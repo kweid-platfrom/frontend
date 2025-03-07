@@ -1,15 +1,19 @@
 import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
-
+// Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyA6YHy9gOuouEwy8JufyfAcXIUicTXU7ZY",
-    authDomain: "qaid-3f040.firebaseapp.com",
-    projectId: "qaid-3f040",
-    storageBucket: "qaid-3f040.firebasestorage.app",
-    messagingSenderId: "347962756282",
-    appId: "1:347962756282:web:3ac695f30ec9a552d6c683",
-    measurementId: "G-1DY8Y53ZCP"
+    apiKey: "AIzaSyDnijsnCLYFNrJ8DhvT2bhohgjb7bSr3as",
+    authDomain: "kweidorigin.firebaseapp.com",
+    projectId: "kweidorigin",
+    storageBucket: "kweidorigin.firebasestorage.app",
+    messagingSenderId: "404106955543",
+    appId: "1:404106955543:web:741b7eb7f2dd07ee7ac552"
 };
 
-const app = initializeApp(firebaseConfig);
-export default app;
+//initialize Firebase
+const app = initializeApp(firebaseConfig)
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+
+export { auth, googleProvider}
