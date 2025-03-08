@@ -6,11 +6,13 @@ import { sendSignInLinkToEmail, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAlert } from "../../components/CustomAlert";
 import '../../app/globals.css';
 
 const Register = () => {
     const [email, setEmail] = useState("");
     const router = useRouter();
+    const { showAlert, alertComponent } = useAlert();
 
     const handleRegister = async (e) => {
         e.preventDefault();
@@ -21,9 +23,10 @@ const Register = () => {
             };
             await sendSignInLinkToEmail(auth, email, actionCodeSettings);
             window.localStorage.setItem("emailForSignIn", email);
-            alert("Verification email sent. Please check your inbox.");
+            showAlert("Verification email sent. Please check your inbox.", "success");
         } catch (error) {
             console.error(error.message);
+            showAlert(error.message, "error");
         }
     };
 
@@ -33,13 +36,17 @@ const Register = () => {
             router.push("/dashboard");
         } catch (error) {
             console.error(error.message);
+            showAlert(error.message, "error");
         }
     };
 
     return (
         <div className="min-h-screen bg-[#F5F7FA] flex flex-col items-center">
+            {/* The Alert Component */}
+            {alertComponent}
+            
             <header className="w-full h-[70px] bg-white flex items-center px-8 shadow-sm">
-                <div className="font-bold text-2xl text-[#00897B]">LOGO</div>
+                <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">LOGO</Link>
             </header>
             
             <div className="w-full max-w-md mt-[10vh] bg-white rounded-lg shadow-md p-8 flex flex-col gap-6">
