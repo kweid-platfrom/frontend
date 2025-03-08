@@ -40,7 +40,7 @@ const Register = () => {
                 <input type="email" placeholder="Company email" on onChange={(e) => setEmail(e.target.value)} required />
                 <button type="submit">Register</button>
             </form>
-            
+
         </div>
     );
 
