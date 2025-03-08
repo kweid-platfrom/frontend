@@ -41,15 +41,16 @@ const Register = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#F5F7FA] flex flex-col items-center">
-            {/* The Alert Component */}
+        <>
+         {/* The Alert Component */}
             {alertComponent}
+        <div className="min-h-screen bg-[#fff] flex flex-col items-center">
             
             <header className="w-full h-[70px] bg-white flex items-center px-8 shadow-sm">
                 <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">LOGO</Link>
             </header>
             
-            <div className="w-full max-w-md mt-[10vh] bg-white rounded-lg shadow-md p-8 flex flex-col gap-6">
+            <div className="w-full max-w-md mt-[10vh] bg-white rounded-lg p-8 flex flex-col gap-6">
                 <h2 className="text-[#2D3142] text-2xl font-bold text-center">Register</h2>
                 
                 <button 
@@ -99,6 +100,7 @@ const Register = () => {
                 </p>
             </div>
         </div>
+        </>
     );
 };
 
