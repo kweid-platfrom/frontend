@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { sendSignInLinkToEmail, signInWithPopup, } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
-import { useRouter } from "react-router-dom";
+import { useRouter } from "next/navigation";
 
 const Register = () => {
     const [email, setEmail] = useState("");
