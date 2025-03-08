@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "firebase/auth";
 import { auth } from "../../config/firebase";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/router";
 
 const AccountSetup = () => {
     const [password, setPassword] = useState("");
@@ -11,7 +11,7 @@ const AccountSetup = () => {
     const [name, setName] = useState("");
     const [company, setCompany] = useState("");
 
-    const navigaten = useNavigate();
+    const router = useRouter();
     const email = window.localStorage.getItem("emailForSignIn")
 
     useEffect(() => {
@@ -34,7 +34,7 @@ const AccountSetup = () => {
                 name, company, email: auth.currentUser.eamil,
             });
             alert("Account setup complete.");
-            navigaten("/add-users")
+            router.push("/add-users")
         } catch (error) {
             console.error(error.message)
         }

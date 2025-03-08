@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { getAuth } from "firebase/auth";
 import { getFirestore, setDoc, doc } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
-import { app } from "../../config/firebase"; // Ensure firebaseConfig exports 'app'
+import { useRouter } from "next/router";
+import { app } from "../../config/firebase";
 
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -10,7 +10,7 @@ const db = getFirestore(app);
 const AddUsers = () => {
     const [emails, setEmails] = useState([""]);
     const [orgDomain] = useState(auth.currentUser?.email.split("@")[1]);
-    const navigate = useNavigate();
+    const router = useRouter();
 
     const handleAddField = () => {
         setEmails([...emails, ""]);
@@ -37,7 +37,7 @@ const AddUsers = () => {
                 )
             );
             alert("Invites sent successfully");
-            navigate("/dashboard");
+            router.push("/dashboard");
         } catch (error) {
             console.error("Error sending invites: ", error);
         }
@@ -58,7 +58,7 @@ const AddUsers = () => {
             ))}
             <button onClick={handleAddField}>Add User</button>
             <button onClick={handleSendInvites}>Send Invites</button>
-            <button onClick={() => navigate("/dashboard")}>Skip</button>
+            <button onClick={() => router.push("/dashboard")}>Skip</button>
         </div>
     );
 };

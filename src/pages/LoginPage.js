@@ -12,7 +12,7 @@ const LoginPage = () => {
         e.preventDefault();
         try {
             await login(email, password);
-            router.push("/dashboard"); // Redirect after login
+            router.push("/dashboard");
         } catch (error) {
             console.error("Login failed:", error.message);
         }

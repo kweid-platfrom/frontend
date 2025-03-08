@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { sendSignInLinkToEmail, signInWithPopup, } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "react-router-dom";
 
 const Register = () => {
     const [email, setEmail] = useState("");
-    const navigate = useNavigate();
+    const router = useRouter();
 
     const handleRegister = async (e) => {
         e.preventDefault();
@@ -26,7 +26,7 @@ const Register = () => {
     const handleGoogleRegister = async () => {
         try {
             await signInWithPopup(auth, googleProvider);
-            navigate("/dashboard");
+            router.push("/dashboard");
         } catch (error) {
             console.error(error.message);
         }

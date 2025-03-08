@@ -1,20 +1,20 @@
-"use client"; 
+"use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword, signInWithPopup, } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/router";
 
 const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const navigate = useNavigate();
+    const router = useRouter(); 
 
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            navigate("/dashboard");
+            router.push("/dashboard"); 
         } catch (error) {
             console.error(error.message);
         }
@@ -23,7 +23,7 @@ const Login = () => {
     const handleGoogleLogin = async () => {
         try {
             await signInWithPopup(auth, googleProvider);
-            navigate("/dashboard");
+            router.push("/dashboard");
         } catch (error) {
             console.error(error.message);
         }
@@ -31,18 +31,30 @@ const Login = () => {
 
     return (
         <div>
-
             <h2>Login</h2>
-            <form action="form" onSubmit={handleLogin}>
-                <input type="email" placeholder="Company email" on onChange={(e) => setEmail(e.target.value)} required />
-                <input type="passsword" placeholder="Password" on onChange={(e) => setPassword(e.target.value)} required />
+            <form onSubmit={handleLogin}>
+                <input
+                    type="email"
+                    placeholder="Company email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                />
+                <input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                />
+                <button type="submit" disabled={!email || !password}> 
+                    Login
+                </button>
             </form>
             <span>or Login with </span>
             <button onClick={handleGoogleLogin}>Google</button>
         </div>
     );
-
-
 };
 
 export default Login;
