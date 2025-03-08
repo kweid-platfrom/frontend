@@ -1,3 +1,5 @@
+"use client"; 
+
 import { useState } from "react";
 import { sendSignInLinkToEmail, signInWithPopup, } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";

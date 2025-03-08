@@ -1,3 +1,5 @@
+"use client"; 
+
 import { useState, useEffect } from "react";
 import { isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "firebase/auth";
 import { auth } from "../../config/firebase";

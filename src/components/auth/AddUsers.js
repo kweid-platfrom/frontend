@@ -1,3 +1,5 @@
+"use client"; 
+
 import { useState } from "react";
 import { db, setDoc, doc, auth } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
