@@ -7,7 +7,7 @@ const Header = () => {
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
 
     return (
-        <header className="bg-[#E1E2E6] shadow-sm z-10 py-3 px-4 md:px-6">
+        <header className="bg-[#fff] shadow-sm z-10 py-3 px-4 md:px-6">
             <div className="flex items-center justify-between space-x-2">
                 
                 {/* Search Bar */}
@@ -23,22 +23,22 @@ const Header = () => {
                 </div>
 
                 {/* Buttons Container */}
-                <div className="flex items-center space-x-3 overflow-x-auto whitespace-nowrap border border-gray-400 rounded-lg px-3 py-2 bg-white">
+                <div className="flex items-center space-x-3 overflow-x-auto whitespace-nowrap rounded-sm px-3 py-2 bg-white">
                     
                     {/* Run Tests */}
-                    <button className="text-[#00897B] px-3 py-2 text-sm rounded-lg flex items-center space-x-2 hover:bg-[#00897B] hover:text-white transition">
+                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition">
                         <Play className="h-4 w-4" />
                         <span className="hidden md:inline">Run Tests</span>
                     </button>
 
                     {/* Report Bug */}
-                    <button className="text-[#A5D6A7] px-3 py-2 text-sm rounded-lg flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition">
+                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition">
                         <Bug className="h-4 w-4" />
                         <span className="hidden md:inline">Report Bug</span>
                     </button>
 
                     {/* Screen Record */}
-                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-lg flex items-center space-x-2 hover:bg-[#2D3142] hover:text-white transition">
+                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition">
                         <Video className="h-4 w-4" />
                         <span className="hidden md:inline">Screen Record</span>
                     </button>
@@ -47,7 +47,7 @@ const Header = () => {
                     <div className="relative">
                         <button
                             onClick={() => setShowReportOptions(!showReportOptions)}
-                            className="text-[#2D3142] px-3 py-2 text-sm rounded-lg flex items-center space-x-2 hover:bg-[#2D3142] hover:text-white transition"
+                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition"
                         >
                             <FileText className="h-4 w-4" />
                             <span className="hidden md:inline">Generate Report</span>
@@ -55,8 +55,8 @@ const Header = () => {
 
                         {showReportOptions && (
                             <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-300 shadow-lg rounded-md text-sm">
-                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Summary (PDF/CSV)</button>
-                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Report (PDF/CSV)</button>
+                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Summary</button>
+                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Report</button>
                             </div>
                         )}
                     </div>
@@ -65,10 +65,10 @@ const Header = () => {
                     <div className="relative">
                         <button
                             onClick={() => setShowTestCaseOptions(!showTestCaseOptions)}
-                            className="text-[#00897B] px-3 py-2 text-sm rounded-lg flex items-center space-x-2 hover:bg-[#00897B] hover:text-white transition"
+                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#E1E2E6] hover:text-white transition"
                         >
                             <Plus className="h-4 w-4" />
-                            <span className="hidden md:inline">+ Add Test Case</span>
+                            <span className="hidden md:inline">Add Test Case</span>
                         </button>
 
                         {showTestCaseOptions && (

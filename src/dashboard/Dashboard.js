@@ -11,7 +11,7 @@ import {
 import TestResultChart from "../components/dashboard/TestResultsChart";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
 import { Sidebar } from "../components/layout";
-import Header from "../components/layout/Header";
+import Header from "../components/layout/header";
 // import { BarChart2, Bug, Code, Activity } from "lucide-react";
 import { KeyMetrics } from "../components/dashboard/KeyMetrics";
 

@@ -43,17 +43,10 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
     useEffect(() => {
         if (showFilters && filterButtonRef.current) {
             const rect = filterButtonRef.current.getBoundingClientRect();
-            const viewportWidth = window.innerWidth;
-            
-            // Ensure overlay doesn't go off the right edge
-            let leftPosition = rect.left + window.scrollX;
-            if (leftPosition + 224 > viewportWidth) { // 224px = w-56
-                leftPosition = Math.max(10, viewportWidth - 224);
-            }
             
             setOverlayPosition({
                 top: rect.bottom + window.scrollY,
-                left: leftPosition
+                left: 1375 // Fixed left position at 1375px
             });
         }
     }, [showFilters]);
@@ -171,11 +164,11 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
         
         // First button in pill
         if (index === 0) {
-            className += "rounded-l-md ";
+            className += "rounded-l-lg ";
         } 
         // Last button in pill
         else if (index === options.length - 1) {
-            className += "rounded-r-md ";
+            className += "rounded-r-lg ";
         }
         // Middle buttons
         else {
@@ -184,9 +177,9 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
         
         // Selected state
         if (isSelected) {
-            className += "bg-blue-600 text-white";
+            className += "bg-[#00897B] text-white";
         } else {
-            className += "bg-gray-200 text-gray-700 hover:bg-gray-300";
+            className += "bg-[#eaeaea] text-gray-700 hover:bg-[#f0f0f0]";
         }
         
         return className;
@@ -219,7 +212,7 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
                     }`}
                     onClick={() => setShowFilters(!showFilters)}
                 >
-                    <Filter className="w-4 h-4 mr-2" />
+                    <Filter className="w-4 h-4 mr-3" />
                     <span className="whitespace-nowrap">Filters</span>
                     {Object.values(selectedFilters).some(arr => arr.length > 0) && (
                         <span className="ml-2 bg-[#00897B] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
