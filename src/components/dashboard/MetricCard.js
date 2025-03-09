@@ -1,29 +1,38 @@
-import React from 'react';
-import "../../app/globals.css"
-import { Card, CardContent } from '@/components/ui/card';
+import React from "react";
 
-const MetricCard = ({ title, value, change, icon, iconColor, iconBgColor }) => {
-    const isPositive = change.startsWith('+');
-    const color = title === 'Open Defects' ?
-        (isPositive ? 'text-red-500' : 'text-green-500') :
-        (isPositive ? 'text-green-500' : 'text-red-500');
+export const MetricCard = ({ title, value, change, status = "neutral", icon: Icon, className = "" }) => {
+    const getStatusColor = () => {
+        switch (status) {
+            case "positive":
+                return "text-green-600";
+            case "negative":
+                return "text-red-600";
+            default:
+                return "text-gray-600";
+        }
+    };
+
+    const getChangePrefix = () => {
+        if (change && change.toString().charAt(0) !== "-" && change.toString().charAt(0) !== "+") {
+            return change > 0 ? "+" : "";
+        }
+        return "";
+    };
 
     return (
-        <Card className="shadow-sm">
-            <CardContent className="p-4">
-                <div className="flex justify-between items-start">
-                    <div>
-                        <p className="text-xs text-gray-500">{title}</p>
-                        <h3 className="text-xl font-bold">{value}</h3>
-                        <p className={`text-xs ${color}`}>{change}</p>
+        <div className={`bg-white rounded-xs shadow p-6 ${className}`}>
+            <div className="flex justify-between items-start">
+                <div className="text-sm text-gray-500 font-medium">{title}</div>
+                {Icon && <Icon className="text-gray-400 h-5 w-5" />}
+            </div>
+            <div className="flex items-baseline mt-2">
+                <div className="text-3xl font-bold">{value}</div>
+                {change && (
+                    <div className={`ml-2 text-sm ${getStatusColor()}`}>
+                        {getChangePrefix()}{change}
                     </div>
-                    <div className={`${iconBgColor} p-1.5 rounded-full`}>
-                        {React.cloneElement(icon, { className: iconColor, size: 16 })}
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+                )}
+            </div>
+        </div>
     );
 };
-
-export default MetricCard;

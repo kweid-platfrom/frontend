@@ -1,20 +1,24 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-const KeyMetrics = require("./KeyMetrics").default;
-const MetricCard = require("./MetricCard").default;
-const ChartCard = require("./ChartCard").default;
-const BugStatusChart = require("./BugStatusChart").default;
-const DefectTrendsChart = require("./DefectTrendsChart").default;
-const TestCoverageChart = require("./TestCoverageChart").default;
-const TestResultChart = require("./TestResultsChart").default;
-const ActivityFeed = require("./ActivityFeed").default;
+// Make sure these paths point to the correct files
+const { KeyMetrics } = require("./KeyMetrics");
+const { MetricCard } = require("./MetricCard");
+const { ChartCard } = require("./ChartCard");
+const { BugStatusChart } = require("./BugStatusChart");
+const { DefectTrendsChart } = require("./DefectTrendsChart");
+const { TestCoverageChart } = require("./TestCoverageChart");
+const { TestResultChart } = require("./TestResultsChart");
+const { ActivityFeed } = require("./ActivityFeed");
+const { ViewToggle } = require("./ViewToggle");
 
+// Export as default exports to match your original pattern
 module.exports = {
-    KeyMetrics,
-    MetricCard,
-    ChartCard,
-    BugStatusChart,
-    DefectTrendsChart,
-    TestCoverageChart,
-    TestResultChart,
-    ActivityFeed,
+    KeyMetrics: KeyMetrics,
+    MetricCard: MetricCard,
+    ChartCard: ChartCard,
+    BugStatusChart: BugStatusChart,
+    DefectTrendsChart: DefectTrendsChart,
+    TestCoverageChart: TestCoverageChart,
+    TestResultChart: TestResultChart,
+    ActivityFeed: ActivityFeed,
+    ViewToggle: ViewToggle
 };

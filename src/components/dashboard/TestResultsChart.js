@@ -1,74 +1,29 @@
-import React from 'react';
-import "../../app/globals.css"
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import ChartCard from './ChartCard';
+import React from "react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-const TestResultsChart = ({ viewMode }) => {
-    const testResultsData = [
-        { name: 'Passed', value: 165, color: '#1dd1a1' },
-        { name: 'Failed', value: 23, color: '#ff6b6b' },
-        { name: 'Blocked', value: 12, color: '#feca57' },
-        { name: 'Skipped', value: 8, color: '#c8d6e5' },
+const TestResultChart = () => {
+    const data = [
+        { date: "3/1", passed: 242, failed: 14 },
+        { date: "3/2", passed: 251, failed: 11 },
+        { date: "3/3", passed: 248, failed: 15 },
+        { date: "3/4", passed: 255, failed: 9 },
+        { date: "3/5", passed: 260, failed: 8 },
+        { date: "3/6", passed: 258, failed: 10 },
+        { date: "3/7", passed: 263, failed: 7 },
     ];
 
     return (
-        <ChartCard
-            title="Test Execution Results"
-            description="Last 7 days test run status"
-        >
-            {viewMode === 'chart' ? (
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                                data={testResultsData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                outerRadius={60}
-                                fill="#8884d8"
-                                dataKey="value"
-                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                            >
-                                {testResultsData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-            ) : (
-                <div className="overflow-x-auto h-64">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Result</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">%</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {testResultsData.map((row, idx) => (
-                                <tr key={idx}>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs font-medium text-gray-900">
-                                        <div className="flex items-center">
-                                            <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: row.color }}></div>
-                                            {row.name}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{row.value}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                                        {(row.value / testResultsData.reduce((sum, item) => sum + item.value, 0) * 100).toFixed(1)}%
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </ChartCard>
+        <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Area type="monotone" dataKey="passed" stackId="1" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
+                <Area type="monotone" dataKey="failed" stackId="1" stroke="#EF4444" fill="#EF4444" fillOpacity={0.6} />
+            </AreaChart>
+        </ResponsiveContainer>
     );
 };
 
-export default TestResultsChart;
+export default TestResultChart;

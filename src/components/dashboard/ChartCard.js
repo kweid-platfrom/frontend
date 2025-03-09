@@ -1,19 +1,12 @@
-import React from 'react';
-import "../../app/globals.css";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import React from "react";
 
-const ChartCard = ({ title, description, children, className = "" }) => {
+export const ChartCard = ({ title, children, className = "" }) => {
     return (
-        <Card className={`shadow-sm rounded-lg border ${className}`}>
-            <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-base font-semibold text-gray-800">{title}</CardTitle>
-                {description && <CardDescription className="text-sm text-gray-600">{description}</CardDescription>}
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
+        <div className={`bg-white rounded-lg shadow p-6 mb-6 ${className}`}>
+            <h2 className="text-lg font-semibold mb-4">{title}</h2>
+            <div className="h-64">
                 {children}
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 };
-
-export default ChartCard;
