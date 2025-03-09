@@ -1,10 +1,61 @@
-import React, { useState } from "react";
+"use client"
+import React, { useState, useRef, useEffect } from "react";
 import { Bell, Search, Play, Bug, FileText, Video, Plus } from "lucide-react";
 import Image from "next/image";
 
-const Header = () => {
+
+const Header = ({ onOpenBugReport }) => {
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
+    
+    const reportButtonRef = useRef(null);
+    const testCaseButtonRef = useRef(null);
+    const reportDropdownRef = useRef(null);
+    const testCaseDropdownRef = useRef(null);
+    
+    // State for dropdown positions
+    const [reportDropdownPosition, setReportDropdownPosition] = useState({ top: 0, left: 0 });
+    const [testCaseDropdownPosition, setTestCaseDropdownPosition] = useState({ top: 0, left: 0 });
+
+    // Calculate dropdown positions when toggling
+    useEffect(() => {
+        if (showReportOptions && reportButtonRef.current) {
+            const rect = reportButtonRef.current.getBoundingClientRect();
+            setReportDropdownPosition({
+                top: rect.bottom + window.scrollY,
+                left: rect.left
+            });
+        }
+    }, [showReportOptions]);
+
+    useEffect(() => {
+        if (showTestCaseOptions && testCaseButtonRef.current) {
+            const rect = testCaseButtonRef.current.getBoundingClientRect();
+            setTestCaseDropdownPosition({
+                top: rect.bottom + window.scrollY,
+                left: rect.left
+            });
+        }
+    }, [showTestCaseOptions]);
+
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (reportDropdownRef.current && !reportDropdownRef.current.contains(event.target) && 
+                reportButtonRef.current && !reportButtonRef.current.contains(event.target)) {
+                setShowReportOptions(false);
+            }
+            if (testCaseDropdownRef.current && !testCaseDropdownRef.current.contains(event.target) &&
+                testCaseButtonRef.current && !testCaseButtonRef.current.contains(event.target)) {
+                setShowTestCaseOptions(false);
+            }
+        }
+        
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [showReportOptions, showTestCaseOptions]);
 
     return (
         <header className="bg-[#fff] shadow-sm z-10 py-3 px-4 md:px-6">
@@ -32,7 +83,10 @@ const Header = () => {
                     </button>
 
                     {/* Report Bug */}
-                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition">
+                    <button 
+                        className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition"
+                        onClick={onOpenBugReport}
+                    >
                         <Bug className="h-4 w-4" />
                         <span className="hidden md:inline">Report Bug</span>
                     </button>
@@ -46,37 +100,25 @@ const Header = () => {
                     {/* Generate Report Dropdown */}
                     <div className="relative">
                         <button
+                            ref={reportButtonRef}
                             onClick={() => setShowReportOptions(!showReportOptions)}
                             className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition"
                         >
                             <FileText className="h-4 w-4" />
                             <span className="hidden md:inline">Generate Report</span>
                         </button>
-
-                        {showReportOptions && (
-                            <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-300 shadow-lg rounded-md text-sm">
-                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Summary</button>
-                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Report</button>
-                            </div>
-                        )}
                     </div>
 
                     {/* Add Test Case Dropdown */}
                     <div className="relative">
                         <button
+                            ref={testCaseButtonRef}
                             onClick={() => setShowTestCaseOptions(!showTestCaseOptions)}
                             className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#E1E2E6] hover:text-white transition"
                         >
                             <Plus className="h-4 w-4" />
                             <span className="hidden md:inline">Add Test Case</span>
                         </button>
-
-                        {showTestCaseOptions && (
-                            <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-300 shadow-lg rounded-md text-sm">
-                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">New Test Case</button>
-                                <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Import Test Cases</button>
-                            </div>
-                        )}
                     </div>
 
                     {/* Notification Bell */}
@@ -97,8 +139,40 @@ const Header = () => {
                     </div>
                 </div>
             </div>
+            
+            {/* Report Options Dropdown - Fixed Position */}
+            {showReportOptions && (
+                <div 
+                    ref={reportDropdownRef}
+                    className="fixed bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
+                    style={{ 
+                        top: `${reportDropdownPosition.top}px`, 
+                        left: `${reportDropdownPosition.left}px`,
+                        minWidth: '160px'
+                    }}
+                >
+                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Summary</button>
+                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Report</button>
+                </div>
+            )}
+            
+            {/* Test Case Options Dropdown - Fixed Position */}
+            {showTestCaseOptions && (
+                <div 
+                    ref={testCaseDropdownRef}
+                    className="fixed bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
+                    style={{ 
+                        top: `${testCaseDropdownPosition.top}px`, 
+                        left: `${testCaseDropdownPosition.left}px`,
+                        minWidth: '160px'
+                    }}
+                >
+                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">New Test Case</button>
+                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Import Test Cases</button>
+                </div>
+            )}
         </header>
     );
 };
 
-export default Header;
+export default Header;  

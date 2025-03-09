@@ -40,16 +40,16 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
     }, []);
 
     // Calculate overlay positions
-    useEffect(() => {
-        if (showFilters && filterButtonRef.current) {
-            const rect = filterButtonRef.current.getBoundingClientRect();
-            
-            setOverlayPosition({
-                top: rect.bottom + window.scrollY,
-                left: 1375 // Fixed left position at 1375px
-            });
-        }
-    }, [showFilters]);
+        useEffect(() => {
+            if (showFilters && filterButtonRef.current) {
+                const rect = filterButtonRef.current.getBoundingClientRect();
+                
+                setOverlayPosition({
+                    top: rect.bottom + window.scrollY,
+                    left: 1275 // Fixed left position at 1375px
+                });
+            }
+        }, [showFilters]);
 
     // Calculate secondary overlay position
     useEffect(() => {
