@@ -1,6 +1,6 @@
 import React from 'react';
-import "../../app/globals.css"
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import "../../app/globals.css";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import ChartCard from './ChartCard';
 
 const BugStatusChart = ({ viewMode }) => {
@@ -11,11 +11,10 @@ const BugStatusChart = ({ viewMode }) => {
         { name: 'Closed', value: 63, color: '#1dd1a1' },
     ];
 
+    const totalBugs = bugStatusData.reduce((sum, item) => sum + item.value, 0);
+
     return (
-        <ChartCard
-            title="Bug Status Distribution"
-            description="Current state of reported defects"
-        >
+        <ChartCard title="Bug Status Distribution" description="Current state of reported defects">
             {viewMode === 'chart' ? (
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -24,8 +23,7 @@ const BugStatusChart = ({ viewMode }) => {
                                 data={bugStatusData}
                                 cx="50%"
                                 cy="50%"
-                                labelLine={false}
-                                outerRadius={60}
+                                outerRadius={80}
                                 fill="#8884d8"
                                 dataKey="value"
                                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
@@ -40,27 +38,23 @@ const BugStatusChart = ({ viewMode }) => {
                 </div>
             ) : (
                 <div className="overflow-x-auto h-64">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="min-w-full border border-gray-200 text-sm">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">%</th>
+                                <th className="px-4 py-2 text-left font-medium text-gray-600 uppercase">Status</th>
+                                <th className="px-4 py-2 text-left font-medium text-gray-600 uppercase">Count</th>
+                                <th className="px-4 py-2 text-left font-medium text-gray-600 uppercase">%</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {bugStatusData.map((row, idx) => (
                                 <tr key={idx}>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs font-medium text-gray-900">
-                                        <div className="flex items-center">
-                                            <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: row.color }}></div>
-                                            {row.name}
-                                        </div>
+                                    <td className="px-4 py-2 whitespace-nowrap flex items-center font-medium text-gray-900">
+                                        <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: row.color }}></span>
+                                        {row.name}
                                     </td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{row.value}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                                        {(row.value / bugStatusData.reduce((sum, item) => sum + item.value, 0) * 100).toFixed(1)}%
-                                    </td>
+                                    <td className="px-4 py-2 text-gray-700">{row.value}</td>
+                                    <td className="px-4 py-2 text-gray-700">{((row.value / totalBugs) * 100).toFixed(1)}%</td>
                                 </tr>
                             ))}
                         </tbody>

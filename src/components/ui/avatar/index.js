@@ -1,4 +1,4 @@
-import Avatar from "../avatar";
+import Avatar from "./Avatar";
 import AvatarImage from "./AvatarImage";
 import AvatarFallback from "./AvatarFallback";
 
