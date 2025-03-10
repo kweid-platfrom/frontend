@@ -25,7 +25,7 @@ const Sidebar = () => {
     ];
 
     return (
-        <div className={`bg-[#016f64] text-white ${isCollapsed ? "w-20" : "w-64"} flex-shrink-0 hidden md:flex flex-col transition-all duration-300`}>
+        <div className={`bg-[#A5D6A7] text-white ${isCollapsed ? "w-20" : "w-55"} flex-shrink-0 hidden md:flex flex-col transition-all duration-300`}>
             {/* Sidebar Header */}
             <div className="p-4 flex items-center justify-between">
                 {/* Logo Always Visible */}
@@ -33,11 +33,11 @@ const Sidebar = () => {
                     <div className="h-10 w-10 rounded-full bg-[#2D3142] flex items-center justify-center">
                         <span className="text-xl font-bold">QA</span>
                     </div>
-                    {!isCollapsed && <h1 className="ml-3 text-xl font-bold">TestTracker</h1>}
+                    {!isCollapsed && <h1 className="ml-3 text-xl text-[#2D3142] font-bold">TestTracker</h1>}
                 </div>
 
                 {/* Toggle Button */}
-                <button onClick={() => setIsCollapsed(!isCollapsed)} className="text-white">
+                <button onClick={() => setIsCollapsed(!isCollapsed)} className="text-[#2D3142]">
                     {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
                 </button>
             </div>
@@ -50,7 +50,7 @@ const Sidebar = () => {
                             key={index}
                             href="#"
                             className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xs 
-                                ${item.active ? "bg-[#A5D6A7] text-[#016f64]" : "text-indigo-100 hover:bg-[#A5D6A7]"}
+                                ${item.active ? "bg-[#00897B] text-white" : "text-[#2D3142] hover:bg-[#00897B]"}
                             `}
                         >
                             <item.icon className="h-5 w-5" />
@@ -63,7 +63,7 @@ const Sidebar = () => {
             {/* Logout Section */}
             <div className="p-4 border-t border-[#00897B] flex items-center">
                 <Image
-                    className="h-8 w-8 rounded-full bg-indigo-500"
+                    className="h-8 w-8 rounded-full bg-[#2D3142]"
                     src="/api/placeholder/32/32"
                     width={32}
                     height={32}
@@ -72,10 +72,10 @@ const Sidebar = () => {
                 {!isCollapsed && (
                     <div className="ml-3">
                         <p className="text-sm font-medium text-white">Alex Johnson</p>
-                        <p className="text-xs font-medium text-indigo-200">QA Engineer</p>
+                        <p className="text-xs font-medium text-[#2D3142]">QA Engineer</p>
                     </div>
                 )}
-                <button className="ml-auto text-indigo-300 hover:text-white">
+                <button className="ml-auto text-[#2D3142] hover:text-white">
                     <LogOut className="h-5 w-5" />
                 </button>
             </div>

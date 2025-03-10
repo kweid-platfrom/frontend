@@ -16,8 +16,8 @@ import Header from "../components/layout/header";
 import { KeyMetrics } from "../components/dashboard/KeyMetrics";
 import BugReportForm from "../components/BugReportForm";
 
-
 const Dashboard = () => {
+    const [showBugForm, setShowBugForm] = useState(false);
     const [timeframeView, setTimeframeView] = useState({ value: "weekly", label: "Weekly" });
 
     const viewOptions = [
@@ -26,21 +26,11 @@ const Dashboard = () => {
         { value: "quarterly", label: "Quarterly" }
     ];
 
-    const [isBugReportOpen, setIsBugReportOpen] = useState(false);
-
-    const handleOpenBugReport = () => {
-        setIsBugReportOpen(true);
-    };
-
-    const handleCloseBugReport = () => {
-        setIsBugReportOpen(false);
-    };
-
     return (
         <div className="flex h-screen bg-gray-50">
             <Sidebar />
             <div className="flex-grow overflow-auto">
-                <Header onOpenBugReport={handleOpenBugReport} />
+            <Header setShowBugForm={setShowBugForm} />
                 <main className="p-6 space-y-6">
                     <div className="flex justify-between items-center">
                         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Testing Dashboard</h1>
@@ -88,13 +78,10 @@ const Dashboard = () => {
                             </div>
                         </div>
                     </div>
+    
+                        {showBugForm && <BugReportForm onClose={() => setShowBugForm(false)} />}
                 </main>
             </div>
-            <BugReportForm
-                isOpen={isBugReportOpen}
-                onClose={handleCloseBugReport}
-            />
-
         </div>
     );
 };
