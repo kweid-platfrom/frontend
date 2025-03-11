@@ -257,14 +257,6 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
 
     return (
         <div className="relative flex items-center">
-            {/* Add Team Member Button */}
-            <button
-                className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-1 hover:bg-gray-100 transition mr-2"
-            >
-                <Plus className="h-4 w-4" />
-                <UserCircle className="h-4 w-4" />
-            </button>
-            
             {/* Recording Button */}
             <button
                 ref={buttonRef}

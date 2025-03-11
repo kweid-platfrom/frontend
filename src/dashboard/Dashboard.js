@@ -15,10 +15,11 @@ import Header from "../components/layout/header";
 import { KeyMetrics } from "../components/dashboard/KeyMetrics";
 import BugReportForm from "../components/BugReportForm";
 import BugTracker from "../pages/bug-tracker";
-import TestScripts from "../pages/test-scripts"
+import TestScripts from "../pages/test-scripts";
 
 const Dashboard = () => {
     const [showBugForm, setShowBugForm] = useState(false);
+    const [bugData, setBugData] = useState(null);
     const [timeframeView, setTimeframeView] = useState({ value: "weekly", label: "Weekly" });
     const [activePage, setActivePage] = useState("dashboard");
 
@@ -27,6 +28,12 @@ const Dashboard = () => {
         { value: "monthly", label: "Monthly" },
         { value: "quarterly", label: "Quarterly" }
     ];
+
+    const handleBugReportSubmit = (bug) => {
+        setBugData(bug);
+        setActivePage("bug-tracker");
+        setShowBugForm(false);
+    };
 
     return (
         <div className="flex h-screen bg-gray-50">
@@ -84,12 +91,12 @@ const Dashboard = () => {
                     )}
 
                     {/* 🐛 Bug Tracker Page */}
-                    {activePage === "bug-tracker" && <BugTracker />}
+                    {activePage === "bug-tracker" && <BugTracker newBug={bugData} />}
 
                     {/* 📝 Test Scripts Page */}
                     {activePage === "test-scripts" && <TestScripts />}
 
-                    {showBugForm && <BugReportForm onClose={() => setShowBugForm(false)} />}
+                    {showBugForm && <BugReportForm onClose={() => setShowBugForm(false)} onSubmit={handleBugReportSubmit} />}
                 </main>
             </div>
         </div>

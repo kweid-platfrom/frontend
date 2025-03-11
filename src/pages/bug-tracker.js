@@ -1,17 +1,23 @@
 "use client"
-import React, { useState } from "react";
-import { ChevronRight, ChevronDown, Plus, Filter, Users, Settings, MessageSquare, X } from "lucide-react";
-import BugDetailsModal from "../components/BugDetailsModal"
+import React, { useState, useEffect } from "react";
+import { ChevronRight, ChevronDown, Filter, Users, Settings, MessageSquare } from "lucide-react";
+import BugDetailsModal from "../components/BugDetailsModal";
+import SelectionActionsModal from "../components/SelectionActionsModal";
 
 const BugTracker = () => {
     const [expandedGroups, setExpandedGroups] = useState({});
     const [selectedBug, setSelectedBug] = useState(null);
-    const [groupColors, setGroupColors] = useState({
-        "04/2025": "#3498db", // Default blue
-        "03/2025": "#2ecc71", // Default green
-    });
+    const [groupColors, setGroupColors] = useState({});
     const [editingTitle, setEditingTitle] = useState(null);
     const [selectedBugs, setSelectedBugs] = useState([]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [teamMembers, setTeamMembers] = useState([
+        "John Doe", 
+        "Jane Smith", 
+        "Alice Brown", 
+        "Bob Johnson", 
+        "Carla Rodriguez"
+    ]);
     
     // Extended bug data with all required fields
     const [bugsData, setBugsData] = useState({
@@ -82,6 +88,21 @@ const BugTracker = () => {
         ]
     });
 
+    // Initialize group colors from localStorage or set defaults if not available
+    useEffect(() => {
+        const savedColors = localStorage.getItem('bugTrackerGroupColors');
+        if (savedColors) {
+            setGroupColors(JSON.parse(savedColors));
+        } else {
+            const defaultColors = {
+                "04/2025": "#3498db", 
+                "03/2025": "#2ecc71",
+            };
+            setGroupColors(defaultColors);
+            localStorage.setItem('bugTrackerGroupColors', JSON.stringify(defaultColors));
+        }
+    }, []);
+
     // Status, Priority, and Severity options
     const statusOptions = ["Open", "In Progress", "Resolved", "Closed", "Under Review", "Needs Info"];
     const priorityOptions = ["High", "Medium", "Low"];
@@ -119,7 +140,11 @@ const BugTracker = () => {
     const changeGroupColor = (date) => {
         // Generate a random color
         const randomColor = "#" + Math.floor(Math.random()*16777215).toString(16);
-        setGroupColors(prev => ({ ...prev, [date]: randomColor }));
+        const updatedColors = { ...groupColors, [date]: randomColor };
+        setGroupColors(updatedColors);
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('bugTrackerGroupColors', JSON.stringify(updatedColors));
     };
 
     const handleBugSelection = (bugId, groupDate) => {
@@ -189,6 +214,15 @@ const BugTracker = () => {
         }
     };
 
+    const handleAssigneeChange = (bugId, groupDate, newAssignee) => {
+        const updatedBugsData = {...bugsData};
+        const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
+        if (bugIndex !== -1) {
+            updatedBugsData[groupDate][bugIndex].assignedTo = newAssignee;
+            setBugsData(updatedBugsData);
+        }
+    };
+
     // Helper function to determine status color
     const getStatusColor = (status) => {
         switch (status.toLowerCase()) {
@@ -239,15 +273,155 @@ const BugTracker = () => {
         }
     };
 
+    // Handle bulk status changes for selected bugs
+    const handleBulkStatusChange = (newStatus) => {
+        const updatedBugsData = {...bugsData};
+        
+        selectedBugs.forEach(selectionKey => {
+            const [groupDate, bugId] = selectionKey.split('-');
+            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
+            if (bugIndex !== -1) {
+                updatedBugsData[groupDate][bugIndex].status = newStatus;
+            }
+        });
+        
+        setBugsData(updatedBugsData);
+    };
+
+    // Handle bulk status changes for selected bugs
+    const handleBulkPriorityChange = (newPriority) => {
+        const updatedBugsData = {...bugsData};
+        
+        selectedBugs.forEach(selectionKey => {
+            const [groupDate, bugId] = selectionKey.split('-');
+            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
+            if (bugIndex !== -1) {
+                updatedBugsData[groupDate][bugIndex].priority = newPriority;
+            }
+        });
+        
+        setBugsData(updatedBugsData);
+    };
+
+    // Handle bulk status changes for selected bugs
+    const handleBulkSeverityChange = (newSeverity) => {
+        const updatedBugsData = {...bugsData};
+        
+        selectedBugs.forEach(selectionKey => {
+            const [groupDate, bugId] = selectionKey.split('-');
+            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
+            if (bugIndex !== -1) {
+                updatedBugsData[groupDate][bugIndex].severity = newSeverity;
+            }
+        });
+        
+        setBugsData(updatedBugsData);
+    };
+
+    // Handle bulk assignee changes
+    const handleBulkAssigneeChange = (newAssignee) => {
+        const updatedBugsData = {...bugsData};
+        
+        selectedBugs.forEach(selectionKey => {
+            const [groupDate, bugId] = selectionKey.split('-');
+            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
+            if (bugIndex !== -1) {
+                updatedBugsData[groupDate][bugIndex].assignedTo = newAssignee;
+            }
+        });
+        
+        setBugsData(updatedBugsData);
+    };
+
+    // Handle moving bugs to a different group
+    const handleMoveToGroup = (targetGroup) => {
+        const updatedBugsData = {...bugsData};
+        
+        // If the target group doesn't exist, create it
+        if (!updatedBugsData[targetGroup]) {
+            updatedBugsData[targetGroup] = [];
+        }
+        
+        // Process each selected bug
+        selectedBugs.forEach(selectionKey => {
+            const [sourceGroup, bugId] = selectionKey.split('-');
+            
+            // Skip if trying to move to the same group
+            if (sourceGroup === targetGroup) return;
+            
+            // Find the bug in the source group
+            const bugIndex = updatedBugsData[sourceGroup].findIndex(bug => bug.id === bugId);
+            if (bugIndex !== -1) {
+                // Add to target group
+                const bugToMove = {...updatedBugsData[sourceGroup][bugIndex]};
+                updatedBugsData[targetGroup].push(bugToMove);
+                
+                // Remove from source group
+                updatedBugsData[sourceGroup].splice(bugIndex, 1);
+            }
+        });
+        
+        // Clean up empty groups (optional)
+        Object.keys(updatedBugsData).forEach(group => {
+            if (updatedBugsData[group].length === 0) {
+                delete updatedBugsData[group];
+            }
+        });
+        
+        setBugsData(updatedBugsData);
+        setSelectedBugs([]); // Clear selections after move
+    };
+
+    // Handle delete selected bugs
+    const handleDeleteSelected = () => {
+        const updatedBugsData = {...bugsData};
+        
+        selectedBugs.forEach(selectionKey => {
+            const [groupDate, bugId] = selectionKey.split('-');
+            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
+            if (bugIndex !== -1) {
+                updatedBugsData[groupDate].splice(bugIndex, 1);
+            }
+        });
+        
+        // Clean up empty groups
+        Object.keys(updatedBugsData).forEach(group => {
+            if (updatedBugsData[group].length === 0) {
+                delete updatedBugsData[group];
+            }
+        });
+        
+        setBugsData(updatedBugsData);
+        setSelectedBugs([]); // Clear selections after delete
+    };
+
+    // Export selected bugs
+    const handleExport = (format) => {
+        const selectedBugsData = [];
+        
+        // Collect all selected bugs
+        selectedBugs.forEach(selectionKey => {
+            const [groupDate, bugId] = selectionKey.split('-');
+            const bug = bugsData[groupDate].find(b => b.id === bugId);
+            if (bug) {
+                selectedBugsData.push({...bug, group: groupDate});
+            }
+        });
+        
+        // Mock export functionality (in a real app, this would generate and download the file)
+        console.log(`Exporting ${selectedBugsData.length} bugs to ${format} format`);
+        console.log(selectedBugsData);
+        
+        // Would call an API endpoint here in a real implementation
+        alert(`${selectedBugsData.length} bugs prepared for export to ${format} format. Check console for details.`);
+    };
+
     return (
         <div className="p-4 min-h-screen">
             {/* Secondary Header */}
-            <div className="flex justify-between items-center bg-white p-3 shadow-md mb-4 sticky top-0 z-10">
+            <div className="flex justify-between items-center bg-white p-3 shadow-md mb-9 sticky top-0 z-10">
                 <h1 className="text-xl font-bold">Bug Tracker</h1>
                 <div className="flex space-x-2">
-                    <button className="flex items-center bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors">
-                        <Plus size={16} className="mr-2" /> New Bug
-                    </button>
                     <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors">
                         <Filter size={16} className="mr-2" /> Filter
                     </button>
@@ -261,18 +435,18 @@ const BugTracker = () => {
             </div>
 
             {/* Bug Groups */}
-            <div className="space-y-12 pb-10">
+            <div className="space-y-9 pb-10">
                 {Object.entries(bugsData).map(([date, bugs]) => (
                     <div 
                         key={date} 
                         className="bg-white shadow rounded overflow-hidden"
                         style={{ 
-                            borderLeft: `6px solid ${groupColors[date] || ''}`
+                            borderLeft: `6px solid ${groupColors[date] || '#cccccc'}`
                         }}
                     >
                         <div 
                             className="flex items-center p-3 cursor-pointer bg-gray-200 hover:bg-gray-300 transition-colors" 
-                            style={{ backgroundColor: `${groupColors[date]}20` }}
+                            style={{ backgroundColor: `${groupColors[date] || '#cccccc'}20` }}
                         >
                             {expandedGroups[date] ? 
                                 <ChevronDown 
@@ -288,12 +462,12 @@ const BugTracker = () => {
                             }
                             <div 
                                 className="w-4 h-4 mr-2 cursor-pointer border border-gray-400"
-                                style={{ backgroundColor: groupColors[date] }}
+                                style={{ backgroundColor: groupColors[date] || '#cccccc' }}
                                 onClick={() => changeGroupColor(date)}
                             ></div>
                             <h3 
                                 className="text-lg font-bold"
-                                style={{ color: groupColors[date] }}
+                                style={{ color: groupColors[date] || '#cccccc' }}
                                 onClick={() => toggleGroup(date)}
                             >
                                 Bugs/Defects {date}
@@ -369,10 +543,21 @@ const BugTracker = () => {
                                                 </td>
                                                 <td className="border border-gray-300 p-2 whitespace-nowrap">{bug.id}</td>
                                                 <td className="border border-gray-300 p-2 whitespace-nowrap">{bug.category}</td>
-                                                <td className="border border-gray-300 p-2 whitespace-nowrap">{bug.assignedTo}</td>
                                                 <td className="border border-gray-300 p-2 whitespace-nowrap">
                                                     <select 
-                                                        className={`p-1 text-white ${getStatusColor(bug.status)}`}
+                                                        className="p-1 w-full"
+                                                        value={bug.assignedTo}
+                                                        onChange={(e) => handleAssigneeChange(bug.id, date, e.target.value)}
+                                                    >
+                                                        {teamMembers.map(member => (
+                                                            <option key={member} value={member}>{member}</option>
+                                                        ))}
+                                                        <option value="unassigned">Unassigned</option>
+                                                    </select>
+                                                </td>
+                                                <td className={`border border-gray-300 p-0 whitespace-nowrap ${getStatusColor(bug.status)}`}>
+                                                    <select 
+                                                        className={`p-1 text-white w-full ${getStatusColor(bug.status)}`}
                                                         value={bug.status}
                                                         onChange={(e) => handleStatusChange(bug.id, date, e.target.value)}
                                                     >
@@ -382,9 +567,9 @@ const BugTracker = () => {
                                                         <option value="custom">+ Add New Status</option>
                                                     </select>
                                                 </td>
-                                                <td className="border border-gray-300 p-2 whitespace-nowrap">
+                                                <td className={`border border-gray-300 p-0 whitespace-nowrap ${getPriorityColor(bug.priority)}`}>
                                                     <select 
-                                                        className={`p-1 text-white ${getPriorityColor(bug.priority)}`}
+                                                        className={`p-1 text-white w-full ${getPriorityColor(bug.priority)}`}
                                                         value={bug.priority}
                                                         onChange={(e) => handlePriorityChange(bug.id, date, e.target.value)}
                                                     >
@@ -393,9 +578,9 @@ const BugTracker = () => {
                                                         ))}
                                                     </select>
                                                 </td>
-                                                <td className="border border-gray-300 p-2 whitespace-nowrap">
+                                                <td className={`border border-gray-300 p-0 whitespace-nowrap ${getSeverityColor(bug.severity)}`}>
                                                     <select 
-                                                        className={`p-1 text-white ${getSeverityColor(bug.severity)}`}
+                                                        className={`p-1 text-white w-full ${getSeverityColor(bug.severity)}`}
                                                         value={bug.severity}
                                                         onChange={(e) => handleSeverityChange(bug.id, date, e.target.value)}
                                                     >
@@ -427,7 +612,7 @@ const BugTracker = () => {
                 ))}
             </div>
 
-            {/* Bug Details Modal (extracted to component) */}
+            {/* Bug Details Modal */}
             {selectedBug && (
                 <BugDetailsModal 
                     bug={selectedBug} 
@@ -439,26 +624,28 @@ const BugTracker = () => {
                     statusOptions={statusOptions}
                     priorityOptions={priorityOptions}
                     severityOptions={severityOptions}
+                    teamMembers={teamMembers}
                 />
             )}
 
             {/* Selection Actions Modal */}
             {selectedBugs.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg p-4 border-t border-gray-300 flex justify-between items-center">
-                    <div className="flex items-center">
-                        <span className="font-bold mr-4">{selectedBugs.length} items selected</span>
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded mr-2">Set Status</button>
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded mr-2">Set Priority</button>
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded mr-2">Assign To</button>
-                        <button className="bg-red-500 text-white px-3 py-1 rounded">Delete</button>
-                    </div>
-                    <button 
-                        className="text-gray-600 hover:text-gray-800"
-                        onClick={clearAllSelections}
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
+                <SelectionActionsModal
+                    selectedCount={selectedBugs.length}
+                    onClose={clearAllSelections}
+                    onStatusChange={handleBulkStatusChange}
+                    onPriorityChange={handleBulkPriorityChange}
+                    onSeverityChange={handleBulkSeverityChange}
+                    onAssigneeChange={handleBulkAssigneeChange}
+                    onMoveToGroup={handleMoveToGroup}
+                    onDelete={handleDeleteSelected}
+                    onExport={handleExport}
+                    statusOptions={statusOptions}
+                    priorityOptions={priorityOptions}
+                    severityOptions={severityOptions}
+                    groups={Object.keys(bugsData)}
+                    teamMembers={teamMembers}
+                />
             )}
         </div>
     );
