@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import {
     LayoutDashboard,
@@ -14,6 +14,18 @@ import {
 
 const Sidebar = ({ activePage, setActivePage }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
+
+    useEffect(() => {
+        const storedPage = localStorage.getItem("activePage");
+        if (storedPage) {
+            setActivePage(storedPage);
+        }
+    }, [setActivePage]);
+
+    const handlePageChange = (page) => {
+        setActivePage(page);
+        localStorage.setItem("activePage", page);
+    };
 
     const navItems = [
         { icon: LayoutDashboard, label: "Dashboard", page: "dashboard" },
@@ -47,7 +59,7 @@ const Sidebar = ({ activePage, setActivePage }) => {
                     {navItems.map((item, index) => (
                         <button
                             key={index}
-                            onClick={() => setActivePage(item.page)}
+                            onClick={() => handlePageChange(item.page)}
                             className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded-xs transition-all
                                 ${activePage === item.page ? "bg-[#00897B] text-white" : "text-[#2D3142] hover:bg-[#00897B]"}
                             `}

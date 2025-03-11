@@ -267,7 +267,7 @@ const BugTracker = () => {
                         key={date} 
                         className="bg-white shadow rounded overflow-hidden"
                         style={{ 
-                            borderLeft: `6px solid ${groupColors[date] || '#888888'}`
+                            borderLeft: `6px solid ${groupColors[date] || ''}`
                         }}
                     >
                         <div 
