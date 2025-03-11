@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 import React, { useState, useRef, useEffect } from "react";
-import { Video } from "lucide-react";
+import { Video, Plus, UserCircle } from "lucide-react";
 
 const ScreenRecorderButton = ({ onRecordingComplete }) => {
     const [isRecording, setIsRecording] = useState(false);
@@ -11,6 +12,16 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
     const [countdown, setCountdown] = useState(3);
     const [recordingTime, setRecordingTime] = useState(0);
     const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+    const [showBugForm, setShowBugForm] = useState(false);
+    const [networkError, setNetworkError] = useState(false);
+    const [bugReport, setBugReport] = useState({
+        title: "",
+        description: "",
+        browser: "",
+        os: "",
+        timestamp: "",
+        networkDetails: ""
+    });
 
     const buttonRef = useRef(null);
     const overlayRef = useRef(null);
@@ -41,6 +52,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         } else if (countdown === 0 && !isRecording && showOverlay) {
             startRecording();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [countdown, showOverlay, isRecording]);
 
     // Clean up on unmount
@@ -73,6 +85,35 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [isRecording]);
+
+    // Mock function to check for network errors
+    const checkForNetworkErrors = () => {
+        // This would be replaced with actual network check logic
+        // For now, let's simulate random network errors for demonstration
+        return Math.random() < 0.5; // 50% chance of network error
+    };
+
+    // Function to gather browser and system information
+    const gatherSystemInfo = () => {
+        const browserInfo = navigator.userAgent;
+        const osInfo = navigator.platform;
+        const now = new Date();
+        
+        // Mock network error details - in a real app, you'd capture actual errors
+        const mockNetworkError = {
+            status: 503,
+            endpoint: "/api/upload-recording",
+            error: "Service Unavailable",
+            latency: "2541ms"
+        };
+        
+        return {
+            browser: browserInfo,
+            os: osInfo,
+            timestamp: now.toISOString(),
+            networkDetails: JSON.stringify(mockNetworkError, null, 2)
+        };
+    };
 
     const toggleOverlay = () => {
         if (isRecording) {
@@ -131,6 +172,24 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             if (timerRef.current) {
                 clearInterval(timerRef.current);
             }
+            
+            // Check for network errors
+            const hasNetworkError = checkForNetworkErrors();
+            setNetworkError(hasNetworkError);
+            
+            if (hasNetworkError) {
+                // Automatically generate bug report
+                const systemInfo = gatherSystemInfo();
+                
+                const generatedReport = {
+                    title: "Network Error During Screen Recording Upload",
+                    description: `Failed to upload screen recording due to network error. The recording lasted ${formatTime(recordingTime)} and was ${recordedChunks.reduce((total, chunk) => total + chunk.size, 0) / (1024 * 1024)} MB in size.`,
+                    ...systemInfo
+                };
+                
+                setBugReport(generatedReport);
+                setShowBugForm(true);
+            }
         }
     };
 
@@ -168,6 +227,16 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         // Clear any recorded data
         setRecordedChunks([]);
         setVideoPreviewUrl(null);
+        setShowBugForm(false);
+    };
+
+    const handleBugReportSubmit = (event) => {
+        event.preventDefault();
+        // Submit the bug report
+        console.log("Bug report submitted:", bugReport);
+        setShowBugForm(false);
+        setNetworkError(false);
+        setShowOverlay(false);
     };
 
     // Format seconds into MM:SS
@@ -177,16 +246,37 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
+    // Get button text based on recording state
+    const getButtonText = () => {
+        if (isRecording) {
+            return `Stop Recording (${formatTime(recordingTime)})`;
+        } else {
+            return "Record Screen";
+        }
+    };
+
     return (
-        <div className="relative">
+        <div className="relative flex items-center">
+            {/* Add Team Member Button */}
+            <button
+                className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-1 hover:bg-gray-100 transition mr-2"
+            >
+                <Plus className="h-4 w-4" />
+                <UserCircle className="h-4 w-4" />
+            </button>
+            
             {/* Recording Button */}
             <button
                 ref={buttonRef}
-                className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition"
+                className={`px-3 py-2 text-sm rounded-xs flex items-center space-x-2 transition ${
+                    isRecording 
+                        ? "bg-red-100 text-red-700 hover:bg-red-200" 
+                        : "text-[#2D3142] hover:bg-[#A5D6A7] hover:text-white"
+                }`}
                 onClick={toggleOverlay}
             >
                 <Video className={`h-4 w-4 ${isRecording ? "text-red-500" : ""}`} />
-                <span className="hidden md:inline">{isRecording ? "Stop Recording" : "Record Screen"}</span>
+                <span className="hidden md:inline">{getButtonText()}</span>
                 {isRecording && <span className="ml-1 text-red-500 animate-pulse">●</span>}
             </button>
 
@@ -221,6 +311,58 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                 >
                                     Stop Recording
                                 </button>
+                            </div>
+                        ) : showBugForm ? (
+                            <div className="py-3">
+                                <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                                    <p className="font-medium">Network Error Detected</p>
+                                    <p className="text-sm">Please confirm and submit this bug report.</p>
+                                </div>
+                                <form onSubmit={handleBugReportSubmit}>
+                                    <div className="mb-3">
+                                        <label className="block text-gray-700 font-medium mb-1">
+                                            Title
+                                        </label>
+                                        <div className="bg-gray-50 border border-gray-300 rounded-md p-2 text-gray-700">
+                                            {bugReport.title}
+                                        </div>
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block text-gray-700 font-medium mb-1">
+                                            Description
+                                        </label>
+                                        <div className="bg-gray-50 border border-gray-300 rounded-md p-2 text-gray-700 text-sm min-h-16">
+                                            {bugReport.description}
+                                        </div>
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block text-gray-700 font-medium mb-1">
+                                            System Information
+                                        </label>
+                                        <div className="bg-gray-50 border border-gray-300 rounded-md p-2 text-gray-700 text-xs font-mono overflow-auto max-h-32">
+                                            <div><strong>Browser:</strong> {bugReport.browser?.substring(0, 50)}...</div>
+                                            <div><strong>OS:</strong> {bugReport.os}</div>
+                                            <div><strong>Timestamp:</strong> {bugReport.timestamp}</div>
+                                            <div className="mt-2"><strong>Network Details:</strong></div>
+                                            <pre>{bugReport.networkDetails}</pre>
+                                        </div>
+                                    </div>
+                                    <div className="flex space-x-2">
+                                        <button
+                                            type="button"
+                                            onClick={cancelRecording}
+                                            className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-50 transition"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition"
+                                        >
+                                            Submit Report
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         ) : videoPreviewUrl ? (
                             <div className="py-3">

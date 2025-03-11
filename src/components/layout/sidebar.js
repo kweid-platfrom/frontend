@@ -12,23 +12,22 @@ import {
     ChevronsRight
 } from "lucide-react";
 
-const Sidebar = () => {
+const Sidebar = ({ activePage, setActivePage }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     const navItems = [
-        { icon: LayoutDashboard, label: "Dashboard", active: true },
-        { icon: Beaker, label: "Test Runs" },
-        { icon: Bug, label: "Bug Tracker" },
-        { icon: GitPullRequest, label: "Pull Requests" },
-        { icon: Settings, label: "Settings" },
-        { icon: HelpCircle, label: "Help" },
+        { icon: LayoutDashboard, label: "Dashboard", page: "dashboard" },
+        { icon: Bug, label: "Bug Tracker", page: "bug-tracker" },
+        { icon: Beaker, label: "Test Scripts", page: "test-scripts" },
+        { icon: GitPullRequest, label: "Pull Requests", page: "pull-requests" },
+        { icon: Settings, label: "Settings", page: "settings" },
+        { icon: HelpCircle, label: "Help", page: "help" },
     ];
 
     return (
         <div className={`bg-[#A5D6A7] text-white ${isCollapsed ? "w-20" : "w-55"} flex-shrink-0 hidden md:flex flex-col transition-all duration-300`}>
             {/* Sidebar Header */}
             <div className="p-4 flex items-center justify-between">
-                {/* Logo Always Visible */}
                 <div className="flex items-center">
                     <div className="h-10 w-10 rounded-full bg-[#2D3142] flex items-center justify-center">
                         <span className="text-xl font-bold">QA</span>
@@ -46,16 +45,16 @@ const Sidebar = () => {
             <nav className="mt-5 px-2 flex-1">
                 <div className="space-y-1">
                     {navItems.map((item, index) => (
-                        <a
+                        <button
                             key={index}
-                            href="#"
-                            className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xs 
-                                ${item.active ? "bg-[#00897B] text-white" : "text-[#2D3142] hover:bg-[#00897B]"}
+                            onClick={() => setActivePage(item.page)}
+                            className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded-xs transition-all
+                                ${activePage === item.page ? "bg-[#00897B] text-white" : "text-[#2D3142] hover:bg-[#00897B]"}
                             `}
                         >
                             <item.icon className="h-5 w-5" />
                             {!isCollapsed && <span className="ml-3">{item.label}</span>}
-                        </a>
+                        </button>
                     ))}
                 </div>
             </nav>

@@ -160,7 +160,7 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
         const isSelected = selectedOption.value === option.value;
         
         // Base styles
-        let className = "px-3 py-2 flex items-center ";
+        let className = "px-2 py-2 flex items-center ";
         
         // First button in pill
         if (index === 0) {
@@ -172,14 +172,14 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
         }
         // Middle buttons
         else {
-            className += "border-l border-r border-gray-300 ";
+            className += "border-l border-r border-gray-400 ";
         }
         
         // Selected state
         if (isSelected) {
-            className += "bg-[#00897B] text-white";
+            className += "bg-[#00897B] text-white text-sm";
         } else {
-            className += "bg-[#eaeaea] text-gray-700 hover:bg-[#f0f0f0]";
+            className += "bg-[#eaeaea] text-sm text-gray-700  hover:bg-[#f0f0f0]";
         }
         
         return className;
@@ -207,15 +207,15 @@ export const ViewToggle = ({ options, defaultOption, onChange }) => {
                 {/* Filters Button - Separate from toggle pill */}
                 <button
                     ref={filterButtonRef}
-                    className={`px-3 py-2 rounded-xs flex items-center ${
-                        showFilters ? "bg-[#00897B] text-white" : "bg-[#eaeaea] text-gray-700 hover:bg-[#f0f0f0]"
+                    className={`px-2 py-2 rounded-xs flex items-center ${
+                        showFilters ? "bg-[#00897B] text-white" : "bg-[#eaeaea] text-gray-700 text-sm hover:bg-[#f0f0f0]"
                     }`}
                     onClick={() => setShowFilters(!showFilters)}
                 >
                     <Filter className="w-4 h-4 mr-3" />
                     <span className="whitespace-nowrap">Filters</span>
                     {Object.values(selectedFilters).some(arr => arr.length > 0) && (
-                        <span className="ml-2 bg-[#00897B] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        <span className="ml-2 bg-[#00897B] text-white text-xm rounded-full w-5 h-5 flex items-center justify-center">
                             {Object.values(selectedFilters).reduce((sum, arr) => sum + arr.length, 0)}
                         </span>
                     )}
