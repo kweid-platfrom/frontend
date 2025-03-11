@@ -1,12 +1,12 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
-import { Bell, Search, Play, Bug, FileText, UserPlus, Plus, } from "lucide-react";
+import { Bell, Search, Play, FileText, UserPlus, Plus, } from "lucide-react";
 import Image from "next/image";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
-import BugReportForm from "../BugReportForm";
+import BugReportButton from "../BugReport";
+
 
 const Header = () => {
-    const [showBugForm, setShowBugForm] = useState(false);
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
 
@@ -95,13 +95,7 @@ const Header = () => {
                     </button>
 
                     {/* Report Bug */}
-                    <button
-                        className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition"
-                        onClick={() => setShowBugForm(true)}
-                    >
-                        <Bug className="h-4 w-4" />
-                        <span className="hidden md:inline">Report Bug</span>
-                    </button>
+                    <BugReportButton className="text-[#2D3142] hover:bg-[#A5D6A7] hover:text-[#2D3142]" />
 
                     {/* Enhanced Screen Recorder Button */}
                     <ScreenRecorderButton onRecordingComplete={handleRecordingComplete} />
@@ -187,8 +181,6 @@ const Header = () => {
                 </div>
             )}
         </header>
-        {/* Bug Report Form Modal */}
-        <BugReportForm show={showBugForm} onClose={() => setShowBugForm(false)} />
 
         </>
     );

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import React, { useState } from "react";
 import "../app/globals.css";
@@ -13,12 +14,10 @@ import ActivityFeed from "../components/dashboard/ActivityFeed";
 import { Sidebar } from "../components/layout";
 import Header from "../components/layout/header";
 import { KeyMetrics } from "../components/dashboard/KeyMetrics";
-import BugReportForm from "../components/BugReportForm";
 import BugTracker from "../pages/bug-tracker";
 import TestScripts from "../pages/test-scripts";
 
 const Dashboard = () => {
-    const [showBugForm, setShowBugForm] = useState(false);
     const [bugData, setBugData] = useState(null);
     const [timeframeView, setTimeframeView] = useState({ value: "weekly", label: "Weekly" });
     const [activePage, setActivePage] = useState("dashboard");
@@ -29,18 +28,12 @@ const Dashboard = () => {
         { value: "quarterly", label: "Quarterly" }
     ];
 
-    const handleBugReportSubmit = (bug) => {
-        setBugData(bug);
-        setActivePage("bug-tracker");
-        setShowBugForm(false);
-    };
-
     return (
         <div className="flex h-screen bg-gray-50">
             <Sidebar activePage={activePage} setActivePage={setActivePage} />
 
             <div className="flex-grow overflow-auto">
-                <Header setShowBugForm={setShowBugForm} />
+                <Header />
 
                 <main className="p-6 space-y-6">
                     {activePage === "dashboard" && (
@@ -96,7 +89,6 @@ const Dashboard = () => {
                     {/* 📝 Test Scripts Page */}
                     {activePage === "test-scripts" && <TestScripts />}
 
-                    {showBugForm && <BugReportForm onClose={() => setShowBugForm(false)} onSubmit={handleBugReportSubmit} />}
                 </main>
             </div>
         </div>
