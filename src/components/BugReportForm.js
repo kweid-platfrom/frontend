@@ -259,5 +259,4 @@ const BugReportForm = ({ isOpen, onClose }) => {
         </div>
     );
 };
-
 export default BugReportForm;
