@@ -16,14 +16,20 @@ import {
 } from "lucide-react";
 
 const Sidebar = ({ setActivePage }) => {
-    // Initialize from localStorage to prevent flashing issue
-    const [isCollapsed, setIsCollapsed] = useState(() => {
-        return JSON.parse(localStorage.getItem("isCollapsed")) ?? false;
-    });
+    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [selectedPage, setSelectedPage] = useState("dashboard");
 
-    const [selectedPage, setSelectedPage] = useState(() => {
-        return localStorage.getItem("activePage") || "dashboard";
-    });
+    useEffect(() => {
+        const storedCollapsed = localStorage.getItem("isCollapsed");
+        const storedPage = localStorage.getItem("activePage");
+        if (storedCollapsed !== null) {
+            setIsCollapsed(JSON.parse(storedCollapsed));
+        }
+        if (storedPage) {
+            setSelectedPage(storedPage);
+        }
+    }, []);
+
 
     useEffect(() => {
         setActivePage(selectedPage); // Ensure active page state is updated

@@ -1,294 +1,177 @@
 "use client"
-import React, { useState, useRef, useEffect } from "react";
-import { X, ChevronDown } from "lucide-react";
+import React, { useState } from "react";
+import { X, Copy, Check } from "lucide-react";
 
-const SelectionActionsModal = ({
-    selectedCount,
-    onClose,
-    onStatusChange,
-    onPriorityChange,
-    onSeverityChange,
-    onAssigneeChange,
-    onMoveToGroup,
-    onDelete,
-    onExport,
-    statusOptions,
-    priorityOptions,
-    severityOptions,
-    groups,
-    teamMembers,
-    anchorPosition
+const SelectionActionsModal = ({ 
+    selectedBugs, 
+    onClose, 
+    statusOptions, 
+    priorityOptions, 
+    severityOptions, 
+    teamMembers, 
+    updateMultipleBugs
 }) => {
-    const [activeTab, setActiveTab] = useState("status");
-    const [selectedStatus, setSelectedStatus] = useState("");
-    const [selectedPriority, setSelectedPriority] = useState("");
-    const [selectedSeverity, setSelectedSeverity] = useState("");
-    const [selectedAssignee, setSelectedAssignee] = useState("");
-    const [selectedGroup, setSelectedGroup] = useState("");
-    const [dropdownOpen, setDropdownOpen] = useState(false);
-
-    const dropdownRef = useRef(null);
-    const modalRef = useRef(null);
-
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setDropdownOpen(false);
-            }
-        };
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, []);
-
-    const handleStatusChange = (status) => {
-        setSelectedStatus(status);
-        onStatusChange(status);
+    const [bulkEditField, setBulkEditField] = useState("");
+    const [bulkEditValue, setBulkEditValue] = useState("");
+    
+    const handleApplyChanges = () => {
+        if (!bulkEditField || !bulkEditValue) return;
+        
+        const updates = selectedBugs.map(bug => ({
+            ...bug,
+            [bulkEditField]: bulkEditValue
+        }));
+        
+        updateMultipleBugs(updates);
         onClose();
     };
-
-    const handlePriorityChange = (priority) => {
-        setSelectedPriority(priority);
-        onPriorityChange(priority);
-        onClose();
+    
+    const copyToClipboard = () => {
+        const textToCopy = selectedBugs.map(bug => 
+            `${bug.id} - ${bug.title} - ${bug.status} - ${bug.priority} - ${bug.severity}`
+        ).join('\n');
+        
+        navigator.clipboard.writeText(textToCopy)
+            .then(() => {
+                alert("Bug information copied to clipboard!");
+            })
+            .catch(err => {
+                console.error("Failed to copy text: ", err);
+            });
     };
 
-    const handleSeverityChange = (severity) => {
-        setSelectedSeverity(severity);
-        onSeverityChange(severity);
-        onClose();
-    };
-
-    const handleAssigneeChange = (assignee) => {
-        setSelectedAssignee(assignee);
-        onAssigneeChange(assignee);
-        onClose();
-    };
-
-    const handleMoveToGroup = (group) => {
-        setSelectedGroup(group);
-        onMoveToGroup(group);
-        onClose();
-    };
-
-    const handleDelete = () => {
-        if (window.confirm(`Are you sure you want to delete ${selectedCount} item(s)?`)) {
-            onDelete();
-            onClose();
-        }
-    };
-
-    const handleExport = () => {
-        onExport();
-        onClose();
-    };
-
-    // Position modal below the bug tracker
-    const modalStyle = {
-        top: anchorPosition ? `${anchorPosition.bottom + 10}px` : '50%',
-        left: anchorPosition ? `${anchorPosition.left}px` : '50%',
-        transform: anchorPosition ? 'none' : 'translate(-50%, -50%)'
-    };
+    // Generate field options for bulk editing
+    const fieldOptions = [
+        {value: "status", label: "Status", options: statusOptions},
+        {value: "priority", label: "Priority", options: priorityOptions},
+        {value: "severity", label: "Severity", options: severityOptions},
+        {value: "assignedTo", label: "Assigned To", options: teamMembers},
+        {value: "category", label: "Category", options: null}, // Free text
+        {value: "dueDate", label: "Due Date", options: null}, // Free text
+    ];
 
     return (
-        <div className="fixed inset-0 z-50" onClick={(e) => e.target === e.currentTarget && onClose()}>
-            <div
-                ref={modalRef}
-                className="bg-white rounded-lg shadow-lg w-64"
-                style={modalStyle}
-            >
-                <div className="flex items-center justify-between p-2 border-b">
-                    <h2 className="text-sm font-semibold">Bulk Actions ({selectedCount})</h2>
-                    <button
-                        onClick={onClose}
-                        className="p-1 rounded-full hover:bg-gray-100"
-                    >
-                        <X className="h-4 w-4" />
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-auto">
+                <div className="sticky top-0 bg-white p-4 border-b flex justify-between items-center">
+                    <h2 className="text-xl font-semibold">Selected Bugs ({selectedBugs.length})</h2>
+                    <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100">
+                        <X size={20} />
                     </button>
                 </div>
-
-                <div className="border-b">
-                    <div className="flex flex-wrap">
-                        <button
-                            className={`px-2 py-1 text-xs ${activeTab === "status" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
-                            onClick={() => setActiveTab("status")}
-                        >
-                            Status
-                        </button>
-                        <button
-                            className={`px-2 py-1 text-xs ${activeTab === "priority" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
-                            onClick={() => setActiveTab("priority")}
-                        >
-                            Priority
-                        </button>
-                        <button
-                            className={`px-2 py-1 text-xs ${activeTab === "severity" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
-                            onClick={() => setActiveTab("severity")}
-                        >
-                            Severity
-                        </button>
-                        <button
-                            className={`px-2 py-1 text-xs ${activeTab === "assignee" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
-                            onClick={() => setActiveTab("assignee")}
-                        >
-                            Assignee
-                        </button>
-                        <button
-                            className={`px-2 py-1 text-xs ${activeTab === "group" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500"}`}
-                            onClick={() => setActiveTab("group")}
-                        >
-                            Group
-                        </button>
+                
+                <div className="p-6">
+                    {/* Selected bugs list */}
+                    <div className="mb-6">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-lg font-medium">Selected Items</h3>
+                            <button 
+                                onClick={copyToClipboard}
+                                className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+                            >
+                                <Copy size={16} className="mr-1" />
+                                Copy List
+                            </button>
+                        </div>
+                        
+                        <div className="max-h-64 overflow-y-auto border rounded">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {selectedBugs.map(bug => (
+                                        <tr key={bug.id}>
+                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{bug.id}</td>
+                                            <td className="px-3 py-2 text-sm text-gray-900 truncate max-w-xs">{bug.title}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{bug.status}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{bug.priority}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    {/* Bulk edit section */}
+                    <div className="mt-8 p-4 border rounded bg-gray-50">
+                        <h3 className="text-lg font-medium mb-4">Bulk Edit</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Field selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Field to Update</label>
+                                <select 
+                                    value={bulkEditField}
+                                    onChange={(e) => {
+                                        setBulkEditField(e.target.value);
+                                        setBulkEditValue(""); // Reset value when field changes
+                                    }}
+                                    className="w-full p-2 border rounded"
+                                >
+                                    <option value="">Select Field</option>
+                                    {fieldOptions.map(field => (
+                                        <option key={field.value} value={field.value}>{field.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            
+                            {/* Value selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">New Value</label>
+                                {bulkEditField && fieldOptions.find(f => f.value === bulkEditField)?.options ? (
+                                    <select 
+                                        value={bulkEditValue}
+                                        onChange={(e) => setBulkEditValue(e.target.value)}
+                                        className="w-full p-2 border rounded"
+                                    >
+                                        <option value="">Select Value</option>
+                                        {fieldOptions.find(f => f.value === bulkEditField).options.map(option => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input 
+                                        type="text" 
+                                        value={bulkEditValue}
+                                        onChange={(e) => setBulkEditValue(e.target.value)}
+                                        className="w-full p-2 border rounded"
+                                        placeholder={`Enter new ${fieldOptions.find(f => f.value === bulkEditField)?.label || 'value'}`}
+                                        disabled={!bulkEditField}
+                                    />
+                                )}
+                            </div>
+                        </div>
+                        
+                        <div className="mt-4 text-sm text-gray-600">
+                            <p>
+                                {selectedBugs.length} bugs will be updated with {bulkEditField ? `${fieldOptions.find(f => f.value === bulkEditField).label}` : "the selected field"} 
+                                {bulkEditValue ? ` set to "${bulkEditValue}"` : ""}
+                            </p>
+                        </div>
                     </div>
                 </div>
-
-                <div className="p-2">
-                    {activeTab === "status" && (
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                className="w-full p-2 border rounded flex justify-between items-center text-sm"
-                                onClick={() => setDropdownOpen(!dropdownOpen)}
-                            >
-                                <span>{selectedStatus ? statusOptions.find(s => s.value === selectedStatus)?.label : "Select status"}</span>
-                                <ChevronDown className="h-4 w-4" />
-                            </button>
-
-                            {dropdownOpen && (
-                                <div className="absolute left-0 right-0 mt-1 border rounded bg-white shadow-lg z-10 max-h-32 overflow-y-auto">
-                                    {statusOptions.map((status) => (
-                                        <button
-                                            key={status.value}
-                                            className="w-full text-left px-2 py-1 hover:bg-gray-100 text-sm"
-                                            onClick={() => handleStatusChange(status.value)}
-                                        >
-                                            {status.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === "priority" && (
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                className="w-full p-2 border rounded flex justify-between items-center text-sm"
-                                onClick={() => setDropdownOpen(!dropdownOpen)}
-                            >
-                                <span>{selectedPriority ? priorityOptions.find(p => p.value === selectedPriority)?.label : "Select priority"}</span>
-                                <ChevronDown className="h-4 w-4" />
-                            </button>
-
-                            {dropdownOpen && (
-                                <div className="absolute left-0 right-0 mt-1 border rounded bg-white shadow-lg z-10 max-h-32 overflow-y-auto">
-                                    {priorityOptions.map((priority) => (
-                                        <button
-                                            key={priority.value}
-                                            className="w-full text-left px-2 py-1 hover:bg-gray-100 text-sm"
-                                            onClick={() => handlePriorityChange(priority.value)}
-                                        >
-                                            {priority.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === "severity" && (
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                className="w-full p-2 border rounded flex justify-between items-center text-sm"
-                                onClick={() => setDropdownOpen(!dropdownOpen)}
-                            >
-                                <span>{selectedSeverity ? severityOptions.find(s => s.value === selectedSeverity)?.label : "Select severity"}</span>
-                                <ChevronDown className="h-4 w-4" />
-                            </button>
-
-                            {dropdownOpen && (
-                                <div className="absolute left-0 right-0 mt-1 border rounded bg-white shadow-lg z-10 max-h-32 overflow-y-auto">
-                                    {severityOptions.map((severity) => (
-                                        <button
-                                            key={severity.value}
-                                            className="w-full text-left px-2 py-1 hover:bg-gray-100 text-sm"
-                                            onClick={() => handleSeverityChange(severity.value)}
-                                        >
-                                            {severity.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === "assignee" && (
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                className="w-full p-2 border rounded flex justify-between items-center text-sm"
-                                onClick={() => setDropdownOpen(!dropdownOpen)}
-                            >
-                                <span>{selectedAssignee ? teamMembers.find(m => m.id === selectedAssignee)?.name : "Select assignee"}</span>
-                                <ChevronDown className="h-4 w-4" />
-                            </button>
-
-                            {dropdownOpen && (
-                                <div className="absolute left-0 right-0 mt-1 border rounded bg-white shadow-lg z-10 max-h-32 overflow-y-auto">
-                                    {teamMembers.map((member) => (
-                                        <button
-                                            key={member.id}
-                                            className="w-full text-left px-2 py-1 hover:bg-gray-100 text-sm"
-                                            onClick={() => handleAssigneeChange(member.id)}
-                                        >
-                                            {member.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === "group" && (
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                className="w-full p-2 border rounded flex justify-between items-center text-sm"
-                                onClick={() => setDropdownOpen(!dropdownOpen)}
-                            >
-                                <span>{selectedGroup ? groups.find(g => g.id === selectedGroup)?.name : "Select group"}</span>
-                                <ChevronDown className="h-4 w-4" />
-                            </button>
-
-                            {dropdownOpen && (
-                                <div className="absolute left-0 right-0 mt-1 border rounded bg-white shadow-lg z-10 max-h-32 overflow-y-auto">
-                                    {groups.map((group) => (
-                                        <button
-                                            key={group.id}
-                                            className="w-full text-left px-2 py-1 hover:bg-gray-100 text-sm"
-                                            onClick={() => handleMoveToGroup(group.id)}
-                                        >
-                                            {group.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-2 border-t flex justify-between">
-                    <button
-                        className="px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded"
-                        onClick={handleDelete}
+                
+                {/* Action Buttons */}
+                <div className="sticky bottom-0 bg-gray-50 p-4 border-t flex justify-end space-x-2">
+                    <button 
+                        className="px-4 py-2 border rounded hover:bg-gray-100"
+                        onClick={onClose}
                     >
-                        Delete
+                        Cancel
                     </button>
-                    <button
-                        className="px-2 py-1 text-xs text-blue-500 hover:bg-blue-50 rounded"
-                        onClick={handleExport}
+                    <button 
+                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center disabled:bg-blue-300"
+                        onClick={handleApplyChanges}
+                        disabled={!bulkEditField || !bulkEditValue}
                     >
-                        Export
+                        <Check size={16} className="mr-1" />
+                        Apply Changes
                     </button>
                 </div>
             </div>
