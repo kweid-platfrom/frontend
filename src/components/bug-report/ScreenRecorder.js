@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
-import { Video} from "lucide-react";
+import { Video } from "lucide-react";
 
 const ScreenRecorderButton = ({ onRecordingComplete }) => {
     const [isRecording, setIsRecording] = useState(false);
@@ -58,7 +58,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             startRecording();
             setIsCountdownActive(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [countdown, isCountdownActive]);
 
     // Clean up on unmount
@@ -106,7 +106,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         const browserInfo = navigator.userAgent;
         const osInfo = navigator.platform;
         const now = new Date();
-        
+
         // Mock network error details - in a real app, you'd capture actual errors
         const mockNetworkError = {
             status: 503,
@@ -114,7 +114,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             error: "Service Unavailable",
             latency: "2541ms"
         };
-        
+
         return {
             browser: browserInfo,
             os: osInfo,
@@ -134,18 +134,18 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
 
     const initiateRecording = async () => {
         setIsSelectingSource(true);
-        
+
         try {
             // This will prompt the browser's native UI for selecting what to record
             const displayStream = await navigator.mediaDevices.getDisplayMedia({
                 video: { cursor: "always" },
                 audio: true
             });
-            
+
             // User has selected what to record and clicked Share in the browser UI
             setStream(displayStream);
             setIsSelectingSource(false);
-            
+
             // Now start the countdown
             setIsCountdownActive(true);
         } catch (error) {
@@ -187,7 +187,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             setShowOverlay(false);
             setCountdown(3);
             setIsCountdownActive(false);
-            
+
             // Stop stream if it exists
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
@@ -211,22 +211,22 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                 clearInterval(timerRef.current);
                 timerRef.current = null;
             }
-            
+
             // Check for network errors
             const hasNetworkError = checkForNetworkErrors();
             setNetworkError(hasNetworkError);
-            
+
             if (hasNetworkError) {
                 // Automatically generate bug report
                 const systemInfo = gatherSystemInfo();
-                
+
                 // Create steps to reproduce
                 const stepsToReproduce = `
 1. Attempted to record screen for ${formatTime(recordingTime)}
 2. Tried to upload recording to server
 3. Received network error during upload process
 4. Error occurred at ${systemInfo.timestamp}`;
-                
+
                 const generatedReport = {
                     title: "Network Error During Screen Recording Upload",
                     description: `Failed to upload screen recording due to network error. The recording lasted ${formatTime(recordingTime)} and was ${recordedChunks.reduce((total, chunk) => total + chunk.size, 0) / (1024 * 1024).toFixed(2)} MB in size.`,
@@ -236,7 +236,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                     severity: "High",
                     ...systemInfo
                 };
-                
+
                 setBugReport(generatedReport);
                 setShowBugForm(true);
                 setShowOverlay(true);
@@ -298,7 +298,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
 
     const handleBugReportSubmit = (event) => {
         event.preventDefault();
-        
+
         // Prepare form data for submission
         const formData = new FormData();
         formData.append('title', bugReport.title);
@@ -312,22 +312,22 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             timestamp: bugReport.timestamp
         }));
         formData.append('networkDetails', bugReport.networkDetails);
-        
+
         // Append the recording as an attachment
         if (bugReport.attachment) {
             formData.append('attachment', bugReport.attachment, 'screen-recording.webm');
         }
-        
+
         // Here you would make the actual API call to submit the bug report
         // For example:
         // fetch('/api/bug-reports', {
         //     method: 'POST',
         //     body: formData
         // })
-        
+
         console.log("Bug report ready to submit:", bugReport);
         console.log("Form data prepared for API call");
-        
+
         // Reset states
         setShowBugForm(false);
         setNetworkError(false);
@@ -356,11 +356,10 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             {/* Recording Button */}
             <button
                 ref={buttonRef}
-                className={`px-3 py-2 text-sm rounded-xs flex items-center space-x-2 transition ${
-                    isRecording 
-                        ? "bg-red-100 text-red-700 hover:bg-red-200" 
+                className={`px-3 py-2 text-sm rounded-xs flex items-center space-x-2 transition ${isRecording
+                        ? "bg-red-100 text-red-700 hover:bg-red-200"
                         : "text-[#2D3142] hover:bg-[#A5D6A7] hover:text-[#2d3142]"
-                }`}
+                    }`}
                 onClick={toggleOverlay}
                 disabled={isSelectingSource}
             >
@@ -373,7 +372,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             {showOverlay && (
                 <div
                     ref={overlayRef}
-                    className="fixed bg-white border border-gray-300 shadow-xl rounded-lg text-sm z-50 w-96 max-h-[90vh] overflow-auto" /* Added max-height and overflow */
+                    className="fixed bg-white border border-gray-300 shadow-xl rounded-lg text-sm z-50 w-80 max-h-[90vh] overflow-auto justify-center text-ce" /* Added max-height and overflow */
                     style={{
                         top: `${overlayPosition.top}px`,
                         left: `${overlayPosition.left}px`
@@ -385,7 +384,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                         {isSelectingSource ? (
                             <div className="text-center py-4">
                                 <div className="animate-pulse text-gray-600 mb-4">
-                                    Select what you want to record in the browser dialog...
+                                    Recording Options
                                 </div>
                             </div>
                         ) : isCountdownActive && countdown > 0 ? (
@@ -421,7 +420,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         <input
                                             type="text"
                                             value={bugReport.title}
-                                            onChange={(e) => setBugReport({...bugReport, title: e.target.value})}
+                                            onChange={(e) => setBugReport({ ...bugReport, title: e.target.value })}
                                             className="w-full border border-gray-300 rounded-md p-2 text-gray-700"
                                         />
                                     </div>
@@ -431,7 +430,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         </label>
                                         <textarea
                                             value={bugReport.description}
-                                            onChange={(e) => setBugReport({...bugReport, description: e.target.value})}
+                                            onChange={(e) => setBugReport({ ...bugReport, description: e.target.value })}
                                             className="w-full border border-gray-300 rounded-md p-2 text-gray-700 text-sm"
                                             rows="2"
                                         />
@@ -442,7 +441,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         </label>
                                         <select
                                             value={bugReport.category}
-                                            onChange={(e) => setBugReport({...bugReport, category: e.target.value})}
+                                            onChange={(e) => setBugReport({ ...bugReport, category: e.target.value })}
                                             className="w-full border border-gray-300 rounded-md p-2 text-gray-700"
                                         >
                                             <option value="Network">Network</option>
@@ -458,7 +457,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         </label>
                                         <textarea
                                             value={bugReport.stepsToReproduce}
-                                            onChange={(e) => setBugReport({...bugReport, stepsToReproduce: e.target.value})}
+                                            onChange={(e) => setBugReport({ ...bugReport, stepsToReproduce: e.target.value })}
                                             className="w-full border border-gray-300 rounded-md p-2 text-gray-700 text-sm"
                                             rows="2"
                                         />
@@ -469,7 +468,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         </label>
                                         <select
                                             value={bugReport.severity}
-                                            onChange={(e) => setBugReport({...bugReport, severity: e.target.value})}
+                                            onChange={(e) => setBugReport({ ...bugReport, severity: e.target.value })}
                                             className="w-full border border-gray-300 rounded-md p-2 text-gray-700"
                                         >
                                             <option value="Low">Low</option>
@@ -484,9 +483,9 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         </label>
                                         <div className="bg-gray-50 border border-gray-300 rounded-md p-2 text-gray-700 text-xs">
                                             <p>Screen recording attached ({
-                                                bugReport.attachment ? 
-                                                (bugReport.attachment.size / (1024 * 1024)).toFixed(2) + " MB" : 
-                                                "No file"
+                                                bugReport.attachment ?
+                                                    (bugReport.attachment.size / (1024 * 1024)).toFixed(2) + " MB" :
+                                                    "No file"
                                             })</p>
                                         </div>
                                     </div>
@@ -512,7 +511,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         </button>
                                         <button
                                             type="submit"
-                                            className="flex-1 bg-[#00897B] hover:bg-[#459187] text-white py-2 px-4 rounded-xs transition"
+                                            className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-4 rounded-xs transition"
                                         >
                                             Submit Report
                                         </button>
@@ -531,7 +530,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                 <div className="flex space-x-2">
                                     <button
                                         onClick={cancelRecording}
-                                        className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-50 transition"
+                                        className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-xs hover:bg-gray-50 transition"
                                     >
                                         Discard
                                     </button>
@@ -542,27 +541,27 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                             setVideoPreviewUrl(null);
                                             setRecordedChunks([]);
                                         }}
-                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md transition"
+                                        className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-4 rounded-xs transition"
                                     >
-                                        Keep Recording
+                                        Save
                                     </button>
                                 </div>
                             </div>
                         ) : (
                             <div className="py-3">
-                                <p className="text-gray-600 mb-4">Click the Share button to select what you want to record (tab, window, or entire screen).</p>
+                                <p className="text-gray-600 mb-4">Click the Start Button to proceed</p>
                                 <div className="flex space-x-2">
                                     <button
                                         onClick={cancelRecording}
-                                        className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-xs hover:bg-gray-50 transition"
-                                    >
+                                        className="flex-1 border border-gray-300 text-gray-700 py-2 px-2 rounded-xs hover:bg-gray-50 transition"
+        >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={initiateRecording}
-                                        className="flex-1 bg-[#00897B] hover:bg-[#459187] text-white py-2 px-2 rounded-xs transition"
+                                                className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-2 rounded-xs transition]"
                                     >
-                                        Share
+                                        Start
                                     </button>
                                 </div>
                             </div>

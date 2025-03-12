@@ -2,38 +2,53 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import {
     LayoutDashboard,
-    Beaker,
+    FileCode,
+    BarChart3,
+    Video,
     Bug,
     GitPullRequest,
     Settings,
     HelpCircle,
     LogOut,
     ChevronsLeft,
-    ChevronsRight
+    ChevronsRight,
+    ScrollText
 } from "lucide-react";
 
-const Sidebar = ({ activePage, setActivePage }) => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
+const Sidebar = ({ setActivePage }) => {
+    // Initialize from localStorage to prevent flashing issue
+    const [isCollapsed, setIsCollapsed] = useState(() => {
+        return JSON.parse(localStorage.getItem("isCollapsed")) ?? false;
+    });
+
+    const [selectedPage, setSelectedPage] = useState(() => {
+        return localStorage.getItem("activePage") || "dashboard";
+    });
 
     useEffect(() => {
-        const storedPage = localStorage.getItem("activePage");
-        if (storedPage) {
-            setActivePage(storedPage);
-        }
-    }, [setActivePage]);
+        setActivePage(selectedPage); // Ensure active page state is updated
+    }, [selectedPage, setActivePage]);
 
     const handlePageChange = (page) => {
-        setActivePage(page);
+        setSelectedPage(page);
         localStorage.setItem("activePage", page);
+    };
+
+    const toggleCollapse = () => {
+        setIsCollapsed((prev) => {
+            const newState = !prev;
+            localStorage.setItem("isCollapsed", JSON.stringify(newState));
+            return newState;
+        });
     };
 
     const navItems = [
         { icon: LayoutDashboard, label: "Dashboard", page: "dashboard" },
         { icon: Bug, label: "Bug Tracker", page: "bug-tracker" },
-        { icon: Beaker, label: "Test Scripts", page: "test-scripts" },
-        { icon: Beaker, label: "Automated Scripts", page: "auto-scripts" },
-        { icon: Beaker, label: "Reports", page: "reports" },
-        { icon: Beaker, label: "Recordings", page: "recordings" },
+        { icon: ScrollText, label: "Test Scripts", page: "test-scripts" },
+        { icon: FileCode, label: "Automated Scripts", page: "auto-scripts" },
+        { icon: BarChart3, label: "Reports", page: "reports" },
+        { icon: Video, label: "Recordings", page: "recordings" },
         { icon: GitPullRequest, label: "Pull Requests", page: "pull-requests" },
         { icon: Settings, label: "Settings", page: "settings" },
         { icon: HelpCircle, label: "Help", page: "help" },
@@ -51,7 +66,7 @@ const Sidebar = ({ activePage, setActivePage }) => {
                 </div>
 
                 {/* Toggle Button */}
-                <button onClick={() => setIsCollapsed(!isCollapsed)} className="text-[#2D3142]">
+                <button onClick={toggleCollapse} className="text-[#2D3142]">
                     {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
                 </button>
             </div>
@@ -64,7 +79,7 @@ const Sidebar = ({ activePage, setActivePage }) => {
                             key={index}
                             onClick={() => handlePageChange(item.page)}
                             className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded-xs transition-all
-                                ${activePage === item.page ? "bg-[#A5D6A7] text-[#00897B]" : "text-white hover:bg-[#00897B]"}
+                                ${selectedPage === item.page ? "bg-[#A5D6A7] text-[#00897B]" : "text-white hover:bg-[#00796B]"}
                             `}
                         >
                             <item.icon className="h-5 w-5" />

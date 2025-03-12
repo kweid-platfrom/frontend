@@ -176,7 +176,7 @@ const BugReportButton = ({ className = "" }) => {
                                         <input id="file-upload" type="file" multiple className="hidden" onChange={handleAttachmentChange} />
                                         <button type="button" className="flex items-center space-x-2 text-[#00897B]">
                                             <File className="h-5 w-5" />
-                                            <span>From In-App Recordings</span>
+                                            <span>From Recordings</span>
                                         </button>
                                     </div>
                                 </div>
@@ -217,7 +217,7 @@ const BugReportButton = ({ className = "" }) => {
                                     </select>
                                 </div>
 
-                                <button type="submit" className="w-full bg-[#00897B] text-white py-2 rounded mt-4">
+                                <button type="submit" className="w-full bg-[#00897B] hover:bg-[#00796B] text-white py-2 rounded mt-4">
                                     Submit
                                 </button>
                             </form>
