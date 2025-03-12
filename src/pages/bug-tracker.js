@@ -19,6 +19,8 @@ const BugTracker = () => {
         "Carla Rodriguez"
     ]);
 
+    
+
     // Extended bug data with all required fields
     const [bugsData, setBugsData] = useState({
         "04/2025": [
@@ -417,6 +419,7 @@ const BugTracker = () => {
         // Would call an API endpoint here in a real implementation
         alert(`${selectedBugsData.length} bugs prepared for export to ${format} format. Check console for details.`);
     };
+    
 
     return (
         <div className="p-4 min-h-screen">
@@ -472,7 +475,7 @@ const BugTracker = () => {
                                 style={{ color: groupColors[date] || '#cccccc' }}
                                 onClick={() => toggleGroup(date)}
                             >
-                                Bugs/Defects {date}
+                                Issues {date}
                             </h3>
                         </div>
 
@@ -481,7 +484,7 @@ const BugTracker = () => {
                                 <table className="min-w-full table-auto border-collapse border border-gray-300">
                                     <thead>
                                         <tr className="bg-white text-sm">
-                                            <th className="border border-gray-400 p-2 whitespace-nowrap w-8">
+                                            <th className="border border-gray-400 p-1 whitespace-nowrap w-8">
                                                 <input
                                                     type="checkbox"
                                                     className="w-4 h-4"
@@ -648,7 +651,7 @@ const BugTracker = () => {
                     groups={Object.keys(bugsData)}
                     teamMembers={teamMembers}
                 />
-            )}
+            )};
         </div>
     );
 };

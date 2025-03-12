@@ -18,6 +18,13 @@ import BugTracker from "../pages/bug-tracker";
 import TestScripts from "../pages/test-scripts";
 
 const Dashboard = () => {
+
+    const [activeModal, setActiveModal] = useState(null);
+
+    // Functions to control modals
+    const openModal = (modalType) => setActiveModal(modalType);
+    const closeModal = () => setActiveModal(null);
+
     const [bugData, setBugData] = useState(null);
     const [timeframeView, setTimeframeView] = useState({ value: "weekly", label: "Weekly" });
     const [activePage, setActivePage] = useState("dashboard");

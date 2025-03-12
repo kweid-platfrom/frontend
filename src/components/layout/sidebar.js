@@ -31,13 +31,16 @@ const Sidebar = ({ activePage, setActivePage }) => {
         { icon: LayoutDashboard, label: "Dashboard", page: "dashboard" },
         { icon: Bug, label: "Bug Tracker", page: "bug-tracker" },
         { icon: Beaker, label: "Test Scripts", page: "test-scripts" },
+        { icon: Beaker, label: "Automated Scripts", page: "auto-scripts" },
+        { icon: Beaker, label: "Reports", page: "reports" },
+        { icon: Beaker, label: "Recordings", page: "recordings" },
         { icon: GitPullRequest, label: "Pull Requests", page: "pull-requests" },
         { icon: Settings, label: "Settings", page: "settings" },
         { icon: HelpCircle, label: "Help", page: "help" },
     ];
 
     return (
-        <div className={`bg-[#A5D6A7] text-white ${isCollapsed ? "w-20" : "w-55"} flex-shrink-0 hidden md:flex flex-col transition-all duration-300`}>
+        <div className={`bg-[#00897B] text-white ${isCollapsed ? "w-20" : "w-55"} flex-shrink-0 hidden md:flex flex-col transition-all duration-300`}>
             {/* Sidebar Header */}
             <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center">
@@ -61,7 +64,7 @@ const Sidebar = ({ activePage, setActivePage }) => {
                             key={index}
                             onClick={() => handlePageChange(item.page)}
                             className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded-xs transition-all
-                                ${activePage === item.page ? "bg-[#00897B] text-white" : "text-[#2D3142] hover:bg-[#00897B]"}
+                                ${activePage === item.page ? "bg-[#A5D6A7] text-[#00897B]" : "text-white hover:bg-[#00897B]"}
                             `}
                         >
                             <item.icon className="h-5 w-5" />
