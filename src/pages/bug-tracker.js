@@ -1,6 +1,6 @@
 "use client"
-import React, { useState, useEffect, useMemo } from "react";
-import { Filter, Users, Settings, Plus, UserPlus } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Filter, Users, Settings, UserPlus } from "lucide-react";
 import BugDetailsModal from "../components/BugDetailsModal";
 import SelectionActionsModal from "../components/SelectionActionsModal";
 import SecondaryHeader from "../components/layout/secondaryHeader";
@@ -18,7 +18,7 @@ const BugTracker = () => {
     // Initialize all groups to be expanded by default
     const [expandedGroups, setExpandedGroups] = useState({});
     const [selectedBug, setSelectedBug] = useState(null);
-    const [colorScheme, setColorScheme] = useState(getColorScheme());
+    const [colorScheme, setColorScheme] = useState({});
     const [editingTitle, setEditingTitle] = useState(null);
     const [selectedBugs, setSelectedBugs] = useState([]);
     const [showSelectionModal, setShowSelectionModal] = useState(false);
@@ -36,91 +36,113 @@ const BugTracker = () => {
     const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 
     // Initialize bug data from localStorage or use default data
-    const [bugsData, setBugsData] = useState(() => {
-        const savedBugs = localStorage.getItem('bugsData');
-        if (savedBugs) {
+    const [bugsData, setBugsData] = useState({});
+
+    // Initialize color scheme
+    useEffect(() => {
+        // Ensure colorScheme is initialized before using it
+        const scheme = getColorScheme() || {};
+        setColorScheme(scheme);
+    }, []);
+
+    // Initialize bug data
+    useEffect(() => {
+        const initBugsData = () => {
             try {
-                return JSON.parse(savedBugs);
+                const savedBugs = localStorage.getItem('bugsData');
+                if (savedBugs) {
+                    const parsedData = JSON.parse(savedBugs);
+                    if (parsedData && typeof parsedData === 'object') {
+                        setBugsData(parsedData);
+                        return;
+                    }
+                }
             } catch (e) {
                 console.error("Failed to load saved bugs data", e);
             }
-        }
-        
-        // Default bug data if no saved data exists
-        return {
-            "04/2025": [
-                {
-                    id: "BUG-001",
-                    title: "Login button unresponsive",
-                    category: "UI",
-                    assignedTo: "John Doe",
-                    status: "Open",
-                    priority: "High",
-                    severity: "Critical",
-                    epic: "User Authentication",
-                    testCase: "TC-045",
-                    caseStatus: "Failed",
-                    dueDate: "04/15/2025",
-                    automated: "Yes",
-                    automationLink: "https://github.com/company/repo/tests/login-tests.js",
-                    creationLog: "04/01/2025 by Admin",
-                    comments: [
-                        { id: 1, author: "John Doe", text: "This needs urgent fixing.", timestamp: "04/02/2025, 10:15 AM", replies: [] },
-                        {
-                            id: 2, author: "Jane Smith", text: "Looking into it now.", timestamp: "04/02/2025, 10:20 AM", replies: [
-                                { id: 3, author: "John Doe", text: "Thanks for the quick response.", timestamp: "04/02/2025, 10:25 AM" }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    id: "BUG-002",
-                    title: "API request timeout",
-                    category: "Backend",
-                    assignedTo: "Jane Smith",
-                    status: "In Progress",
-                    priority: "Medium",
-                    severity: "Major",
-                    epic: "Data Retrieval",
-                    testCase: "TC-067",
-                    caseStatus: "Failed",
-                    dueDate: "04/10/2025",
-                    automated: "Yes",
-                    automationLink: "https://github.com/company/repo/tests/api-tests.js",
-                    creationLog: "04/02/2025 by QA Team",
-                    comments: [
-                        { id: 1, author: "Jane Smith", text: "Investigating the API endpoint now.", timestamp: "04/03/2025, 09:15 AM", replies: [] }
-                    ]
-                }
-            ],
-            "03/2025": [
-                {
-                    id: "BUG-003",
-                    title: "Mobile layout issue",
-                    category: "UI",
-                    assignedTo: "Alice Brown",
-                    status: "Resolved",
-                    priority: "Low",
-                    severity: "Minor",
-                    epic: "Mobile Experience",
-                    testCase: "TC-032",
-                    caseStatus: "Passed",
-                    dueDate: "03/20/2025",
-                    automated: "No",
-                    automationLink: "",
-                    creationLog: "03/15/2025 by UX Team",
-                    comments: [
-                        { id: 1, author: "Alice Brown", text: "Fixed the CSS issues with mobile layout.", timestamp: "03/16/2025, 11:30 AM", replies: [] },
-                        { id: 2, author: "QA Team", text: "Verified the fix. Works well now.", timestamp: "03/17/2025, 09:45 AM", replies: [] }
-                    ]
-                }
-            ]
+
+            // Default bug data if no saved data exists
+            const defaultData = {
+                "04/2025": [
+                    {
+                        id: "BUG-001",
+                        title: "Login button unresponsive",
+                        category: "UI",
+                        assignedTo: "John Doe",
+                        status: "Open",
+                        priority: "High",
+                        severity: "Critical",
+                        epic: "User Authentication",
+                        testCase: "TC-045",
+                        caseStatus: "Failed",
+                        dueDate: "04/15/2025",
+                        automated: "Yes",
+                        automationLink: "https://github.com/company/repo/tests/login-tests.js",
+                        creationLog: "04/01/2025 by Admin",
+                        comments: [
+                            { id: 1, author: "John Doe", text: "This needs urgent fixing.", timestamp: "04/02/2025, 10:15 AM", replies: [] },
+                            {
+                                id: 2, author: "Jane Smith", text: "Looking into it now.", timestamp: "04/02/2025, 10:20 AM", replies: [
+                                    { id: 3, author: "John Doe", text: "Thanks for the quick response.", timestamp: "04/02/2025, 10:25 AM" }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        id: "BUG-002",
+                        title: "API request timeout",
+                        category: "Backend",
+                        assignedTo: "Jane Smith",
+                        status: "In Progress",
+                        priority: "Medium",
+                        severity: "Major",
+                        epic: "Data Retrieval",
+                        testCase: "TC-067",
+                        caseStatus: "Failed",
+                        dueDate: "04/10/2025",
+                        automated: "Yes",
+                        automationLink: "https://github.com/company/repo/tests/api-tests.js",
+                        creationLog: "04/02/2025 by QA Team",
+                        comments: [
+                            { id: 1, author: "Jane Smith", text: "Investigating the API endpoint now.", timestamp: "04/03/2025, 09:15 AM", replies: [] }
+                        ]
+                    }
+                ],
+                "03/2025": [
+                    {
+                        id: "BUG-003",
+                        title: "Mobile layout issue",
+                        category: "UI",
+                        assignedTo: "Alice Brown",
+                        status: "Resolved",
+                        priority: "Low",
+                        severity: "Minor",
+                        epic: "Mobile Experience",
+                        testCase: "TC-032",
+                        caseStatus: "Passed",
+                        dueDate: "03/20/2025",
+                        automated: "No",
+                        automationLink: "",
+                        creationLog: "03/15/2025 by UX Team",
+                        comments: [
+                            { id: 1, author: "Alice Brown", text: "Fixed the CSS issues with mobile layout.", timestamp: "03/16/2025, 11:30 AM", replies: [] },
+                            { id: 2, author: "QA Team", text: "Verified the fix. Works well now.", timestamp: "03/17/2025, 09:45 AM", replies: [] }
+                        ]
+                    }
+                ]
+            };
+            setBugsData(defaultData);
         };
-    });
+
+        initBugsData();
+    }, []);
 
     // Save bugs data to localStorage whenever it changes
     useEffect(() => {
-        localStorage.setItem('bugsData', JSON.stringify(bugsData));
+        // Only save if bugsData is properly initialized
+        if (bugsData && Object.keys(bugsData).length > 0) {
+            localStorage.setItem('bugsData', JSON.stringify(bugsData));
+        }
     }, [bugsData]);
 
     // Keep selectedBug in sync with bugsData
@@ -128,14 +150,20 @@ const BugTracker = () => {
         if (selectedBug) {
             // Find the current version of the bug in bugsData
             let updatedBug = null;
-            for (const [, bugs] of Object.entries(bugsData)) {
-                const foundBug = bugs.find(b => b.id === selectedBug.id);
-                if (foundBug) {
-                    updatedBug = foundBug;
-                    break;
+
+            // Make sure bugsData is defined before iterating
+            if (bugsData) {
+                for (const [, bugs] of Object.entries(bugsData)) {
+                    if (bugs && Array.isArray(bugs)) {
+                        const foundBug = bugs.find(b => b.id === selectedBug.id);
+                        if (foundBug) {
+                            updatedBug = foundBug;
+                            break;
+                        }
+                    }
                 }
             }
-            
+
             // If bug still exists, update the selected bug
             if (updatedBug) {
                 setSelectedBug(updatedBug);
@@ -149,11 +177,13 @@ const BugTracker = () => {
 
     // Set all groups to be expanded by default
     useEffect(() => {
-        const initialExpandedState = {};
-        Object.keys(bugsData).forEach(date => {
-            initialExpandedState[date] = true;  // Set all to true for expanded by default
-        });
-        setExpandedGroups(initialExpandedState);
+        if (bugsData && Object.keys(bugsData).length > 0) {
+            const initialExpandedState = {};
+            Object.keys(bugsData).forEach(date => {
+                initialExpandedState[date] = true;  // Set all to true for expanded by default
+            });
+            setExpandedGroups(initialExpandedState);
+        }
     }, [bugsData]);
 
     // Update selection modal visibility based on selections
@@ -178,36 +208,17 @@ const BugTracker = () => {
         { icon: UserPlus, label: "Add Team Member", onClick: () => setShowTeamMemberModal(true) }
     ];
 
-    // Get the current date in MM/YYYY format for new bugs
-    const getCurrentDateGroup = () => {
-        const today = new Date();
-        return `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-    };
 
-    // Generate a unique bug ID
-    const generateBugId = () => {
-        // Find the highest existing ID number
-        let maxNum = 0;
-        Object.values(bugsData).forEach(bugs => {
-            bugs.forEach(bug => {
-                const idNum = parseInt(bug.id.replace("BUG-", ""), 10);
-                if (!isNaN(idNum) && idNum > maxNum) {
-                    maxNum = idNum;
-                }
-            });
-        });
-        return `BUG-${String(maxNum + 1).padStart(3, '0')}`;
-    };
+    const isAllInGroupSelected = useCallback((groupDate) => {
+        if (!bugsData || !bugsData[groupDate] || bugsData[groupDate].length === 0) return false;
+        return bugsData[groupDate].every(bug =>
+            selectedBugs.includes(`${groupDate}-${bug.id}`)
+        );
+    }, [bugsData, selectedBugs]);
 
-    // Memoize derived data for performance and actually use it
-    const groupsWithSelection = useMemo(() => {
-        return Object.keys(bugsData).map(date => ({
-            date,
-            isAllSelected: isAllInGroupSelected(date),
-            bugsCount: bugsData[date]?.length || 0,
-            selectedCount: selectedBugs.filter(key => key.startsWith(`${date}-`)).length
-        }));
-    }, [bugsData, isAllInGroupSelected, selectedBugs]);
+    const clearAllSelections = () => {
+        setSelectedBugs([]);
+    };
 
     // Group toggling
     const toggleGroup = (date) => {
@@ -227,6 +238,8 @@ const BugTracker = () => {
 
     // Title editing
     const handleTitleEdit = (bugId, groupDate, e) => {
+        if (!bugsData || !bugsData[groupDate]) return;
+
         const updatedBugsData = { ...bugsData };
         const groupBugs = updatedBugsData[groupDate];
         if (groupBugs) {
@@ -248,6 +261,8 @@ const BugTracker = () => {
 
     // Group color management
     const changeGroupColor = (date) => {
+        if (!colorScheme) return;
+
         // Generate a random color
         const randomColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
         const updatedColorScheme = updateGroupColor(date, randomColor, colorScheme);
@@ -269,10 +284,12 @@ const BugTracker = () => {
     };
 
     const handleSelectAllInGroup = (groupDate, isChecked) => {
+        if (!bugsData || !bugsData[groupDate]) return;
+
         setSelectedBugs(prev => {
             // Create a new selection array without bugs from this group
             const filteredSelection = prev.filter(key => !key.startsWith(`${groupDate}-`));
-            
+
             if (isChecked && bugsData[groupDate]) {
                 // Add all bugs from this group
                 const groupSelections = bugsData[groupDate].map(bug => `${groupDate}-${bug.id}`);
@@ -284,19 +301,10 @@ const BugTracker = () => {
         });
     };
 
-    const isAllInGroupSelected = useCallback((groupDate) => {
-        if (!bugsData[groupDate] || bugsData[groupDate].length === 0) return false;
-        return bugsData[groupDate].every(bug => 
-            selectedBugs.includes(`${groupDate}-${bug.id}`)
-        );
-    }, [bugsData, selectedBugs]);
-
-    const clearAllSelections = () => {
-        setSelectedBugs([]);
-    };
-
     // Bug field updates
     const handleStatusChange = (bugId, groupDate, newStatus) => {
+        if (!bugsData || !bugsData[groupDate]) return;
+
         const updatedBugsData = { ...bugsData };
         if (updatedBugsData[groupDate]) {
             const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
@@ -308,6 +316,8 @@ const BugTracker = () => {
     };
 
     const handlePriorityChange = (bugId, groupDate, newPriority) => {
+        if (!bugsData || !bugsData[groupDate]) return;
+
         const updatedBugsData = { ...bugsData };
         if (updatedBugsData[groupDate]) {
             const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
@@ -319,6 +329,8 @@ const BugTracker = () => {
     };
 
     const handleSeverityChange = (bugId, groupDate, newSeverity) => {
+        if (!bugsData || !bugsData[groupDate]) return;
+
         const updatedBugsData = { ...bugsData };
         if (updatedBugsData[groupDate]) {
             const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
@@ -330,6 +342,8 @@ const BugTracker = () => {
     };
 
     const handleAssigneeChange = (bugId, groupDate, newAssignee) => {
+        if (!bugsData || !bugsData[groupDate]) return;
+
         const updatedBugsData = { ...bugsData };
         if (updatedBugsData[groupDate]) {
             const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
@@ -341,16 +355,20 @@ const BugTracker = () => {
     };
 
     // Color helper functions
-    const getStatusColorForBug = (status) => getStatusColor(status, colorScheme);
-    const getPriorityColorForBug = (priority) => getPriorityColor(priority, colorScheme);
-    const getSeverityColorForBug = (severity) => getSeverityColor(severity, colorScheme);
+    const getStatusColorForBug = (status) => getStatusColor(status, colorScheme || {});
+    const getPriorityColorForBug = (priority) => getPriorityColor(priority, colorScheme || {});
+    const getSeverityColorForBug = (severity) => getSeverityColor(severity, colorScheme || {});
 
     // Update bug details from modal
     const handleUpdateBug = (updatedBug) => {
+        if (!bugsData) return;
+
         const updatedBugsData = { ...bugsData };
 
         // Find which group this bug belongs to
         for (const [date, bugs] of Object.entries(updatedBugsData)) {
+            if (!bugs || !Array.isArray(bugs)) continue;
+
             const bugIndex = bugs.findIndex(b => b.id === updatedBug.id);
             if (bugIndex !== -1) {
                 updatedBugsData[date][bugIndex] = updatedBug;
@@ -360,55 +378,22 @@ const BugTracker = () => {
         }
     };
 
-    // Add a new bug
-    const addNewBug = () => {
-        const groupDate = getCurrentDateGroup();
-        const newBugId = generateBugId();
-        const today = new Date();
-        
-        const newBug = {
-            id: newBugId,
-            title: "New Bug",
-            category: "UI",
-            assignedTo: "",
-            status: "Open",
-            priority: "Medium",
-            severity: "Minor",
-            epic: "",
-            testCase: "",
-            caseStatus: "",
-            dueDate: "",
-            automated: "No",
-            automationLink: "",
-            creationLog: `${today.toLocaleDateString()} by User`,
-            comments: []
-        };
-
-        const updatedBugsData = { ...bugsData };
-
-        // If the group doesn't exist, create it
-        if (!updatedBugsData[groupDate]) {
-            updatedBugsData[groupDate] = [];
-        }
-
-        // Add the new bug to the group
-        updatedBugsData[groupDate].push(newBug);
-        setBugsData(updatedBugsData);
-        
-        // Open the bug details modal for the new bug
-        setSelectedBug(newBug);
-        setShowBugDetailsModal(true);
-    };
-
     // Handle bulk operations for selected bugs
     const handleUpdateMultipleBugs = (updates) => {
+        if (!bugsData) return;
+
         const updatedBugsData = { ...bugsData };
 
         selectedBugs.forEach(selectionKey => {
-            const [groupDate, bugId] = selectionKey.split('-');
+            const parts = selectionKey.split('-');
+            if (parts.length < 2) return;
+
+            const groupDate = parts[0];
+            const bugId = parts.slice(1).join('-'); // Handles case where bugId might contain hyphens
+
             if (updatedBugsData[groupDate]) {
                 const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-                
+
                 if (bugIndex !== -1) {
                     // Apply all provided updates
                     Object.keys(updates).forEach(field => {
@@ -426,6 +411,8 @@ const BugTracker = () => {
 
     // Handle moving bugs to a different group
     const handleMoveToGroup = (targetGroup) => {
+        if (!bugsData) return;
+
         const updatedBugsData = { ...bugsData };
 
         // If the target group doesn't exist, create it
@@ -435,7 +422,11 @@ const BugTracker = () => {
 
         // Process each selected bug
         selectedBugs.forEach(selectionKey => {
-            const [sourceGroup, bugId] = selectionKey.split('-');
+            const parts = selectionKey.split('-');
+            if (parts.length < 2) return;
+
+            const sourceGroup = parts[0];
+            const bugId = parts.slice(1).join('-'); // Handles case where bugId might contain hyphens
 
             // Skip if trying to move to the same group
             if (sourceGroup === targetGroup) return;
@@ -467,10 +458,17 @@ const BugTracker = () => {
 
     // Handle deleting selected bugs
     const handleDeleteSelectedBugs = () => {
+        if (!bugsData) return;
+
         const updatedBugsData = { ...bugsData };
 
         selectedBugs.forEach(selectionKey => {
-            const [groupDate, bugId] = selectionKey.split('-');
+            const parts = selectionKey.split('-');
+            if (parts.length < 2) return;
+
+            const groupDate = parts[0];
+            const bugId = parts.slice(1).join('-'); // Handles case where bugId might contain hyphens
+
             if (updatedBugsData[groupDate]) {
                 updatedBugsData[groupDate] = updatedBugsData[groupDate].filter(bug => bug.id !== bugId);
 
@@ -488,11 +486,11 @@ const BugTracker = () => {
 
     // Add a comment to a bug
     const addComment = (bugId, groupDate, commentText, author) => {
-        if (!commentText || !author) return;
-        
+        if (!commentText || !author || !bugsData || !bugsData[groupDate]) return;
+
         const updatedBugsData = { ...bugsData };
         if (!updatedBugsData[groupDate]) return;
-        
+
         const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
         if (bugIndex === -1) return;
 
@@ -538,26 +536,33 @@ const BugTracker = () => {
 
     // Implement person filter 
     const handlePersonFilter = () => {
+        if (!bugsData) return;
+
         const assigneeCount = {};
-        
+
         // Count bugs per assignee
-        Object.values(bugsData).flat().forEach(bug => {
-            if (bug.assignedTo) {
-                assigneeCount[bug.assignedTo] = (assigneeCount[bug.assignedTo] || 0) + 1;
+        Object.values(bugsData).forEach(bugs => {
+            if (bugs && Array.isArray(bugs)) {
+                bugs.forEach(bug => {
+                    if (bug.assignedTo) {
+                        assigneeCount[bug.assignedTo] = (assigneeCount[bug.assignedTo] || 0) + 1;
+                    }
+                });
             }
         });
-        
+
         // Log assignee distribution
         console.log("Bugs by assignee:", assigneeCount);
-        
+
         // For demo purposes, just show an alert with assignee stats
         alert("Assignee distribution logged to console.");
     };
 
     // Filter bugs based on date filter
     const filteredBugsData = useMemo(() => {
+        if (!bugsData) return {};
         if (!dateFilter) return bugsData;
-        
+
         const filtered = {};
         if (bugsData[dateFilter]) {
             filtered[dateFilter] = bugsData[dateFilter];
@@ -565,32 +570,25 @@ const BugTracker = () => {
         return filtered;
     }, [bugsData, dateFilter]);
 
-    // Group statistics for the dashboard
-    const groupStats = useMemo(() => {
-        return groupsWithSelection.map(group => {
-            // Find all bugs for this group
-            const bugs = bugsData[group.date] || [];
-            
-            // Count bugs by status
-            const statusCount = {};
-            bugs.forEach(bug => {
-                statusCount[bug.status] = (statusCount[bug.status] || 0) + 1;
-            });
-            
-            // Calculate priority distribution
-            const priorityCount = {};
-            bugs.forEach(bug => {
-                priorityCount[bug.priority] = (priorityCount[bug.priority] || 0) + 1;
-            });
-            
-            return {
-                ...group,
-                statusCount,
-                priorityCount,
-                totalBugs: bugs.length
-            };
-        });
-    }, [groupsWithSelection, bugsData]);
+    // Check if data is ready to render
+    const isDataReady = useMemo(() => {
+        return bugsData && Object.keys(bugsData).length > 0;
+    }, [bugsData]);
+
+    // If data is not ready, show loading state
+    if (!isDataReady) {
+        return (
+            <div className="flex flex-col min-h-screen bg-gray-50">
+                <SecondaryHeader
+                    title="Bug Tracker"
+                    actions={[]}
+                />
+                <main className="flex-1 p-4 flex items-center justify-center">
+                    <p>Loading bug tracker data...</p>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col min-h-screen bg-gray-50">
@@ -602,18 +600,10 @@ const BugTracker = () => {
             <main className="flex-1 p-4">
                 {/* Add New Bug button */}
                 <div className="mb-4 flex justify-between items-center">
-                    <button 
-                        onClick={addNewBug}
-                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center"
-                    >
-                        <Plus size={16} className="mr-2" />
-                        Add New Bug
-                    </button>
-                    
                     {dateFilter && (
                         <div className="flex items-center bg-blue-100 px-3 py-1 rounded">
                             <span className="mr-2">Filtered: {dateFilter}</span>
-                            <button 
+                            <button
                                 onClick={clearDateFilter}
                                 className="text-blue-600 hover:text-blue-800"
                             >
@@ -621,35 +611,6 @@ const BugTracker = () => {
                             </button>
                         </div>
                     )}
-                </div>
-
-                {/* Dashboard with group statistics */}
-                <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {groupStats.slice(0, 3).map((stat) => (
-                        <div 
-                            key={stat.date} 
-                            className="bg-white p-4 rounded-lg shadow"
-                            onClick={() => applyDateFilter(stat.date)}
-                        >
-                            <h3 className="font-bold mb-2">{stat.date}</h3>
-                            <p>Total bugs: {stat.totalBugs}</p>
-                            <p>Selected: {stat.selectedCount}</p>
-                            <div className="mt-2">
-                                <h4 className="text-sm font-medium">Status:</h4>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                    {Object.entries(stat.statusCount).map(([status, count]) => (
-                                        <span 
-                                            key={status}
-                                            className="px-2 py-1 text-xs rounded"
-                                            style={{ backgroundColor: getStatusColorForBug(status) }}
-                                        >
-                                            {status}: {count}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
                 </div>
 
                 {/* Selected bugs count and actions */}
@@ -686,30 +647,28 @@ const BugTracker = () => {
                                 handleTitleEdit={(bugId, e) => handleTitleEdit(bugId, date, e)}
                                 handleTitleEditStart={handleTitleEditStart}
                                 handleTitleEditEnd={handleTitleEditEnd}
-                                getStatusColor={getStatusColorForBug}
-                                getPriorityColor={getPriorityColorForBug}
-                                getSeverityColor={getSeverityColorForBug}
                                 handleStatusChange={(bugId, newStatus) => handleStatusChange(bugId, date, newStatus)}
                                 handlePriorityChange={(bugId, newPriority) => handlePriorityChange(bugId, date, newPriority)}
                                 handleSeverityChange={(bugId, newSeverity) => handleSeverityChange(bugId, date, newSeverity)}
                                 handleAssigneeChange={(bugId, newAssignee) => handleAssigneeChange(bugId, date, newAssignee)}
+                                changeGroupColor={() => changeGroupColor(date)}
                                 statusOptions={statusOptions}
                                 priorityOptions={priorityOptions}
                                 severityOptions={severityOptions}
                                 teamMembers={teamMembers}
+                                getStatusColor={getStatusColorForBug}
+                                getPriorityColor={getPriorityColorForBug}
+                                getSeverityColor={getSeverityColorForBug}
                                 selectedBugs={selectedBugs}
                                 handleBugSelection={(bugId) => handleBugSelection(bugId, date)}
                                 isAllSelected={isAllInGroupSelected(date)}
                                 handleSelectAll={(isChecked) => handleSelectAllInGroup(date, isChecked)}
-                                changeGroupColor={() => changeGroupColor(date)}
-                                groupColor={colorScheme.groups?.[date] || '#f3f4f6'}
+                                addComment={(bugId, comment, author) => addComment(bugId, date, comment, author)}
                             />
                         ))
                 ) : (
-                    <div className="p-8 text-center bg-white rounded-lg shadow">
-                        <p className="text-gray-500">
-                            {dateFilter ? `No bugs found for ${dateFilter}. Try clearing the filter.` : 'No bugs found. Add a new bug to get started.'}
-                        </p>
+                    <div className="p-4 bg-white rounded-lg shadow text-center">
+                        <p>No bugs found. {dateFilter ? "Try clearing the filter." : "Add a new bug to get started."}</p>
                     </div>
                 )}
             </main>
@@ -719,76 +678,76 @@ const BugTracker = () => {
                 <BugDetailsModal
                     bug={selectedBug}
                     onClose={closeBugDetails}
+                    onUpdate={handleUpdateBug}
                     statusOptions={statusOptions}
                     priorityOptions={priorityOptions}
                     severityOptions={severityOptions}
                     teamMembers={teamMembers}
-                    updateBug={handleUpdateBug}
-                    getStatusColor={getStatusColorForBug}
-                    getPriorityColor={getPriorityColorForBug}
-                    getSeverityColor={getSeverityColorForBug}
-                    addComment={(commentText) => {
-                        // Find which group this bug belongs to
-                        for (const [date, bugs] of Object.entries(bugsData)) {
-                            if (bugs.some(b => b.id === selectedBug.id)) {
-                                addComment(selectedBug.id, date, commentText, "Current User");
-                                break;
-                            }
-                        }
-                    }}
                 />
             )}
 
             {/* Selection actions modal */}
-            {showSelectionModal && selectedBugs.length > 0 && (
+            {showSelectionModal && (
                 <SelectionActionsModal
-                    selectedBugs={selectedBugs}
                     onClose={() => setShowSelectionModal(false)}
+                    selectedCount={selectedBugs.length}
+                    onUpdateMultiple={handleUpdateMultipleBugs}
+                    onDeleteSelected={handleDeleteSelectedBugs}
+                    onMoveToGroup={handleMoveToGroup}
                     statusOptions={statusOptions}
                     priorityOptions={priorityOptions}
                     severityOptions={severityOptions}
                     teamMembers={teamMembers}
-                    updateMultipleBugs={handleUpdateMultipleBugs}
-                    handleMoveToGroup={handleMoveToGroup}
-                    handleDeleteSelectedBugs={handleDeleteSelectedBugs}
-                    existingGroups={Object.keys(bugsData)}
+                    availableGroups={Object.keys(bugsData)}
                 />
             )}
 
-            {/* Date filter menu */}
-            {filterMenuOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-                    <div className="bg-white p-4 rounded-lg shadow-lg w-80">
-                        <h3 className="font-bold mb-3">Filter by Date</h3>
-                        <div className="max-h-60 overflow-y-auto mb-3">
-                            {Object.keys(bugsData)
-                                .sort((a, b) => {
-                                    // Sort by date (newest first)
-                                    const dateA = new Date(a.split('/').reverse().join('/'));
-                                    const dateB = new Date(b.split('/').reverse().join('/'));
-                                    return dateB - dateA;
-                                })
-                                .map(date => (
-                                    <div 
-                                        key={date}
-                                        className="py-2 px-3 hover:bg-gray-100 cursor-pointer rounded mb-1"
-                                        onClick={() => applyDateFilter(date)}
-                                    >
-                                        {date} ({bugsData[date].length} bugs)
-                                    </div>
-                                ))
-                            }
+            {/* Team member modal */}
+            {showTeamMemberModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+                        <h2 className="text-xl font-bold mb-4">Manage Team Members</h2>
+
+                        <div className="mb-4">
+                            <label className="block mb-2">Add new team member:</label>
+                            <div className="flex">
+                                <input
+                                    type="text"
+                                    value={newTeamMember}
+                                    onChange={(e) => setNewTeamMember(e.target.value)}
+                                    className="flex-1 border border-gray-300 p-2 rounded-l"
+                                    placeholder="Enter name"
+                                />
+                                <button
+                                    onClick={handleAddTeamMember}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-r hover:bg-blue-700"
+                                >
+                                    Add
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex justify-end space-x-2">
+
+                        <div className="mb-4">
+                            <h3 className="font-medium mb-2">Current team members:</h3>
+                            <ul className="border border-gray-200 rounded divide-y">
+                                {teamMembers.map(member => (
+                                    <li key={member} className="p-2 flex justify-between items-center">
+                                        <span>{member}</span>
+                                        <button
+                                            onClick={() => handleRemoveTeamMember(member)}
+                                            className="text-red-600 hover:text-red-800"
+                                        >
+                                            Remove
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        <div className="flex justify-end">
                             <button
-                                onClick={clearDateFilter}
-                                className="px-3 py-1 text-gray-600 hover:bg-gray-100 rounded"
-                            >
-                                Clear Filter
-                            </button>
-                            <button
-                                onClick={() => setFilterMenuOpen(false)}
-                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                onClick={() => setShowTeamMemberModal(false)}
+                                className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
                             >
                                 Close
                             </button>
@@ -797,50 +756,37 @@ const BugTracker = () => {
                 </div>
             )}
 
-            {/* Team member modal */}
-            {showTeamMemberModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-                    <div className="bg-white p-4 rounded-lg shadow-lg w-80">
-                        <h3 className="font-bold mb-3">Manage Team Members</h3>
-                        
+            {/* Filter menu */}
+            {filterMenuOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+                        <h2 className="text-xl font-bold mb-4">Filter Bugs</h2>
+
                         <div className="mb-4">
-                            <label className="block text-sm font-medium mb-1">Add New Team Member</label>
-                            <div className="flex">
-                                <input
-                                    type="text"
-                                    value={newTeamMember}
-                                    onChange={(e) => setNewTeamMember(e.target.value)}
-                                    className="flex-1 border rounded-l px-3 py-2"
-                                    placeholder="Enter name"
-                                />
-                                <button
-                                    onClick={handleAddTeamMember}
-                                    className="bg-blue-600 text-white px-3 py-2 rounded-r hover:bg-blue-700"
-                                >
-                                    Add
-                                </button>
+                            <h3 className="font-medium mb-2">Select date range:</h3>
+                            <div className="grid grid-cols-2 gap-2">
+                                {Object.keys(bugsData).map(date => (
+                                    <button
+                                        key={date}
+                                        onClick={() => applyDateFilter(date)}
+                                        className={`p-2 border rounded ${dateFilter === date ? 'bg-blue-100 border-blue-500' : 'border-gray-300 hover:bg-gray-100'}`}
+                                    >
+                                        {date}
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                        
-                        <div className="mb-4 max-h-60 overflow-y-auto">
-                            <label className="block text-sm font-medium mb-2">Current Team Members</label>
-                            {teamMembers.map(member => (
-                                <div key={member} className="flex justify-between items-center py-2 border-b">
-                                    <span>{member}</span>
-                                    <button
-                                        onClick={() => handleRemoveTeamMember(member)}
-                                        className="text-red-600 hover:text-red-800 text-sm"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        <div className="flex justify-end">
+
+                        <div className="flex justify-between">
                             <button
-                                onClick={() => setShowTeamMemberModal(false)}
-                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                onClick={clearDateFilter}
+                                className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+                            >
+                                Clear Filters
+                            </button>
+                            <button
+                                onClick={() => setFilterMenuOpen(false)}
+                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                             >
                                 Close
                             </button>

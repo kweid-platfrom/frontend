@@ -137,7 +137,7 @@ const Header = ({ setShowBugForm }) => {
                     <div className="flex items-center">
                         <Image
                             className="h-8 w-8 rounded-full bg-[#E1E2E6]"
-                            src="/api/placeholder/32/32"
+                            src="/dummyimage.com/300.png/09f/fff"
                             alt="User avatar"
                             width={32}
                             height={32}

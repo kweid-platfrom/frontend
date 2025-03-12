@@ -99,7 +99,7 @@ const Sidebar = ({ setActivePage }) => {
             <div className="p-4 border-t border-[#00897B] flex items-center">
                 <Image
                     className="h-8 w-8 rounded-full bg-[#2D3142]"
-                    src="/api/placeholder/32/32"
+                    src="/dummyimage.com/300.png/09f/fff"
                     width={32}
                     height={32}
                     alt="User avatar"

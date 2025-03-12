@@ -5,13 +5,13 @@ import { ChevronRight, ChevronDown } from "lucide-react";
 import BugTable from "./bugTable";
 
 const BugGroup = ({
-    date,
-    bugs,
-    expandedGroups,
-    groupColors,
-    editingTitle,
-    selectedBugs,
-    teamMembers,
+    date = '',
+    bugs = [],
+    expandedGroups = {},
+    groupColors = {},
+    editingTitle = '',
+    selectedBugs = [],
+    teamMembers = [],
     statusOptions,
     priorityOptions,
     severityOptions,
@@ -32,6 +32,7 @@ const BugGroup = ({
     getSeverityColor,
     openBugDetails
 }) => {
+    
     return (
         <div
             className="bg-white shadow rounded overflow-hidden"
