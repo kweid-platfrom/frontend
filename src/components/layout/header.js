@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
-import { Bell, Search, Play, FileText, Plus } from "lucide-react";
+import { Bell, Search, Play, UserPlus, FileText, Plus } from "lucide-react";
 import Image from "next/image";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
 import BugReportButton from "../BugReport";
@@ -8,12 +8,12 @@ import BugReportButton from "../BugReport";
 const Header = ({ setShowBugForm }) => {
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
-    
+
     const reportButtonRef = useRef(null);
     const testCaseButtonRef = useRef(null);
     const reportDropdownRef = useRef(null);
     const testCaseDropdownRef = useRef(null);
-    
+
     // State for dropdown positions
     const [reportDropdownPosition, setReportDropdownPosition] = useState({ top: 0, left: 0 });
     const [testCaseDropdownPosition, setTestCaseDropdownPosition] = useState({ top: 0, left: 0 });
@@ -22,7 +22,7 @@ const Header = ({ setShowBugForm }) => {
     const handleRecordingComplete = (recordingData) => {
         // In a real app, you might want to store this data or pass it to the bug form
         console.log('Recording completed:', recordingData);
-        
+
         // Automatically open bug report form with recording data
         setShowBugForm(true);
     };
@@ -51,7 +51,7 @@ const Header = ({ setShowBugForm }) => {
     // Close dropdowns when clicking outside
     useEffect(() => {
         function handleClickOutside(event) {
-            if (reportDropdownRef.current && !reportDropdownRef.current.contains(event.target) && 
+            if (reportDropdownRef.current && !reportDropdownRef.current.contains(event.target) &&
                 reportButtonRef.current && !reportButtonRef.current.contains(event.target)) {
                 setShowReportOptions(false);
             }
@@ -60,7 +60,7 @@ const Header = ({ setShowBugForm }) => {
                 setShowTestCaseOptions(false);
             }
         }
-        
+
         document.addEventListener("mousedown", handleClickOutside);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
@@ -70,7 +70,7 @@ const Header = ({ setShowBugForm }) => {
     return (
         <header className="bg-[#fff] shadow-sm z-10 py-3 px-4 md:px-6">
             <div className="flex items-center justify-between space-x-2">
-                
+
                 {/* Search Bar */}
                 <div className="relative flex-1 max-w-xs md:max-w-sm">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -85,15 +85,15 @@ const Header = ({ setShowBugForm }) => {
 
                 {/* Buttons Container */}
                 <div className="flex items-center space-x-3 overflow-x-auto whitespace-nowrap rounded-sm px-3 py-2 bg-white">
-                    
+
                     {/* Run Tests */}
-                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition">
+                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2d3142] transition">
                         <Play className="h-4 w-4" />
                         <span className="hidden md:inline">Run Tests</span>
                     </button>
 
                     {/* Report Bug */}
-                    <BugReportButton className="text-[#2D3142] hover:bg-[#A5D6A7] hover:text-[#2D3142]" />
+                    <BugReportButton className="text-[#2D3142] hover:bg-[rgb(165,214,167)] hover:text-[#2D3142]" />
 
 
                     {/* Enhanced Screen Recorder Button */}
@@ -104,7 +104,7 @@ const Header = ({ setShowBugForm }) => {
                         <button
                             ref={reportButtonRef}
                             onClick={() => setShowReportOptions(!showReportOptions)}
-                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-white transition"
+                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition"
                         >
                             <FileText className="h-4 w-4" />
                             <span className="hidden md:inline">Generate Report</span>
@@ -116,12 +116,16 @@ const Header = ({ setShowBugForm }) => {
                         <button
                             ref={testCaseButtonRef}
                             onClick={() => setShowTestCaseOptions(!showTestCaseOptions)}
-                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#E1E2E6] hover:text-white transition"
+                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5d6a7] hover:text-[#2D3142] transition"
                         >
                             <Plus className="h-4 w-4" />
                             <span className="hidden md:inline">Add Test Case</span>
                         </button>
                     </div>
+                    {/* Add Team Member Button */}
+                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-1 hover:bg-gray-100 transition mr-2">
+                        <UserPlus className="h-4 w-4" />
+                    </button>
 
                     {/* Notification Bell */}
                     <button className="p-1 rounded-full text-gray-600 hover:text-gray-800 relative">
@@ -132,7 +136,7 @@ const Header = ({ setShowBugForm }) => {
                     {/* User Avatar */}
                     <div className="flex items-center">
                         <Image
-                            className="h-8 w-8 rounded-full bg-indigo-500"
+                            className="h-8 w-8 rounded-full bg-[#E1E2E6]"
                             src="/api/placeholder/32/32"
                             alt="User avatar"
                             width={32}
@@ -141,14 +145,14 @@ const Header = ({ setShowBugForm }) => {
                     </div>
                 </div>
             </div>
-            
+
             {/* Report Options Dropdown - Fixed Position */}
             {showReportOptions && (
-                <div 
+                <div
                     ref={reportDropdownRef}
                     className="fixed bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
-                    style={{ 
-                        top: `${reportDropdownPosition.top}px`, 
+                    style={{
+                        top: `${reportDropdownPosition.top}px`,
                         left: `${reportDropdownPosition.left}px`,
                         minWidth: '160px'
                     }}
@@ -157,14 +161,14 @@ const Header = ({ setShowBugForm }) => {
                     <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Report</button>
                 </div>
             )}
-            
+
             {/* Test Case Options Dropdown - Fixed Position */}
             {showTestCaseOptions && (
-                <div 
+                <div
                     ref={testCaseDropdownRef}
                     className="fixed bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
-                    style={{ 
-                        top: `${testCaseDropdownPosition.top}px`, 
+                    style={{
+                        top: `${testCaseDropdownPosition.top}px`,
                         left: `${testCaseDropdownPosition.left}px`,
                         minWidth: '160px'
                     }}

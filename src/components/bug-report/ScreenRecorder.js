@@ -359,7 +359,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                 className={`px-3 py-2 text-sm rounded-xs flex items-center space-x-2 transition ${
                     isRecording 
                         ? "bg-red-100 text-red-700 hover:bg-red-200" 
-                        : "text-[#2D3142] hover:bg-[#A5D6A7] hover:text-white"
+                        : "text-[#2D3142] hover:bg-[#A5D6A7] hover:text-[#2d3142]"
                 }`}
                 onClick={toggleOverlay}
                 disabled={isSelectingSource}
@@ -390,7 +390,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                             </div>
                         ) : isCountdownActive && countdown > 0 ? (
                             <div className="text-center py-6">
-                                <div className="text-5xl font-bold text-indigo-600 mb-2">{countdown}</div>
+                                <div className="text-5xl font-bold text-[#00897B] mb-2">{countdown}</div>
                                 <p className="text-gray-600">Recording will start in {countdown} second{countdown !== 1 ? 's' : ''}...</p>
                             </div>
                         ) : isRecording ? (
@@ -506,13 +506,13 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                         <button
                                             type="button"
                                             onClick={cancelRecording}
-                                            className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-50 transition"
+                                            className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-xs hover:bg-gray-50 transition"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             type="submit"
-                                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition"
+                                            className="flex-1 bg-[#00897B] hover:bg-[#459187] text-white py-2 px-4 rounded-xs transition"
                                         >
                                             Submit Report
                                         </button>
@@ -560,7 +560,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                     </button>
                                     <button
                                         onClick={initiateRecording}
-                                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-xs transition"
+                                        className="flex-1 bg-[#00897B] hover:bg-[#459187] text-white py-2 px-2 rounded-xs transition"
                                     >
                                         Share
                                     </button>
