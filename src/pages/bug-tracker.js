@@ -1,6 +1,5 @@
 "use client"
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Filter, Users, Settings, UserPlus } from "lucide-react";
 import BugDetailsModal from "../components/BugDetailsModal";
 import SelectionActionsModal from "../components/SelectionActionsModal";
 import SecondaryHeader from "../components/layout/secondaryHeader";
@@ -23,17 +22,6 @@ const BugTracker = () => {
     const [selectedBugs, setSelectedBugs] = useState([]);
     const [showSelectionModal, setShowSelectionModal] = useState(false);
     const [showBugDetailsModal, setShowBugDetailsModal] = useState(false);
-    const [teamMembers, setTeamMembers] = useState([
-        "John Doe",
-        "Jane Smith",
-        "Alice Brown",
-        "Bob Johnson",
-        "Carla Rodriguez"
-    ]);
-    const [showTeamMemberModal, setShowTeamMemberModal] = useState(false);
-    const [newTeamMember, setNewTeamMember] = useState("");
-    const [dateFilter, setDateFilter] = useState(null);
-    const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 
     // Initialize bug data from localStorage or use default data
     const [bugsData, setBugsData] = useState({});
@@ -199,14 +187,6 @@ const BugTracker = () => {
     const statusOptions = ["Open", "In Progress", "Resolved", "Closed", "Under Review", "Needs Info"];
     const priorityOptions = ["High", "Medium", "Low"];
     const severityOptions = ["Critical", "Major", "Minor", "Cosmetic"];
-
-    // Header actions with implemented functionality
-    const headerActions = [
-        { icon: Filter, label: "Filter", onClick: () => setFilterMenuOpen(true) },
-        { icon: Users, label: "Person Filter", onClick: () => handlePersonFilter() },
-        { icon: Settings, label: "Settings", onClick: () => console.log("Settings clicked") },
-        { icon: UserPlus, label: "Add Team Member", onClick: () => setShowTeamMemberModal(true) }
-    ];
 
 
     const isAllInGroupSelected = useCallback((groupDate) => {
@@ -510,65 +490,7 @@ const BugTracker = () => {
         setBugsData(updatedBugsData);
     };
 
-    // Implement team members management functionality
-    const handleAddTeamMember = () => {
-        if (newTeamMember.trim() !== '' && !teamMembers.includes(newTeamMember.trim())) {
-            setTeamMembers([...teamMembers, newTeamMember.trim()]);
-            setNewTeamMember('');
-            setShowTeamMemberModal(false);
-        }
-    };
 
-    const handleRemoveTeamMember = (memberToRemove) => {
-        setTeamMembers(teamMembers.filter(member => member !== memberToRemove));
-    };
-
-    // Implement date filtering
-    const applyDateFilter = (date) => {
-        setDateFilter(date);
-        setFilterMenuOpen(false);
-    };
-
-    const clearDateFilter = () => {
-        setDateFilter(null);
-        setFilterMenuOpen(false);
-    };
-
-    // Implement person filter 
-    const handlePersonFilter = () => {
-        if (!bugsData) return;
-
-        const assigneeCount = {};
-
-        // Count bugs per assignee
-        Object.values(bugsData).forEach(bugs => {
-            if (bugs && Array.isArray(bugs)) {
-                bugs.forEach(bug => {
-                    if (bug.assignedTo) {
-                        assigneeCount[bug.assignedTo] = (assigneeCount[bug.assignedTo] || 0) + 1;
-                    }
-                });
-            }
-        });
-
-        // Log assignee distribution
-        console.log("Bugs by assignee:", assigneeCount);
-
-        // For demo purposes, just show an alert with assignee stats
-        alert("Assignee distribution logged to console.");
-    };
-
-    // Filter bugs based on date filter
-    const filteredBugsData = useMemo(() => {
-        if (!bugsData) return {};
-        if (!dateFilter) return bugsData;
-
-        const filtered = {};
-        if (bugsData[dateFilter]) {
-            filtered[dateFilter] = bugsData[dateFilter];
-        }
-        return filtered;
-    }, [bugsData, dateFilter]);
 
     // Check if data is ready to render
     const isDataReady = useMemo(() => {
@@ -594,26 +516,11 @@ const BugTracker = () => {
         <div className="flex flex-col min-h-screen bg-gray-50">
             <SecondaryHeader
                 title="Bug Tracker"
-                actions={headerActions}
+
             />
 
             <main className="flex-1 p-4">
-                {/* Add New Bug button */}
-                <div className="mb-4 flex justify-between items-center">
-                    {dateFilter && (
-                        <div className="flex items-center bg-blue-100 px-3 py-1 rounded">
-                            <span className="mr-2">Filtered: {dateFilter}</span>
-                            <button
-                                onClick={clearDateFilter}
-                                className="text-blue-600 hover:text-blue-800"
-                            >
-                                Clear
-                            </button>
-                        </div>
-                    )}
-                </div>
 
-                {/* Selected bugs count and actions */}
                 {selectedBugs.length > 0 && (
                     <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
                         <span className="font-medium">{selectedBugs.length} bug(s) selected</span>
@@ -627,8 +534,8 @@ const BugTracker = () => {
                 )}
 
                 {/* Bug groups */}
-                {Object.entries(filteredBugsData).length > 0 ? (
-                    Object.entries(filteredBugsData)
+                {Object.entries(bugsData).length > 0 ? (
+                    Object.entries(bugsData)
                         .sort((a, b) => {
                             // Sort by date (newest first)
                             const dateA = new Date(a[0].split('/').reverse().join('/'));
@@ -655,7 +562,6 @@ const BugTracker = () => {
                                 statusOptions={statusOptions}
                                 priorityOptions={priorityOptions}
                                 severityOptions={severityOptions}
-                                teamMembers={teamMembers}
                                 getStatusColor={getStatusColorForBug}
                                 getPriorityColor={getPriorityColorForBug}
                                 getSeverityColor={getSeverityColorForBug}
@@ -702,98 +608,6 @@ const BugTracker = () => {
                 />
             )}
 
-            {/* Team member modal */}
-            {showTeamMemberModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-                        <h2 className="text-xl font-bold mb-4">Manage Team Members</h2>
-
-                        <div className="mb-4">
-                            <label className="block mb-2">Add new team member:</label>
-                            <div className="flex">
-                                <input
-                                    type="text"
-                                    value={newTeamMember}
-                                    onChange={(e) => setNewTeamMember(e.target.value)}
-                                    className="flex-1 border border-gray-300 p-2 rounded-l"
-                                    placeholder="Enter name"
-                                />
-                                <button
-                                    onClick={handleAddTeamMember}
-                                    className="bg-blue-600 text-white px-4 py-2 rounded-r hover:bg-blue-700"
-                                >
-                                    Add
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="mb-4">
-                            <h3 className="font-medium mb-2">Current team members:</h3>
-                            <ul className="border border-gray-200 rounded divide-y">
-                                {teamMembers.map(member => (
-                                    <li key={member} className="p-2 flex justify-between items-center">
-                                        <span>{member}</span>
-                                        <button
-                                            onClick={() => handleRemoveTeamMember(member)}
-                                            className="text-red-600 hover:text-red-800"
-                                        >
-                                            Remove
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        <div className="flex justify-end">
-                            <button
-                                onClick={() => setShowTeamMemberModal(false)}
-                                className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Filter menu */}
-            {filterMenuOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-                        <h2 className="text-xl font-bold mb-4">Filter Bugs</h2>
-
-                        <div className="mb-4">
-                            <h3 className="font-medium mb-2">Select date range:</h3>
-                            <div className="grid grid-cols-2 gap-2">
-                                {Object.keys(bugsData).map(date => (
-                                    <button
-                                        key={date}
-                                        onClick={() => applyDateFilter(date)}
-                                        className={`p-2 border rounded ${dateFilter === date ? 'bg-blue-100 border-blue-500' : 'border-gray-300 hover:bg-gray-100'}`}
-                                    >
-                                        {date}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between">
-                            <button
-                                onClick={clearDateFilter}
-                                className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
-                            >
-                                Clear Filters
-                            </button>
-                            <button
-                                onClick={() => setFilterMenuOpen(false)}
-                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
