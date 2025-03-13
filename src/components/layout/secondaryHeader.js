@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
-import { Filter, Users, Calendar, ChevronDown, X } from "lucide-react";
+import { Filter, Calendar, ChevronDown, XCircle } from "lucide-react";
 
 const statusColors = {
     "To Do": "text-gray-600",
@@ -32,45 +32,29 @@ const SecondaryHeader = ({ title }) => {
         setOpenDropdown(openDropdown === dropdown ? null : dropdown);
     };
 
+    const clearFilters = () => {
+        setSelectedPerson(null);
+        setSelectedStatus(null);
+        setStartDate("");
+        setEndDate("");
+    };
+
+    const isFilterApplied = selectedPerson || selectedStatus || startDate || endDate;
+
     return (
         <div className="flex justify-between items-center bg-white p-3 shadow-md mb-9 sticky top-0 z-10">
-            <div className="flex flex-col">
-                <h1 className="text-xl font-bold">{title}</h1>
-
-                {/* Selected Filters - Now Appended Properly */}
-                <div className="flex space-x-3 mt-1 items-center">
-                    {startDate && endDate && (
-                        <div className="flex items-center bg-gray-100 px-3 py-1 rounded">
-                            <Calendar size={14} className="mr-1" />
-                            {startDate} - {endDate}
-                            <X size={14} className="ml-2 cursor-pointer text-gray-600 hover:text-gray-900" onClick={() => {
-                                setStartDate("");
-                                setEndDate("");
-                            }} />
-                        </div>
-                    )}
-                    {selectedPerson && (
-                        <div className="flex items-center bg-gray-100 px-3 py-1 rounded">
-                            <Image src={selectedPerson.avatar} alt="Avatar" width={20} height={20} className="rounded-full mr-2" />
-                            {selectedPerson.firstName}
-                            <X size={14} className="ml-2 cursor-pointer text-gray-600 hover:text-gray-900" onClick={() => setSelectedPerson(null)} />
-                        </div>
-                    )}
-                    {selectedStatus && (
-                        <div className={`flex items-center bg-gray-100 px-3 py-1 rounded ${statusColors[selectedStatus]}`}>
-                            {selectedStatus}
-                            <X size={14} className="ml-2 cursor-pointer hover:text-gray-900" onClick={() => setSelectedStatus(null)} />
-                        </div>
-                    )}
-                </div>
-            </div>
+            <h1 className="text-xl font-bold">{title}</h1>
 
             {/* Filters */}
             <div className="flex space-x-2 relative">
-                {/* Date Filter - Moved to First */}
+                {/* Date Filter */}
                 <div className="relative">
-                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("date")}> 
-                        <Calendar size={16} className="mr-2" /> Date Filter
+                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("date")}>
+                        <Calendar size={16} className="mr-2" />
+                        <span className="w-auto text-center">
+                            {startDate && endDate ? `${startDate} - ${endDate}` : "Date Filter"}
+                        </span>
+                        <ChevronDown size={16} className="ml-2" />
                     </button>
                     {openDropdown === "date" && (
                         <div className="absolute right-0 mt-2 w-64 bg-white border shadow-lg rounded-lg p-3 z-50">
@@ -84,8 +68,19 @@ const SecondaryHeader = ({ title }) => {
 
                 {/* Person Filter */}
                 <div className="relative">
-                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("persons")}> 
-                        <Users size={16} className="mr-2" /> Filter Persons
+                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("persons")}>
+                        {selectedPerson ? (
+                            <>
+                                <Image src={selectedPerson.avatar} alt="Avatar" width={20} height={20} className="rounded-full mr-2" />
+                                <span className="truncate w-20 text-center">{selectedPerson.firstName}</span>
+                            </>
+                        ) : (
+                            <>
+                                <Image src="https://i.pravatar.cc/40?img=0" alt="Avatar" width={20} height={20} className="rounded-full mr-2" />
+                                <span className="truncate w-20 text-center">Person</span>
+                            </>
+                        )}
+                        <ChevronDown size={16} className="ml-2" />
                     </button>
                     {openDropdown === "persons" && (
                         <div className="absolute right-0 mt-2 w-56 bg-white border shadow-lg rounded-lg z-50">
@@ -103,7 +98,7 @@ const SecondaryHeader = ({ title }) => {
 
                 {/* Status Filter */}
                 <div className="relative">
-                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("status")}> 
+                    <button className={`bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors ${selectedStatus ? statusColors[selectedStatus] : ''}`} onClick={() => toggleDropdown("status")}>
                         <Filter size={16} className="mr-2" />
                         <span className="truncate w-20 text-center">{selectedStatus || "Status"}</span>
                         <ChevronDown size={16} className="ml-2" />
@@ -120,6 +115,13 @@ const SecondaryHeader = ({ title }) => {
                         </div>
                     )}
                 </div>
+
+                {/* Clear Filters Button (Only Appears When Filter is Applied) */}
+                {isFilterApplied && (
+                    <button className="bg-gray-300 text-white px-2 py-2 rounded flex items-center hover:bg-gray-700 transition-colors" onClick={clearFilters}>
+                        <XCircle size={16} />
+                    </button>
+                )}
             </div>
         </div>
     );

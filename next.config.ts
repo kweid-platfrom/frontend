@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    domains: ["i.pravatar.cc"], // Add any other external image domains if needed
+  },
 };
 
 export default nextConfig;
