@@ -16,6 +16,7 @@ import Header from "../components/layout/header";
 import { KeyMetrics } from "../components/dashboard/KeyMetrics";
 import BugTracker from "../pages/bug-tracker";
 import TestScripts from "../pages/test-scripts";
+import AutomatedScripts from "../pages/auto-scripts";
 
 const Dashboard = () => {
 
@@ -94,7 +95,10 @@ const Dashboard = () => {
                     {activePage === "bug-tracker" && <BugTracker newBug={bugData} />}
 
                     {/* 📝 Test Scripts Page */}
-                    {activePage === "test-scripts" && <TestScripts />}
+                    {activePage === "test-scripts" && <TestScripts />} 
+                    
+                    {/* 📝 Automated Scripts Page */}
+                    {activePage === "auto-scripts" && <AutomatedScripts />}
 
                 </main>
             </div>

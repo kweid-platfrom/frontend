@@ -1,5 +1,6 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Filter, Calendar, ChevronDown, XCircle } from "lucide-react";
 
@@ -21,7 +22,7 @@ const teamMembers = [
 
 const statuses = ["To Do", "Invalidated", "Done", "In Progress", "Reopened"];
 
-const SecondaryHeader = ({ title }) => {
+const SecondaryHeader = ({ title: propTitle }) => {
     const [openDropdown, setOpenDropdown] = useState(null);
     const [selectedPerson, setSelectedPerson] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState(null);
@@ -41,9 +42,26 @@ const SecondaryHeader = ({ title }) => {
 
     const isFilterApplied = selectedPerson || selectedStatus || startDate || endDate;
 
+    const pathname = usePathname();
+
+    useEffect(() => {
+        console.log("Pathname:", pathname); // Debugging
+    }, [pathname]);
+
+    const pageTitles = {
+        "/bug-tracker": "Bug Tracker",
+        "/test-scripts": "Test Cases",
+        "/auto-scripts": "Automated Scripts",
+        "/reports": "Reports",
+        "/settings": "Settings"
+    };
+
+    const cleanedPath = pathname ? (pathname.endsWith("/") ? pathname.slice(0, -1) : pathname) : "";
+    const pageTitle = pageTitles[cleanedPath] || propTitle || "Welcome";
+
     return (
         <div className="flex justify-between items-center bg-white p-3 shadow-md mb-9 sticky top-0 z-10">
-            <h1 className="text-xl font-bold">{title}</h1>
+            <h1 className="text-xl font-bold">{pageTitle}</h1>
 
             {/* Filters */}
             <div className="flex space-x-2 relative">

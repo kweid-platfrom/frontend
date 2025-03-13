@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import BugGroup from "../components/bug-report/bugGroup";
 import { X } from "lucide-react";
+import SecondaryHeader from "../components/layout/secondaryHeader";
 
 const BugTracker = () => {
     // Mock data for demonstration
@@ -296,7 +297,7 @@ const isAllInGroupSelected = (date) => {
 
     return (
         <div className="p-4 max-w-screen-xl mx-auto">
-            <h1 className="text-2xl font-bold mb-4">Bug Management Demo</h1>
+            <SecondaryHeader />
 
             {/* Selection modal */}
             {showSelectionModal && (

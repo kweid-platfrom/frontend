@@ -89,6 +89,7 @@ const BugGroup = ({
                             {bugs.map((bug) => {
                                 const bugKey = `${date}-${bug.id}`;
                                 const isSelected = selectedBugs.includes(bugKey);
+                                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                 const assignee = bug.assignedTo !== "unassigned" 
                                     ? teamMembers.find(member => member.id === bug.assignedTo)
                                     : null;
