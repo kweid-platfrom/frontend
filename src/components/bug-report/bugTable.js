@@ -1,4 +1,4 @@
-// components/BugTable.js
+// components/bug-report/BugTable.jsx
 "use client"
 import React, { useState } from "react";
 import { MessageSquare, Check } from "lucide-react";
@@ -56,10 +56,10 @@ const BugTable = ({
 
     return (
         <div className="overflow-x-auto w-full">
-            <table className="min-w-full table-auto border-collapse border border-gray-300 text-left">
+            <table className="min-w-full table-auto border-collapse text-left">
                 <thead>
                     <tr className="bg-gray-50 text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        <th className="border border-gray-300 p-2 w-8 sticky left-0 bg-gray-50 z-10">
+                        <th className="border-b border-gray-300 p-2 w-8 sticky left-0 bg-gray-50 z-10">
                             <input
                                 type="checkbox"
                                 className="w-4 h-4 cursor-pointer"
@@ -67,26 +67,26 @@ const BugTable = ({
                                 onChange={(e) => handleSelectAllInGroup(date, e.target.checked)}
                             />
                         </th>
-                        <th className="border border-gray-300 p-2 sticky left-8 bg-gray-50 z-10 min-w-64">Bug/Defect Title</th>
-                        <th className="border border-gray-300 p-2">Issue ID</th>
-                        <th className="border border-gray-300 p-2">Issue Category</th>
-                        <th className="border border-gray-300 p-2">Assign To</th>
-                        <th className="border border-gray-300 p-2 min-w-32">Status</th>
-                        <th className="border border-gray-300 p-2 min-w-32">Priority</th>
-                        <th className="border border-gray-300 p-2 min-w-32">Severity</th>
-                        <th className="border border-gray-300 p-2">Epic</th>
-                        <th className="border border-gray-300 p-2">Test Case</th>
-                        <th className="border border-gray-300 p-2">Case Status</th>
-                        <th className="border border-gray-300 p-2">Due Date</th>
-                        <th className="border border-gray-300 p-2">Automated</th>
-                        <th className="border border-gray-300 p-2">Link to Automated Scripts</th>
-                        <th className="border border-gray-300 p-2">Creation Log</th>
+                        <th className="border-b border-gray-300 p-2 sticky left-8 bg-gray-50 z-10 min-w-64">Bug/Defect Title</th>
+                        <th className="border-b border-gray-300 p-2">Issue ID</th>
+                        <th className="border-b border-gray-300 p-2">Issue Category</th>
+                        <th className="border-b border-gray-300 p-2">Assign To</th>
+                        <th className="border-b border-gray-300 p-2 min-w-32">Status</th>
+                        <th className="border-b border-gray-300 p-2 min-w-32">Priority</th>
+                        <th className="border-b border-gray-300 p-2 min-w-32">Severity</th>
+                        <th className="border-b border-gray-300 p-2">Epic</th>
+                        <th className="border-b border-gray-300 p-2">Test Case</th>
+                        <th className="border-b border-gray-300 p-2">Case Status</th>
+                        <th className="border-b border-gray-300 p-2">Due Date</th>
+                        <th className="border-b border-gray-300 p-2">Automated</th>
+                        <th className="border-b border-gray-300 p-2">Link to Automated Scripts</th>
+                        <th className="border-b border-gray-300 p-2">Creation Log</th>
                     </tr>
                 </thead>
                 <tbody>
                     {bugs.map(bug => (
                         <tr key={bug.id} className="hover:bg-gray-50 text-sm">
-                            <td className="border border-gray-300 p-2 text-center sticky left-0 bg-white z-10">
+                            <td className="border-b border-gray-300 p-2 text-center sticky left-0 bg-white z-10">
                                 <input
                                     type="checkbox"
                                     className="w-4 h-4 cursor-pointer"
@@ -94,7 +94,7 @@ const BugTable = ({
                                     onChange={() => handleBugSelection(bug.id, date)}
                                 />
                             </td>
-                            <td className="border border-gray-300 p-2 sticky left-8 bg-white z-10">
+                            <td className="border-b border-gray-300 p-2 sticky left-8 bg-white z-10">
                                 <div className="flex items-center">
                                     {editingTitle === bug.id ? (
                                         <input
@@ -123,9 +123,9 @@ const BugTable = ({
                                     />
                                 </div>
                             </td>
-                            <td className="border border-gray-300 p-2 font-mono text-xs">{bug.id}</td>
-                            <td className="border border-gray-300 p-2">{bug.category}</td>
-                            <td className="border border-gray-300 p-2">
+                            <td className="border-b border-gray-300 p-2 font-mono text-xs">{bug.id}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.category}</td>
+                            <td className="border-b border-gray-300 p-2">
                                 <select
                                     className="p-1 w-full rounded text-sm border border-gray-200"
                                     value={bug.assignedTo}
@@ -133,11 +133,11 @@ const BugTable = ({
                                 >
                                     <option value="unassigned">Unassigned</option>
                                     {teamMembers.map(member => {
-                                        // Assuming member object has name and avatar properties
+                                        // Handling different member formats
                                         if (typeof member === 'object') {
                                             return (
                                                 <option key={member.id} value={member.id}>
-                                                    {member.firstName}
+                                                    {member.firstName} {member.lastName || ''}
                                                 </option>
                                             );
                                         }
@@ -180,7 +180,7 @@ const BugTable = ({
                                     </div>
                                 )}
                             </td>
-                            <td className="border border-gray-300 p-0">
+                            <td className="border-b border-gray-300 p-0">
                                 {showNewStatusInput[bug.id] ? (
                                     <div className="flex items-center">
                                         <input
@@ -222,7 +222,7 @@ const BugTable = ({
                                     </select>
                                 )}
                             </td>
-                            <td className="border border-gray-300 p-0">
+                            <td className="border-b border-gray-300 p-0">
                                 <select
                                     className={`p-1 w-full h-full rounded text-white ${getPriorityColor(bug.priority)}`}
                                     value={bug.priority}
@@ -234,7 +234,7 @@ const BugTable = ({
                                     ))}
                                 </select>
                             </td>
-                            <td className="border border-gray-300 p-0">
+                            <td className="border-b border-gray-300 p-0">
                                 <select
                                     className={`p-1 w-full h-full rounded text-white ${getSeverityColor(bug.severity)}`}
                                     value={bug.severity}
@@ -246,18 +246,18 @@ const BugTable = ({
                                     ))}
                                 </select>
                             </td>
-                            <td className="border border-gray-300 p-2">{bug.epic || "—"}</td>
-                            <td className="border border-gray-300 p-2">{bug.testCase || "—"}</td>
-                            <td className="border border-gray-300 p-2">{bug.caseStatus || "—"}</td>
-                            <td className="border border-gray-300 p-2">{bug.dueDate || "—"}</td>
-                            <td className="border border-gray-300 p-2 text-center">
+                            <td className="border-b border-gray-300 p-2">{bug.epic || "—"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.testCase || "—"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.caseStatus || "—"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.dueDate || "—"}</td>
+                            <td className="border-b border-gray-300 p-2 text-center">
                                 {bug.automated === "Yes" ? (
                                     <span className="inline-block w-4 h-4 bg-green-500 rounded-full"></span>
                                 ) : bug.automated === "No" ? (
                                     <span className="inline-block w-4 h-4 bg-red-500 rounded-full"></span>
                                 ) : "—"}
                             </td>
-                            <td className="border border-gray-300 p-2">
+                            <td className="border-b border-gray-300 p-2">
                                 {bug.automationLink ? (
                                     <a 
                                         href={bug.automationLink} 
@@ -269,12 +269,12 @@ const BugTable = ({
                                     </a>
                                 ) : "—"}
                             </td>
-                            <td className="border border-gray-300 p-2 text-xs text-gray-600">{bug.creationLog || "—"}</td>
+                            <td className="border-b border-gray-300 p-2 text-xs text-gray-600">{bug.creationLog || "—"}</td>
                         </tr>
                     ))}
                     {bugs.length === 0 && (
                         <tr>
-                            <td colSpan="15" className="border border-gray-300 p-4 text-center text-gray-500">
+                            <td colSpan="15" className="border-b border-gray-300 p-4 text-center text-gray-500">
                                 No bugs found for this date
                             </td>
                         </tr>

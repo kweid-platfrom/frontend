@@ -1,8 +1,9 @@
-// pages/bug-management-demo.js or app/bug-management/page.js
+// pages/bug-tracker.jsx or app/bug-tracker/page.jsx
 "use client"
 import React, { useState, useEffect } from "react";
 import BugGroup from "../components/bug-report/bugGroup";
-import { X } from "lucide-react";
+import BugDetailsModal from "../components/BugDetailsModal"
+import { X, Plus } from "lucide-react";
 import SecondaryHeader from "../components/layout/secondaryHeader";
 
 const BugTracker = () => {
@@ -24,7 +25,9 @@ const BugTracker = () => {
             automationLink: null,
             creationLog: "Created on 2025-03-10 by Admin",
             creationDate: "2025-03-10 09:30:00",
-            description: "Users report that the login button doesn't respond on iOS devices smaller than iPhone 12."
+            description: "Users report that the login button doesn't respond on iOS devices smaller than iPhone 12.",
+            stepsToReproduce: "1. Open app on iPhone SE\n2. Navigate to login screen\n3. Tap login button",
+            comments: []
         },
         {
             id: "BUG-002",
@@ -42,7 +45,9 @@ const BugTracker = () => {
             automationLink: "https://github.com/example/tests/performance",
             creationLog: "Created on 2025-03-10 by Admin",
             creationDate: "2025-03-10 14:45:00",
-            description: "The system experiences database timeouts when concurrent users exceed 1000."
+            description: "The system experiences database timeouts when concurrent users exceed 1000.",
+            stepsToReproduce: "1. Run load test with 1000+ concurrent users\n2. Monitor database connection pool\n3. Observe timeout errors in logs",
+            comments: []
         },
         {
             id: "BUG-003",
@@ -60,7 +65,9 @@ const BugTracker = () => {
             automationLink: "https://github.com/example/tests/billing",
             creationLog: "Created on 2025-03-11 by Admin",
             creationDate: "2025-03-11 11:20:00",
-            description: "The invoice total doesn't match the sum of line items when discounts are applied."
+            description: "The invoice total doesn't match the sum of line items when discounts are applied.",
+            stepsToReproduce: "1. Create invoice with multiple items\n2. Apply percentage discount\n3. Check total amount",
+            comments: []
         },
         {
             id: "BUG-004",
@@ -78,7 +85,9 @@ const BugTracker = () => {
             automationLink: null,
             creationLog: "Created on 2025-03-12 by Admin",
             creationDate: "2025-03-12 13:15:00",
-            description: "Users are being logged out after only 5 minutes of inactivity instead of the specified 30 minutes."
+            description: "Users are being logged out after only 5 minutes of inactivity instead of the specified 30 minutes.",
+            stepsToReproduce: "1. Log in to the application\n2. Remain inactive for 5 minutes\n3. Attempt to perform an action",
+            comments: []
         },
         {
             id: "BUG-005",
@@ -96,7 +105,9 @@ const BugTracker = () => {
             automationLink: "https://github.com/example/tests/reporting",
             creationLog: "Created on 2025-03-12 by Admin",
             creationDate: "2025-03-12 16:40:00",
-            description: "When exporting reports with more than 10,000 rows, the system crashes."
+            description: "When exporting reports with more than 10,000 rows, the system crashes.",
+            stepsToReproduce: "1. Generate a report with 10,000+ data points\n2. Click export to Excel\n3. Observe system error",
+            comments: []
         }
     ];
 
@@ -106,10 +117,11 @@ const BugTracker = () => {
     const [groupColors, setGroupColors] = useState({});
     const [editingTitle, setEditingTitle] = useState(null);
     const [selectedBugs, setSelectedBugs] = useState([]);
-    const statusOptions = ["Open", "In Progress", "Blocked", "Done", "Closed"];
+    const [statusOptions, setStatusOptions] = useState(["Open", "In Progress", "Blocked", "Done", "Closed"]);
     const priorityOptions = ["Low", "Medium", "High", "Critical"];
     const severityOptions = ["Minor", "Major", "Critical", "Blocker"];
     const [showSelectionModal, setShowSelectionModal] = useState(false);
+    const [bugForDetails, setBugForDetails] = useState(null);
 
     // Team members
     const teamMembers = [
@@ -129,14 +141,37 @@ const BugTracker = () => {
     }, {});
 
     useEffect(() => {
+        // Initialize all groups as expanded
         const initialExpandedState = {};
-        const groupDates = Object.keys(groupedBugs);
-        groupDates.forEach(date => {
+        Object.keys(groupedBugs).forEach(date => {
             initialExpandedState[date] = true;
         });
         setExpandedGroups(initialExpandedState);
+        
+        // Initialize random colors for groups
+        const initialColorState = {};
+        Object.keys(groupedBugs).forEach(date => {
+            initialColorState[date] = getRandomColor();
+        });
+        setGroupColors(initialColorState);
+        
         // Only run this effect once on component mount
     }, [groupedBugs]);
+
+    // Generate a random color
+    const getRandomColor = () => {
+        const colors = [
+            '#3b82f6', // blue
+            '#10b981', // green
+            '#f59e0b', // amber
+            '#ef4444', // red
+            '#8b5cf6', // purple
+            '#ec4899', // pink
+            '#06b6d4', // cyan
+            '#f97316'  // orange
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+    };
 
     // Show selection modal when bugs are selected
     useEffect(() => {
@@ -153,32 +188,18 @@ const BugTracker = () => {
 
     // Change group color
     const changeGroupColor = (date) => {
-        // Generate a random color
-        const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
         setGroupColors(prevColors => ({
             ...prevColors,
-            [date]: randomColor
+            [date]: getRandomColor()
         }));
     };
 
     // Check if all bugs in a group are selected
-const isAllInGroupSelected = (date) => {
-    // Make sure groupedBugs[date] exists and is an array
-    const groupBugs = groupedBugs[date] || [];
-    
-    // If there are no bugs in this group, return false
-    if (groupBugs.length === 0) return false;
-    
-    // Make sure selectedBugs is an array before using includes
-    if (!Array.isArray(selectedBugs)) return false;
-    
-    // Check if every bug in the group is selected
-    return groupBugs.every(bug => {
-        // Create the bug key the same way it's created in handleBugSelection
-        const bugKey = `${date}-${bug.id}`;
-        return selectedBugs.includes(bugKey);
-    });
-};
+    const isAllInGroupSelected = (date) => {
+        const groupBugs = groupedBugs[date] || [];
+        if (groupBugs.length === 0) return false;
+        return groupBugs.every(bug => selectedBugs.includes(`${date}-${bug.id}`));
+    };
 
     // Handle selecting all bugs in a group
     const handleSelectAllInGroup = (date, isChecked) => {
@@ -255,6 +276,30 @@ const isAllInGroupSelected = (date) => {
         ));
     };
 
+    // Add a new status option
+    const addNewStatus = (status) => {
+        if (!statusOptions.includes(status)) {
+            setStatusOptions([...statusOptions, status]);
+        }
+    };
+
+    // Open bug details
+    const openBugDetails = (bug) => {
+        setBugForDetails(bug);
+    };
+
+    // Close bug details
+    const closeBugDetails = () => {
+        setBugForDetails(null);
+    };
+
+    // Update bug after editing in details modal
+    const updateBug = (updatedBug) => {
+        setBugs(prevBugs => prevBugs.map(bug => 
+            bug.id === updatedBug.id ? updatedBug : bug
+        ));
+    };
+
     // Handle bulk actions
     const handleBulkAction = (action) => {
         let updatedBugs = [...bugs];
@@ -287,83 +332,182 @@ const isAllInGroupSelected = (date) => {
         });
 
         setBugs(updatedBugs);
+        // Clear selection after bulk action
         setSelectedBugs([]);
     };
 
-    // Clear all selections
-    const clearSelections = () => {
-        setSelectedBugs([]);
+    // Helper functions for color coding
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'Open': return '#3b82f6'; // blue
+            case 'In Progress': return '#f59e0b'; // amber
+            case 'Blocked': return '#ef4444'; // red
+            case 'Done': return '#10b981'; // green
+            case 'Closed': return '#6b7280'; // gray
+            default: return '#3b82f6'; // default blue
+        }
+    };
+
+    const getPriorityColor = (priority) => {
+        switch (priority) {
+            case 'Low': return '#6b7280'; // gray
+            case 'Medium': return '#f59e0b'; // amber
+            case 'High': return '#f97316'; // orange
+            case 'Critical': return '#ef4444'; // red
+            default: return '#6b7280'; // default gray
+        }
+    };
+
+    const getSeverityColor = (severity) => {
+        switch (severity) {
+            case 'Minor': return '#6b7280'; // gray
+            case 'Major': return '#f59e0b'; // amber
+            case 'Critical': return '#ef4444'; // red
+            case 'Blocker': return '#7f1d1d'; // dark red
+            default: return '#6b7280'; // default gray
+        }
+    };
+
+    // Create a new bug
+    const createNewBug = () => {
+        const newBug = {
+            id: `BUG-${String(bugs.length + 1).padStart(3, '0')}`,
+            title: "New Bug",
+            category: "Uncategorized",
+            assignedTo: "unassigned",
+            status: "Open",
+            priority: "Medium",
+            severity: "Minor",
+            epic: "",
+            testCase: "",
+            caseStatus: "",
+            dueDate: "",
+            automated: "No",
+            automationLink: null,
+            creationLog: `Created on ${new Date().toISOString().split('T')[0]} by User`,
+            creationDate: new Date().toISOString().replace('T', ' ').substring(0, 19),
+            description: "",
+            stepsToReproduce: "",
+            comments: []
+        };
+
+        setBugs([...bugs, newBug]);
+        // Scroll to the bottom to show the new bug
+        setTimeout(() => {
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 100);
     };
 
     return (
-        <div className="p-4 max-w-screen-xl mx-auto">
-            <SecondaryHeader />
-
-            {/* Selection modal */}
+        <div className="container mx-auto px-4 py-6">
+            <SecondaryHeader title="Bug Tracker" />
+            
+            {/* Bug list */}
+            <div className="mt-6">
+                {Object.keys(groupedBugs).sort().reverse().map(date => (
+                    <BugGroup
+                        key={date}
+                        date={date}
+                        bugs={groupedBugs[date]}
+                        expanded={expandedGroups[date]}
+                        groupColor={groupColors[date]}
+                        onToggleExpand={() => toggleGroup(date)}
+                        onChangeColor={() => changeGroupColor(date)}
+                        teamMembers={teamMembers}
+                        statusOptions={statusOptions}
+                        priorityOptions={priorityOptions}
+                        severityOptions={severityOptions}
+                        selectedBugs={selectedBugs}
+                        editingTitle={editingTitle}
+                        getStatusColor={getStatusColor}
+                        getPriorityColor={getPriorityColor}
+                        getSeverityColor={getSeverityColor}
+                        isAllInGroupSelected={isAllInGroupSelected(date)}
+                        handleSelectAllInGroup={handleSelectAllInGroup}
+                        handleBugSelection={handleBugSelection}
+                        handleTitleEditStart={handleTitleEditStart}
+                        handleTitleEdit={handleTitleEdit}
+                        handleTitleEditEnd={handleTitleEditEnd}
+                        handleAssigneeChange={handleAssigneeChange}
+                        handleStatusChange={handleStatusChange}
+                        handlePriorityChange={handlePriorityChange}
+                        handleSeverityChange={handleSeverityChange}
+                        openBugDetails={openBugDetails}
+                        addNewStatus={addNewStatus}
+                    />
+                ))}
+            </div>
+            
+            {/* Create bug button */}
+            <div className="fixed bottom-6 right-6">
+                <button
+                    onClick={createNewBug}
+                    className="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full shadow-lg flex items-center justify-center"
+                >
+                    <Plus size={24} />
+                </button>
+            </div>
+            
+            {/* Selection modal for bulk actions */}
             {showSelectionModal && (
-                <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 p-4 rounded-md shadow-lg z-50 flex items-center gap-4">
-                    <span className="font-medium">{selectedBugs.length} items selected</span>
-                    <button
-                        onClick={() => handleBulkAction('delete')}
-                        className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
-                    >
-                        Delete
-                    </button>
+                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-md px-4 py-3 flex items-center space-x-4 border border-gray-200">
+                    <span className="font-medium">{selectedBugs.length} bug(s) selected</span>
+                    
                     <button
                         onClick={() => handleBulkAction('markDone')}
-                        className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600"
+                        className="px-3 py-1 bg-green-100 text-green-800 rounded-md text-sm"
                     >
                         Mark Done
                     </button>
+                    
                     <button
                         onClick={() => handleBulkAction('markBlocked')}
-                        className="bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600"
+                        className="px-3 py-1 bg-red-100 text-red-800 rounded-md text-sm"
                     >
                         Mark Blocked
                     </button>
+                    
                     <button
                         onClick={() => handleBulkAction('setPriorityHigh')}
-                        className="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600"
+                        className="px-3 py-1 bg-orange-100 text-orange-800 rounded-md text-sm"
                     >
                         Set High Priority
                     </button>
+                    
                     <button
-                        onClick={clearSelections}
-                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                        onClick={() => handleBulkAction('delete')}
+                        className="px-3 py-1 bg-gray-100 text-gray-800 rounded-md text-sm"
                     >
-                        <X size={20} />
+                        Delete
+                    </button>
+                    
+                    <button
+                        onClick={() => setSelectedBugs([])}
+                        className="p-1 hover:bg-gray-100 rounded-full"
+                    >
+                        <X size={18} />
                     </button>
                 </div>
             )}
-
-            {/* Bug groups */}
-{Object.entries(groupedBugs).map(([date, bugs]) => (
-    <BugGroup
-    key={date}
-    date={date}
-    bugs={bugs}
-    expanded={expandedGroups[date]}
-    groupColor={groupColors[date]}
-    onToggleExpand={() => toggleGroup(date)}
-    onChangeColor={() => changeGroupColor(date)}
-    teamMembers={teamMembers}
-    editingTitle={editingTitle}
-    onTitleEditStart={handleTitleEditStart}
-    onTitleEdit={(bugId, e) => handleTitleEdit(bugId, date, e)}
-    onTitleEditEnd={handleTitleEditEnd}
-    onAssigneeChange={(bugId, assigneeId) => handleAssigneeChange(bugId, date, assigneeId)}
-    onStatusChange={(bugId, status) => handleStatusChange(bugId, date, status)}
-    onPriorityChange={(bugId, priority) => handlePriorityChange(bugId, date, priority)}
-    onSeverityChange={(bugId, severity) => handleSeverityChange(bugId, date, severity)}
-    statusOptions={statusOptions}
-    priorityOptions={priorityOptions}
-    severityOptions={severityOptions}
-    selectedBugs={selectedBugs}
-    onBugSelection={(bugId) => handleBugSelection(bugId, date)}
-    isAllSelected={isAllInGroupSelected(date)}
-    onSelectAll={(isChecked) => handleSelectAllInGroup(date, isChecked)}
-/>
-))}
+            
+            {/* Bug details modal */}
+            {bugForDetails && (
+                <BugDetailsModal 
+                    bug={bugForDetails} 
+                    onClose={closeBugDetails} 
+                    statusOptions={statusOptions}
+                    priorityOptions={priorityOptions}
+                    severityOptions={severityOptions}
+                    teamMembers={teamMembers.map(m => `${m.firstName} ${m.lastName}`).concat(["Unassigned"])}
+                    updateBug={updateBug}
+                    getStatusColor={getStatusColor}
+                    getPriorityColor={getPriorityColor}
+                    getSeverityColor={getSeverityColor}
+                />
+            )}
         </div>
     );
 };

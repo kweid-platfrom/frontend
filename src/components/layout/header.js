@@ -1,13 +1,24 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
 import { Bell, Search, Play, UserPlus, FileText, Plus } from "lucide-react";
-import Image from "next/image";
+// import Image from "next/image";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
 import BugReportButton from "../BugReport";
+import UserAvatar from "../UserAvatar";
 
 const Header = ({ setShowBugForm }) => {
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
+
+    // Current user information (would typically come from auth context)
+    const currentUser = {
+        name: "John Doe",
+        email: "john.doe@example.com",
+        image: "/dummyimage.com/300.png/09f/fff",
+        role: "Developer",
+        subscription: "Pro",
+        company: "Tech Solutions Inc."
+    };
 
     const reportButtonRef = useRef(null);
     const testCaseButtonRef = useRef(null);
@@ -135,14 +146,10 @@ const Header = ({ setShowBugForm }) => {
 
                     {/* User Avatar */}
                     <div className="flex items-center">
-                        <Image
-                            className="h-8 w-8 rounded-full bg-[#E1E2E6]"
-                            src="/dummyimage.com/300.png/09f/fff"
-                            alt="User avatar"
-                            width={32}
-                            height={32}
-                        />
+                    <UserAvatar user={currentUser} size={40} />
                     </div>
+                    
+
                 </div>
             </div>
 

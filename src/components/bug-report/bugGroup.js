@@ -1,239 +1,227 @@
-// components/bug-report/bugGroup.js
+// components/bug-report/bugGroup.jsx
 import React from "react";
-import { ChevronRight, ChevronDown, Palette } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, MessageSquare } from "lucide-react";
 
-
-const BugGroup = ({
-    date,
-    bugs,
-    expanded,
-    groupColor,
-    onToggleExpand,
-    onChangeColor,
-    teamMembers,
-    editingTitle,
-    onTitleEditStart,
-    onTitleEdit,
-    onTitleEditEnd,
-    onAssigneeChange,
-    onStatusChange,
-    onPriorityChange,
-    onSeverityChange,
-    statusOptions,
-    priorityOptions,
-    severityOptions,
-    selectedBugs,
-    onBugSelection,
-    isAllSelected,
-    onSelectAll
+const BugGroup = ({ 
+    date, 
+    bugs, 
+    expanded, 
+    groupColor, 
+    onToggleExpand, 
+    onChangeColor, 
+    teamMembers, 
+    statusOptions, 
+    priorityOptions, 
+    severityOptions, 
+    selectedBugs, 
+    editingTitle, 
+    getStatusColor, 
+    getPriorityColor, 
+    getSeverityColor, 
+    isAllInGroupSelected, 
+    handleSelectAllInGroup, 
+    handleBugSelection, 
+    handleTitleEditStart, 
+    handleTitleEdit, 
+    handleTitleEditEnd, 
+    handleAssigneeChange, 
+    handleStatusChange, 
+    handlePriorityChange, 
+    handleSeverityChange, 
+    openBugDetails, 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    addNewStatus 
 }) => {
-    // Format the date to a more readable format
-    const formattedDate = new Date(date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
+    // Format date for display
+    const formatDate = (dateString) => {
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
+    // Find team member by ID
+    const findTeamMember = (id) => {
+        if (id === "unassigned") return { firstName: "Unassigned", lastName: "", avatar: null };
+        return teamMembers.find(member => member.id === id) || { firstName: "Unknown", lastName: "", avatar: null };
+    };
 
     return (
-        <div className="mb-4">
+        <div className="mb-6 border rounded-md shadow-sm overflow-hidden">
             {/* Group header */}
             <div 
-                className="flex items-center p-3 border rounded-md cursor-pointer"
-                style={{ borderLeftColor: groupColor, borderLeftWidth: '4px' }}
+                className="flex items-center justify-between p-3 cursor-pointer"
+                onClick={onToggleExpand}
+                style={{ backgroundColor: groupColor, color: 'white' }}
             >
-                {/* Expand/collapse button */}
-                <button 
-                    onClick={onToggleExpand}
-                    className="mr-2"
-                >
-                    {expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-                </button>
+                <div className="flex items-center space-x-2">
+                    {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    <h3 className="font-medium">{formatDate(date)}</h3>
+                    <span className="text-sm">({bugs.length} bugs)</span>
+                </div>
                 
-                {/* Group title */}
-                <div className="flex-1 font-medium">{formattedDate} ({bugs.length})</div>
-                
-                {/* Group actions */}
-                <button 
-                    onClick={onChangeColor}
-                    className="p-1 mr-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
-                    title="Change group color"
-                >
-                    <Palette size={18} />
-                </button>
-                
-                {/* Group selection checkbox */}
-                <input 
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={(e) => onSelectAll(e.target.checked)}
-                    className="ml-2"
-                />
+                <div className="flex items-center space-x-2">
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onChangeColor();
+                        }}
+                        className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
+                    >
+                        <RefreshCw size={16} />
+                    </button>
+                </div>
             </div>
             
-            {/* Bug list - only display when expanded */}
+            {/* Group content */}
             {expanded && (
-                <div className="mt-2 border rounded-md overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="bg-gray-50 dark:bg-gray-800">
-                                <th className="p-2 text-left">Select</th>
-                                <th className="p-2 text-left">ID</th>
-                                <th className="p-2 text-left">Title</th>
-                                <th className="p-2 text-left">Assignee</th>
-                                <th className="p-2 text-left">Status</th>
-                                <th className="p-2 text-left">Priority</th>
-                                <th className="p-2 text-left">Severity</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {bugs.map((bug) => {
-                                const bugKey = `${date}-${bug.id}`;
-                                const isSelected = selectedBugs.includes(bugKey);
-                                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                                const assignee = bug.assignedTo !== "unassigned" 
-                                    ? teamMembers.find(member => member.id === bug.assignedTo)
-                                    : null;
-                                    
-                                return (
-                                    <tr 
-                                        key={bug.id}
-                                        className={`border-t ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                <div className="bg-white">
+                    {/* Table header */}
+                    <div className="grid grid-cols-12 gap-2 p-3 bg-gray-50 border-b text-sm font-medium text-gray-600">
+                        <div className="col-span-1 flex items-center">
+                            <input 
+                                type="checkbox" 
+                                checked={isAllInGroupSelected}
+                                onChange={(e) => handleSelectAllInGroup(date, e.target.checked)}
+                                className="rounded"
+                            />
+                        </div>
+                        <div className="col-span-3">Title</div>
+                        <div className="col-span-2">Assigned To</div>
+                        <div className="col-span-1">Status</div>
+                        <div className="col-span-1">Priority</div>
+                        <div className="col-span-1">Severity</div>
+                        <div className="col-span-3">Creation Info</div>
+                    </div>
+                    
+                    {/* Bug rows */}
+                    {bugs.map((bug) => {
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        const assignee = findTeamMember(bug.assignedTo);
+                        const isSelected = selectedBugs.includes(`${date}-${bug.id}`);
+                        
+                        return (
+                            <div 
+                                key={bug.id}
+                                className={`grid grid-cols-12 gap-2 p-3 border-b hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}
+                            >
+                                {/* Checkbox */}
+                                <div className="col-span-1 flex items-center">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={isSelected}
+                                        onChange={() => handleBugSelection(bug.id, date)}
+                                        className="rounded"
+                                    />
+                                </div>
+                                
+                                {/* Title */}
+                                <div className="col-span-3 flex items-center">
+                                    {editingTitle === bug.id ? (
+                                        <input 
+                                            type="text" 
+                                            value={bug.title}
+                                            onChange={(e) => handleTitleEdit(bug.id, date, e)}
+                                            onBlur={handleTitleEditEnd}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleTitleEditEnd()}
+                                            className="w-full p-1 border rounded"
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <div className="flex items-center w-full">
+                                            <span 
+                                                className="flex-grow cursor-pointer hover:underline"
+                                                onClick={() => handleTitleEditStart(bug.id)}
+                                            >
+                                                {bug.id}: {bug.title}
+                                            </span>
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openBugDetails(bug);
+                                                }}
+                                                className="ml-2 text-gray-500 hover:text-blue-500"
+                                                title="Open bug details"
+                                            >
+                                                <MessageSquare size={16} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* Assigned To */}
+                                <div className="col-span-2">
+                                    <select 
+                                        value={bug.assignedTo}
+                                        onChange={(e) => handleAssigneeChange(bug.id, date, e.target.value)}
+                                        className="w-full p-1 border rounded text-sm"
                                     >
-                                        {/* Selection checkbox */}
-                                        <td className="p-2">
-                                            <input 
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => onBugSelection(bug.id)}
-                                            />
-                                        </td>
-                                        
-                                        {/* Bug ID */}
-                                        <td className="p-2 font-mono text-sm">{bug.id}</td>
-                                        
-                                        {/* Bug title - editable */}
-                                        <td className="p-2">
-                                            {editingTitle === bug.id ? (
-                                                <input 
-                                                    type="text"
-                                                    value={bug.title}
-                                                    onChange={(e) => onTitleEdit(bug.id, e)}
-                                                    onBlur={onTitleEditEnd}
-                                                    onKeyDown={(e) => e.key === 'Enter' && onTitleEditEnd()}
-                                                    className="w-full p-1 border rounded"
-                                                    autoFocus
-                                                />
-                                            ) : (
-                                                <div 
-                                                    onClick={() => onTitleEditStart(bug.id)}
-                                                    className="cursor-pointer hover:underline"
-                                                >
-                                                    {bug.title}
-                                                </div>
-                                            )}
-                                        </td>
-                                        
-                                        {/* Assignee dropdown */}
-                                        <td className="p-2">
-                                            <select
-                                                value={bug.assignedTo}
-                                                onChange={(e) => onAssigneeChange(bug.id, e.target.value)}
-                                                className="p-1 border rounded bg-transparent"
-                                            >
-                                                <option value="unassigned">Unassigned</option>
-                                                {teamMembers.map(member => (
-                                                    <option key={member.id} value={member.id}>
-                                                        {member.firstName} {member.lastName}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                        
-                                        {/* Status dropdown */}
-                                        <td className="p-2">
-                                            <select
-                                                value={bug.status}
-                                                onChange={(e) => onStatusChange(bug.id, e.target.value)}
-                                                className={`p-1 border rounded text-white ${getStatusColor(bug.status)}`}
-                                            >
-                                                {statusOptions.map(status => (
-                                                    <option key={status} value={status}>
-                                                        {status}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                        
-                                        {/* Priority dropdown */}
-                                        <td className="p-2">
-                                            <select
-                                                value={bug.priority}
-                                                onChange={(e) => onPriorityChange(bug.id, e.target.value)}
-                                                className={`p-1 border rounded text-white ${getPriorityColor(bug.priority)}`}
-                                            >
-                                                {priorityOptions.map(priority => (
-                                                    <option key={priority} value={priority}>
-                                                        {priority}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                        
-                                        {/* Severity dropdown */}
-                                        <td className="p-2">
-                                            <select
-                                                value={bug.severity}
-                                                onChange={(e) => onSeverityChange(bug.id, e.target.value)}
-                                                className={`p-1 border rounded text-white ${getSeverityColor(bug.severity)}`}
-                                            >
-                                                {severityOptions.map(severity => (
-                                                    <option key={severity} value={severity}>
-                                                        {severity}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                        <option value="unassigned">Unassigned</option>
+                                        {teamMembers.map(member => (
+                                            <option key={member.id} value={member.id}>
+                                                {member.firstName} {member.lastName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                {/* Status */}
+                                <div className="col-span-1">
+                                    <select 
+                                        value={bug.status}
+                                        onChange={(e) => handleStatusChange(bug.id, date, e.target.value)}
+                                        className="w-full p-1 border rounded text-sm text-white"
+                                        style={{ backgroundColor: getStatusColor(bug.status) }}
+                                    >
+                                        {statusOptions.map(status => (
+                                            <option key={status} value={status}>
+                                                {status}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                {/* Priority */}
+                                <div className="col-span-1">
+                                    <select 
+                                        value={bug.priority}
+                                        onChange={(e) => handlePriorityChange(bug.id, date, e.target.value)}
+                                        className="w-full p-1 border rounded text-sm text-white"
+                                        style={{ backgroundColor: getPriorityColor(bug.priority) }}
+                                    >
+                                        {priorityOptions.map(priority => (
+                                            <option key={priority} value={priority}>
+                                                {priority}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                {/* Severity */}
+                                <div className="col-span-1">
+                                    <select 
+                                        value={bug.severity}
+                                        onChange={(e) => handleSeverityChange(bug.id, date, e.target.value)}
+                                        className="w-full p-1 border rounded text-sm text-white"
+                                        style={{ backgroundColor: getSeverityColor(bug.severity) }}
+                                    >
+                                        {severityOptions.map(severity => (
+                                            <option key={severity} value={severity}>
+                                                {severity}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                {/* Creation Info */}
+                                <div className="col-span-3 text-sm text-gray-500">
+                                    {bug.creationLog}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
     );
-};
-
-// Helper functions for status, priority, and severity colors
-const getStatusColor = (status) => {
-    switch (status) {
-        case 'Open': return 'bg-blue-600';
-        case 'In Progress': return 'bg-yellow-600';
-        case 'Blocked': return 'bg-red-600';
-        case 'Done': return 'bg-green-600';
-        case 'Closed': return 'bg-gray-600';
-        default: return 'bg-gray-600';
-    }
-};
-
-const getPriorityColor = (priority) => {
-    switch (priority) {
-        case 'Low': return 'bg-green-600';
-        case 'Medium': return 'bg-yellow-600';
-        case 'High': return 'bg-orange-600';
-        case 'Critical': return 'bg-red-600';
-        default: return 'bg-gray-600';
-    }
-};
-
-const getSeverityColor = (severity) => {
-    switch (severity) {
-        case 'Minor': return 'bg-blue-600';
-        case 'Major': return 'bg-orange-600';
-        case 'Critical': return 'bg-red-600';
-        case 'Blocker': return 'bg-purple-600';
-        default: return 'bg-gray-600';
-    }
 };
 
 export default BugGroup;
