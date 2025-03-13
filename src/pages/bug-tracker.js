@@ -1,613 +1,368 @@
+// pages/bug-management-demo.js or app/bug-management/page.js
 "use client"
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import BugDetailsModal from "../components/BugDetailsModal";
-import SelectionActionsModal from "../components/SelectionActionsModal";
-import SecondaryHeader from "../components/layout/secondaryHeader";
+import React, { useState, useEffect } from "react";
 import BugGroup from "../components/bug-report/bugGroup";
-import {
-    getColorScheme,
-    saveColorScheme,
-    getStatusColor,
-    getPriorityColor,
-    getSeverityColor,
-    updateGroupColor
-} from "../utils/colorConfig";
+import { X } from "lucide-react";
 
 const BugTracker = () => {
-    // Initialize all groups to be expanded by default
+    // Mock data for demonstration
+    const initialBugs = [
+        {
+            id: "BUG-001",
+            title: "Login button not working on mobile devices",
+            category: "UI/UX",
+            assignedTo: "1", // John Doe
+            status: "Open",
+            priority: "High",
+            severity: "Major",
+            epic: "User Authentication",
+            testCase: "TC-123",
+            caseStatus: "Failed",
+            dueDate: "2025-03-20",
+            automated: "No",
+            automationLink: null,
+            creationLog: "Created on 2025-03-10 by Admin",
+            creationDate: "2025-03-10 09:30:00",
+            description: "Users report that the login button doesn't respond on iOS devices smaller than iPhone 12."
+        },
+        {
+            id: "BUG-002",
+            title: "Database timeout during high traffic periods",
+            category: "Backend",
+            assignedTo: "2", // Jane Smith
+            status: "In Progress",
+            priority: "Critical",
+            severity: "Blocker",
+            epic: "System Performance",
+            testCase: "TC-456",
+            caseStatus: "Failed",
+            dueDate: "2025-03-15",
+            automated: "Yes",
+            automationLink: "https://github.com/example/tests/performance",
+            creationLog: "Created on 2025-03-10 by Admin",
+            creationDate: "2025-03-10 14:45:00",
+            description: "The system experiences database timeouts when concurrent users exceed 1000."
+        },
+        {
+            id: "BUG-003",
+            title: "Incorrect calculation in invoice totals",
+            category: "Business Logic",
+            assignedTo: "3", // Alex Johnson
+            status: "Done",
+            priority: "Medium",
+            severity: "Major",
+            epic: "Billing System",
+            testCase: "TC-789",
+            caseStatus: "Passed",
+            dueDate: "2025-03-12",
+            automated: "Yes",
+            automationLink: "https://github.com/example/tests/billing",
+            creationLog: "Created on 2025-03-11 by Admin",
+            creationDate: "2025-03-11 11:20:00",
+            description: "The invoice total doesn't match the sum of line items when discounts are applied."
+        },
+        {
+            id: "BUG-004",
+            title: "Session timeout occurring too quickly",
+            category: "Security",
+            assignedTo: "unassigned",
+            status: "Open",
+            priority: "Low",
+            severity: "Minor",
+            epic: "User Sessions",
+            testCase: "TC-234",
+            caseStatus: "Failed",
+            dueDate: "2025-03-25",
+            automated: "No",
+            automationLink: null,
+            creationLog: "Created on 2025-03-12 by Admin",
+            creationDate: "2025-03-12 13:15:00",
+            description: "Users are being logged out after only 5 minutes of inactivity instead of the specified 30 minutes."
+        },
+        {
+            id: "BUG-005",
+            title: "Report export fails with large datasets",
+            category: "Reporting",
+            assignedTo: "1", // John Doe
+            status: "Blocked",
+            priority: "High",
+            severity: "Critical",
+            epic: "Analytics Platform",
+            testCase: "TC-567",
+            caseStatus: "Failed",
+            dueDate: "2025-03-18",
+            automated: "Yes",
+            automationLink: "https://github.com/example/tests/reporting",
+            creationLog: "Created on 2025-03-12 by Admin",
+            creationDate: "2025-03-12 16:40:00",
+            description: "When exporting reports with more than 10,000 rows, the system crashes."
+        }
+    ];
+
+    // State management
+    const [bugs, setBugs] = useState(initialBugs);
     const [expandedGroups, setExpandedGroups] = useState({});
-    const [selectedBug, setSelectedBug] = useState(null);
-    const [colorScheme, setColorScheme] = useState({});
+    const [groupColors, setGroupColors] = useState({});
     const [editingTitle, setEditingTitle] = useState(null);
     const [selectedBugs, setSelectedBugs] = useState([]);
+    const statusOptions = ["Open", "In Progress", "Blocked", "Done", "Closed"];
+    const priorityOptions = ["Low", "Medium", "High", "Critical"];
+    const severityOptions = ["Minor", "Major", "Critical", "Blocker"];
     const [showSelectionModal, setShowSelectionModal] = useState(false);
-    const [showBugDetailsModal, setShowBugDetailsModal] = useState(false);
 
-    // Initialize bug data from localStorage or use default data
-    const [bugsData, setBugsData] = useState({});
+    // Team members
+    const teamMembers = [
+        { id: "1", firstName: "John", lastName: "Doe", avatar: "/api/placeholder/30/30" },
+        { id: "2", firstName: "Jane", lastName: "Smith", avatar: "/api/placeholder/30/30" },
+        { id: "3", firstName: "Alex", lastName: "Johnson", avatar: "/api/placeholder/30/30" }
+    ];
 
-    // Initialize color scheme
-    useEffect(() => {
-        // Ensure colorScheme is initialized before using it
-        const scheme = getColorScheme() || {};
-        setColorScheme(scheme);
-    }, []);
-
-    // Initialize bug data
-    useEffect(() => {
-        const initBugsData = () => {
-            try {
-                const savedBugs = localStorage.getItem('bugsData');
-                if (savedBugs) {
-                    const parsedData = JSON.parse(savedBugs);
-                    if (parsedData && typeof parsedData === 'object') {
-                        setBugsData(parsedData);
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to load saved bugs data", e);
-            }
-
-            // Default bug data if no saved data exists
-            const defaultData = {
-                "04/2025": [
-                    {
-                        id: "BUG-001",
-                        title: "Login button unresponsive",
-                        category: "UI",
-                        assignedTo: "John Doe",
-                        status: "Open",
-                        priority: "High",
-                        severity: "Critical",
-                        epic: "User Authentication",
-                        testCase: "TC-045",
-                        caseStatus: "Failed",
-                        dueDate: "04/15/2025",
-                        automated: "Yes",
-                        automationLink: "https://github.com/company/repo/tests/login-tests.js",
-                        creationLog: "04/01/2025 by Admin",
-                        comments: [
-                            { id: 1, author: "John Doe", text: "This needs urgent fixing.", timestamp: "04/02/2025, 10:15 AM", replies: [] },
-                            {
-                                id: 2, author: "Jane Smith", text: "Looking into it now.", timestamp: "04/02/2025, 10:20 AM", replies: [
-                                    { id: 3, author: "John Doe", text: "Thanks for the quick response.", timestamp: "04/02/2025, 10:25 AM" }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        id: "BUG-002",
-                        title: "API request timeout",
-                        category: "Backend",
-                        assignedTo: "Jane Smith",
-                        status: "In Progress",
-                        priority: "Medium",
-                        severity: "Major",
-                        epic: "Data Retrieval",
-                        testCase: "TC-067",
-                        caseStatus: "Failed",
-                        dueDate: "04/10/2025",
-                        automated: "Yes",
-                        automationLink: "https://github.com/company/repo/tests/api-tests.js",
-                        creationLog: "04/02/2025 by QA Team",
-                        comments: [
-                            { id: 1, author: "Jane Smith", text: "Investigating the API endpoint now.", timestamp: "04/03/2025, 09:15 AM", replies: [] }
-                        ]
-                    }
-                ],
-                "03/2025": [
-                    {
-                        id: "BUG-003",
-                        title: "Mobile layout issue",
-                        category: "UI",
-                        assignedTo: "Alice Brown",
-                        status: "Resolved",
-                        priority: "Low",
-                        severity: "Minor",
-                        epic: "Mobile Experience",
-                        testCase: "TC-032",
-                        caseStatus: "Passed",
-                        dueDate: "03/20/2025",
-                        automated: "No",
-                        automationLink: "",
-                        creationLog: "03/15/2025 by UX Team",
-                        comments: [
-                            { id: 1, author: "Alice Brown", text: "Fixed the CSS issues with mobile layout.", timestamp: "03/16/2025, 11:30 AM", replies: [] },
-                            { id: 2, author: "QA Team", text: "Verified the fix. Works well now.", timestamp: "03/17/2025, 09:45 AM", replies: [] }
-                        ]
-                    }
-                ]
-            };
-            setBugsData(defaultData);
-        };
-
-        initBugsData();
-    }, []);
-
-    // Save bugs data to localStorage whenever it changes
-    useEffect(() => {
-        // Only save if bugsData is properly initialized
-        if (bugsData && Object.keys(bugsData).length > 0) {
-            localStorage.setItem('bugsData', JSON.stringify(bugsData));
+    // Group bugs by date
+    const groupedBugs = bugs.reduce((acc, bug) => {
+        const date = bug.creationDate.split(' ')[0]; // Get just the date part
+        if (!acc[date]) {
+            acc[date] = [];
         }
-    }, [bugsData]);
+        acc[date].push(bug);
+        return acc;
+    }, {});
 
-    // Keep selectedBug in sync with bugsData
     useEffect(() => {
-        if (selectedBug) {
-            // Find the current version of the bug in bugsData
-            let updatedBug = null;
+        const initialExpandedState = {};
+        const groupDates = Object.keys(groupedBugs);
+        groupDates.forEach(date => {
+            initialExpandedState[date] = true;
+        });
+        setExpandedGroups(initialExpandedState);
+        // Only run this effect once on component mount
+    }, [groupedBugs]);
 
-            // Make sure bugsData is defined before iterating
-            if (bugsData) {
-                for (const [, bugs] of Object.entries(bugsData)) {
-                    if (bugs && Array.isArray(bugs)) {
-                        const foundBug = bugs.find(b => b.id === selectedBug.id);
-                        if (foundBug) {
-                            updatedBug = foundBug;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // If bug still exists, update the selected bug
-            if (updatedBug) {
-                setSelectedBug(updatedBug);
-            } else {
-                // If bug was deleted, close the modal
-                setShowBugDetailsModal(false);
-                setSelectedBug(null);
-            }
-        }
-    }, [bugsData, selectedBug]);
-
-    // Set all groups to be expanded by default
+    // Show selection modal when bugs are selected
     useEffect(() => {
-        if (bugsData && Object.keys(bugsData).length > 0) {
-            const initialExpandedState = {};
-            Object.keys(bugsData).forEach(date => {
-                initialExpandedState[date] = true;  // Set all to true for expanded by default
-            });
-            setExpandedGroups(initialExpandedState);
-        }
-    }, [bugsData]);
-
-    // Update selection modal visibility based on selections
-    useEffect(() => {
-        if (selectedBugs.length > 0) {
-            setShowSelectionModal(true);
-        } else {
-            setShowSelectionModal(false);
-        }
+        setShowSelectionModal(selectedBugs.length > 0);
     }, [selectedBugs]);
 
-    // Status, Priority, and Severity options
-    const statusOptions = ["Open", "In Progress", "Resolved", "Closed", "Under Review", "Needs Info"];
-    const priorityOptions = ["High", "Medium", "Low"];
-    const severityOptions = ["Critical", "Major", "Minor", "Cosmetic"];
-
-
-    const isAllInGroupSelected = useCallback((groupDate) => {
-        if (!bugsData || !bugsData[groupDate] || bugsData[groupDate].length === 0) return false;
-        return bugsData[groupDate].every(bug =>
-            selectedBugs.includes(`${groupDate}-${bug.id}`)
-        );
-    }, [bugsData, selectedBugs]);
-
-    const clearAllSelections = () => {
-        setSelectedBugs([]);
-    };
-
-    // Group toggling
+    // Toggle group expansion
     const toggleGroup = (date) => {
-        setExpandedGroups(prev => ({ ...prev, [date]: !prev[date] }));
+        setExpandedGroups(prevState => ({
+            ...prevState,
+            [date]: !prevState[date]
+        }));
     };
 
-    // Bug details modal
-    const openBugDetails = (bug) => {
-        setSelectedBug(bug);
-        setShowBugDetailsModal(true);
+    // Change group color
+    const changeGroupColor = (date) => {
+        // Generate a random color
+        const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+        setGroupColors(prevColors => ({
+            ...prevColors,
+            [date]: randomColor
+        }));
     };
 
-    const closeBugDetails = () => {
-        setSelectedBug(null);
-        setShowBugDetailsModal(false);
-    };
+    // Check if all bugs in a group are selected
+const isAllInGroupSelected = (date) => {
+    // Make sure groupedBugs[date] exists and is an array
+    const groupBugs = groupedBugs[date] || [];
+    
+    // If there are no bugs in this group, return false
+    if (groupBugs.length === 0) return false;
+    
+    // Make sure selectedBugs is an array before using includes
+    if (!Array.isArray(selectedBugs)) return false;
+    
+    // Check if every bug in the group is selected
+    return groupBugs.every(bug => {
+        // Create the bug key the same way it's created in handleBugSelection
+        const bugKey = `${date}-${bug.id}`;
+        return selectedBugs.includes(bugKey);
+    });
+};
 
-    // Title editing
-    const handleTitleEdit = (bugId, groupDate, e) => {
-        if (!bugsData || !bugsData[groupDate]) return;
+    // Handle selecting all bugs in a group
+    const handleSelectAllInGroup = (date, isChecked) => {
+        const groupBugs = groupedBugs[date] || [];
 
-        const updatedBugsData = { ...bugsData };
-        const groupBugs = updatedBugsData[groupDate];
-        if (groupBugs) {
-            const bugIndex = groupBugs.findIndex(bug => bug.id === bugId);
-            if (bugIndex !== -1) {
-                updatedBugsData[groupDate][bugIndex].title = e.target.value;
-                setBugsData(updatedBugsData);
-            }
+        if (isChecked) {
+            // Add all bugs from this group that aren't already selected
+            const newSelectedBugs = [...selectedBugs];
+            groupBugs.forEach(bug => {
+                const bugKey = `${date}-${bug.id}`;
+                if (!newSelectedBugs.includes(bugKey)) {
+                    newSelectedBugs.push(bugKey);
+                }
+            });
+            setSelectedBugs(newSelectedBugs);
+        } else {
+            // Remove all bugs from this group
+            setSelectedBugs(selectedBugs.filter(bugKey => !bugKey.startsWith(`${date}-`)));
         }
     };
 
+    // Handle individual bug selection
+    const handleBugSelection = (bugId, date) => {
+        const bugKey = `${date}-${bugId}`;
+
+        if (selectedBugs.includes(bugKey)) {
+            setSelectedBugs(selectedBugs.filter(key => key !== bugKey));
+        } else {
+            setSelectedBugs([...selectedBugs, bugKey]);
+        }
+    };
+
+    // Handle title editing
     const handleTitleEditStart = (bugId) => {
         setEditingTitle(bugId);
+    };
+
+    const handleTitleEdit = (bugId, date, e) => {
+        const newTitle = e.target.value;
+        setBugs(prevBugs => prevBugs.map(bug =>
+            bug.id === bugId ? { ...bug, title: newTitle } : bug
+        ));
     };
 
     const handleTitleEditEnd = () => {
         setEditingTitle(null);
     };
 
-    // Group color management
-    const changeGroupColor = (date) => {
-        if (!colorScheme) return;
-
-        // Generate a random color
-        const randomColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
-        const updatedColorScheme = updateGroupColor(date, randomColor, colorScheme);
-        setColorScheme(updatedColorScheme);
-        saveColorScheme(updatedColorScheme);
+    // Handle assignee change
+    const handleAssigneeChange = (bugId, date, assigneeId) => {
+        setBugs(prevBugs => prevBugs.map(bug =>
+            bug.id === bugId ? { ...bug, assignedTo: assigneeId } : bug
+        ));
     };
 
-    // Bug selection handling
-    const handleBugSelection = (bugId, groupDate) => {
-        const selectionKey = `${groupDate}-${bugId}`;
-
-        setSelectedBugs(prev => {
-            if (prev.includes(selectionKey)) {
-                return prev.filter(id => id !== selectionKey);
-            } else {
-                return [...prev, selectionKey];
-            }
-        });
+    // Handle status change
+    const handleStatusChange = (bugId, date, status) => {
+        setBugs(prevBugs => prevBugs.map(bug =>
+            bug.id === bugId ? { ...bug, status: status } : bug
+        ));
     };
 
-    const handleSelectAllInGroup = (groupDate, isChecked) => {
-        if (!bugsData || !bugsData[groupDate]) return;
-
-        setSelectedBugs(prev => {
-            // Create a new selection array without bugs from this group
-            const filteredSelection = prev.filter(key => !key.startsWith(`${groupDate}-`));
-
-            if (isChecked && bugsData[groupDate]) {
-                // Add all bugs from this group
-                const groupSelections = bugsData[groupDate].map(bug => `${groupDate}-${bug.id}`);
-                return [...filteredSelection, ...groupSelections];
-            } else {
-                // Just return the filtered selection without this group's bugs
-                return filteredSelection;
-            }
-        });
+    // Handle priority change
+    const handlePriorityChange = (bugId, date, priority) => {
+        setBugs(prevBugs => prevBugs.map(bug =>
+            bug.id === bugId ? { ...bug, priority: priority } : bug
+        ));
     };
 
-    // Bug field updates
-    const handleStatusChange = (bugId, groupDate, newStatus) => {
-        if (!bugsData || !bugsData[groupDate]) return;
-
-        const updatedBugsData = { ...bugsData };
-        if (updatedBugsData[groupDate]) {
-            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-            if (bugIndex !== -1) {
-                updatedBugsData[groupDate][bugIndex].status = newStatus;
-                setBugsData(updatedBugsData);
-            }
-        }
+    // Handle severity change
+    const handleSeverityChange = (bugId, date, severity) => {
+        setBugs(prevBugs => prevBugs.map(bug =>
+            bug.id === bugId ? { ...bug, severity: severity } : bug
+        ));
     };
 
-    const handlePriorityChange = (bugId, groupDate, newPriority) => {
-        if (!bugsData || !bugsData[groupDate]) return;
+    // Handle bulk actions
+    const handleBulkAction = (action) => {
+        let updatedBugs = [...bugs];
 
-        const updatedBugsData = { ...bugsData };
-        if (updatedBugsData[groupDate]) {
-            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-            if (bugIndex !== -1) {
-                updatedBugsData[groupDate][bugIndex].priority = newPriority;
-                setBugsData(updatedBugsData);
-            }
-        }
-    };
+        selectedBugs.forEach(bugKey => {
+            const bugId = bugKey.split('-')[1];
 
-    const handleSeverityChange = (bugId, groupDate, newSeverity) => {
-        if (!bugsData || !bugsData[groupDate]) return;
-
-        const updatedBugsData = { ...bugsData };
-        if (updatedBugsData[groupDate]) {
-            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-            if (bugIndex !== -1) {
-                updatedBugsData[groupDate][bugIndex].severity = newSeverity;
-                setBugsData(updatedBugsData);
-            }
-        }
-    };
-
-    const handleAssigneeChange = (bugId, groupDate, newAssignee) => {
-        if (!bugsData || !bugsData[groupDate]) return;
-
-        const updatedBugsData = { ...bugsData };
-        if (updatedBugsData[groupDate]) {
-            const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-            if (bugIndex !== -1) {
-                updatedBugsData[groupDate][bugIndex].assignedTo = newAssignee;
-                setBugsData(updatedBugsData);
-            }
-        }
-    };
-
-    // Color helper functions
-    const getStatusColorForBug = (status) => getStatusColor(status, colorScheme || {});
-    const getPriorityColorForBug = (priority) => getPriorityColor(priority, colorScheme || {});
-    const getSeverityColorForBug = (severity) => getSeverityColor(severity, colorScheme || {});
-
-    // Update bug details from modal
-    const handleUpdateBug = (updatedBug) => {
-        if (!bugsData) return;
-
-        const updatedBugsData = { ...bugsData };
-
-        // Find which group this bug belongs to
-        for (const [date, bugs] of Object.entries(updatedBugsData)) {
-            if (!bugs || !Array.isArray(bugs)) continue;
-
-            const bugIndex = bugs.findIndex(b => b.id === updatedBug.id);
-            if (bugIndex !== -1) {
-                updatedBugsData[date][bugIndex] = updatedBug;
-                setBugsData(updatedBugsData);
-                break;
-            }
-        }
-    };
-
-    // Handle bulk operations for selected bugs
-    const handleUpdateMultipleBugs = (updates) => {
-        if (!bugsData) return;
-
-        const updatedBugsData = { ...bugsData };
-
-        selectedBugs.forEach(selectionKey => {
-            const parts = selectionKey.split('-');
-            if (parts.length < 2) return;
-
-            const groupDate = parts[0];
-            const bugId = parts.slice(1).join('-'); // Handles case where bugId might contain hyphens
-
-            if (updatedBugsData[groupDate]) {
-                const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-
-                if (bugIndex !== -1) {
-                    // Apply all provided updates
-                    Object.keys(updates).forEach(field => {
-                        if (updates[field] !== undefined && updates[field] !== null) {
-                            updatedBugsData[groupDate][bugIndex][field] = updates[field];
-                        }
-                    });
-                }
+            switch (action) {
+                case 'delete':
+                    updatedBugs = updatedBugs.filter(bug => bug.id !== bugId);
+                    break;
+                case 'markDone':
+                    updatedBugs = updatedBugs.map(bug =>
+                        bug.id === bugId ? { ...bug, status: 'Done' } : bug
+                    );
+                    break;
+                case 'markBlocked':
+                    updatedBugs = updatedBugs.map(bug =>
+                        bug.id === bugId ? { ...bug, status: 'Blocked' } : bug
+                    );
+                    break;
+                case 'setPriorityHigh':
+                    updatedBugs = updatedBugs.map(bug =>
+                        bug.id === bugId ? { ...bug, priority: 'High' } : bug
+                    );
+                    break;
+                default:
+                    break;
             }
         });
 
-        setBugsData(updatedBugsData);
-        setShowSelectionModal(false);
-    };
-
-    // Handle moving bugs to a different group
-    const handleMoveToGroup = (targetGroup) => {
-        if (!bugsData) return;
-
-        const updatedBugsData = { ...bugsData };
-
-        // If the target group doesn't exist, create it
-        if (!updatedBugsData[targetGroup]) {
-            updatedBugsData[targetGroup] = [];
-        }
-
-        // Process each selected bug
-        selectedBugs.forEach(selectionKey => {
-            const parts = selectionKey.split('-');
-            if (parts.length < 2) return;
-
-            const sourceGroup = parts[0];
-            const bugId = parts.slice(1).join('-'); // Handles case where bugId might contain hyphens
-
-            // Skip if trying to move to the same group
-            if (sourceGroup === targetGroup) return;
-
-            // Make sure the source group exists
-            if (updatedBugsData[sourceGroup]) {
-                // Find the bug in the source group
-                const bugIndex = updatedBugsData[sourceGroup].findIndex(bug => bug.id === bugId);
-                if (bugIndex !== -1) {
-                    // Add to target group
-                    const bugToMove = { ...updatedBugsData[sourceGroup][bugIndex] };
-                    updatedBugsData[targetGroup].push(bugToMove);
-
-                    // Remove from source group
-                    updatedBugsData[sourceGroup] = updatedBugsData[sourceGroup].filter(bug => bug.id !== bugId);
-
-                    // If source group is now empty, remove it
-                    if (updatedBugsData[sourceGroup].length === 0) {
-                        delete updatedBugsData[sourceGroup];
-                    }
-                }
-            }
-        });
-
-        // Clear selections and update state
+        setBugs(updatedBugs);
         setSelectedBugs([]);
-        setBugsData(updatedBugsData);
     };
 
-    // Handle deleting selected bugs
-    const handleDeleteSelectedBugs = () => {
-        if (!bugsData) return;
-
-        const updatedBugsData = { ...bugsData };
-
-        selectedBugs.forEach(selectionKey => {
-            const parts = selectionKey.split('-');
-            if (parts.length < 2) return;
-
-            const groupDate = parts[0];
-            const bugId = parts.slice(1).join('-'); // Handles case where bugId might contain hyphens
-
-            if (updatedBugsData[groupDate]) {
-                updatedBugsData[groupDate] = updatedBugsData[groupDate].filter(bug => bug.id !== bugId);
-
-                // Remove empty groups
-                if (updatedBugsData[groupDate].length === 0) {
-                    delete updatedBugsData[groupDate];
-                }
-            }
-        });
-
-        setBugsData(updatedBugsData);
+    // Clear all selections
+    const clearSelections = () => {
         setSelectedBugs([]);
-        setShowSelectionModal(false);
     };
-
-    // Add a comment to a bug
-    const addComment = (bugId, groupDate, commentText, author) => {
-        if (!commentText || !author || !bugsData || !bugsData[groupDate]) return;
-
-        const updatedBugsData = { ...bugsData };
-        if (!updatedBugsData[groupDate]) return;
-
-        const bugIndex = updatedBugsData[groupDate].findIndex(bug => bug.id === bugId);
-        if (bugIndex === -1) return;
-
-        const newComment = {
-            id: Date.now(), // Use timestamp as a simple unique ID
-            author: author,
-            text: commentText,
-            timestamp: new Date().toLocaleString(),
-            replies: []
-        };
-
-        if (!updatedBugsData[groupDate][bugIndex].comments) {
-            updatedBugsData[groupDate][bugIndex].comments = [];
-        }
-
-        updatedBugsData[groupDate][bugIndex].comments.push(newComment);
-        setBugsData(updatedBugsData);
-    };
-
-
-
-    // Check if data is ready to render
-    const isDataReady = useMemo(() => {
-        return bugsData && Object.keys(bugsData).length > 0;
-    }, [bugsData]);
-
-    // If data is not ready, show loading state
-    if (!isDataReady) {
-        return (
-            <div className="flex flex-col min-h-screen bg-gray-50">
-                <SecondaryHeader
-                    title="Bug Tracker"
-                    actions={[]}
-                />
-                <main className="flex-1 p-4 flex items-center justify-center">
-                    <p>Loading bug tracker data...</p>
-                </main>
-            </div>
-        );
-    }
 
     return (
-        <div className="flex flex-col min-h-screen bg-gray-50">
-            <SecondaryHeader
-                title="Bug Tracker"
+        <div className="p-4 max-w-screen-xl mx-auto">
+            <h1 className="text-2xl font-bold mb-4">Bug Management Demo</h1>
 
-            />
-
-            <main className="flex-1 p-4">
-
-                {selectedBugs.length > 0 && (
-                    <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
-                        <span className="font-medium">{selectedBugs.length} bug(s) selected</span>
-                        <button
-                            onClick={clearAllSelections}
-                            className="text-blue-600 hover:text-blue-800"
-                        >
-                            Clear selection
-                        </button>
-                    </div>
-                )}
-
-                {/* Bug groups */}
-                {Object.entries(bugsData).length > 0 ? (
-                    Object.entries(bugsData)
-                        .sort((a, b) => {
-                            // Sort by date (newest first)
-                            const dateA = new Date(a[0].split('/').reverse().join('/'));
-                            const dateB = new Date(b[0].split('/').reverse().join('/'));
-                            return dateB - dateA;
-                        })
-                        .map(([date, bugs]) => (
-                            <BugGroup
-                                key={date}
-                                date={date}
-                                bugs={bugs}
-                                expanded={expandedGroups[date] || false}
-                                toggleGroup={() => toggleGroup(date)}
-                                openBugDetails={openBugDetails}
-                                editingTitle={editingTitle}
-                                handleTitleEdit={(bugId, e) => handleTitleEdit(bugId, date, e)}
-                                handleTitleEditStart={handleTitleEditStart}
-                                handleTitleEditEnd={handleTitleEditEnd}
-                                handleStatusChange={(bugId, newStatus) => handleStatusChange(bugId, date, newStatus)}
-                                handlePriorityChange={(bugId, newPriority) => handlePriorityChange(bugId, date, newPriority)}
-                                handleSeverityChange={(bugId, newSeverity) => handleSeverityChange(bugId, date, newSeverity)}
-                                handleAssigneeChange={(bugId, newAssignee) => handleAssigneeChange(bugId, date, newAssignee)}
-                                changeGroupColor={() => changeGroupColor(date)}
-                                statusOptions={statusOptions}
-                                priorityOptions={priorityOptions}
-                                severityOptions={severityOptions}
-                                getStatusColor={getStatusColorForBug}
-                                getPriorityColor={getPriorityColorForBug}
-                                getSeverityColor={getSeverityColorForBug}
-                                selectedBugs={selectedBugs}
-                                handleBugSelection={(bugId) => handleBugSelection(bugId, date)}
-                                isAllSelected={isAllInGroupSelected(date)}
-                                handleSelectAll={(isChecked) => handleSelectAllInGroup(date, isChecked)}
-                                addComment={(bugId, comment, author) => addComment(bugId, date, comment, author)}
-                            />
-                        ))
-                ) : (
-                    <div className="p-4 bg-white rounded-lg shadow text-center">
-                        <p>No bugs found. {dateFilter ? "Try clearing the filter." : "Add a new bug to get started."}</p>
-                    </div>
-                )}
-            </main>
-
-            {/* Bug details modal */}
-            {showBugDetailsModal && selectedBug && (
-                <BugDetailsModal
-                    bug={selectedBug}
-                    onClose={closeBugDetails}
-                    onUpdate={handleUpdateBug}
-                    statusOptions={statusOptions}
-                    priorityOptions={priorityOptions}
-                    severityOptions={severityOptions}
-                    teamMembers={teamMembers}
-                />
-            )}
-
-            {/* Selection actions modal */}
+            {/* Selection modal */}
             {showSelectionModal && (
-                <SelectionActionsModal
-                    onClose={() => setShowSelectionModal(false)}
-                    selectedCount={selectedBugs.length}
-                    onUpdateMultiple={handleUpdateMultipleBugs}
-                    onDeleteSelected={handleDeleteSelectedBugs}
-                    onMoveToGroup={handleMoveToGroup}
-                    statusOptions={statusOptions}
-                    priorityOptions={priorityOptions}
-                    severityOptions={severityOptions}
-                    teamMembers={teamMembers}
-                    availableGroups={Object.keys(bugsData)}
-                />
+                <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 p-4 rounded-md shadow-lg z-50 flex items-center gap-4">
+                    <span className="font-medium">{selectedBugs.length} items selected</span>
+                    <button
+                        onClick={() => handleBulkAction('delete')}
+                        className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        onClick={() => handleBulkAction('markDone')}
+                        className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600"
+                    >
+                        Mark Done
+                    </button>
+                    <button
+                        onClick={() => handleBulkAction('markBlocked')}
+                        className="bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600"
+                    >
+                        Mark Blocked
+                    </button>
+                    <button
+                        onClick={() => handleBulkAction('setPriorityHigh')}
+                        className="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600"
+                    >
+                        Set High Priority
+                    </button>
+                    <button
+                        onClick={clearSelections}
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
             )}
 
+            {/* Bug groups */}
+{Object.entries(groupedBugs).map(([date, bugs]) => (
+    <BugGroup
+    key={date}
+    date={date}
+    bugs={bugs}
+    expanded={expandedGroups[date]}
+    groupColor={groupColors[date]}
+    onToggleExpand={() => toggleGroup(date)}
+    onChangeColor={() => changeGroupColor(date)}
+    teamMembers={teamMembers}
+    editingTitle={editingTitle}
+    onTitleEditStart={handleTitleEditStart}
+    onTitleEdit={(bugId, e) => handleTitleEdit(bugId, date, e)}
+    onTitleEditEnd={handleTitleEditEnd}
+    onAssigneeChange={(bugId, assigneeId) => handleAssigneeChange(bugId, date, assigneeId)}
+    onStatusChange={(bugId, status) => handleStatusChange(bugId, date, status)}
+    onPriorityChange={(bugId, priority) => handlePriorityChange(bugId, date, priority)}
+    onSeverityChange={(bugId, severity) => handleSeverityChange(bugId, date, severity)}
+    statusOptions={statusOptions}
+    priorityOptions={priorityOptions}
+    severityOptions={severityOptions}
+    selectedBugs={selectedBugs}
+    onBugSelection={(bugId) => handleBugSelection(bugId, date)}
+    isAllSelected={isAllInGroupSelected(date)}
+    onSelectAll={(isChecked) => handleSelectAllInGroup(date, isChecked)}
+/>
+))}
         </div>
     );
 };
