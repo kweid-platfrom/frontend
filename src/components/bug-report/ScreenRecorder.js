@@ -356,7 +356,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             {/* Recording Button */}
             <button
                 ref={buttonRef}
-                className={`px-3 py-2 text-sm rounded-xs flex items-center space-x-2 transition ${isRecording
+                className={`px-3 py-2 cursor-pointer text-sm rounded-xs flex items-center space-x-2 transition ${isRecording
                         ? "bg-red-100 text-red-700 hover:bg-red-200"
                         : "text-[#2D3142] hover:bg-[#A5D6A7] hover:text-[#2d3142]"
                     }`}

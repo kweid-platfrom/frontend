@@ -5,8 +5,16 @@ import { Bell, Search, Play, UserPlus, FileText, Plus } from "lucide-react";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
 import BugReportButton from "../BugReport";
 import UserAvatar from "../UserAvatar";
+import AddUserDropdown from "../modals/AddUserDropdown"
 
 const Header = ({ setShowBugForm }) => {
+    const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
+
+    // Toggle user dropdown
+    const toggleAddUserDropdown = () => {
+        setShowAddUserDropdown(!showAddUserDropdown);
+    };
+
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
 
@@ -79,7 +87,7 @@ const Header = ({ setShowBugForm }) => {
     }, [showReportOptions, showTestCaseOptions]);
 
     return (
-        <header className="bg-[#fff] shadow-sm z-10 py-3 px-4 md:px-6">
+        <header className="bg-[#fff] shadow-sm z-10 py-3 px-4 md:px-6 overflow-visible">
             <div className="flex items-center justify-between space-x-2">
 
                 {/* Search Bar */}
@@ -104,12 +112,13 @@ const Header = ({ setShowBugForm }) => {
                     </button>
 
                     {/* Report Bug */}
-                    <BugReportButton className="text-[#2D3142] hover:bg-[rgb(165,214,167)] hover:text-[#2D3142]" />
+                    <BugReportButton className="text-[#2D3142] hover:bg-[rgb(165,214,167)] hover:text-[#2D3142] cursor-pointer" />
 
 
                     {/* Enhanced Screen Recorder Button */}
-                    <ScreenRecorderButton onRecordingComplete={handleRecordingComplete} />
-
+                    <div className="cursor-pointer">
+                        <ScreenRecorderButton onRecordingComplete={handleRecordingComplete} />
+                    </div>
                     {/* Generate Report Dropdown */}
                     <div className="relative">
                         <button
@@ -118,7 +127,7 @@ const Header = ({ setShowBugForm }) => {
                             className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition"
                         >
                             <FileText className="h-4 w-4" />
-                            <span className="hidden md:inline">Generate Report</span>
+                            <span className="hidden md:inline cursor-pointer">Generate Report</span>
                         </button>
                     </div>
 
@@ -127,28 +136,39 @@ const Header = ({ setShowBugForm }) => {
                         <button
                             ref={testCaseButtonRef}
                             onClick={() => setShowTestCaseOptions(!showTestCaseOptions)}
-                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5d6a7] hover:text-[#2D3142] transition"
+                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5d6a7] hover:text-[#2D3142] transition cursor-pointer"
                         >
                             <Plus className="h-4 w-4" />
                             <span className="hidden md:inline">Add Test Case</span>
                         </button>
                     </div>
                     {/* Add Team Member Button */}
-                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-1 hover:bg-gray-100 transition mr-2">
-                        <UserPlus className="h-4 w-4" />
-                    </button>
+                    <div className="relative">
+                        <button
+                            onClick={toggleAddUserDropdown}
+                            className="relative text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-1 hover:bg-[#A5d6a7] transition mr-2 cursor-pointer z-50" 
+
+                        >
+                            <UserPlus className="h-4 w-4" />
+                        </button>
+                        {showAddUserDropdown && (
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-300 shadow-lg rounded-md z-[9999]">
+                                <AddUserDropdown onClose={() => setShowAddUserDropdown(false)} />
+                            </div>
+                        )}
+                    </div>
 
                     {/* Notification Bell */}
-                    <button className="p-1 rounded-full text-gray-600 hover:text-gray-800 relative">
+                    <button className="p-1 rounded-full text-gray-600 hover:text-gray-800 relative cursor-pointer">
                         <Bell className="h-5 w-5" />
                         <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
                     </button>
 
                     {/* User Avatar */}
                     <div className="flex items-center">
-                    <UserAvatar user={currentUser} size={40} />
+                        <UserAvatar user={currentUser} size={40} />
                     </div>
-                    
+
 
                 </div>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, MessageSquare, ChevronDown, ChevronRight } from "lucide-react";
+import { X, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 
 const BugDetailsModal = ({ 
     bug, 
@@ -109,7 +109,7 @@ const BugDetailsModal = ({
                                         <MessageSquare size={18} className="mr-2" />
                                         <h3 className="text-lg font-medium">Comments ({editedBug.comments?.length || 0})</h3>
                                     </div>
-                                    {showComments ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                                    {showComments ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                 </div>
                                 
                                 {showComments && (
