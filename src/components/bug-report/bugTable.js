@@ -1,4 +1,3 @@
-// components/bug-report/BugTable.jsx
 "use client"
 import React, { useState } from "react";
 import { MessageSquare, Check } from "lucide-react";
@@ -63,7 +62,7 @@ const BugTable = ({
                             <input
                                 type="checkbox"
                                 className="w-4 h-4 cursor-pointer"
-                                checked={isAllInGroupSelected(date)}
+                                checked={isAllInGroupSelected}
                                 onChange={(e) => handleSelectAllInGroup(date, e.target.checked)}
                             />
                         </th>
@@ -80,6 +79,7 @@ const BugTable = ({
                         <th className="border-b border-gray-300 p-2">Due Date</th>
                         <th className="border-b border-gray-300 p-2">Automated</th>
                         <th className="border-b border-gray-300 p-2">Link to Automated Scripts</th>
+                        <th className="border-b border-gray-300 p-2">Reported By</th>
                         <th className="border-b border-gray-300 p-2">Creation Log</th>
                     </tr>
                 </thead>
@@ -223,17 +223,17 @@ const BugTable = ({
                                 )}
                             </td>
                             <td className="border-b border-gray-300 p-0">
-                                <select
-                                    className={`p-1 w-full h-full rounded text-white ${getPriorityColor(bug.priority)}`}
-                                    value={bug.priority}
-                                    onChange={(e) => handlePriorityChange(bug.id, date, e.target.value)}
-                                    style={{ border: "none" }}
-                                >
-                                    {priorityOptions.map(option => (
-                                        <option key={option} value={option}>{option}</option>
-                                    ))}
-                                </select>
-                            </td>
+    <select
+        className={`p-1 w-full h-full rounded text-white ${getPriorityColor(bug.priority)}`}
+        value={bug.priority}
+        onChange={(e) => handlePriorityChange(bug.id, date, e.target.value)}
+        style={{ border: "none" }}
+    >
+        {priorityOptions.map(option => (
+            <option key={option} value={option}>{option}</option>
+        ))}
+    </select>
+</td>
                             <td className="border-b border-gray-300 p-0">
                                 <select
                                     className={`p-1 w-full h-full rounded text-white ${getSeverityColor(bug.severity)}`}
@@ -246,39 +246,36 @@ const BugTable = ({
                                     ))}
                                 </select>
                             </td>
-                            <td className="border-b border-gray-300 p-2">{bug.epic || "—"}</td>
-                            <td className="border-b border-gray-300 p-2">{bug.testCase || "—"}</td>
-                            <td className="border-b border-gray-300 p-2">{bug.caseStatus || "—"}</td>
-                            <td className="border-b border-gray-300 p-2">{bug.dueDate || "—"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.epic || "-"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.testCase || "-"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.caseStatus || "-"}</td>
+                            <td className="border-b border-gray-300 p-2">{bug.dueDate || "-"}</td>
                             <td className="border-b border-gray-300 p-2 text-center">
-                                {bug.automated === "Yes" ? (
-                                    <span className="inline-block w-4 h-4 bg-green-500 rounded-full"></span>
-                                ) : bug.automated === "No" ? (
-                                    <span className="inline-block w-4 h-4 bg-red-500 rounded-full"></span>
-                                ) : "—"}
+                                {bug.automated ? (
+                                    <Check className="h-4 w-4 text-green-500 mx-auto" />
+                                ) : (
+                                    "-"
+                                )}
                             </td>
                             <td className="border-b border-gray-300 p-2">
                                 {bug.automationLink ? (
                                     <a 
                                         href={bug.automationLink} 
-                                        className="text-blue-500 hover:underline flex items-center justify-center" 
                                         target="_blank" 
                                         rel="noopener noreferrer"
+                                        className="text-blue-500 hover:text-blue-700 underline"
                                     >
                                         View Script
                                     </a>
-                                ) : "—"}
+                                ) : (
+                                    "-"
+                                )}
                             </td>
-                            <td className="border-b border-gray-300 p-2 text-xs text-gray-600">{bug.creationLog || "—"}</td>
+                            <td className="border-b border-gray-300 p-2 text-xs text-gray-500">
+                                {bug.creationLog || "-"}
+                            </td>
                         </tr>
                     ))}
-                    {bugs.length === 0 && (
-                        <tr>
-                            <td colSpan="15" className="border-b border-gray-300 p-4 text-center text-gray-500">
-                                No bugs found for this date
-                            </td>
-                        </tr>
-                    )}
                 </tbody>
             </table>
         </div>

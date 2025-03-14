@@ -3,15 +3,15 @@
 import React, { useState, useEffect } from "react";
 import BugGroup from "../components/bug-report/bugGroup";
 import BugDetailsModal from "../components/BugDetailsModal"
-import { X, Plus } from "lucide-react";
+import { X } from "lucide-react";
 import SecondaryHeader from "../components/layout/secondaryHeader";
 
 const BugTracker = () => {
     // Mock data for demonstration
     const initialBugs = [
         {
-            id: "BUG-001",
             title: "Login button not working on mobile devices",
+            id: "BUG-001",
             category: "UI/UX",
             assignedTo: "1", // John Doe
             status: "Open",
@@ -30,8 +30,8 @@ const BugTracker = () => {
             comments: []
         },
         {
-            id: "BUG-002",
             title: "Database timeout during high traffic periods",
+            id: "BUG-002",
             category: "Backend",
             assignedTo: "2", // Jane Smith
             status: "In Progress",
@@ -50,8 +50,8 @@ const BugTracker = () => {
             comments: []
         },
         {
-            id: "BUG-003",
             title: "Incorrect calculation in invoice totals",
+            id: "BUG-003",
             category: "Business Logic",
             assignedTo: "3", // Alex Johnson
             status: "Done",
@@ -67,46 +67,6 @@ const BugTracker = () => {
             creationDate: "2025-03-11 11:20:00",
             description: "The invoice total doesn't match the sum of line items when discounts are applied.",
             stepsToReproduce: "1. Create invoice with multiple items\n2. Apply percentage discount\n3. Check total amount",
-            comments: []
-        },
-        {
-            id: "BUG-004",
-            title: "Session timeout occurring too quickly",
-            category: "Security",
-            assignedTo: "unassigned",
-            status: "Open",
-            priority: "Low",
-            severity: "Minor",
-            epic: "User Sessions",
-            testCase: "TC-234",
-            caseStatus: "Failed",
-            dueDate: "2025-03-25",
-            automated: "No",
-            automationLink: null,
-            creationLog: "Created on 2025-03-12 by Admin",
-            creationDate: "2025-03-12 13:15:00",
-            description: "Users are being logged out after only 5 minutes of inactivity instead of the specified 30 minutes.",
-            stepsToReproduce: "1. Log in to the application\n2. Remain inactive for 5 minutes\n3. Attempt to perform an action",
-            comments: []
-        },
-        {
-            id: "BUG-005",
-            title: "Report export fails with large datasets",
-            category: "Reporting",
-            assignedTo: "1", // John Doe
-            status: "Blocked",
-            priority: "High",
-            severity: "Critical",
-            epic: "Analytics Platform",
-            testCase: "TC-567",
-            caseStatus: "Failed",
-            dueDate: "2025-03-18",
-            automated: "Yes",
-            automationLink: "https://github.com/example/tests/reporting",
-            creationLog: "Created on 2025-03-12 by Admin",
-            creationDate: "2025-03-12 16:40:00",
-            description: "When exporting reports with more than 10,000 rows, the system crashes.",
-            stepsToReproduce: "1. Generate a report with 10,000+ data points\n2. Click export to Excel\n3. Observe system error",
             comments: []
         }
     ];
@@ -368,38 +328,6 @@ const BugTracker = () => {
         }
     };
 
-    // Create a new bug
-    const createNewBug = () => {
-        const newBug = {
-            id: `BUG-${String(bugs.length + 1).padStart(3, '0')}`,
-            title: "New Bug",
-            category: "Uncategorized",
-            assignedTo: "unassigned",
-            status: "Open",
-            priority: "Medium",
-            severity: "Minor",
-            epic: "",
-            testCase: "",
-            caseStatus: "",
-            dueDate: "",
-            automated: "No",
-            automationLink: null,
-            creationLog: `Created on ${new Date().toISOString().split('T')[0]} by User`,
-            creationDate: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            description: "",
-            stepsToReproduce: "",
-            comments: []
-        };
-
-        setBugs([...bugs, newBug]);
-        // Scroll to the bottom to show the new bug
-        setTimeout(() => {
-            window.scrollTo({
-                top: document.body.scrollHeight,
-                behavior: 'smooth'
-            });
-        }, 100);
-    };
 
     return (
         <div className="container mx-auto px-4 py-6">
@@ -439,16 +367,6 @@ const BugTracker = () => {
                         addNewStatus={addNewStatus}
                     />
                 ))}
-            </div>
-            
-            {/* Create bug button */}
-            <div className="fixed bottom-6 right-6">
-                <button
-                    onClick={createNewBug}
-                    className="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full shadow-lg flex items-center justify-center"
-                >
-                    <Plus size={24} />
-                </button>
             </div>
             
             {/* Selection modal for bulk actions */}

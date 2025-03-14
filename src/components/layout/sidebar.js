@@ -16,24 +16,30 @@ import {
 } from "lucide-react";
 
 const Sidebar = ({ setActivePage }) => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
-    const [selectedPage, setSelectedPage] = useState("dashboard");
+    // Initialize with null to prevent default rendering before hydration
+    const [isCollapsed, setIsCollapsed] = useState(null);
+    const [selectedPage, setSelectedPage] = useState(null);
+    const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
-        const storedCollapsed = localStorage.getItem("isCollapsed");
+        // Set isMounted to true after the component mounts
+        setIsMounted(true);
+        
+        // Get stored values after mounting
+        const storedCollapsed = localStorage.getItem("sidebarCollapsed");
         const storedPage = localStorage.getItem("activePage");
-        if (storedCollapsed !== null) {
-            setIsCollapsed(JSON.parse(storedCollapsed));
-        }
-        if (storedPage) {
-            setSelectedPage(storedPage);
-        }
+        
+        // Set states from localStorage or defaults
+        setIsCollapsed(storedCollapsed !== null ? JSON.parse(storedCollapsed) : false);
+        setSelectedPage(storedPage || "dashboard");
     }, []);
 
-
     useEffect(() => {
-        setActivePage(selectedPage); // Ensure active page state is updated
-    }, [selectedPage, setActivePage]);
+        // Only update the active page if the component is mounted and selectedPage is set
+        if (isMounted && selectedPage) {
+            setActivePage(selectedPage);
+        }
+    }, [selectedPage, setActivePage, isMounted]);
 
     const handlePageChange = (page) => {
         setSelectedPage(page);
@@ -43,7 +49,7 @@ const Sidebar = ({ setActivePage }) => {
     const toggleCollapse = () => {
         setIsCollapsed((prev) => {
             const newState = !prev;
-            localStorage.setItem("isCollapsed", JSON.stringify(newState));
+            localStorage.setItem("sidebarCollapsed", JSON.stringify(newState));
             return newState;
         });
     };
@@ -59,6 +65,11 @@ const Sidebar = ({ setActivePage }) => {
         { icon: Settings, label: "Settings", page: "settings" },
         { icon: HelpCircle, label: "Help", page: "help" },
     ];
+
+    // Don't render content until client-side hydration is complete
+    if (isCollapsed === null || !isMounted) {
+        return <div className="bg-[#00897B] w-20 flex-shrink-0 hidden md:block"></div>;
+    }
 
     return (
         <div className={`bg-[#00897B] text-white ${isCollapsed ? "w-20" : "w-55"} flex-shrink-0 hidden md:flex flex-col transition-all duration-300`}>
