@@ -4,7 +4,8 @@ import React from "react";
 import Link from "next/link";
 import '../app/globals.css';
 import Footer from "../components/Footer"
-import Navbar from "../components/Navbar"
+import Navbar from "../components/Navbar";
+import Image from "next/image";
 
 const Home = () => {
     return (
@@ -16,23 +17,23 @@ const Home = () => {
 
             {/* Hero Section */}
             <div className="relative bg-white overflow-hidden">
-                <div className="max-w-7xl mx-auto">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
                         <svg className="hidden lg:block absolute right-0 inset-y-0 h-full w-48 text-white transform translate-x-1/2" fill="currentColor" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                             <polygon points="50,0 100,0 50,100 0,100" />
                         </svg>
                         <div className="pt-10 sm:pt-16 lg:pt-8 xl:pt-16">
                             <div className="sm:text-center lg:text-left">
-                                <h1 className="text-4xl tracking-tight font-extrabold text-[#2D3142] sm:text-5xl md:text-6xl">
+                                <h1 className="text-4xl tracking-tight font-extrabold text-[#2D3142] sm:text-5xl md:text-6xl mb-10">
                                     <span className="block xl:inline">QA Testing,</span>{' '}
                                     <span className="block text-[#00897B] xl:inline">Simplified</span>
                                 </h1>
-                                <p className="mt-3 text-base text-[#4A4B53] sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
+                                <p className="mt-3 text-base text-[#4A4B53] sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0 mb-13">
                                     Streamline your quality assurance workflow with our comprehensive platform for test case management, defect tracking, and automated reporting.
                                 </p>
                                 <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
                                     <div className="rounded-md shadow">
-                                        <Link href="/register" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#00897B] hover:bg-[#00796B] md:py-4 md:text-lg md:px-10">
+                                        <Link href="/register" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xs text-white bg-[#00897B] hover:bg-[#00796B] md:py-4 md:text-lg md:px-10">
                                             Get started
                                         </Link>
                                     </div>
@@ -47,11 +48,15 @@ const Home = () => {
                     </div>
                 </div>
                 <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
-                    <div className="h-56 w-full bg-[#E1E2E6] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-32 w-32 text-[#9EA0A5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                    </div>
+                <div className="">
+    <Image 
+        src="/2.webp" 
+        alt="hero-image" 
+        width={900}  // Set appropriate width
+        height={300} // Set appropriate height
+        className="object-cover rounded-lg"
+    />
+</div>
                 </div>
             </div>
 
