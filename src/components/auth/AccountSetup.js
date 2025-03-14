@@ -1,9 +1,9 @@
 "use client"; 
-
 import { useState, useEffect } from "react";
 import { isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "firebase/auth";
 import { auth } from "../../config/firebase";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
+import "../../app/globals.css"
 
 const AccountSetup = () => {
     const [password, setPassword] = useState("");

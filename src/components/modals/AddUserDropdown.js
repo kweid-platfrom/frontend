@@ -1,9 +1,12 @@
 "use client";
 import React, { useState } from "react";
 import { Plus, X } from "lucide-react";
+import { db } from "../../config/firebase";
+import { collection, addDoc } from "firebase/firestore";
 
 const AddUserDropdown = ({ onClose }) => {
     const [emails, setEmails] = useState([""]);
+    const [loading, setLoading] = useState(false);
 
     // Add new email field
     const addEmailField = () => {
@@ -22,10 +25,34 @@ const AddUserDropdown = ({ onClose }) => {
         setEmails(updatedEmails);
     };
 
-    // Handle submission of emails
-    const handleSubmit = () => {
-        console.log("Adding users:", emails);
-        onClose(); // Close the dropdown after submission
+    // Function to store users in Firestore
+    const handleSubmit = async () => {
+        if (emails.some((email) => email.trim() === "")) {
+            alert("Please enter valid email addresses.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const usersCollection = collection(db, "users");
+
+            // Store each email in Firestore
+            for (const email of emails) {
+                await addDoc(usersCollection, {
+                    email: email.trim(),
+                    createdAt: new Date(),
+                    status: "pending", // Can be used to track invite status
+                });
+            }
+
+            console.log("Users added:", emails);
+            onClose(); // Close dropdown after submission
+        } catch (error) {
+            console.error("Error adding users:", error);
+            alert("Failed to add users. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -59,9 +86,12 @@ const AddUserDropdown = ({ onClose }) => {
 
             <button
                 onClick={handleSubmit}
-                className="w-full bg-[#00897B] text-white py-2 rounded-md hover:bg-[#00695C] transition"
+                disabled={loading}
+                className={`w-full py-2 rounded-md transition ${
+                    loading ? "bg-gray-400 cursor-not-allowed" : "bg-[#00897B] text-white hover:bg-[#00695C]"
+                }`}
             >
-                Add
+                {loading ? "Adding..." : "Add"}
             </button>
         </div>
     );

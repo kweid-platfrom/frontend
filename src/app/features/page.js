@@ -2,6 +2,6 @@
 
 import dynamic from "next/dynamic";
 
-const Checkout = dynamic(() => import("../../components/FeaturesPage"), { ssr: false });
+const Features = dynamic(() => import("../../components/FeaturesPage"), { ssr: false });
 
-export default Checkout;
+export default Features;

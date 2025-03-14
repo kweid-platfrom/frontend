@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { sendSignInLinkToEmail, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "../../config/firebase";
+import { auth, googleProvider, db } from "../../config/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAlert } from "../../components/CustomAlert";
@@ -18,12 +18,21 @@ const Register = () => {
         e.preventDefault();
         try {
             const actionCodeSettings = {
-                url: "http://localhost:3000/set-password",
+                url: `${process.env.NEXT_PUBLIC_APP_URL}/account-setup`,
                 handleCodeInApp: true,
             };
+    
             await sendSignInLinkToEmail(auth, email, actionCodeSettings);
             window.localStorage.setItem("emailForSignIn", email);
             showAlert("Verification email sent. Please check your inbox.", "success");
+    
+            // Save to Firestore (Email is registered but not verified yet)
+            await setDoc(doc(db, "users", email), {
+                email: email,
+                verified: false, // To be updated later
+                createdAt: serverTimestamp(),
+            });
+    
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
