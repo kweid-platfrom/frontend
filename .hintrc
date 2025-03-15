@@ -3,6 +3,22 @@
     "development"
   ],
   "hints": {
-    "axe/language": "off"
+    "axe/language": "off",
+    "disown-opener": "off",
+    "compat-api/html": [
+      "default",
+      {
+        "ignore": [
+          "link[fetchpriority]"
+        ]
+      }
+    ],
+    "axe/text-alternatives": [
+      "default",
+      {
+        "document-title": "off"
+      }
+    ],
+    "no-inline-styles": "off"
   }
 }

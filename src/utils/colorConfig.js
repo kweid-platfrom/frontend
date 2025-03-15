@@ -1,4 +1,4 @@
-// utils/colorConfig.js
+
 "use client"
 
 // Get color scheme from localStorage or use default
