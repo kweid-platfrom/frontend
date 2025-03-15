@@ -53,12 +53,12 @@ const Login = () => {
                         LOGO
                     </Link>
                 </header>
-                <div className="justify-center text-center p-10">
+                <div className="justify-center text-center p-8">
                     <h2 className="text-[#2D3142] text-2xl font-bold text-center">Welcome Back to QAID </h2>
                     <p>– Your Testing Hub Awaits – </p>
                 </div>
 
-                <div className="w-full max-w-sm mt-[4vh] bg-white rounded-lg p-8 flex flex-col gap-6">
+                <div className="w-full max-w-sm  bg-white rounded-lg p-8 flex flex-col gap-6">
                     <form className="flex flex-col gap-4" onSubmit={handleLogin}>
                         <input
                             className="px-4 py-3 border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
@@ -119,7 +119,7 @@ const Login = () => {
                         </button>
                     </div>
 
-                    <p className="text-sm text-[#4A4B53] mt-20 text-center">
+                    <p className="text-md text-[#4A4B53] text-center">
                         Don&apos;t have an account?{" "}
                         <Link href="/register" className="text-[#00897B] font-medium hover:underline">
                             Register
