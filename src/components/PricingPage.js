@@ -124,7 +124,7 @@ const PricingPage = () => {
                     {pricingPlans.map((plan) => (
                         <div
                             key={plan.name}
-                            className={`border rounded-lg p-8 shadow-sm transition-all hover:shadow-md ${plan.recommended ? "border-[#00897B] relative" : "border-gray-200"
+                            className={`border rounded-xs p-8 shadow-sm transition-all hover:shadow-md ${plan.recommended ? "border-[#00897B] relative" : "border-gray-200"
                                 }`}
                         >
                             {plan.recommended && (
@@ -143,10 +143,10 @@ const PricingPage = () => {
                                         ✅ {feature}
                                     </li>
                                 ))}
-                            </ul>q
+                            </ul>
                             <button
                                 onClick={plan.name === "Enterprise" ? () => handleContactSales(plan) : () => navigateToCheckout(plan)}
-                                className="w-full py-3 px-4 rounded-lg font-medium bg-[#00897B] hover:bg-[#00695C] text-white"
+                                className="w-full py-3 px-4 rounded-xs font-medium bg-[#00897B] hover:bg-[#00695C] text-white"
                             >
                                 {plan.name === "Enterprise" ? "Contact Sales" : "Subscribe Now"}
                             </button>

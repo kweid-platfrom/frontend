@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import "../app/globals.css";
-import Navbar from "../components/Navbar"
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer"
 
 const sections = [
     { id: "introduction", title: "Introduction" },
@@ -102,7 +103,7 @@ You can access it from any web browser as long as you have an active internet co
                     <section id="usage" className="mb-16">
                         <h2 className="text-3xl font-bold text-[#2D3142]">Usage Guide</h2>
                         <p className="mt-4 text-[#4A4B53]">
-                            Start using QAID by creating a test case:
+                        Follow these steps to start using QAID efficiently:
                         </p>
                         <pre className="bg-[#2D3142] text-[#A5D6A7] p-4 rounded-md mt-4">
                             <code>
@@ -151,7 +152,7 @@ You can access it from any web browser as long as you have an active internet co
                             <p><strong>Q:</strong> What platforms does QAID support?</p>
                             <p><strong>A:</strong> QAID works on Windows, macOS, and Linux.</p>
                             <p className="mt-4"><strong>Q:</strong> Can I integrate QAID with Jira?</p>
-                            <p><strong>A:</strong> Yes! QAID has built-in integration with Jira.</p>
+                            <p><strong>A:</strong> Not Yet</p>
                         </div>
                     </section>
 
@@ -165,6 +166,7 @@ You can access it from any web browser as long as you have an active internet co
                     </section>
                 </main>
             </div>
+            <Footer />
         </div>
     );
 };
