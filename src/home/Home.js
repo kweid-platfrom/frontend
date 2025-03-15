@@ -48,12 +48,12 @@ const Home = () => {
                     </div>
                 </div>
                 <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
-                <div className="">
+                <div className="h-96 w-full bg-[#F5F7FA] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
     <Image 
         src="/2.webp" 
         alt="hero-image" 
         width={900}  // Set appropriate width
-        height={300} // Set appropriate height
+        height={900} // Set appropriate height
         className="object-cover rounded-lg"
     />
 </div>
