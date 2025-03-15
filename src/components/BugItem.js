@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const BugItem = ({ bug, isSelected, onSelectBug, groupColor }) => {
     const [expanded, setExpanded] = useState(false);
 
