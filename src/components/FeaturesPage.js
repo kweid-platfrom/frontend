@@ -40,10 +40,10 @@ const FeaturePage = () => {
                     <h2 className="text-2xl font-bold text-gray-900 m-6">Get Started with QAID Today!</h2>
                     <p className="text-gray-700 mt-2">Improve your QA efficiency with AI-driven test automation and management.</p>
                     <div className="m-9 flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-                        <button className="px-6 py-3 bg-[#00897B] text-white font-semibold rounded-sm hover:bg-[#00695C] transition">
+                        <button className="px-6 py-3 bg-[#00897B] text-white font-semibold rounded-xs hover:bg-[#00695C] transition">
                             Sign Up for Free
                         </button>
-                        <button className="px-9 py-3 bg-gray-200 text-gray-900 font-semibold rounded-sm hover:bg-gray-300 transition">
+                        <button className="px-9 py-3 bg-gray-200 text-gray-900 font-semibold rounded-xs hover:bg-gray-300 transition">
                             Book a Demo
                         </button>
                     </div>

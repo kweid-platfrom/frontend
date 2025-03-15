@@ -55,7 +55,7 @@ const Footer = () => {
                     </a>
                 </div>
                 <p className="mt-8 text-center text-base text-[#9EA0A5]">
-                    &copy; 2025 QA Aid, Inc. All rights reserved.
+                    &copy; 2025 QAid, Inc. All rights reserved.
                 </p>
             </div>
         </footer>

@@ -64,11 +64,11 @@ const Home = () => {
             <div className="py-12 bg-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="lg:text-center">
-                        <h2 className="text-base text-[#00897B] font-semibold mb-4 tracking-wide uppercase">Features</h2>
-                        <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-[#2D3142] sm:text-4xl mb-6">
+                        <h2 className="text-base text-[#00897B] font-semibold mb-6 tracking-wide uppercase">Features</h2>
+                        <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-[#2D3142] sm:text-4xl mb-7">
                             A better way to manage QA
                         </p>
-                        <p className="mt-4 max-w-2xl text-xl text-[#4A4B53] lg:mx-auto mb-12">
+                        <p className="mt-4 max-w-2xl text-xl text-[#4A4B53] lg:mx-auto mb-15">
                             Powerful tools to help your team catch bugs before your users do.
                         </p>
                     </div>
@@ -128,13 +128,13 @@ const Home = () => {
             <div className="bg-[#F5F7FA] py-12">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center">
-                        <h2 className="text-base text-[#00897B] font-semibold tracking-wide uppercase">Testimonials</h2>
+                        <h2 className="text-base text-[#00897B] font-semibold tracking-wide uppercase mb-8">Testimonials</h2>
                         <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-[#2D3142] sm:text-4xl">
                             Trusted by QA professionals
                         </p>
                     </div>
 
-                    <div className="mt-10">
+                    <div className="mt-15">
                         <div className="max-w-lg mx-auto bg-white rounded-lg shadow-md overflow-hidden">
                             <div className="px-6 py-8">
                                 <div className="flex items-center">
@@ -150,7 +150,7 @@ const Home = () => {
                                 </div>
                                 <div className="mt-4">
                                     <p className="text-[#4A4B53] italic">
-                                        &ldquo;QA Aid has transformed our testing process. We have reduced our bug escape rate by 78% and cut our testing time in half. The reporting features have been invaluable for communicating with stakeholders.&rdquo;
+                                        &ldquo;Q-Aid has transformed our testing process. We have reduced our bug escape rate by 78% and cut our testing time in half. The reporting features have been invaluable for communicating with stakeholders.&rdquo;
                                     </p>
                                 </div>
                             </div>
@@ -163,17 +163,17 @@ const Home = () => {
             <div className="bg-[#00897B]">
                 <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8 lg:flex lg:items-center lg:justify-between">
                     <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-                        <span className="block">Ready to get started?</span>
+                        <span className="block mb-4">Ready to get started?</span>
                         <span className="block text-[#A5D6A7]">Start your free trial today.</span>
                     </h2>
                     <div className="mt-8 flex lg:mt-0 lg:flex-shrink-0">
                         <div className="inline-flex rounded-md shadow">
-                            <Link href="/register" className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-[#00897B] bg-white hover:bg-gray-50">
+                            <Link href="/register" className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-xs text-[#00897B] bg-white hover:bg-gray-50">
                                 Sign up for free
                             </Link>
                         </div>
                         <div className="ml-3 inline-flex rounded-md shadow">
-                            <Link href="/contact" className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#00796B] hover:bg-opacity-90">
+                            <Link href="/contact" className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-xs text-white bg-[#00796B] hover:bg-opacity-90">
                                 Contact sales
                             </Link>
                         </div>

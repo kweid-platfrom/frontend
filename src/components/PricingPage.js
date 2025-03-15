@@ -91,12 +91,12 @@ const PricingPage = () => {
 
             <main className="flex-grow container mx-auto px-4 py-12">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl md:text-4xl font-bold mb-4">Simple, Transparent Pricing</h1>
-                    <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                    <h1 className="text-3xl md:text-4xl font-bold mb-6">Simple, Transparent Pricing</h1>
+                    <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
                         Choose the plan that fits your needs. All plans include a 14-day free trial.
                     </p>
                     {/* Toggle Button */}
-                    <div className="mt-6 inline-flex bg-gray-200 rounded-full p-1">
+                    <div className="mt-6 inline-flex bg-gray-200 rounded-full p-1 mb-6">
                         <button
                             className={`px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm md:text-base  
                                 ${billingCycle === "monthly"
@@ -143,13 +143,7 @@ const PricingPage = () => {
                                         ✅ {feature}
                                     </li>
                                 ))}
-                            </ul>
-                            {/* <button  
-                                onClick={plan.name === "Enterprise" ? handleContactSales : navigateToCheckout} // Use navigateToCheckout directly  
-                                className="w-full py-3 px-4 rounded-lg font-medium bg-[#00897B] hover:bg-[#00695C] text-white"  
-                            >  
-                                {plan.name === "Enterprise" ? "Contact Sales" : "Subscribe Now"}  
-                            </button>   */}
+                            </ul>q
                             <button
                                 onClick={plan.name === "Enterprise" ? () => handleContactSales(plan) : () => navigateToCheckout(plan)}
                                 className="w-full py-3 px-4 rounded-lg font-medium bg-[#00897B] hover:bg-[#00695C] text-white"
@@ -162,10 +156,10 @@ const PricingPage = () => {
 
                 {/* FAQ Section */}
                 <div className="mt-16 text-center">
-                    <h2 className="text-2xl font-bold mb-4">Frequently Asked Questions</h2>
+                    <h2 className="text-2xl font-bold mb-6">Frequently Asked Questions</h2>
                     <div className="max-w-3xl mx-auto space-y-6">
                         <div className="border-b pb-4">
-                            <h3 className="text-lg font-medium mb-2">Can I change plans later?</h3>
+                            <h3 className="text-lg font-medium mb-6">Can I change plans later?</h3>
                             <p>Yes, you can upgrade or downgrade anytime. Changes take effect on your next billing cycle.</p>
                         </div>
                     </div>
@@ -173,7 +167,7 @@ const PricingPage = () => {
 
                 {/* Testimonials Section */}
                 <div className="mt-16 text-center">
-                    <h2 className="text-2xl font-bold mb-4">What Our Customers Say</h2>
+                    <h2 className="text-2xl font-bold mb-10">What Our Customers Say</h2>
                     <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
                         {testimonials.map((testimonial) => (
                             <div key={testimonial.name} className="p-6 bg-gray-100 rounded-lg shadow">
