@@ -53,8 +53,8 @@ const Login = () => {
                         LOGO
                     </Link>
                 </header>
-                <div className="justify-center text-center p-8">
-                    <h2 className="text-[#2D3142] text-2xl font-bold text-center">Welcome Back to QAID </h2>
+                <div className="justify-center text-center p-5">
+                    <h2 className="text-[#2D3142] text-2xl font-bold text-center mb-3">Welcome Back to QAID </h2>
                     <p>– Your Testing Hub Awaits – </p>
                 </div>
 

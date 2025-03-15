@@ -10,18 +10,39 @@ import { useAlert } from "../CustomAlert";
 
 const ForgotPasswordPage = () => {
     const [email, setEmail] = useState("");
-    const [message, setMessage] = useState("");
+    const [error, setError] = useState("");
     const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
 
+    const validateEmail = (email) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
     const handleResetPassword = async () => {
+        setError("");
+        if (!email) {
+            setError("Email field cannot be empty.");
+            return;
+        }
+        if (!validateEmail(email)) {
+            setError("Please enter a valid email address.");
+            return;
+        }
+        
         try {
             await sendPasswordResetEmail(auth, email);
-            setMessage("Password reset link sent to your email.");
+            showAlert("Password reset link sent! Check your email.", "success");
+            setEmail(""); // Clear input field after successful submission
         } catch (error) {
-            console.error(error.message);
-            showAlert(`Failed to send reset email: ${error.message}`);
-        } 
+            console.error("Error sending reset email:", error.message);
+            let errorMessage = "Failed to send reset email. Please try again.";
+            if (error.code === "auth/user-not-found") {
+                errorMessage = "No user found with this email.";
+            } else if (error.code === "auth/invalid-email") {
+                errorMessage = "Invalid email address.";
+            }
+            showAlert(errorMessage, "error");
+        }
     };
 
     return (
@@ -30,27 +51,26 @@ const ForgotPasswordPage = () => {
                 <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">
                     LOGO
                 </Link>
-                {/* The Alert Component */}
                 {alertComponent}
             </header>
             <div className="justify-center text-center p-8">
-                <h2 className="text-[#2D3142] text-2xl font-bold text-center mb-3">Forget Password </h2>
-                <p>– Forgot your password? Don&apos;t worry—enter your email, <br /> and we&apos;ll send you a reset link. – </p>
+                <h2 className="text-[#2D3142] text-2xl font-bold text-center mb-3">Forgot Password</h2>
+                <p>– Forgot your password? Don&apos;t worry—enter your email, <br /> and we&apos;ll send you a reset link. –</p>
             </div>
             <div className="justify-center text-center w-full max-w-sm p-8">
                 <input
                     type="email"
                     placeholder="Enter your email"
-                    className="p-3 border border-gray-300 rounded w-full mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="p-3 border border-gray-300 rounded w-full mb-3 focus:outline-none focus:border-[#00897B]"
+                    value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                 />
-
+                {error && <p className="text-red-600 text-sm mb-2 text-left">{error}</p>}
+                
                 <button onClick={handleResetPassword} className="bg-[#00897B] text-white px-4 py-3 rounded hover:bg-[#00796B] w-full">
                     Reset Password
                 </button>
-
-                {message && <p className="text-green-600 mt-4 text-center">{message}</p>}
 
                 <div className="mt-4 text-center">
                     <button onClick={() => router.push("/login")} className="text-[#00897B] hover:underline">
