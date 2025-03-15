@@ -91,7 +91,7 @@ const AccountSetup = () => {
                     <span className="font-bold text-2xl text-[#00897B]">LOGO</span>
                 </header>
 
-                <div className="w-full max-w-md mt-[10vh] bg-white rounded-lg p-8 flex flex-col gap-6 shadow-md">
+                <div className="w-full max-w-sm mt-[10vh] bg-white rounded-lg p-8 flex flex-col gap-6 shadow-md">
                     <h2 className="text-[#2D3142] text-2xl font-bold text-center">
                         Set Up Your Account
                     </h2>

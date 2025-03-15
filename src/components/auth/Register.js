@@ -52,10 +52,10 @@ const Register = () => {
                         LOGO
                     </Link>
                 </header>
-
-                <div className="w-full max-w-md mt-[10vh] bg-white rounded-lg p-8 flex flex-col gap-6">
-                    <h2 className="text-[#2D3142] text-2xl font-bold text-center">Register</h2>
-
+                <div className="text-[#2D3142] text-lg font-bold text-center mt-10">
+                        <h2>Sign Up for QAID – Streamline Your Testing Workflow </h2>
+                    </div>
+                <div className="w-full max-w-sm mt-[5vh] bg-white rounded-lg p-8 flex flex-col gap-6">
                     <button 
                         onClick={handleGoogleRegister}
                         className="flex items-center justify-center gap-2 w-full bg-white text-[#4A4B53] border border-[#E1E2E6] rounded px-4 py-3 text-base hover:bg-gray-50 hover:border-[#9EA0A5] transition-colors"
@@ -97,7 +97,7 @@ const Register = () => {
                         </Link>
                     </p>
 
-                    <p className="text-sm text-[#4A4B53] text-center">
+                    <p className="text-sm text-[#4A4B53] text-center mt-20">
                         Already have an account?{' '}
                         <Link href="/login" className="text-[#00897B] font-medium hover:underline">
                             Login

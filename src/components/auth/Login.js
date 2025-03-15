@@ -1,4 +1,3 @@
-// Login.jsx
 "use client";
 
 import { useState } from "react";
@@ -7,11 +6,13 @@ import { auth, googleProvider } from "../../config/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAlert } from "../../components/CustomAlert";
-import '../../app/globals.css';
+import { Eye, EyeOff } from "lucide-react";
+import "../../app/globals.css";
 
 const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
 
@@ -45,17 +46,19 @@ const Login = () => {
 
     return (
         <>
-            {/* The Alert Component */}
             {alertComponent}
             <div className="min-h-screen bg-[#fff] flex flex-col items-center">
-
                 <header className="w-full h-[70px] bg-white flex items-center px-8 shadow-sm">
-                    <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">LOGO</Link>
+                    <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">
+                        LOGO
+                    </Link>
                 </header>
+                <div className="justify-center text-center p-10">
+                    <h2 className="text-[#2D3142] text-2xl font-bold text-center">Welcome Back to QAID </h2>
+                    <p>– Your Testing Hub Awaits – </p>
+                </div>
 
-                <div className="w-full max-w-md mt-[5vh] bg-white rounded-lg p-8 flex flex-col gap-6">
-                    <h2 className="text-[#2D3142] mb-15 text-2xl font-bold text-center">Log in to your Suite</h2>
-
+                <div className="w-full max-w-sm mt-[5vh] bg-white rounded-lg p-8 flex flex-col gap-6">
                     <form className="flex flex-col gap-4" onSubmit={handleLogin}>
                         <input
                             className="px-4 py-3 border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
@@ -65,34 +68,42 @@ const Login = () => {
                             onChange={(e) => setEmail(e.target.value)}
                             required
                         />
-                        <input
-                            className="px-4 py-3 border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
-                        <div className="text-right">
+
+                        <div className="relative">
+                            <input
+                                className="px-4 py-3 pr-10 border border-[#E1E2E6] rounded text-[#2D3142] w-full focus:outline-none focus:border-[#00897B]"
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                            />
                             <button
-                                onClick={handleForgotPassword}
-                                className="text-[#00897B] text-sm hover:underline"
+                                type="button"
+                                className="absolute inset-y-0 right-3 flex items-center text-gray-500"
+                                onClick={() => setShowPassword(!showPassword)}
                             >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
+
+                        <div className="text-right">
+                            <button onClick={handleForgotPassword} className="text-[#00897B] text-sm hover:underline">
                                 Forgot password?
                             </button>
                         </div>
+
                         <button
-                            className="bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer hover:bg-[#00796B] transition-colors disabled:bg-[#9EA0A5] disabled:cursor-not-allowed"
+                            className="bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer hover:bg-[#00796B] transition-colors"
                             type="submit"
-                            disabled={!email || !password}
                         >
-                            Login
+                            Sign In
                         </button>
                     </form>
 
                     <div className="flex items-center text-[#9EA0A5] my-2">
                         <div className="flex-grow border-t border-[#E1E2E6]"></div>
-                        <span className="px-3 text-sm">or Login with Email</span>
+                        <span className="px-3 text-sm">or Sign in with </span>
                         <div className="flex-grow border-t border-[#E1E2E6]"></div>
                     </div>
 
@@ -108,8 +119,8 @@ const Login = () => {
                         </button>
                     </div>
 
-                    <p className="text-sm text-[#4A4B53] mt-30 text-center">
-                        Don&apos;t have an account?{' '}
+                    <p className="text-sm text-[#4A4B53] mt-20 text-center">
+                        Don&apos;t have an account?{" "}
                         <Link href="/register" className="text-[#00897B] font-medium hover:underline">
                             Register
                         </Link>
