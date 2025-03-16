@@ -1,17 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+"use client"
 import React, { useState, useEffect } from 'react';
-import {
-    Save,
-    Moon,
-    Sun,
-    Bell,
-    Mail,
-    MessageSquare,
-    Shield,
-    User,
-    UploadCloud
-} from 'lucide-react';
-import Image from 'next/image';
+import Sidebar from '@/components/Settings/Sidebar';
+import ProfileSection from '@/components/Settings/UserProfile';
+import NotificationsSection from '@/components/Settings/NotificationsSection';
+import ThemeSection from '@/components/Settings/ThemeSection';
+import SecuritySection from '@/components/Settings/SecuritySection';
+import OrganizationSection from '@/components/Settings/OrganizationSection';
+import LoadingSpinner from '@/components/Settings/LoadingSpinner';
 
 const SettingsPage = () => {
     const [user, setUser] = useState(null);
@@ -20,19 +16,28 @@ const SettingsPage = () => {
         name: '',
         email: '',
         bio: '',
+        companyName: '',
+        role: '',
         notifications: {
             email: true,
             push: true,
             sms: false
         },
-        theme: 'light'
+        theme: 'light',
+        password: {
+            current: '',
+            new: '',
+            confirm: ''
+        }
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [message, setMessage] = useState(null);
+    const [organizationUsers, setOrganizationUsers] = useState([]);
+    const [activeSection, setActiveSection] = useState('profile');
 
     useEffect(() => {
         // Simulate fetching user data
-        const fetchUser = async () => {
+        const fetchUserData = async () => {
             try {
                 // This would be replaced with an actual API call
                 const response = await new Promise(resolve => {
@@ -42,7 +47,9 @@ const SettingsPage = () => {
                             name: 'Jane Doe',
                             email: 'jane.doe@example.com',
                             bio: 'Product manager with 5+ years of experience',
-                            avatarUrl: '/api/placeholder/150/150',
+                            avatarUrl: null, // No avatar initially
+                            companyName: 'TechCorp Solutions',
+                            role: 'Admin',
                             notifications: {
                                 email: true,
                                 push: true,
@@ -50,7 +57,51 @@ const SettingsPage = () => {
                             },
                             theme: 'light'
                         });
-                    }, 1000);
+                    }, 500);
+                });
+
+                // Simulate fetching organization users
+                const orgUsers = await new Promise(resolve => {
+                    setTimeout(() => {
+                        resolve([
+                            { 
+                                id: 'user123', 
+                                name: 'Jane Doe', 
+                                email: 'jane.doe@example.com', 
+                                status: 'accepted', 
+                                role: 'Admin',
+                                permissions: {
+                                    deleteBugs: true,
+                                    imports: true,
+                                    createBugs: true,
+                                    createBugReports: true,
+                                    generateReports: true
+                                }
+                            },
+                            { 
+                                id: 'user456', 
+                                name: 'John Smith', 
+                                email: 'john.smith@example.com', 
+                                status: 'accepted', 
+                                role: 'Developer',
+                                permissions: {
+                                    deleteBugs: false,
+                                    imports: true,
+                                    createBugs: true,
+                                    createBugReports: true,
+                                    generateReports: false
+                                }
+                            },
+                            { 
+                                id: 'user789', 
+                                name: 'Sarah Johnson', 
+                                email: 'sarah.johnson@example.com', 
+                                status: 'pending', 
+                                role: 'Developer',
+                                permissions: {}
+                            }
+                        ]);
+                    }, 700);
                 });
 
                 setUser(response);
@@ -58,17 +109,25 @@ const SettingsPage = () => {
                     name: response.name,
                     email: response.email,
                     bio: response.bio,
+                    companyName: response.companyName,
+                    role: response.role,
                     notifications: response.notifications,
-                    theme: response.theme
+                    theme: response.theme,
+                    password: {
+                        current: '',
+                        new: '',
+                        confirm: ''
+                    }
                 });
+                setOrganizationUsers(orgUsers);
                 setLoading(false);
             } catch (error) {
-                console.error('Error fetching user data:', error);
+                console.error('Error fetching data:', error);
                 setLoading(false);
             }
         };
 
-        fetchUser();
+        fetchUserData();
     }, []);
 
     const handleChange = (e) => {
@@ -76,6 +135,17 @@ const SettingsPage = () => {
         setFormData(prev => ({
             ...prev,
             [name]: value
+        }));
+    };
+
+    const handlePasswordChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            password: {
+                ...prev.password,
+                [name]: value
+            }
         }));
     };
 
@@ -97,6 +167,22 @@ const SettingsPage = () => {
         }));
     };
 
+    const handleUserPermissionChange = (userId, permission, checked) => {
+        setOrganizationUsers(prev => 
+            prev.map(user => 
+                user.id === userId 
+                    ? { 
+                        ...user, 
+                        permissions: { 
+                            ...user.permissions, 
+                            [permission]: checked 
+                        } 
+                    } 
+                    : user
+            )
+        );
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -110,7 +196,6 @@ const SettingsPage = () => {
                 ...prev,
                 ...formData
             }));
-
             setMessage({ type: 'success', text: 'Settings updated successfully!' });
 
             // Clear message after 3 seconds
@@ -124,6 +209,10 @@ const SettingsPage = () => {
         }
     };
 
+    const handleSectionChange = (section) => {
+        setActiveSection(section);
+    };
+
     const handleAvatarUpload = (e) => {
         // This would normally handle file upload
         console.log("Avatar upload triggered", e.target.files[0]);
@@ -131,11 +220,7 @@ const SettingsPage = () => {
     };
 
     if (loading) {
-        return (
-            <div className="flex justify-center items-center h-96">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#00897B]"></div>
-            </div>
-        );
+        return <LoadingSpinner />;
     }
 
     return (
@@ -151,192 +236,68 @@ const SettingsPage = () => {
             <div className="bg-white rounded-lg shadow-md overflow-hidden">
                 <div className="md:flex">
                     {/* Sidebar */}
-                    <div className="md:w-1/4 bg-gray-50 p-6 border-r">
-                        <div className="relative w-32 h-32">
-                            <Image
-                                src={user.avatarUrl}
-                                alt="Profile"
-                                fill
-                                className="rounded-full object-cover border-4 border-white shadow"
-                                sizes="(max-width: 768px) 100vw, 128px"
-                            />
-                            <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-[#00897B] text-white p-2 rounded-full cursor-pointer shadow-md z-10">
-                                <UploadCloud size={16} />
-                                <input
-                                    id="avatar-upload"
-                                    type="file"
-                                    className="hidden"
-                                    accept="image/*"
-                                    onChange={handleAvatarUpload}
-                                />
-                            </label>
-                        </div>
-                        <nav>
-                            <ul className="space-y-2">
-                                <li>
-                                    <a href="#profile" className="flex items-center p-2 rounded hover:bg-gray-200 text-[#00897B] font-medium">
-                                        <User size={18} className="mr-2" />
-                                        Profile
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="#notifications" className="flex items-center p-2 rounded hover:bg-gray-200">
-                                        <Bell size={18} className="mr-2" />
-                                        Notifications
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="#security" className="flex items-center p-2 rounded hover:bg-gray-200">
-                                        <Shield size={18} className="mr-2" />
-                                        Security
-                                    </a>
-                                </li>
-                            </ul>
-                        </nav>
-                    </div>
+                    <Sidebar 
+                        user={user} 
+                        activeSection={activeSection}
+                        onSectionChange={handleSectionChange}
+                        onAvatarUpload={handleAvatarUpload}
+                    />
 
                     {/* Main content */}
                     <div className="md:w-3/4 p-6">
                         <form onSubmit={handleSubmit}>
-                            <section id="profile" className="mb-8">
-                                <h3 className="text-lg font-medium mb-4">Profile Information</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                                            Full Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            id="name"
-                                            name="name"
-                                            value={formData.name}
-                                            onChange={handleChange}
-                                            className="w-full px-3 py-2 bg-blue-50 rounded focus:outline-none focus:ring-[#00897B]"
-                                            required disabled
-                                        />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                                            Email Address
-                                        </label>
-                                        <input
-                                            type="email"
-                                            id="email"
-                                            name="email"
-                                            value={formData.email}
-                                            onChange={handleChange}
-                                            className="w-full px-3 py-2 bg-blue-50 rounded focus:outline-none  focus:ring-[#00897B]"
-                                            required disabled
-                                        />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-1">
-                                            Bio
-                                        </label>
-                                        <textarea
-                                            id="bio"
-                                            name="bio"
-                                            value={formData.bio}
-                                            onChange={handleChange}
-                                            rows="4"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-[#00897B]"
-                                        />
-                                    </div>
-                                </div>
-                            </section>
+                            {activeSection === 'profile' && (
+                                <ProfileSection 
+                                    formData={formData} 
+                                    onChange={handleChange} 
+                                />
+                            )}
+                            
+                            {activeSection === 'notifications' && (
+                                <NotificationsSection 
+                                    formData={formData} 
+                                    onChange={handleNotificationChange} 
+                                />
+                            )}
+                            
+                            {activeSection === 'theme' && (
+                                <ThemeSection 
+                                    theme={formData.theme} 
+                                    onThemeChange={handleThemeChange} 
+                                />
+                            )}
+                            
+                            {activeSection === 'security' && (
+                                <SecuritySection 
+                                    formData={formData} 
+                                    onChange={handlePasswordChange} 
+                                />
+                            )}
+                            
+                            {activeSection === 'organization' && (
+                                <OrganizationSection 
+                                    formData={formData}
+                                    onChange={handleChange}
+                                    users={organizationUsers}
+                                    onPermissionChange={handleUserPermissionChange}
+                                    currentUserId={user.id}
+                                />
+                            )}
 
-                            <section id="notifications" className="mb-8">
-                                <h3 className="text-lg font-medium mb-4">Notification Preferences</h3>
-                                <div className="space-y-3">
-                                    <div className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            id="email-notifications"
-                                            name="email"
-                                            checked={formData.notifications.email}
-                                            onChange={handleNotificationChange}
-                                            className="h-4 w-4 text-[#00897B] focus:ring-[#00897B] border-gray-300 rounded"
-                                        />
-                                        <label htmlFor="email-notifications" className="ml-2 block text-sm text-gray-700">
-                                            <div className="flex items-center">
-                                                <Mail size={16} className="mr-2" />
-                                                Email Notifications
-                                            </div>
-                                        </label>
-                                    </div>
-                                    <div className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            id="push-notifications"
-                                            name="push"
-                                            checked={formData.notifications.push}
-                                            onChange={handleNotificationChange}
-                                            className="h-4 w-4 text-[#00897B] focus:ring-[#00897B] border-[#00897B] rounded"
-                                        />
-                                        <label htmlFor="push-notifications" className="ml-2 block text-sm text-gray-700">
-                                            <div className="flex items-center">
-                                                <Bell size={16} className="mr-2" />
-                                                Push Notifications
-                                            </div>
-                                        </label>
-                                    </div>
-                                    <div className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            id="sms-notifications"
-                                            name="sms"
-                                            checked={formData.notifications.sms}
-                                            onChange={handleNotificationChange}
-                                            className="h-4 w-4 text-[#00897B] focus:ring-[#00897B] border-gray-300 rounded"
-                                        />
-                                        <label htmlFor="sms-notifications" className="ml-2 block text-sm text-gray-700">
-                                            <div className="flex items-center">
-                                                <MessageSquare size={16} className="mr-2" />
-                                                SMS Notifications
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section id="theme" className="mb-8">
-                                <h3 className="text-lg font-medium mb-4">Theme</h3>
-                                <div className="flex space-x-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleThemeChange('light')}
-                                        className={`p-4 border rounded-md flex flex-col items-center ${formData.theme === 'light'
-                                                ? 'border-[#00897B] bg-blue-50'
-                                                : 'border-gray-300'
-                                            }`}
-                                    >
-                                        <Sun size={24} className="mb-2" />
-                                        <span>Light</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleThemeChange('dark')}
-                                        className={`p-4 border rounded-md flex flex-col items-center ${formData.theme === 'dark'
-                                                ? 'border-[#00897B] bg-blue-50'
-                                                : 'border-gray-300'
-                                            }`}
-                                    >
-                                        <Moon size={24} className="mb-2" />
-                                        <span>Dark</span>
-                                    </button>
-                                </div>
-                            </section>
-
-                            <div className="border-t pt-6">
+                            <div className="border-t pt-6 mt-6">
                                 <button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="flex items-center justify-center px-4 py-2 bg-[#00897B] text-white font-medium rounded hover:bg-[#00897B] focus:outline-none  focus:ring-[#00897B] focus:ring-offset-2 disabled:opacity-50"
+                                    className="flex items-center justify-center px-4 py-2 bg-[#00897b] text-white font-medium rounded hover:bg-[#00796B] focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
                                 >
                                     {isSubmitting ? (
                                         <div className="mr-2 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
                                     ) : (
-                                        <Save size={18} className="mr-2" />
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                            <polyline points="17 21 17 13 7 13 7 21" />
+                                            <polyline points="7 3 7 8 15 8" />
+                                        </svg>
                                     )}
                                     Save Changes
                                 </button>
