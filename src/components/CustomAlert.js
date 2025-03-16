@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 
 // Create Alert Context
@@ -10,17 +11,18 @@ const AlertContext = createContext();
 const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose }) => {
     const [isVisible, setIsVisible] = useState(show);
     const [portalElement, setPortalElement] = useState(null);
+    const [isHovered, setIsHovered] = useState(false);
 
     useEffect(() => {
         setIsVisible(show);
-        if (show && duration) {
+        if (show && duration && !isHovered) {
             const timer = setTimeout(() => {
                 setIsVisible(false);
                 if (onClose) onClose();
             }, duration);
             return () => clearTimeout(timer);
         }
-    }, [show, duration, onClose]);
+    }, [show, duration, onClose, isHovered]);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -45,6 +47,12 @@ const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose
         if (onClose) onClose();
     };
 
+    const handleMouseEnter = () => setIsHovered(true);
+    const handleMouseLeave = () => {
+        setIsHovered(false);
+        setTimeout(() => setIsVisible(false), 1000);
+    };
+
     const alertStyles = {
         success: "bg-green-100 border-green-500 text-green-700",
         error: "bg-red-100 border-red-500 text-red-700",
@@ -55,14 +63,18 @@ const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose
     if (!portalElement || !isVisible) return null;
 
     return createPortal(
-        <div className="fixed inset-0 flex items-start justify-center pt-16 px-4 z-50 pointer-events-none">
-            <div className={`max-w-md w-full ${alertStyles[type]} border-l-4 rounded shadow-md p-4 flex items-center pointer-events-auto`}>
+        <div className="fixed text-xs inset-0 flex items-start justify-center pt-16 px-4 z-50 pointer-events-none">
+            <div 
+                className={`max-w-md w-full ${alertStyles[type]} border-l-4 rounded shadow-md p-4 flex items-center pointer-events-auto`} 
+                onMouseEnter={handleMouseEnter} 
+                onMouseLeave={handleMouseLeave}
+            >
                 <div className="flex-grow">{message}</div>
                 <button
                     onClick={handleClose}
-                    className="ml-4 text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="ml-4 text-lg text-[#b7bac9] hover:text-[#f9f9f9] focus:outline-none"
                 >
-                    ✖
+                    <X size={18} />
                 </button>
             </div>
         </div>,

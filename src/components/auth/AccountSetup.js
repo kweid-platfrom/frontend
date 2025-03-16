@@ -34,10 +34,23 @@ const AccountSetup = () => {
 
         if (isSignInWithEmailLink(auth, window.location.href)) {
             signInWithEmailLink(auth, storedEmail, window.location.href)
-                .then(() => window.localStorage.removeItem("emailForSignIn"))
-                .catch((error) => showAlert(error.message, "error"));
+                .then((result) => {
+                    // Ensure the user is properly signed in
+                    if (!result.user) {
+                        throw new Error("Authentication failed. Please try again.");
+                    }
+
+                    // Store the user credential
+                    window.localStorage.removeItem("emailForSignIn");
+                })
+                .catch((error) => {
+                    console.error("Firebase sign-in error:", error);  // Log error for debugging
+                    showAlert(error.message || "Invalid or expired link. Please register again.", "error");
+                    router.push("/register");
+                });
         }
     }, [router, showAlert]);
+
 
     const handleSetPassword = async () => {
         if (!name || !company || !password || !confirmPassword) {
@@ -157,9 +170,8 @@ const AccountSetup = () => {
                     {/* Continue Button */}
                     <button
                         onClick={handleSetPassword}
-                        className={`bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer ${
-                            isLoading ? "opacity-50 cursor-not-allowed" : "hover:bg-[#00796B] transition-colors"
-                        }`}
+                        className={`bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer ${isLoading ? "opacity-50 cursor-not-allowed" : "hover:bg-[#00796B] transition-colors"
+                            }`}
                         disabled={isLoading}
                     >
                         {isLoading ? "Processing..." : "Continue"}
