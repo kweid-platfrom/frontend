@@ -1,68 +1,108 @@
-import React, { useState, useRef, useEffect } from "react";
-import { UserCircle, Settings, CreditCard, Building } from "lucide-react";
+import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import {
+    User,
+    Settings,
+    HelpCircle,
+    LogOut,
+    ChevronDown
+} from 'lucide-react';
 
-const UserAvatar = ({ user, size = 40 }) => {
-    const [showUserDropdown, setShowUserDropdown] = useState(false);
+const UserAvatarDropdown = ({ user }) => {
+    const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
+    // Generate initials from user's name
+    const getInitials = (name) => {
+        if (!name) return 'U';
+
+        const nameParts = name.split(' ');
+        if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase();
+
+        return (
+            nameParts[0].charAt(0).toUpperCase() +
+            nameParts[nameParts.length - 1].charAt(0).toUpperCase()
+        );
+    };
+
+    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setShowUserDropdown(false);
+                setIsOpen(false);
             }
         };
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
     }, []);
 
-    const toggleUserDropdown = () => {
-        setShowUserDropdown(!showUserDropdown);
+    const toggleDropdown = () => {
+        setIsOpen(!isOpen);
     };
 
     return (
         <div className="relative" ref={dropdownRef}>
             <button
-                onClick={toggleUserDropdown}
-                className="flex items-center focus:outline-none"
+                onClick={toggleDropdown}
+                className="flex items-center space-x-2 focus:outline-none"
+                aria-expanded={isOpen}
+                aria-haspopup="true"
             >
-                {user.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                        src={user.image}
-                        alt={user.name}
-                        className={`w-${size / 4} h-${size / 4} rounded-full`}
-                        style={{ width: `${size}px`, height: `${size}px` }}
-                    />
-                ) : (
-                    <UserCircle size={size} />
-                )}
-            </button>
-
-            {showUserDropdown && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-50 border">
-                    <div className="p-3 border-b">
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-sm text-gray-600">{user.email}</p>
+                {user?.avatarUrl ? (
+                    <div className="relative w-8 h-8">
+                        <Image
+                            src={user.avatarUrl}
+                            alt="User avatar"
+                            fill
+                            className="rounded-full object-cover"
+                            sizes="32px"
+                        />
                     </div>
-                    <ul>
-                        <li className="flex items-center p-3 hover:bg-gray-50 cursor-pointer">
-                            <Settings size={18} className="mr-2" />
-                            <span>Settings</span>
-                        </li>
-                        <li className="flex items-center p-3 hover:bg-gray-50 cursor-pointer">
-                            <CreditCard size={18} className="mr-2" />
-                            <span>Subscription: {user.subscription}</span>
-                        </li>
-                        <li className="flex items-center p-3 hover:bg-gray-50 cursor-pointer">
-                            <Building size={18} className="mr-2" />
-                            <span>Company: {user.company}</span>
-                        </li>
-                    </ul>
+                ) : (
+                    <div className="w-8 h-8 rounded-full bg-[#00897b] flex items-center justify-center text-white font-medium">
+                        {getInitials(user?.name)}
+                    </div>
+                )}
+                <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-medium">{user?.name || 'User'}</p>
+                        <p className="text-xs text-gray-500 truncate">{user?.email || 'user@example.com'}</p>
+                    </div>
+
+                    <div className="py-1">
+                        <Link href="/profile" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <User size={16} className="mr-3 text-gray-500" />
+                            Profile
+                        </Link>
+                        <Link href="/settings" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <Settings size={16} className="mr-3 text-gray-500" />
+                            Settings
+                        </Link>
+                        <Link href="/help" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <HelpCircle size={16} className="mr-3 text-gray-500" />
+                            Help Center
+                        </Link>
+                    </div>
+
+                    <div className="py-1 border-t border-gray-100">
+                        <button
+                            onClick={() => console.log('Logout clicked')}
+                            className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                        >
+                            <LogOut size={16} className="mr-3 text-red-500" />
+                            Sign out
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
     );
 };
 
-export default UserAvatar;
+export default UserAvatarDropdown;

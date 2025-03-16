@@ -53,29 +53,32 @@ const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose
         setTimeout(() => setIsVisible(false), 1000);
     };
 
+    // Styling that matches the settings page alert
     const alertStyles = {
-        success: "bg-green-100 border-green-500 text-green-700",
-        error: "bg-red-100 border-red-500 text-red-700",
-        warning: "bg-yellow-100 border-yellow-500 text-yellow-700",
-        info: "bg-blue-100 border-blue-500 text-blue-700",
+        success: "bg-green-100 text-green-800",
+        error: "bg-red-100 text-red-800",
+        warning: "bg-yellow-100 text-yellow-800",
+        info: "bg-blue-100 text-blue-800",
     };
 
     if (!portalElement || !isVisible) return null;
 
     return createPortal(
-        <div className="fixed text-xs inset-0 flex items-start justify-center pt-16 px-4 z-50 pointer-events-none">
+        <div className="fixed inset-0 flex items-start justify-center pt-16 px-4 z-50 pointer-events-none">
             <div 
-                className={`max-w-md w-full ${alertStyles[type]} border-l-4 rounded shadow-md p-4 flex items-center pointer-events-auto`} 
+                className={`max-w-md w-full ${alertStyles[type]} p-4 mb-6 rounded pointer-events-auto`} 
                 onMouseEnter={handleMouseEnter} 
                 onMouseLeave={handleMouseLeave}
             >
-                <div className="flex-grow">{message}</div>
-                <button
-                    onClick={handleClose}
-                    className="ml-4 text-lg text-[#b7bac9] hover:text-[#f9f9f9] focus:outline-none"
-                >
-                    <X size={18} />
-                </button>
+                <div className="flex items-center">
+                    <div className="flex-grow">{message}</div>
+                    <button
+                        onClick={handleClose}
+                        className="ml-4 text-current hover:opacity-75 focus:outline-none"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
             </div>
         </div>,
         portalElement

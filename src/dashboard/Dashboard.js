@@ -17,6 +17,7 @@ import { KeyMetrics } from "../components/dashboard/KeyMetrics";
 import BugTracker from "../pages/bug-tracker";
 import TestScripts from "../pages/test-scripts";
 import AutomatedScripts from "../pages/auto-scripts";
+import SettingsPage from "../pages/settings"
 
 const Dashboard = () => {
 
@@ -99,6 +100,9 @@ const Dashboard = () => {
                     
                     {/* 📝 Automated Scripts Page */}
                     {activePage === "auto-scripts" && <AutomatedScripts />}
+
+                    {/* 📝 Settings Page */}
+                    {activePage === "settings" && <SettingsPage />}
 
                 </main>
             </div>

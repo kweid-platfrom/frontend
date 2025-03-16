@@ -10,6 +10,12 @@ import AddUserDropdown from "../modals/AddUserDropdown"
 const Header = ({ setShowBugForm }) => {
     const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
 
+    const user = {
+        name: "John Doe",
+        email: "john.doe@example.com",
+        photoURL: "/default-avatar.png",
+    };
+
     // Toggle user dropdown
     const toggleAddUserDropdown = () => {
         setShowAddUserDropdown(!showAddUserDropdown);
@@ -19,14 +25,6 @@ const Header = ({ setShowBugForm }) => {
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
 
     // Current user information (would typically come from auth context)
-    const currentUser = {
-        name: "John Doe",
-        email: "john.doe@example.com",
-        image: "/dummyimage.com/300.png/09f/fff",
-        role: "Developer",
-        subscription: "Pro",
-        company: "Tech Solutions Inc."
-    };
 
     const reportButtonRef = useRef(null);
     const testCaseButtonRef = useRef(null);
@@ -164,8 +162,8 @@ const Header = ({ setShowBugForm }) => {
                     </button>
 
                     {/* User Avatar */}
-                    <div className="flex items-center z-[9999]">
-                        <UserAvatar user={currentUser} size={40} />
+                    <div className="flex items-center">
+                        {user && <UserAvatar user={user} />}
                     </div>
 
 
