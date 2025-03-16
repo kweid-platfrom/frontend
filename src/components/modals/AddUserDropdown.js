@@ -1,65 +1,79 @@
 "use client";
-import React, { useState } from "react";
-import { Plus, X } from "lucide-react";
-import { db } from "../../config/firebase";
-import { collection, addDoc } from "firebase/firestore";
 
-const AddUserDropdown = ({ onClose }) => {
+import { useState } from "react";
+import { Plus, X } from "lucide-react";
+import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { useAlertContext } from "@/components/CustomAlert";
+
+const AddUserDropdown = ({ onClose, organizationId }) => {
+    const { showAlert } = useAlertContext();
     const [emails, setEmails] = useState([""]);
     const [loading, setLoading] = useState(false);
 
-    // Add new email field
     const addEmailField = () => {
         setEmails([...emails, ""]);
     };
 
-    // Remove an email field
-    const removeEmailField = (index) => {
-        setEmails(emails.filter((_, i) => i !== index));
-    };
-
-    // Handle email input change
     const handleEmailChange = (index, value) => {
         const updatedEmails = [...emails];
         updatedEmails[index] = value;
         setEmails(updatedEmails);
     };
 
-    // Function to store users in Firestore
+    const removeEmailField = (index) => {
+        const updatedEmails = emails.filter((_, i) => i !== index);
+        setEmails(updatedEmails);
+    };
+
     const handleSubmit = async () => {
         if (emails.some((email) => email.trim() === "")) {
-            alert("Please enter valid email addresses.");
+            showAlert("Please enter valid email addresses.", "error");
             return;
         }
 
         setLoading(true);
         try {
             const usersCollection = collection(db, "users");
-
-            // Store each email in Firestore
+            
             for (const email of emails) {
+                const trimmedEmail = email.trim();
+
+                // Check if the email is already invited
+                const q = query(usersCollection, where("email", "==", trimmedEmail));
+                const querySnapshot = await getDocs(q);
+                
+                if (!querySnapshot.empty) {
+                    showAlert(`User with email ${trimmedEmail} is already invited.`, "warning");
+                    continue;
+                }
+
+                const inviteLink = `${window.location.origin}/register?org=${organizationId}`;
+
                 await addDoc(usersCollection, {
-                    email: email.trim(),
+                    email: trimmedEmail,
+                    inviteLink,
                     createdAt: new Date(),
-                    status: "pending", // Can be used to track invite status
+                    status: "pending",
+                    organizationId,
                 });
             }
 
-            console.log("Users added:", emails);
-            onClose(); // Close dropdown after submission
+            showAlert("Users invited successfully!", "success");
+            onClose();
         } catch (error) {
             console.error("Error adding users:", error);
-            alert("Failed to add users. Please try again.");
+            showAlert("Failed to invite users. Please try again.", "error");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-300 shadow-lg rounded-md p-3 z-[9999]">
-            <div className="flex justify-between items-center cursor-pointer mb-2">
+        <div className="absolute right-30 w-[400px] bg-white border border-gray-300 shadow-lg rounded-md z-[999] p-8">
+            <div className="flex justify-between items-center cursor-pointer mb-4">
                 <span className="font-semibold text-sm">Add Users</span>
-                <button onClick={addEmailField} className="p-1 rounded-full bg-gray-200 hover:bg-gray-300">
+                <button onClick={addEmailField} className="p-1 rounded-full bg-gray-200 hover:bg-gray-300 mb-4">
                     <Plus className="h-4 w-4 text-gray-600" />
                 </button>
             </div>
@@ -70,14 +84,11 @@ const AddUserDropdown = ({ onClose }) => {
                         type="email"
                         value={email}
                         onChange={(e) => handleEmailChange(index, e.target.value)}
-                        className="flex-1 p-2 border rounded-md text-sm"
+                        className="flex-1 p-2 border rounded text-sm focus:outline-none focus:border-[#00897B]"
                         placeholder="Enter email"
                     />
                     {emails.length > 1 && (
-                        <button
-                            onClick={() => removeEmailField(index)}
-                            className="ml-2 p-1 rounded-full bg-red-500 hover:bg-red-600 text-white"
-                        >
+                        <button onClick={() => removeEmailField(index)} className="ml-2 p-1 text-red-500">
                             <X className="h-4 w-4" />
                         </button>
                     )}
@@ -87,11 +98,11 @@ const AddUserDropdown = ({ onClose }) => {
             <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className={`w-full py-2 rounded-md transition ${
+                className={`w-full py-2 rounded transition ${
                     loading ? "bg-gray-400 cursor-not-allowed" : "bg-[#00897B] text-white hover:bg-[#00695C]"
                 }`}
             >
-                {loading ? "Adding..." : "Add"}
+                {loading ? "Sending..." : "Send Invites"}
             </button>
         </div>
     );

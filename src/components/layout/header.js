@@ -87,7 +87,7 @@ const Header = ({ setShowBugForm }) => {
     }, [showReportOptions, showTestCaseOptions]);
 
     return (
-        <header className="bg-[#fff] shadow-sm z-10 py-3 px-4 md:px-6 overflow-visible">
+        <header className="relative bg-[#fff] shadow-sm z-[50] py-3 px-4 md:px-6 overflow-visible">
             <div className="flex items-center justify-between space-x-2">
 
                 {/* Search Bar */}
@@ -143,16 +143,15 @@ const Header = ({ setShowBugForm }) => {
                         </button>
                     </div>
                     {/* Add Team Member Button */}
-                    <div className="relative">
+                    <div className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center hover:bg-[#A5d6a7] transition  cursor-pointer">
                         <button
                             onClick={toggleAddUserDropdown}
-                            className="relative text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-1 hover:bg-[#A5d6a7] transition mr-2 cursor-pointer z-50" 
-
+                            className="relative" 
                         >
                             <UserPlus className="h-4 w-4" />
                         </button>
                         {showAddUserDropdown && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-300 shadow-lg rounded-md z-[9999]">
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-300 shadow-lg rounded">
                                 <AddUserDropdown onClose={() => setShowAddUserDropdown(false)} />
                             </div>
                         )}
@@ -165,7 +164,7 @@ const Header = ({ setShowBugForm }) => {
                     </button>
 
                     {/* User Avatar */}
-                    <div className="flex items-center">
+                    <div className="flex items-center z-[9999]">
                         <UserAvatar user={currentUser} size={40} />
                     </div>
 
