@@ -7,6 +7,7 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [authError, setAuthError] = useState(null);
 
     useEffect(() => {
         // Listen for auth state changes
@@ -19,15 +20,26 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = async (email, password) => {
-        return signInWithEmailAndPassword(auth, email, password);
+        setAuthError(null); // Reset error state before attempting login
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+            setAuthError(error.message);
+            throw error; // Re-throw error so components using `login` can handle it
+        }
     };
 
     const logout = async () => {
-        return signOut(auth);
+        try {
+            await signOut(auth);
+            setUser(null);
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout }}>
+        <AuthContext.Provider value={{ user, login, logout, loading, authError }}>
             {!loading && children}
         </AuthContext.Provider>
     );

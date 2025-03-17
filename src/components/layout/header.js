@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
-import { Bell, Search, Play, UserPlus, FileText, Plus } from "lucide-react";
+import { Bell, Search, Play, UserPlus, FileText, Plus, LogOut, Settings, User } from "lucide-react";
 // import Image from "next/image";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
 import BugReportButton from "../BugReport";
@@ -9,6 +9,7 @@ import AddUserDropdown from "../modals/AddUserDropdown"
 
 const Header = ({ setShowBugForm }) => {
     const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
+    const [showUserProfileDropdown, setShowUserProfileDropdown] = useState(false);
 
     const user = {
         name: "John Doe",
@@ -19,17 +20,34 @@ const Header = ({ setShowBugForm }) => {
     // Toggle user dropdown
     const toggleAddUserDropdown = () => {
         setShowAddUserDropdown(!showAddUserDropdown);
+        // Close other dropdowns when opening this one
+        if (!showAddUserDropdown) {
+            setShowUserProfileDropdown(false);
+            setShowReportOptions(false);
+            setShowTestCaseOptions(false);
+        }
+    };
+
+    // Toggle profile dropdown
+    const toggleUserProfileDropdown = () => {
+        setShowUserProfileDropdown(!showUserProfileDropdown);
+        // Close other dropdowns when opening this one
+        if (!showUserProfileDropdown) {
+            setShowAddUserDropdown(false);
+            setShowReportOptions(false);
+            setShowTestCaseOptions(false);
+        }
     };
 
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
 
-    // Current user information (would typically come from auth context)
-
     const reportButtonRef = useRef(null);
     const testCaseButtonRef = useRef(null);
     const reportDropdownRef = useRef(null);
     const testCaseDropdownRef = useRef(null);
+    const userDropdownRef = useRef(null);
+    const addUserDropdownRef = useRef(null);
 
     // State for dropdown positions
     const [reportDropdownPosition, setReportDropdownPosition] = useState({ top: 0, left: 0 });
@@ -76,13 +94,21 @@ const Header = ({ setShowBugForm }) => {
                 testCaseButtonRef.current && !testCaseButtonRef.current.contains(event.target)) {
                 setShowTestCaseOptions(false);
             }
+            if (userDropdownRef.current && !userDropdownRef.current.contains(event.target) &&
+                !event.target.closest('.user-avatar-container')) {
+                setShowUserProfileDropdown(false);
+            }
+            if (addUserDropdownRef.current && !addUserDropdownRef.current.contains(event.target) &&
+                !event.target.closest('.add-user-button')) {
+                setShowAddUserDropdown(false);
+            }
         }
 
         document.addEventListener("mousedown", handleClickOutside);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [showReportOptions, showTestCaseOptions]);
+    }, [showReportOptions, showTestCaseOptions, showUserProfileDropdown, showAddUserDropdown]);
 
     return (
         <header className="relative bg-[#fff] shadow-sm z-[50] py-3 px-4 md:px-6 overflow-visible">
@@ -121,7 +147,12 @@ const Header = ({ setShowBugForm }) => {
                     <div className="relative">
                         <button
                             ref={reportButtonRef}
-                            onClick={() => setShowReportOptions(!showReportOptions)}
+                            onClick={() => {
+                                setShowReportOptions(!showReportOptions);
+                                setShowTestCaseOptions(false);
+                                setShowUserProfileDropdown(false);
+                                setShowAddUserDropdown(false);
+                            }}
                             className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition"
                         >
                             <FileText className="h-4 w-4" />
@@ -133,26 +164,27 @@ const Header = ({ setShowBugForm }) => {
                     <div className="relative">
                         <button
                             ref={testCaseButtonRef}
-                            onClick={() => setShowTestCaseOptions(!showTestCaseOptions)}
+                            onClick={() => {
+                                setShowTestCaseOptions(!showTestCaseOptions);
+                                setShowReportOptions(false);
+                                setShowUserProfileDropdown(false);
+                                setShowAddUserDropdown(false);
+                            }}
                             className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5d6a7] hover:text-[#2D3142] transition cursor-pointer"
                         >
                             <Plus className="h-4 w-4" />
                             <span className="hidden md:inline">Add Test Case</span>
                         </button>
                     </div>
+                    
                     {/* Add Team Member Button */}
-                    <div className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center hover:bg-[#A5d6a7] transition  cursor-pointer">
+                    <div className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center hover:bg-[#A5d6a7] transition cursor-pointer">
                         <button
                             onClick={toggleAddUserDropdown}
-                            className="relative" 
+                            className="relative add-user-button" 
                         >
                             <UserPlus className="h-4 w-4" />
                         </button>
-                        {showAddUserDropdown && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-300 shadow-lg rounded">
-                                <AddUserDropdown onClose={() => setShowAddUserDropdown(false)} />
-                            </div>
-                        )}
                     </div>
 
                     {/* Notification Bell */}
@@ -162,11 +194,11 @@ const Header = ({ setShowBugForm }) => {
                     </button>
 
                     {/* User Avatar */}
-                    <div className="flex items-center">
-                        {user && <UserAvatar user={user} />}
+                    <div className="flex items-center relative user-avatar-container">
+                        <div onClick={toggleUserProfileDropdown} className="cursor-pointer">
+                            {user && <UserAvatar user={user} />}
+                        </div>
                     </div>
-
-
                 </div>
             </div>
 
@@ -199,6 +231,44 @@ const Header = ({ setShowBugForm }) => {
                 >
                     <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">New Test Case</button>
                     <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Import Test Cases</button>
+                </div>
+            )}
+
+            {/* User Profile Dropdown */}
+            {showUserProfileDropdown && (
+                <div
+                    ref={userDropdownRef}
+                    className="absolute top-16 right-4 bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
+                    style={{ minWidth: '200px' }}
+                >
+                    <div className="px-4 py-3 border-b border-gray-200">
+                        <p className="text-sm font-medium">{user.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                    </div>
+                    <div className="py-1">
+                        <button className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100">
+                            <User className="h-4 w-4 mr-2" />
+                            <span>Profile</span>
+                        </button>
+                        <button className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100">
+                            <Settings className="h-4 w-4 mr-2" />
+                            <span>Settings</span>
+                        </button>
+                        <button className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600">
+                            <LogOut className="h-4 w-4 mr-2" />
+                            <span>Sign out</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Add User Dropdown */}
+            {showAddUserDropdown && (
+                <div 
+                    ref={addUserDropdownRef}
+                    className="absolute right-16 top-16 bg-white border border-gray-300 shadow-lg rounded-md z-50"
+                >
+                    <AddUserDropdown onClose={() => setShowAddUserDropdown(false)} />
                 </div>
             )}
         </header>

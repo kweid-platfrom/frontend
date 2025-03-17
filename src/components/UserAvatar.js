@@ -12,55 +12,59 @@ import {
 const UserAvatarDropdown = ({ user }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
+    const buttonRef = useRef(null);
 
     // Generate initials from user's name
     const getInitials = (name) => {
         if (!name) return 'U';
-
         const nameParts = name.split(' ');
-        if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase();
-
-        return (
-            nameParts[0].charAt(0).toUpperCase() +
-            nameParts[nameParts.length - 1].charAt(0).toUpperCase()
-        );
+        return nameParts.length === 1
+            ? nameParts[0].charAt(0).toUpperCase()
+            : nameParts[0].charAt(0).toUpperCase() + nameParts[nameParts.length - 1].charAt(0).toUpperCase();
     };
 
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+            if (
+                dropdownRef.current && !dropdownRef.current.contains(event.target) &&
+                buttonRef.current && !buttonRef.current.contains(event.target)
+            ) {
                 setIsOpen(false);
             }
         };
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setIsOpen(false);
+            }
+        };
+
         document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
         };
     }, []);
 
-    const toggleDropdown = () => {
-        setIsOpen(!isOpen);
-    };
-
     return (
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative">
             <button
-                onClick={toggleDropdown}
+                ref={buttonRef}
+                onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center space-x-2 focus:outline-none"
                 aria-expanded={isOpen}
                 aria-haspopup="true"
             >
                 {user?.avatarUrl ? (
-                    <div className="relative w-8 h-8">
-                        <Image
-                            src={user.avatarUrl}
-                            alt="User avatar"
-                            fill
-                            className="rounded-full object-cover"
-                            sizes="32px"
-                        />
-                    </div>
+                    <Image
+                        src={user.avatarUrl}
+                        alt="User avatar"
+                        width={32}
+                        height={32}
+                        className="rounded-full object-cover"
+                    />
                 ) : (
                     <div className="w-8 h-8 rounded-full bg-[#00897b] flex items-center justify-center text-white font-medium">
                         {getInitials(user?.name)}
@@ -69,7 +73,10 @@ const UserAvatarDropdown = ({ user }) => {
                 <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200">
+                <div
+                    ref={dropdownRef}
+                    className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200 min-w-[200px]"
+                >
                     <div className="px-4 py-3 border-b border-gray-100">
                         <p className="text-sm font-medium">{user?.name || 'User'}</p>
                         <p className="text-xs text-gray-500 truncate">{user?.email || 'user@example.com'}</p>
