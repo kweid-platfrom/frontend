@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "../../config/firebase";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "../../context/AuthProvider";
 import { useAlert } from "../../components/CustomAlert";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import "../../app/globals.css";
@@ -16,15 +15,27 @@ const Login = () => {
     const [loadingEmailLogin, setLoadingEmailLogin] = useState(false);
     const [loadingGoogleLogin, setLoadingGoogleLogin] = useState(false);
     const router = useRouter();
+    const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
     const { showAlert, alertComponent } = useAlert();
+
+    // Redirect if already logged in
+    useEffect(() => {
+        if (currentUser && !loading) {
+            router.push("/dashboard");
+        }
+    }, [currentUser, loading, router]);
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoadingEmailLogin(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
-            showAlert("Login successful!", "success");
-            router.push("/dashboard");
+            const result = await signIn(email, password);
+            if (result.success) {
+                showAlert("Login successful!", "success");
+                router.push("/dashboard");
+            } else {
+                showAlert(result.error, "error");
+            }
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
@@ -36,9 +47,17 @@ const Login = () => {
     const handleGoogleLogin = async () => {
         setLoadingGoogleLogin(true);
         try {
-            await signInWithPopup(auth, googleProvider);
-            showAlert("Login successful!", "success");
-            router.push("/dashboard");
+            const result = await signInWithGoogle();
+            if (result.success) {
+                if (result.isNewUser) {
+                    showAlert("Welcome! Your account has been created.", "success");
+                } else {
+                    showAlert("Login successful!", "success");
+                }
+                router.push("/dashboard");
+            } else {
+                showAlert(result.error, "error");
+            }
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
@@ -51,6 +70,19 @@ const Login = () => {
         e.preventDefault();
         router.push("/forgot-password");
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex justify-center items-center">
+                <Loader2 className="animate-spin h-8 w-8 text-[#00897B]" />
+            </div>
+        );
+    }
+
+    // If already logged in, don't render the login form
+    if (currentUser) {
+        return null;
+    }
 
     return (
         <>
@@ -96,7 +128,7 @@ const Login = () => {
                         </div>
 
                         <div className="text-right">
-                            <button  onClick={handleForgotPassword}  className="text-[#00897B] text-sm hover:underline">
+                            <button onClick={handleForgotPassword} className="text-[#00897B] text-sm hover:underline">
                                 Forgot password?
                             </button>
                         </div>

@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { AlertProvider } from "../components/CustomAlert";
+import { AuthProvider } from "../context/AuthProvider"; // Import AuthProvider
 import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
 
 // Load fonts with required weights & subsets
@@ -12,9 +13,11 @@ export default function RootLayout({ children }) {
     return (
         <html lang="en">
             <body className={`${poppins.className} ${montserrat.className} ${sansHebrew.className}`}>
-                <AlertProvider>
-                    {children}
-                </AlertProvider>
+                <AuthProvider>  {/* Wrap the entire app */}
+                    <AlertProvider>
+                        {children}
+                    </AlertProvider>
+                </AuthProvider>
             </body>
         </html>
     );

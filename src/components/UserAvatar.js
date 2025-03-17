@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import SignOutButton from '@/components/auth/SignOutButton';
 import {
     User,
     Settings,
     HelpCircle,
-    LogOut,
     ChevronDown
 } from 'lucide-react';
 
@@ -102,7 +102,7 @@ const UserAvatarDropdown = ({ user }) => {
                             onClick={() => console.log('Logout clicked')}
                             className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                         >
-                            <LogOut size={16} className="mr-3 text-red-500" />
+                            <SignOutButton variant="text" />
                             Sign out
                         </button>
                     </div>

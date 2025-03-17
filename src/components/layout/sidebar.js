@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
+import SignOutButton from "@/components/auth/SignOutButton";
 import {
     LayoutDashboard, FileCode, BarChart3, Video, Bug, GitPullRequest, 
-    Settings, HelpCircle, LogOut, ChevronsLeft, ChevronsRight, ScrollText
+    Settings, HelpCircle, ChevronsLeft, ChevronsRight, ScrollText
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip"; // Assuming you use ShadCN for tooltips
 
@@ -103,7 +104,7 @@ const Sidebar = ({ setActivePage }) => {
                         </div>
                     )}
                     <button className="ml-auto text-[#2D3142] hover:text-white">
-                        <LogOut className="h-5 w-5" />
+                        <SignOutButton variant="icon" className="h-5 w-5" />
                     </button>
                 </div>
             </div>
