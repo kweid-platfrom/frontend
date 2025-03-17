@@ -1,6 +1,8 @@
-import React from 'react';
+"use client"; // Required for Next.js client component
 
-const ProfileSection = ({ formData, onChange }) => {
+import React from "react";
+
+const ProfileSection = ({ formData = {}, onChange = () => { } }) => {
     return (
         <section id="profile" className="mb-8">
             <h3 className="text-lg font-medium mb-4">Profile Information</h3>
@@ -13,10 +15,10 @@ const ProfileSection = ({ formData, onChange }) => {
                         type="text"
                         id="name"
                         name="name"
-                        value={formData.name}
+                        value={formData?.name || ""}
                         onChange={onChange}
                         className="w-full px-3 py-2 border bg-[#f2f2f2] rounded focus:outline-none focus:ring-[#00897B]"
-                        required 
+                        required
                         disabled
                     />
                 </div>
@@ -28,7 +30,7 @@ const ProfileSection = ({ formData, onChange }) => {
                         type="email"
                         id="email"
                         name="email"
-                        value={formData.email}
+                        value={formData?.email || ""}
                         onChange={onChange}
                         className="w-full px-3 py-2 border bg-[#f2f2f2] rounded focus:outline-none focus:ring-[#00897B]"
                         required
@@ -43,7 +45,7 @@ const ProfileSection = ({ formData, onChange }) => {
                         type="tel"
                         id="phone"
                         name="phone"
-                        value={formData.phone}
+                        value={formData?.phone || ""}
                         onChange={onChange}
                         className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-[#00897B]"
                         placeholder="(123) 456-7890"
@@ -56,7 +58,7 @@ const ProfileSection = ({ formData, onChange }) => {
                     <textarea
                         id="bio"
                         name="bio"
-                        value={formData.bio}
+                        value={formData?.bio || ""}
                         onChange={onChange}
                         rows="4"
                         className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-[#00897B]"
@@ -71,7 +73,7 @@ const ProfileSection = ({ formData, onChange }) => {
                         type="url"
                         id="website"
                         name="website"
-                        value={formData.website}
+                        value={formData?.website || ""}
                         onChange={onChange}
                         className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-[#00897B]"
                         placeholder="https://example.com"
@@ -85,7 +87,7 @@ const ProfileSection = ({ formData, onChange }) => {
                         type="text"
                         id="location"
                         name="location"
-                        value={formData.location}
+                        value={formData?.location || ""}
                         onChange={onChange}
                         className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-[#00897B]"
                         placeholder="City, State"

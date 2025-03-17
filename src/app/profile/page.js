@@ -1,7 +1,6 @@
-"use client";
+import React from "react";
+import ProfileSection from "@/components/ProfileSection";
 
-import dynamic from "next/dynamic";
-
-const UserProfile = dynamic(() => import("../../components/Settings/UserProfile"), { ssr: false });
-
-export default UserProfile;
+export default function AddUsersPage() {
+    return <ProfileSection />
+}

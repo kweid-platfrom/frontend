@@ -2,7 +2,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Settings/Sidebar';
-import ProfileSection from '@/components/Settings/UserProfile';
+import ProfileSection from '@/components/ProfileSection';
 import NotificationsSection from '@/components/Settings/NotificationsSection';
 import ThemeSection from '@/components/Settings/ThemeSection';
 import SecuritySection from '@/components/Settings/SecuritySection';
