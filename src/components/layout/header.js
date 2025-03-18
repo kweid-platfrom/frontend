@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
+import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import { Bell, Search, Play, UserPlus, FileText, Plus, LogOut, Settings, User } from "lucide-react";
 // import Image from "next/image";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
@@ -10,12 +11,8 @@ import AddUserDropdown from "../modals/AddUserDropdown"
 const Header = ({ setShowBugForm }) => {
     const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
     const [showUserProfileDropdown, setShowUserProfileDropdown] = useState(false);
+    const [user, setUser] = useState(null);
 
-    const user = {
-        name: "John Doe",
-        email: "john.doe@example.com",
-        photoURL: "/default-avatar.png",
-    };
 
     // Toggle user dropdown
     const toggleAddUserDropdown = () => {
@@ -109,6 +106,28 @@ const Header = ({ setShowBugForm }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [showReportOptions, showTestCaseOptions, showUserProfileDropdown, showAddUserDropdown]);
+    useEffect(() => {
+        const auth = getAuth();
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                setUser({
+                    name: currentUser.displayName || "User",
+                    email: currentUser.email,
+                    photoURL: currentUser.photoURL || "/default-avatar.png",
+                });
+            } else {
+                setUser(null);
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
+    
+    const handleLogout = async () => {
+        const auth = getAuth();
+        await signOut(auth);
+    };
+
 
     return (
         <header className="relative bg-[#fff] shadow-sm z-[50] py-3 px-4 md:px-6 overflow-visible">
@@ -254,7 +273,7 @@ const Header = ({ setShowBugForm }) => {
                             <Settings className="h-4 w-4 mr-2" />
                             <span>Settings</span>
                         </button>
-                        <button className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600">
+                        <button onClick={handleLogout} className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600">
                             <LogOut className="h-4 w-4 mr-2" />
                             <span>Sign out</span>
                         </button>

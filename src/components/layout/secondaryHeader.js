@@ -45,15 +45,33 @@ const SecondaryHeader = ({ title: propTitle }) => {
     const pathname = usePathname();
 
     useEffect(() => {
-        console.log("Pathname:", pathname); // Debugging
-    }, [pathname]);
+        const fetchTeamMembers = async () => {
+            const auth = getAuth();
+            const db = getFirestore();
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            try {
+                const teamCollection = collection(db, "teamMembers");
+                const teamSnapshot = await getDocs(teamCollection);
+                const members = teamSnapshot.docs.map(doc => doc.data());
+                
+                setTeamMembers([{ firstName: user.displayName || "You", avatar: user.photoURL }, ...members]);
+            } catch (error) {
+                console.error("Error fetching team members:", error);
+            }
+        };
+
+        fetchTeamMembers();
+    }, []);
 
     const pageTitles = {
         "/bug-tracker": "Bug Tracker",
         "/test-scripts": "Test Cases",
         "/auto-scripts": "Automated Scripts",
         "/reports": "Reports",
-        "/settings": "Settings"
+        "/settings": "Settings",
+        "/help": "Help"
     };
 
     const cleanedPath = pathname ? (pathname.endsWith("/") ? pathname.slice(0, -1) : pathname) : "";
@@ -86,15 +104,23 @@ const SecondaryHeader = ({ title: propTitle }) => {
 
                 {/* Person Filter */}
                 <div className="relative">
-                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("persons")}>
+                    <button className="bg-gray-200 px-4 py-2 rounded flex items-center hover:bg-gray-300 transition-colors" onClick={() => toggleDropdown("persons")}> 
                         {selectedPerson ? (
                             <>
-                                <Image src={selectedPerson.avatar} alt="Avatar" width={20} height={20} className="rounded-full mr-2" />
+                                {selectedPerson.avatar ? (
+                                    <Image src={selectedPerson.avatar} alt="Avatar" width={20} height={20} className="rounded-full mr-2" />
+                                ) : (
+                                    <div className="w-8 h-8 bg-gray-400 text-white flex items-center justify-center rounded-full mr-2">
+                                        {selectedPerson.initials}
+                                    </div>
+                                )}
                                 <span className="truncate w-20 text-center">{selectedPerson.firstName}</span>
                             </>
                         ) : (
                             <>
-                                <Image src="https://i.pravatar.cc/40?img=0" alt="Avatar" width={20} height={20} className="rounded-full mr-2" />
+                                <div className="w-8 h-8 bg-gray-400 text-white flex items-center justify-center rounded-full mr-2">
+                                    ?
+                                </div>
                                 <span className="truncate w-20 text-center">Person</span>
                             </>
                         )}
@@ -103,9 +129,15 @@ const SecondaryHeader = ({ title: propTitle }) => {
                     {openDropdown === "persons" && (
                         <div className="absolute right-0 mt-2 w-56 bg-white border shadow-lg rounded-lg z-50">
                             <ul className="p-2">
-                                {teamMembers.map((person) => (
-                                    <li key={person.firstName} onClick={() => { setSelectedPerson(person); setOpenDropdown(null); }} className="flex items-center p-2 border-b hover:bg-gray-100 cursor-pointer">
-                                        <Image src={person.avatar} alt="Avatar" width={24} height={24} className="rounded-full mr-2" />
+                                {teamMembers.map((person, index) => (
+                                    <li key={index} onClick={() => { setSelectedPerson(person); setOpenDropdown(null); }} className="flex items-center p-2 border-b hover:bg-gray-100 cursor-pointer">
+                                        {person.avatar ? (
+                                            <Image src={person.avatar} alt="Avatar" width={24} height={24} className="rounded-full mr-2" />
+                                        ) : (
+                                            <div className="w-8 h-8 bg-gray-400 text-white flex items-center justify-center rounded-full mr-2">
+                                                {person.initials}
+                                            </div>
+                                        )}
                                         {person.firstName}
                                     </li>
                                 ))}
@@ -113,6 +145,7 @@ const SecondaryHeader = ({ title: propTitle }) => {
                         </div>
                     )}
                 </div>
+            
 
                 {/* Status Filter */}
                 <div className="relative">

@@ -60,7 +60,7 @@ const SignOutButton = ({ className, variant = "icon" }) => {
         <button
             onClick={handleSignOut}
             disabled={loading}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 transition-colors rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 ${className}`}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 transition-colors rounded hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 ${className}`}
         >
             {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

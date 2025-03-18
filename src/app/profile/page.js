@@ -1,32 +1,12 @@
-"use client";
+import ProfileSection from "../../components/ProfileSection"; // ✅ Keep only what's needed
 
-import { useEffect, useState } from "react";
-import { auth } from "../../firebaseConfig";
-import { onAuthStateChanged } from "firebase/auth";
-import ProfileSection from "../../components/ProfileSection";
-import { useRouter } from "next/navigation";
-
-const ProfileSection = () => {
-    const [user, setUser] = useState(null);
-    const router = useRouter();
-
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            if (!currentUser) {
-                router.push("/login"); // Redirect to login if not authenticated
-            } else {
-                setUser(currentUser);
-            }
-        });
-
-        return () => unsubscribe();
-    }, [router]);
-
-    if (!user) {
-        return <p>Loading...</p>;
-    }
-
-    return <ProfileSection />;
+const ProfilePage = () => {
+    return (
+        <div>
+            <h1>Profile</h1>
+            <ProfileSection />
+        </div>
+    );
 };
 
-export default ProfileSection;
+export default ProfilePage;
