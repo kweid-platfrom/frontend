@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Bug, Upload, File } from "lucide-react";
+import { db, storage } from "../config/firebase";
+import { collection, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const BugReportButton = ({ className = "" }) => {
     const [showBugForm, setShowBugForm] = useState(false);
@@ -14,11 +17,10 @@ const BugReportButton = ({ className = "" }) => {
     const [severity, setSeverity] = useState("Low");
     const [assignedTo, setAssignedTo] = useState("");
     const [error, setError] = useState("");
-
-    const teamMembers = [
-        { id: 1, name: "Alice" },
-        { id: 2, name: "Bob" },
-    ];
+    const [teamMembers, setTeamMembers] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [recordings, setRecordings] = useState([]);
+    const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
 
     useEffect(() => {
         document.body.style.overflow = showBugForm ? "hidden" : "auto";
@@ -27,62 +29,112 @@ const BugReportButton = ({ className = "" }) => {
         };
     }, [showBugForm]);
 
+    useEffect(() => {
+        // Fetch team members dynamically from Firestore
+        const fetchTeamMembers = async () => {
+            try {
+                const teamRef = collection(db, "teamMembers");
+                const snapshot = await getDocs(teamRef);
+                const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setTeamMembers(members);
+            } catch (error) {
+                console.error("Error fetching team members:", error);
+            }
+        };
+
+        // Fetch recordings from Firestore
+        const fetchRecordings = async () => {
+            setIsLoadingRecordings(true);
+            try {
+                const recordingsRef = collection(db, "recordings");
+                const snapshot = await getDocs(recordingsRef);
+                const recordingData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setRecordings(recordingData);
+            } catch (error) {
+                console.error("Error fetching recordings:", error);
+            } finally {
+                setIsLoadingRecordings(false);
+            }
+        };
+
+        if (showBugForm) {
+            fetchTeamMembers();
+            fetchRecordings();
+        }
+    }, [showBugForm]);
+
     const handleAttachmentChange = (event) => {
         const files = Array.from(event.target.files);
         setAttachments((prevAttachments) => [...prevAttachments, ...files]);
     };
 
-    const handleSubmit = (e) => {
+    const handleRecordingSelect = (recordingUrl, recordingName) => {
+        // Create a file object from the recording URL
+        fetch(recordingUrl)
+            .then(response => response.blob())
+            .then(blob => {
+                const file = new File([blob], recordingName, { type: "video/mp4" });
+                setAttachments((prevAttachments) => [...prevAttachments, file]);
+            })
+            .catch(error => {
+                console.error("Error fetching recording:", error);
+            });
+    };
+
+    const removeAttachment = (index) => {
+        setAttachments(prevAttachments => prevAttachments.filter((_, i) => i !== index));
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!title) {
             setError("Title is required");
             return;
         }
 
-        const formData = new FormData();
-        formData.append("title", title);
-        formData.append("category", category);
-        formData.append("description", description);
-        formData.append("stepsToReproduce", stepsToReproduce);
-        formData.append("severity", severity);
-        formData.append("assignedTo", assignedTo);
+        setIsSubmitting(true);
 
-        attachments.forEach((file) => {
-            formData.append("attachments", file);
-        });
+        try {
+            // Upload attachments to Firebase Storage
+            const uploadedFiles = await Promise.all(
+                attachments.map(async (file) => {
+                    const storageRef = ref(storage, `bugReports/${Date.now()}_${file.name}`);
+                    await uploadBytes(storageRef, file);
+                    const downloadURL = await getDownloadURL(storageRef);
+                    return {
+                        name: file.name,
+                        url: downloadURL
+                    };
+                })
+            );
 
-        // Example API call (make sure to change the URL to your API endpoint)  
-        // fetch('YOUR_API_ENDPOINT', {  
-        //     method: 'POST',  
-        //     body: formData,  
-        // })  
-        // .then((response) => {  
-        //     if (response.ok) {  
-        //         // Reset form  
-        //         setError('');  
-        //         setTitle('');  
-        //         setDescription('');  
-        //         setStepsToReproduce('');  
-        //         setAttachments([]);  
-        //         setAssignedTo('');  
-        //         setShowBugForm(false);  
-        //     } else {  
-        //         setError('Failed to submit bug report.');  
-        //     }  
-        // })  
-        // .catch((error) => {  
-        //     setError('An error occurred while submitting the bug report.');  
-        // });  
+            // Add bug report to Firestore
+            await addDoc(collection(db, "bugReports"), {
+                title,
+                category,
+                description,
+                stepsToReproduce,
+                severity,
+                assignedTo,
+                attachments: uploadedFiles,
+                status: "New",
+                timestamp: serverTimestamp(),
+            });
 
-        // Clear the form and close the modal after submission  
-
-        setError("");
-        setTitle("");
-        setDescription("");
-        setStepsToReproduce("");
-        setAttachments([]);
-        setAssignedTo("");
-        setShowBugForm(false);
+            // Reset form and close modal
+            setError("");
+            setTitle("");
+            setDescription("");
+            setStepsToReproduce("");
+            setAttachments([]);
+            setAssignedTo("");
+            setShowBugForm(false);
+        } catch (error) {
+            console.error("Error submitting bug report:", error);
+            setError("Failed to submit bug report.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -103,7 +155,7 @@ const BugReportButton = ({ className = "" }) => {
                             aria-hidden="true"
                             onClick={() => setShowBugForm(false)}
                         />
-                        <div className="relative bg-white border border-gray-200 rounded-sm  shadow-md p-6 w-[90%] h-[90vh] max-w-lg">
+                        <div className="relative bg-white border border-gray-200 rounded-sm  shadow-md p-6 w-[90%] h-[100vh] max-w-lg">
                             <button
                                 onClick={() => setShowBugForm(false)}
                                 className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
@@ -174,11 +226,88 @@ const BugReportButton = ({ className = "" }) => {
                                             <span>From Device</span>
                                         </button> |
                                         <input id="file-upload" type="file" multiple className="hidden" onChange={handleAttachmentChange} />
-                                        <button type="button" className="flex items-center space-x-2 text-[#00897B]">
+                                        <button 
+                                            type="button" 
+                                            className="flex items-center space-x-2 text-[#00897B]"
+                                            onClick={() => document.getElementById('recording-modal').showModal()}
+                                        >
                                             <File className="h-5 w-5" />
                                             <span>From Recordings</span>
                                         </button>
                                     </div>
+                                    
+                                    {/* Recording selection modal */}
+                                    <dialog id="recording-modal" className="rounded-md shadow-lg p-4 w-11/12 max-w-md">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-lg font-semibold">Select Recording</h3>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => document.getElementById('recording-modal').close()}
+                                                className="text-gray-600 hover:text-gray-900"
+                                            >
+                                                <X className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                        
+                                        {isLoadingRecordings ? (
+                                            <div className="text-center py-4">Loading recordings...</div>
+                                        ) : recordings.length === 0 ? (
+                                            <div className="text-center py-4">No recordings found</div>
+                                        ) : (
+                                            <div className="max-h-64 overflow-y-auto">
+                                                {recordings.map((recording) => (
+                                                    <div 
+                                                        key={recording.id} 
+                                                        className="p-2 border-b hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                                                        onClick={() => {
+                                                            handleRecordingSelect(recording.url, recording.name || `Recording-${recording.id}.mp4`);
+                                                            document.getElementById('recording-modal').close();
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center">
+                                                            <File className="h-4 w-4 mr-2" />
+                                                            <span>{recording.name || `Recording-${recording.id}`}</span>
+                                                        </div>
+                                                        <span className="text-xs text-gray-500">
+                                                            {recording.timestamp ? new Date(recording.timestamp.toDate()).toLocaleDateString() : 'Unknown date'}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        
+                                        <div className="mt-4 flex justify-end">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => document.getElementById('recording-modal').close()}
+                                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </dialog>
+                                    
+                                    {/* Display selected attachments */}
+                                    {attachments.length > 0 && (
+                                        <div className="mt-2 border rounded p-2">
+                                            <p className="text-sm font-medium mb-1">Selected files:</p>
+                                            {attachments.map((file, index) => (
+                                                <div key={index} className="flex justify-between items-center text-sm py-1 border-b last:border-0">
+                                                    <div className="flex items-center">
+                                                        <File className="h-4 w-4 mr-2" />
+                                                        <span className="truncate max-w-[180px]">{file.name}</span>
+                                                    </div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => removeAttachment(index)}
+                                                        className="text-red-500 hover:text-red-700"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="mb-4">
@@ -210,15 +339,19 @@ const BugReportButton = ({ className = "" }) => {
                                     >
                                         <option value="">Select Team Member</option>
                                         {teamMembers.map((member) => (
-                                            <option key={member.id} value={member.name}>
-                                                {member.name}
+                                            <option key={member.id} value={member.name || member.id}>
+                                                {member.name || member.id}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <button type="submit" className="w-full bg-[#00897B] hover:bg-[#00796B] text-white py-2 rounded mt-4">
-                                    Submit
+                                <button 
+                                    type="submit" 
+                                    className="w-full bg-[#00897B] hover:bg-[#00796B] text-white py-2 rounded mt-4"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? "Submitting..." : "Submit"}
                                 </button>
                             </form>
                         </div>

@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // Import storage
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -12,13 +13,14 @@ const firebaseConfig = {
     appId: "1:404106955543:web:741b7eb7f2dd07ee7ac552"
 };
 
-//initialize Firebase
-const app = initializeApp(firebaseConfig)
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const db = getFirestore(app);
+const storage = getStorage(app); // Initialize storage
 
-//Ensure session persists across refresh
+// Ensure session persists across refresh
 setPersistence(auth, browserLocalPersistence);
 
-export { app, auth, googleProvider, db}
+export { app, auth, googleProvider, db, storage }; // Export storage
