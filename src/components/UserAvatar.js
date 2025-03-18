@@ -99,13 +99,13 @@ const UserAvatarDropdown = () => {
                     </div>
 
                     <div className="py-1 border-t border-gray-100">
-                        <button
+                        <div
                             onClick={() => console.log("Logout clicked")}
                             className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                         >
                             <SignOutButton variant="text" />
                             <span className="ml-2">Sign out</span>
-                        </button>
+                        </div>
                     </div>
                 </div>
             )}
