@@ -124,7 +124,7 @@ const Sidebar = ({ setActivePage }) => {
                                     <TooltipTrigger asChild>
                                         <button
                                             onClick={() => handlePageChange(item.page)}
-                                            className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded-md transition-colors duration-200
+                                            className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded transition-colors duration-200
                                                 ${selectedPage === item.page ? "bg-[#00897B] text-white" : "text-white hover:bg-[#00796B]"}
                                             `}
                                         >
