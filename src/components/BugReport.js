@@ -19,8 +19,6 @@ const BugReportButton = ({ className = "" }) => {
     const [error, setError] = useState("");
     const [teamMembers, setTeamMembers] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [recordings, setRecordings] = useState([]);
-    const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
 
     useEffect(() => {
         document.body.style.overflow = showBugForm ? "hidden" : "auto";
@@ -68,18 +66,6 @@ const BugReportButton = ({ className = "" }) => {
         setAttachments((prevAttachments) => [...prevAttachments, ...files]);
     };
 
-    const handleRecordingSelect = (recordingUrl, recordingName) => {
-        // Create a file object from the recording URL
-        fetch(recordingUrl)
-            .then(response => response.blob())
-            .then(blob => {
-                const file = new File([blob], recordingName, { type: "video/mp4" });
-                setAttachments((prevAttachments) => [...prevAttachments, file]);
-            })
-            .catch(error => {
-                console.error("Error fetching recording:", error);
-            });
-    };
 
     const removeAttachment = (index) => {
         setAttachments(prevAttachments => prevAttachments.filter((_, i) => i !== index));
@@ -140,7 +126,7 @@ const BugReportButton = ({ className = "" }) => {
     return (
         <>
             <button
-                className={`px-3 py-2 text-sm rounded-xs flex items-center space-x-2 transition ${className}`}
+                className={`px-3 py-2 text-sm rounded flex items-center space-x-2 transition ${className}`}
                 onClick={() => setShowBugForm(true)}
             >
                 <Bug className="h-4 w-4" />
@@ -155,7 +141,7 @@ const BugReportButton = ({ className = "" }) => {
                             aria-hidden="true"
                             onClick={() => setShowBugForm(false)}
                         />
-                        <div className="relative bg-white border border-gray-200 rounded-sm  shadow-md p-6 w-[90%] h-[100vh] max-w-lg">
+                        <div className="relative bg-white border border-gray-200 rounded-sm  shadow-md p-6 w-[90%] h-[90vh] max-w-lg">
                             <button
                                 onClick={() => setShowBugForm(false)}
                                 className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
@@ -235,58 +221,7 @@ const BugReportButton = ({ className = "" }) => {
                                             <span>From Recordings</span>
                                         </button>
                                     </div>
-                                    
-                                    {/* Recording selection modal */}
-                                    <dialog id="recording-modal" className="rounded-md shadow-lg p-4 w-11/12 max-w-md">
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-lg font-semibold">Select Recording</h3>
-                                            <button 
-                                                type="button" 
-                                                onClick={() => document.getElementById('recording-modal').close()}
-                                                className="text-gray-600 hover:text-gray-900"
-                                            >
-                                                <X className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                        
-                                        {isLoadingRecordings ? (
-                                            <div className="text-center py-4">Loading recordings...</div>
-                                        ) : recordings.length === 0 ? (
-                                            <div className="text-center py-4">No recordings found</div>
-                                        ) : (
-                                            <div className="max-h-64 overflow-y-auto">
-                                                {recordings.map((recording) => (
-                                                    <div 
-                                                        key={recording.id} 
-                                                        className="p-2 border-b hover:bg-gray-100 cursor-pointer flex justify-between items-center"
-                                                        onClick={() => {
-                                                            handleRecordingSelect(recording.url, recording.name || `Recording-${recording.id}.mp4`);
-                                                            document.getElementById('recording-modal').close();
-                                                        }}
-                                                    >
-                                                        <div className="flex items-center">
-                                                            <File className="h-4 w-4 mr-2" />
-                                                            <span>{recording.name || `Recording-${recording.id}`}</span>
-                                                        </div>
-                                                        <span className="text-xs text-gray-500">
-                                                            {recording.timestamp ? new Date(recording.timestamp.toDate()).toLocaleDateString() : 'Unknown date'}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        
-                                        <div className="mt-4 flex justify-end">
-                                            <button 
-                                                type="button" 
-                                                onClick={() => document.getElementById('recording-modal').close()}
-                                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </dialog>
-                                    
+                            
                                     {/* Display selected attachments */}
                                     {attachments.length > 0 && (
                                         <div className="mt-2 border rounded p-2">
