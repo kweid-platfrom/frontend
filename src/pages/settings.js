@@ -46,26 +46,29 @@ const SettingsPage = () => {
     const [activeSection, setActiveSection] = useState('profile');
 
     useEffect(() => {
+        console.log('Auth User:', authUser); // Debugging
+    
         const fetchUserData = async () => {
             try {
-                if (authUser) {
-                    const response = await fetch('/api/user'); 
-                    if (!response.ok) throw new Error(`Failed to fetch user data: ${response.status}`);
-                    const userData = await response.json();
-                    console.log('Fetched User Data:', userData); // Debugging
-                    if (!userData || !userData.name) {
-                        throw new Error('User data structure is incorrect');
-                    }
-                    setUser(userData);
-                    setFormData(prevData => ({
-                        ...prevData,
-                        name: userData.name || '',
-                        email: userData.email || '',
-                        bio: userData.bio || '',
-                        companyName: userData.companyName || '',
-                        role: userData.role || '',
-                    }));
-                }
+                if (!authUser) return; // Prevents unnecessary API calls
+                
+                const response = await fetch('/api/user');
+                if (!response.ok) throw new Error(`Failed to fetch user data: ${response.status}`);
+                
+                const userData = await response.json();
+                console.log('Fetched User Data:', userData); // Debugging
+    
+                if (!userData || !userData.name) throw new Error('User data structure is incorrect');
+                
+                setUser(userData);
+                setFormData(prevData => ({
+                    ...prevData,
+                    name: userData.name || '',
+                    email: userData.email || '',
+                    bio: userData.bio || '',
+                    companyName: userData.companyName || '',
+                    role: userData.role || '',
+                }));
             } catch (error) {
                 console.error('Error fetching user data:', error);
                 setMessage({ type: 'error', text: 'Failed to load user data. Please refresh the page.' });
@@ -73,8 +76,7 @@ const SettingsPage = () => {
                 setLoading(false);
             }
         };
-        
-
+    
         fetchUserData();
     }, [authUser]);
 
