@@ -198,7 +198,7 @@ const TestCaseManagement = () => {
                         </button>
                         <button
                             onClick={handleExportReport}
-                            className="px-4 py-2 bg-[#FF64BD] text-white rounded hover:bg-[#c969a0] flex items-center"
+                            className="px-4 py-2 bg-[#FF64BD] text-white rounded hover:bg-[#834468] flex items-center"
                         >
                             <FileUp className="w-4 h-4 mr-2" />
                             Export

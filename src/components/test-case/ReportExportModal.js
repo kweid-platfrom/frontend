@@ -193,7 +193,7 @@ const ReportExportModal = ({ testCases, onClose }) => {
                         <button
                             type="button"
                             onClick={handleExport}
-                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-[#00897B] hover:bg-[#49928b]"
+                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-[#00897B] hover:bg-[#00897C]"
                             disabled={generating}
                         >
                             {generating ? 'Generating...' : 'Export Report'}
