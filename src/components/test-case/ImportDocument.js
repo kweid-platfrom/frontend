@@ -64,7 +64,7 @@ const ImportDocument = ({ onImport, onCancel }) => {
                             <select
                                 value={documentType}
                                 onChange={(e) => setDocumentType(e.target.value)}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                             >
                                 <option value="requirements">Requirements Document</option>
                                 <option value="userStories">User Stories</option>
@@ -108,14 +108,14 @@ const ImportDocument = ({ onImport, onCancel }) => {
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="px-4 py-2 mr-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                            className="px-4 py-2 mr-4 border border-gray-300 rounded shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                             disabled={uploading}
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-[#00897B] hover:bg-[#357771]"
                             disabled={uploading || !file}
                         >
                             {uploading ? 'Uploading...' : 'Import'}

@@ -5,6 +5,7 @@ import ImportDocument from "../components/test-case/ImportDocument";
 import FilterSection from '../components/test-case/FilterSection';
 import AIProcessingModal from '../components/test-case/AIProcessingModal';
 import ReportExportModal from '../components/test-case/ReportExportModal';
+import { ArrowDownCircle, FileUp, Plus } from 'lucide-react';
 
 const TestCaseManagement = () => {
     const [testCases, setTestCases] = useState([]);
@@ -190,30 +191,24 @@ const TestCaseManagement = () => {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleImportDocument}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                            className="px-4 py-2 bg-[#2D3142] text-white rounded hover:bg-[#1d1f27] flex items-center"
                         >
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-                            </svg>
+                            <ArrowDownCircle className="w-4 h-4 mr-2" />
                             Import
                         </button>
                         <button
                             onClick={handleExportReport}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center"
+                            className="px-4 py-2 bg-[#FF64BD] text-white rounded hover:bg-[#c969a0] flex items-center"
                         >
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                            </svg>
+                            <FileUp className="w-4 h-4 mr-2" />
                             Export
                         </button>
                         <button
                             onClick={handleCreateTestCase}
-                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"
+                            className="px-4 py-2 bg-[#00897B] text-white rounded hover:bg-[#195952] flex items-center"
                         >
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                            New Test Case
+                            <Plus className="w-4 h-4 mr-2" />
+                            New
                         </button>
                     </div>
                 </div>

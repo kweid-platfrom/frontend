@@ -74,7 +74,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                     value={formData.title}
                                     onChange={handleChange}
                                     required
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897c]"
                                 />
                             </div>
 
@@ -87,7 +87,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                     value={formData.module}
                                     onChange={handleChange}
                                     required
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                                 />
                             </div>
                         </div>
@@ -100,7 +100,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                 value={formData.description}
                                 onChange={handleChange}
                                 rows={3}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                             />
                         </div>
 
@@ -112,7 +112,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                     name="priority"
                                     value={formData.priority}
                                     onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                                 >
                                     <option value="Low">Low</option>
                                     <option value="Medium">Medium</option>
@@ -127,7 +127,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                     name="status"
                                     value={formData.status}
                                     onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                                 >
                                     <option value="Draft">Draft</option>
                                     <option value="Active">Active</option>
@@ -147,7 +147,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                                 type="text"
                                                 value={step.description}
                                                 onChange={(e) => handleStepChange(index, 'description', e.target.value)}
-                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B]focus:border-[#00897B]"
                                                 placeholder="Step description"
                                             />
                                         </div>
@@ -157,7 +157,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                                 type="text"
                                                 value={step.expectedResult}
                                                 onChange={(e) => handleStepChange(index, 'expectedResult', e.target.value)}
-                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                                                 placeholder="Expected result"
                                             />
                                         </div>
@@ -180,7 +180,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                             type="text"
                                             value={newStep.description}
                                             onChange={(e) => setNewStep({ ...newStep, description: e.target.value })}
-                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                                             placeholder="Step description"
                                         />
                                     </div>
@@ -190,7 +190,7 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                                             type="text"
                                             value={newStep.expectedResult}
                                             onChange={(e) => setNewStep({ ...newStep, expectedResult: e.target.value })}
-                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-[#00897B] focus:border-[#00897B]"
                                             placeholder="Expected result"
                                         />
                                     </div>
@@ -212,13 +212,13 @@ const TestCaseForm = ({ testCase, onSave, onCancel }) => {
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="px-4 py-2 mr-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                            className="px-4 py-2 mr-4 border border-gray-300 rounded shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-[#00897B] hover:bg-[#00897C]"
                         >
                             {testCase ? 'Update Test Case' : 'Create Test Case'}
                         </button>
