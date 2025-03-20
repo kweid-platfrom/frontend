@@ -6,8 +6,11 @@ import FilterSection from '../components/test-case/FilterSection';
 import AIProcessingModal from '../components/test-case/AIProcessingModal';
 import ReportExportModal from '../components/test-case/ReportExportModal';
 import { ArrowDownCircle, FileUp, Plus } from 'lucide-react';
+import { useTestCaseMetrics } from '../hooks/useTestCaseMetrics';
 
 const TestCaseManagement = () => {
+    const { processAndSaveMetrics } = useTestCaseMetrics();
+    const [lastMetricsUpdate, setLastMetricsUpdate] = useState(null);
     const [testCases, setTestCases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
@@ -26,6 +29,22 @@ const TestCaseManagement = () => {
     useEffect(() => {
         fetchTestCases();
     }, []);
+
+    useEffect(() => {
+        // Check if we have test cases and update metrics when component mounts
+        if (testCases.length > 0 && !lastMetricsUpdate) {
+            updateDashboardMetrics();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [testCases]);
+
+    const updateDashboardMetrics = async () => {
+        const success = await processAndSaveMetrics(testCases);
+        if (success) {
+            setLastMetricsUpdate(new Date());
+            // Optionally show a success message
+        }
+    };
 
     const fetchTestCases = async () => {
         setLoading(true);
@@ -151,6 +170,8 @@ const TestCaseManagement = () => {
             setTestCases([...testCases, newTestCase]);
         }
         setShowForm(false);
+        
+        updateDashboardMetrics();
     };
 
     const handleEditTestCase = (testCase) => {
