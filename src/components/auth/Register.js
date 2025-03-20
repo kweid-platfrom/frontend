@@ -7,29 +7,43 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAlert } from "../../components/CustomAlert";
 import { FcGoogle } from "react-icons/fc";
+import { Loader2 } from "lucide-react";
 import "../../app/globals.css";
 
 const Register = () => {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [emailError, setEmailError] = useState("");
     const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
 
     const validateEmail = (email) => {
-        const workEmailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-        return workEmailPattern.test(email);
+        if (!email) {
+            setEmailError("Email is required");
+            return false;
+        }
+        
+        const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailPattern.test(email)) {
+            setEmailError("Please enter a valid email address");
+            return false;
+        }
+        
+        // You can add additional work email validation if needed
+        // For example, check for certain domains or patterns
+        
+        setEmailError("");
+        return true;
     };
 
     const handleRegister = async (e) => {
         e.preventDefault();
 
         if (!validateEmail(email)) {
-            setEmailError("Please enter a valid company email.");
             return;
         }
 
-        setEmailError(""); 
         setLoading(true);
 
         try {
@@ -50,12 +64,16 @@ const Register = () => {
     };
 
     const handleGoogleRegister = async () => {
+        setGoogleLoading(true);
         try {
             await signInWithPopup(auth, googleProvider);
+            showAlert("Registration successful!", "success");
             router.push("/dashboard");
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
+        } finally {
+            setGoogleLoading(false);
         }
     };
 
@@ -65,9 +83,10 @@ const Register = () => {
                 <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">
                     LOGO
                 </Link>
-                {alertComponent}
             </header>
-
+            
+            {alertComponent}
+            
             <div className="justify-center text-center p-5">
                 <h2 className="text-[#2D3142] text-2xl font-bold text-center mb-3">Sign Up for QAID</h2>
                 <p>– Streamline Your Testing Workflow –</p>
@@ -77,9 +96,11 @@ const Register = () => {
                 <button 
                     onClick={handleGoogleRegister}
                     className="flex items-center justify-center gap-2 w-full bg-white text-[#4A4B53] border border-[#E1E2E6] rounded px-4 py-3 text-base hover:bg-gray-50 hover:border-[#9EA0A5] transition-colors"
+                    disabled={googleLoading}
                 >
                     <FcGoogle className="w-5 h-5 fill-[#4285F4]" />
                     Continue with Google
+                    {googleLoading && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                 </button>
 
                 <div className="flex items-center text-[#9EA0A5] my-2">
@@ -88,30 +109,30 @@ const Register = () => {
                     <div className="flex-grow border-t border-[#E1E2E6]"></div>
                 </div>
 
-                <form className="flex flex-col gap-4" onSubmit={handleRegister}>
-                    <input
-                        className={`px-4 py-3 border ${
-                            emailError ? "border-red-500" : "border-[#E1E2E6]"
-                        } rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]`}
-                        type="email"
-                        placeholder="Company email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
-                    {emailError && <p className="text-red-500 text-sm">{emailError}</p>}
+                <form className="flex flex-col gap-4" onSubmit={handleRegister} noValidate>
+                    <div className="flex flex-col gap-1">
+                        <input
+                            className={`px-4 py-3 border ${
+                                emailError ? "border-red-500" : "border-[#E1E2E6]"
+                            } rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]`}
+                            type="email"
+                            placeholder="Company email"
+                            value={email}
+                            onChange={(e) => {
+                                setEmail(e.target.value);
+                                if (emailError) setEmailError("");
+                            }}
+                        />
+                        {emailError && <p className="text-red-500 text-sm">{emailError}</p>}
+                    </div>
 
                     <button
-                        className="bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer hover:bg-[#00796B] transition-colors flex items-center justify-center"
+                        className="bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer hover:bg-[#00796B] transition-colors flex items-center justify-center gap-2"
                         type="submit"
                         disabled={loading}
                     >
-                        {loading ? (
-                            <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="4" strokeDasharray="31.415, 31.415" strokeLinecap="round"></circle>
-                            </svg>
-                        ) : null}
                         Sign Up
+                        {loading && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                     </button>
                 </form>
 

@@ -42,6 +42,32 @@ const SkeletonLoader = ({ type, count = 1, className }) => {
                         ))}
                     </div>
                 );
+                
+            case "activityFeed":
+                return (
+                    <div className="space-y-4 w-full">
+                        {[...Array(count)].map((_, index) => (
+                            <div key={index} className="flex items-start space-x-3 p-3 border border-gray-100 rounded-lg">
+                                <div className={classNames(skeletonBase, "h-10 w-10 rounded-full flex-shrink-0")} />
+                                <div className="w-full space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <div className={classNames(skeletonBase, "h-4 w-1/3")} />
+                                        <div className={classNames(skeletonBase, "h-3 w-20")} />
+                                    </div>
+                                    <div className={classNames(skeletonBase, "h-3 w-2/3")} />
+                                    <div className={classNames(skeletonBase, "h-16 w-full")} />
+                                    <div className="flex justify-between items-center pt-2">
+                                        <div className="flex space-x-2">
+                                            <div className={classNames(skeletonBase, "h-6 w-16")} />
+                                            <div className={classNames(skeletonBase, "h-6 w-16")} />
+                                        </div>
+                                        <div className={classNames(skeletonBase, "h-6 w-20")} />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
 
             case "list":
             default:
@@ -65,7 +91,7 @@ const SkeletonLoader = ({ type, count = 1, className }) => {
 };
 
 SkeletonLoader.propTypes = {
-    type: PropTypes.oneOf(["list", "grid", "card", "avatar", "text"]),
+    type: PropTypes.oneOf(["list", "grid", "card", "avatar", "text", "activityFeed"]),
     count: PropTypes.number,
     className: PropTypes.string,
 };

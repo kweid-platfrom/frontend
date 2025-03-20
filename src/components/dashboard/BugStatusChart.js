@@ -1,6 +1,6 @@
 import React from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import Skeleton from "../ui/Skeleton";
+import SkeletonLoader from "../ui/Skeleton";
 
 export const BugStatusChart = ({ data, isLoading }) => {
     // Define consistent colors for bug statuses
@@ -15,7 +15,7 @@ export const BugStatusChart = ({ data, isLoading }) => {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Skeleton className="h-64 w-64 rounded-full" />
+                <SkeletonLoader className="h-64 w-64 rounded-full" />
             </div>
         );
     }

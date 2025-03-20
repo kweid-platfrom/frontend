@@ -1,6 +1,6 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
-import Skeleton  from "../ui/Skeleton";
+import SkeletonLoader from "../ui/Skeleton";
 import { Bug, ClipboardCheck, AlertCircle, CheckCircle } from 'lucide-react';
 
 export const KeyMetrics = ({ dashboardData, isLoading }) => {
@@ -88,7 +88,7 @@ export const KeyMetrics = ({ dashboardData, isLoading }) => {
                         <div>
                             <h3 className="text-sm font-medium text-gray-500">{metric.title}</h3>
                             {isLoading ? (
-                                <Skeleton className="h-8 w-20 mt-1" />
+                                <SkeletonLoader className="h-8 w-20 mt-1" />
                             ) : (
                                 <p className={`text-2xl font-bold ${metric.color}`}>{metric.value}</p>
                             )}

@@ -15,6 +15,7 @@ const Login = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [loadingEmailLogin, setLoadingEmailLogin] = useState(false);
     const [loadingGoogleLogin, setLoadingGoogleLogin] = useState(false);
+    const [errors, setErrors] = useState({ email: "", password: "" });
     const router = useRouter();
     const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
     const { showAlert, alertComponent } = useAlert();
@@ -26,8 +27,39 @@ const Login = () => {
         }
     }, [currentUser, loading, router]);
 
+    const validateForm = () => {
+        let isValid = true;
+        const newErrors = { email: "", password: "" };
+        
+        // Email validation
+        if (!email) {
+            newErrors.email = "Email is required";
+            isValid = false;
+        } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
+            newErrors.email = "Please enter a valid email address";
+            isValid = false;
+        }
+        
+        // Password validation
+        if (!password) {
+            newErrors.password = "Password is required";
+            isValid = false;
+        } else if (password.length < 6) {
+            newErrors.password = "Password must be at least 6 characters";
+            isValid = false;
+        }
+        
+        setErrors(newErrors);
+        return isValid;
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
+        
+        if (!validateForm()) {
+            return;
+        }
+        
         setLoadingEmailLogin(true);
         try {
             const result = await signIn(email, password);
@@ -50,11 +82,15 @@ const Login = () => {
         try {
             const result = await signInWithGoogle();
             if (result.success) {
+                // If the user doesn't exist, redirect to register
                 if (result.isNewUser) {
-                    showAlert("Welcome! Your account has been created.", "success");
-                } else {
-                    showAlert("Login successful!", "success");
+                    showAlert("Please complete your registration first.", "info");
+                    router.push("/register");
+                    return;
                 }
+                
+                // Otherwise, show success and redirect to dashboard
+                showAlert("Login successful!", "success");
                 router.push("/dashboard");
             } else {
                 showAlert(result.error, "error");
@@ -100,32 +136,46 @@ const Login = () => {
                 </div>
 
                 <div className="w-full max-w-sm bg-white rounded-lg p-8 flex flex-col gap-6">
-                    <form className="flex flex-col gap-4" onSubmit={handleLogin}>
-                        <input
-                            className="px-4 py-3 border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
-                            type="email"
-                            placeholder="name@company.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-
-                        <div className="relative">
+                    <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
+                        <div className="flex flex-col gap-1">
                             <input
-                                className="px-4 py-3 pr-10 border border-[#E1E2E6] rounded text-[#2D3142] w-full focus:outline-none focus:border-[#00897B]"
-                                type={showPassword ? "text" : "password"}
-                                placeholder="Password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
+                                className={`px-4 py-3 border ${
+                                    errors.email ? "border-red-500" : "border-[#E1E2E6]"
+                                } rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]`}
+                                type="email"
+                                placeholder="name@company.com"
+                                value={email}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    if (errors.email) setErrors({...errors, email: ""});
+                                }}
                             />
-                            <button
-                                type="button"
-                                className="absolute inset-y-0 right-3 flex items-center text-gray-500"
-                                onClick={() => setShowPassword(!showPassword)}
-                            >
-                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                            </button>
+                            {errors.email && <span className="text-red-500 text-sm">{errors.email}</span>}
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                            <div className="relative">
+                                <input
+                                    className={`px-4 py-3 pr-10 border ${
+                                        errors.password ? "border-red-500" : "border-[#E1E2E6]"
+                                    } rounded text-[#2D3142] w-full focus:outline-none focus:border-[#00897B]`}
+                                    type={showPassword ? "text" : "password"}
+                                    placeholder="Password"
+                                    value={password}
+                                    onChange={(e) => {
+                                        setPassword(e.target.value);
+                                        if (errors.password) setErrors({...errors, password: ""});
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    className="absolute inset-y-0 right-3 flex items-center text-gray-500"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                >
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                </button>
+                            </div>
+                            {errors.password && <span className="text-red-500 text-sm">{errors.password}</span>}
                         </div>
 
                         <div className="text-right">

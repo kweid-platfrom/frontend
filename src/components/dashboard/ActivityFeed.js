@@ -9,105 +9,183 @@ import {
     Bug,
     FileCheck,
     Clock,
-    Code
+    Code,
+    UserPlus,
+    FileText,
+    ExternalLink,
+    Lock
 } from "lucide-react";
-import { collection, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import { useAuth } from "../../context/AuthProvider"; // Assuming you have an auth context
 
-const ActivityFeed = () => {
+const ActivityFeed = ({ organizationId }) => {
     const [activities, setActivities] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const { currentUser, loading: authLoading } = useAuth(); // Get current user from auth context
 
     useEffect(() => {
-        // Fetch activities from Firestore
+        // Wait for auth to initialize
+        if (authLoading) return;
+
+        // Clear any previous errors
+        setError(null);
+
+        // Set up unsubscribe function for cleanup
+        let unsubscribe = () => {};
+
         const fetchActivities = async () => {
             try {
-                const querySnapshot = await getDocs(collection(db, "activities"));
+                // Check if user is authenticated
+                if (!currentUser) {
+                    setError("authentication");
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Create a query based on available filters
+                let activitiesQuery;
+                const activitiesRef = collection(db, "activities");
+
+                if (organizationId) {
+                    // Fetch activities for specific organization
+                    activitiesQuery = query(activitiesRef, where("organizationId", "==", organizationId));
+                } else {
+                    // Fetch activities for current user
+                    activitiesQuery = query(activitiesRef, where("userId", "==", currentUser.uid));
+                }
+
+                // First, get the initial data
+                const querySnapshot = await getDocs(activitiesQuery);
                 const fetchedActivities = querySnapshot.docs.map(doc => ({
                     id: doc.id,
-                    ...doc.data()
+                    ...doc.data(),
+                    timestamp: doc.data().timestamp?.toDate ? doc.data().timestamp?.toDate() : 
+                              doc.data().timestamp ? new Date(doc.data().timestamp) : new Date()
                 }));
+
+                // Sort activities by timestamp (newest first)
+                fetchedActivities.sort((a, b) => b.timestamp - a.timestamp);
                 setActivities(fetchedActivities);
+
+                // Set up real-time listener
+                unsubscribe = onSnapshot(
+                    activitiesQuery,
+                    (snapshot) => {
+                        const updatedActivities = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                            timestamp: doc.data().timestamp?.toDate ? doc.data().timestamp?.toDate() : 
+                                      doc.data().timestamp ? new Date(doc.data().timestamp) : new Date()
+                        }));
+                        updatedActivities.sort((a, b) => b.timestamp - a.timestamp);
+                        setActivities(updatedActivities);
+                        setIsLoading(false);
+                    },
+                    (error) => {
+                        console.error("Error in real-time listener:", error);
+                        setError(error.code === "permission-denied" ? "permission" : "unknown");
+                        setIsLoading(false);
+                    }
+                );
             } catch (error) {
-                console.error("Error fetching activities: ", error);
-            } finally {
+                console.error("Error fetching activities:", error);
+                setError(error.code === "permission-denied" ? "permission" : "unknown");
                 setIsLoading(false);
             }
         };
 
         fetchActivities();
 
-        // Optional: Enable real-time updates using onSnapshot
-        const unsubscribe = onSnapshot(collection(db, "activities"), snapshot => {
-            const fetchedActivities = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setActivities(fetchedActivities);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    console.log("ActivityFeed Data:", activities); // Debugging: Check if activities are being received
-
-    // Exclude user actions, subscription, and billing activities
-    const filteredActivities = activities.filter(activity =>
-        !["user-action", "subscription", "billing"].includes(activity?.type)
-    );
+        // Cleanup function to unsubscribe from the listener
+        return () => {
+            if (typeof unsubscribe === "function") {
+                unsubscribe();
+            }
+        };
+    }, [currentUser, authLoading, organizationId]);
 
     // Helper function to determine icon based on activity type
     const getActivityIcon = (activity) => {
         if (!activity) return AlertCircle;
 
-        if (activity.type === "bug") return Bug;
-        if (activity.type === "test") return CheckSquare;
-
-        if (activity.action) {
-            if (activity.action.includes("fixed") || activity.action.includes("resolved")) {
+        // Activity types
+        switch (activity.type) {
+            case "bug":
+            case "defect":
+                return Bug;
+            case "test":
                 return CheckSquare;
-            }
-            if (activity.action.includes("test")) {
-                return FileCheck;
-            }
-            if (activity.action.includes("coverage")) {
-                return GitCommit;
-            }
-            if (activity.action.includes("deploy")) {
-                return Terminal;
-            }
-            if (activity.action.includes("PR") || activity.action.includes("merge")) {
-                return GitPullRequest;
-            }
-            if (activity.action.includes("code") || activity.action.includes("develop")) {
-                return Code;
-            }
+            case "team":
+                return UserPlus;
+            case "report":
+                return FileText;
+            case "integration":
+                return ExternalLink;
+            default:
+                // Activity actions
+                if (activity.action) {
+                    if (activity.action.includes("fixed") || activity.action.includes("resolved")) {
+                        return CheckSquare;
+                    }
+                    if (activity.action.includes("test")) {
+                        return FileCheck;
+                    }
+                    if (activity.action.includes("coverage")) {
+                        return GitCommit;
+                    }
+                    if (activity.action.includes("deploy")) {
+                        return Terminal;
+                    }
+                    if (activity.action.includes("PR") || activity.action.includes("merge")) {
+                        return GitPullRequest;
+                    }
+                    if (activity.action.includes("code") || activity.action.includes("develop")) {
+                        return Code;
+                    }
+                }
+                return Clock;
         }
-
-        return Clock;
     };
 
     // Helper function to determine icon color based on activity status
     const getIconColor = (activity) => {
         if (!activity) return "text-gray-500";
 
-        if (activity.status) {
-            const status = activity.status.toLowerCase();
-            if (["failed", "critical", "high"].includes(status)) {
-                return "text-red-500";
+        // Check for bug status
+        if (activity.type === "bug" || activity.type === "defect") {
+            if (activity.status) {
+                const status = activity.status.toLowerCase();
+                if (["failed", "critical", "high"].includes(status)) {
+                    return "text-red-500";
+                }
+                if (["passed", "resolved", "closed"].includes(status)) {
+                    return "text-green-500";
+                }
+                if (status === "in progress") {
+                    return "text-yellow-500";
+                }
+                if (status === "new") {
+                    return "text-blue-500";
+                }
             }
-            if (["passed", "resolved", "closed"].includes(status)) {
-                return "text-green-500";
-            }
-            if (status === "in progress") {
-                return "text-yellow-500";
-            }
-            if (status === "new") {
-                return "text-blue-500";
-            }
+            return "text-red-500";
         }
 
-        return activity.type === "bug" ? "text-red-500" : activity.type === "test" ? "text-green-500" : "text-blue-500";
+        // Color based on activity type
+        switch (activity.type) {
+            case "test":
+                return "text-green-500";
+            case "team":
+                return "text-purple-500";
+            case "report":
+                return "text-blue-500";
+            case "integration":
+                return "text-indigo-500";
+            default:
+                return "text-blue-500";
+        }
     };
 
     // Format timestamp to relative time
@@ -135,15 +213,27 @@ const ActivityFeed = () => {
     const getActivityDescription = (activity) => {
         if (!activity) return "";
 
-        if (activity.type === "bug") {
-            return `${activity.status} bug: ${activity.title}`;
+        // Format descriptions for different activity types
+        switch (activity.type) {
+            case "bug":
+            case "defect":
+                return `${activity.status || "New"} defect: ${activity.title}`;
+            
+            case "test":
+                return `Test ${activity.action || "run"} ${activity.status ? `(${activity.status})` : ""}: ${activity.title}`;
+            
+            case "team":
+                return activity.action || "Team activity";
+            
+            case "report":
+                return `Report ${activity.action || "generated"}: ${activity.title || ""}`;
+            
+            case "integration":
+                return `Integration: ${activity.action || activity.title || "API activity"}`;
+            
+            default:
+                return activity.action || activity.title || "Unknown activity";
         }
-
-        if (activity.type === "test") {
-            return `Test run ${activity.status.toLowerCase()}: ${activity.title}`;
-        }
-
-        return activity.action || activity.title || "Unknown activity";
     };
 
     // **Loading State (Skeleton)**
@@ -166,12 +256,48 @@ const ActivityFeed = () => {
         );
     }
 
+    // **Error States**
+    if (error === "permission") {
+        return (
+            <div className="text-center py-6 text-amber-500">
+                <Lock className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>Unable to access activity data</p>
+                <p className="text-sm text-gray-500">You don&apos;t have permission to view these activities.</p>
+                <p className="text-xs text-gray-400 mt-2">Please contact your administrator.</p>
+            </div>
+        );
+    }
+
+    if (error === "authentication") {
+        return (
+            <div className="text-center py-6 text-amber-500">
+                <AlertCircle className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>Authentication required</p>
+                <p className="text-sm text-gray-500">Please sign in to view activities.</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="text-center py-6 text-red-500">
+                <AlertCircle className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>Something went wrong</p>
+                <p className="text-sm text-gray-500">Unable to load activities at this time.</p>
+                <p className="text-xs text-gray-400 mt-2">Please try again later.</p>
+            </div>
+        );
+    }
+
     // **Empty State**
-    if (!Array.isArray(filteredActivities) || filteredActivities.length === 0) {
+    if (!Array.isArray(activities) || activities.length === 0) {
         return (
             <div className="text-center py-6 text-gray-500">
                 <Clock className="h-10 w-10 mx-auto mb-2 opacity-50" />
                 <p>No recent activities</p>
+                <p className="text-sm text-gray-400">
+                    {organizationId ? "No activities in this organization yet." : "You have no recent activities."}
+                </p>
             </div>
         );
     }
@@ -179,19 +305,22 @@ const ActivityFeed = () => {
     // **Activity Feed Render**
     return (
         <div className="space-y-4">
-            {filteredActivities.map((activity, index) => {
+            {activities.map((activity) => {
                 const Icon = getActivityIcon(activity);
                 const iconColor = getIconColor(activity);
                 const description = getActivityDescription(activity);
                 const time = formatTime(activity.timestamp);
 
                 return (
-                    <div key={index} className="flex items-start border-b pb-3 last:border-b-0 last:pb-0">
+                    <div key={activity.id} className="flex items-start border-b pb-3 last:border-b-0 last:pb-0">
                         <div className={`mr-3 ${iconColor}`}>
                             <Icon className="h-5 w-5" />
                         </div>
                         <div className="flex-1">
-                            <div className="font-medium">{activity.user || "Unknown User"}</div>
+                            <div className="font-medium">
+                                {activity.user || "Unknown User"}
+                                {activity.teamMember && ` → ${activity.teamMember}`}
+                            </div>
                             <div className="text-sm text-gray-600">{description}</div>
                             <div className="text-xs text-gray-500 mt-1">{time}</div>
                         </div>
