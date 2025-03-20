@@ -1,6 +1,6 @@
 import React from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import Skeleton from "react-loading-skeleton";
+import Skeleton from "../ui/Skeleton";
 
 export const BugStatusChart = ({ data, isLoading }) => {
     // Define consistent colors for bug statuses

@@ -1,5 +1,5 @@
-"use client"
-import React from "react";
+"use client";
+import React, { useEffect, useState } from "react";
 import {
     GitCommit,
     GitPullRequest,
@@ -11,23 +11,58 @@ import {
     Clock,
     Code
 } from "lucide-react";
+import { collection, getDocs, onSnapshot } from "firebase/firestore";
+import { db } from "../../config/firebase";
 
-const ActivityFeed = ({ activities, isLoading }) => {
+const ActivityFeed = () => {
+    const [activities, setActivities] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        // Fetch activities from Firestore
+        const fetchActivities = async () => {
+            try {
+                const querySnapshot = await getDocs(collection(db, "activities"));
+                const fetchedActivities = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setActivities(fetchedActivities);
+            } catch (error) {
+                console.error("Error fetching activities: ", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchActivities();
+
+        // Optional: Enable real-time updates using onSnapshot
+        const unsubscribe = onSnapshot(collection(db, "activities"), snapshot => {
+            const fetchedActivities = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setActivities(fetchedActivities);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    console.log("ActivityFeed Data:", activities); // Debugging: Check if activities are being received
+
+    // Exclude user actions, subscription, and billing activities
+    const filteredActivities = activities.filter(activity =>
+        !["user-action", "subscription", "billing"].includes(activity?.type)
+    );
+
     // Helper function to determine icon based on activity type
     const getActivityIcon = (activity) => {
         if (!activity) return AlertCircle;
 
-        // For bugs
-        if (activity.type === "bug") {
-            return Bug;
-        }
+        if (activity.type === "bug") return Bug;
+        if (activity.type === "test") return CheckSquare;
 
-        // For tests
-        if (activity.type === "test") {
-            return CheckSquare;
-        }
-
-        // For more specific activities if needed
         if (activity.action) {
             if (activity.action.includes("fixed") || activity.action.includes("resolved")) {
                 return CheckSquare;
@@ -49,7 +84,6 @@ const ActivityFeed = ({ activities, isLoading }) => {
             }
         }
 
-        // Default icon
         return Clock;
     };
 
@@ -59,10 +93,10 @@ const ActivityFeed = ({ activities, isLoading }) => {
 
         if (activity.status) {
             const status = activity.status.toLowerCase();
-            if (status === "failed" || status === "critical" || status === "high") {
+            if (["failed", "critical", "high"].includes(status)) {
                 return "text-red-500";
             }
-            if (status === "passed" || status === "resolved" || status === "closed") {
+            if (["passed", "resolved", "closed"].includes(status)) {
                 return "text-green-500";
             }
             if (status === "in progress") {
@@ -73,15 +107,7 @@ const ActivityFeed = ({ activities, isLoading }) => {
             }
         }
 
-        // Default colors based on activity type
-        if (activity.type === "bug") {
-            return "text-red-500";
-        }
-        if (activity.type === "test") {
-            return "text-green-500";
-        }
-
-        return "text-blue-500";
+        return activity.type === "bug" ? "text-red-500" : activity.type === "test" ? "text-green-500" : "text-blue-500";
     };
 
     // Format timestamp to relative time
@@ -90,23 +116,17 @@ const ActivityFeed = ({ activities, isLoading }) => {
 
         const now = new Date();
         const activityTime = timestamp instanceof Date ? timestamp : new Date(timestamp);
+        if (isNaN(activityTime)) return "Invalid date";
+
         const diffMs = now - activityTime;
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMins / 60);
         const diffDays = Math.floor(diffHours / 24);
 
-        if (diffMins < 1) {
-            return "Just now";
-        }
-        if (diffMins < 60) {
-            return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
-        }
-        if (diffHours < 24) {
-            return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
-        }
-        if (diffDays < 7) {
-            return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-        }
+        if (diffMins < 1) return "Just now";
+        if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+        if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
 
         return activityTime.toLocaleDateString();
     };
@@ -126,7 +146,7 @@ const ActivityFeed = ({ activities, isLoading }) => {
         return activity.action || activity.title || "Unknown activity";
     };
 
-    // Loading state
+    // **Loading State (Skeleton)**
     if (isLoading) {
         return (
             <div className="space-y-4">
@@ -146,8 +166,8 @@ const ActivityFeed = ({ activities, isLoading }) => {
         );
     }
 
-    // If no activities, show empty state
-    if (!activities || activities.length === 0) {
+    // **Empty State**
+    if (!Array.isArray(filteredActivities) || filteredActivities.length === 0) {
         return (
             <div className="text-center py-6 text-gray-500">
                 <Clock className="h-10 w-10 mx-auto mb-2 opacity-50" />
@@ -156,9 +176,10 @@ const ActivityFeed = ({ activities, isLoading }) => {
         );
     }
 
+    // **Activity Feed Render**
     return (
         <div className="space-y-4">
-            {activities.map((activity, index) => {
+            {filteredActivities.map((activity, index) => {
                 const Icon = getActivityIcon(activity);
                 const iconColor = getIconColor(activity);
                 const description = getActivityDescription(activity);
@@ -170,7 +191,7 @@ const ActivityFeed = ({ activities, isLoading }) => {
                             <Icon className="h-5 w-5" />
                         </div>
                         <div className="flex-1">
-                            <div className="font-medium">{activity.user}</div>
+                            <div className="font-medium">{activity.user || "Unknown User"}</div>
                             <div className="text-sm text-gray-600">{description}</div>
                             <div className="text-xs text-gray-500 mt-1">{time}</div>
                         </div>

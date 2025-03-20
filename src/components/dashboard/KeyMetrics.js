@@ -1,6 +1,6 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
-import Skeleton from "react-loading-skeleton";
+import Skeleton  from "../ui/Skeleton";
 import { Bug, ClipboardCheck, AlertCircle, CheckCircle } from 'lucide-react';
 
 export const KeyMetrics = ({ dashboardData, isLoading }) => {
