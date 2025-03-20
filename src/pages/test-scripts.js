@@ -1,88 +1,269 @@
-"use client";
-import React, { useState } from "react";
-import {  CheckCircle, XCircle, Loader2, Upload } from "lucide-react";
-import OpenAI from "openai";
+import React, { useState, useEffect } from 'react';
+import TestCaseList from "../components/test-case/TestCaseList"
+import TestCaseForm from "../components/test-case/TestCaseForm";
+import ImportDocument from "../components/test-case/ImportDocument";
+import FilterSection from '../components/test-case/FilterSection';
+import AIProcessingModal from '../components/test-case/AIProcessingModal';
+import ReportExportModal from '../components/test-case/ReportExportModal';
 
-const TestScriptPage = () => {
+const TestCaseManagement = () => {
     const [testCases, setTestCases] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [ setFile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [selectedTestCase, setSelectedTestCase] = useState(null);
+    const [showForm, setShowForm] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [showAIProcessingModal, setShowAIProcessingModal] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [filters, setFilters] = useState({
+        priority: [],
+        module: [],
+        status: [],
+        searchTerm: '',
+    });
 
-    // OpenAI API key (store securely in environment variables)
-    const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    // Fetch test cases on component mount
+    useEffect(() => {
+        fetchTestCases();
+    }, []);
 
-    // Function to handle file upload and AI processing
-    const handleFileUpload = async (event) => {
-        const uploadedFile = event.target.files[0];
-        setFile(uploadedFile);
+    const fetchTestCases = async () => {
         setLoading(true);
-
-        const reader = new FileReader();
-        reader.readAsText(uploadedFile);
-        reader.onload = async () => {
-            const fileText = reader.result;
-            const generatedTestCases = await generateTestCases(fileText);
-            setTestCases(generatedTestCases);
-            setLoading(false);
-        };
-    };
-
-    // Function to generate test cases using OpenAI
-    const generateTestCases = async (text) => {
         try {
-            const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-            const response = await openai.chat.completions.create({
-                model: "gpt-4",
-                messages: [{ role: "system", content: "Extract structured test cases from the following requirements:" },
-                { role: "user", content: text }],
-                temperature: 0.3,
-            });
-
-            const parsedResponse = JSON.parse(response.choices[0].message.content);
-            return parsedResponse.testCases || [];
+            // Simulated API call
+            setTimeout(() => {
+                const mockTestCases = [
+                    {
+                        id: 1,
+                        title: 'User Login Functionality',
+                        description: 'Verify user can login with valid credentials',
+                        priority: 'High',
+                        module: 'Authentication',
+                        status: 'Active',
+                        createdBy: 'John Doe',
+                        createdAt: '2025-03-15',
+                        steps: [
+                            { id: 1, description: 'Navigate to login page', expectedResult: 'Login page is displayed' },
+                            { id: 2, description: 'Enter valid username and password', expectedResult: 'Credentials are accepted' },
+                            { id: 3, description: 'Click login button', expectedResult: 'User is redirected to dashboard' }
+                        ],
+                        executionStatus: 'Not Run',
+                        version: '1.0',
+                    },
+                    {
+                        id: 2,
+                        title: 'Password Reset',
+                        description: 'Verify user can reset password',
+                        priority: 'Medium',
+                        module: 'Authentication',
+                        status: 'Active',
+                        createdBy: 'Jane Smith',
+                        createdAt: '2025-03-14',
+                        steps: [
+                            { id: 1, description: 'Navigate to login page', expectedResult: 'Login page is displayed' },
+                            { id: 2, description: 'Click "Forgot Password"', expectedResult: 'Password reset page is displayed' },
+                            { id: 3, description: 'Enter email address', expectedResult: 'Email is accepted' },
+                            { id: 4, description: 'Click reset button', expectedResult: 'Password reset email is sent' }
+                        ],
+                        executionStatus: 'Passed',
+                        version: '1.0',
+                    }
+                ];
+                setTestCases(mockTestCases);
+                setLoading(false);
+            }, 1500);
         } catch (error) {
-            console.error("Error generating test cases:", error);
-            return [];
+            console.error('Error fetching test cases:', error);
+            setLoading(false);
         }
     };
 
+    const handleCreateTestCase = () => {
+        setSelectedTestCase(null);
+        setShowForm(true);
+    };
+
+    const handleImportDocument = () => {
+        setShowImportModal(true);
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handleDocumentImported = (_document) => {
+        setShowImportModal(false);
+        setShowAIProcessingModal(true);
+
+        // Simulate AI processing
+        setTimeout(() => {
+            const newTestCases = [
+                {
+                    id: testCases.length + 1,
+                    title: 'Document Upload Functionality',
+                    description: 'Verify user can upload documents',
+                    priority: 'Medium',
+                    module: 'Document Management',
+                    status: 'Draft',
+                    createdBy: 'AI Generator',
+                    createdAt: new Date().toISOString().split('T')[0],
+                    steps: [
+                        { id: 1, description: 'Navigate to document upload page', expectedResult: 'Upload page is displayed' },
+                        { id: 2, description: 'Select document from file system', expectedResult: 'Document is selected' },
+                        { id: 3, description: 'Click upload button', expectedResult: 'Document is uploaded successfully' }
+                    ],
+                    executionStatus: 'Not Run',
+                    version: '1.0',
+                },
+                {
+                    id: testCases.length + 2,
+                    title: 'Document Validation',
+                    description: 'Verify document validation works correctly',
+                    priority: 'High',
+                    module: 'Document Management',
+                    status: 'Draft',
+                    createdBy: 'AI Generator',
+                    createdAt: new Date().toISOString().split('T')[0],
+                    steps: [
+                        { id: 1, description: 'Try to upload invalid document format', expectedResult: 'Error message is displayed' },
+                        { id: 2, description: 'Try to upload document exceeding size limit', expectedResult: 'Error message is displayed' }
+                    ],
+                    executionStatus: 'Not Run',
+                    version: '1.0',
+                }
+            ];
+
+            setTestCases([...testCases, ...newTestCases]);
+            setShowAIProcessingModal(false);
+        }, 3000);
+    };
+
+    const handleSaveTestCase = (testCase) => {
+        if (testCase.id) {
+            // Update existing test case
+            setTestCases(testCases.map(tc => tc.id === testCase.id ? testCase : tc));
+        } else {
+            // Add new test case
+            const newTestCase = {
+                ...testCase,
+                id: testCases.length + 1,
+                createdAt: new Date().toISOString().split('T')[0],
+                executionStatus: 'Not Run',
+                version: '1.0',
+            };
+            setTestCases([...testCases, newTestCase]);
+        }
+        setShowForm(false);
+    };
+
+    const handleEditTestCase = (testCase) => {
+        setSelectedTestCase(testCase);
+        setShowForm(true);
+    };
+
+    const handleDeleteTestCase = (id) => {
+        setTestCases(testCases.filter(tc => tc.id !== id));
+    };
+
+    const handleFilterChange = (newFilters) => {
+        setFilters(newFilters);
+    };
+
+    const handleExportReport = () => {
+        setShowExportModal(true);
+    };
+
+    const filteredTestCases = testCases.filter(tc => {
+        const matchesPriority = filters.priority.length === 0 || filters.priority.includes(tc.priority);
+        const matchesModule = filters.module.length === 0 || filters.module.includes(tc.module);
+        const matchesStatus = filters.status.length === 0 || filters.status.includes(tc.status);
+        const matchesSearch = !filters.searchTerm ||
+            tc.title.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+            tc.description.toLowerCase().includes(filters.searchTerm.toLowerCase());
+
+        return matchesPriority && matchesModule && matchesStatus && matchesSearch;
+    });
+
     return (
-        <div className="p-6 bg-white shadow-lg rounded-lg">
-            <h2 className="text-xl font-bold mb-4">Test Case Management</h2>
+        <div className="flex flex-col h-screen">
+            <div className="flex-grow p-6 shadow">
+                <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-3xl font-bold text-gray-800">Test Cases</h1>
+                    
+                    {/* Action Buttons in the header section */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleImportDocument}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                        >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                            </svg>
+                            Import
+                        </button>
+                        <button
+                            onClick={handleExportReport}
+                            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center"
+                        >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            Export
+                        </button>
+                        <button
+                            onClick={handleCreateTestCase}
+                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"
+                        >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            New Test Case
+                        </button>
+                    </div>
+                </div>
 
-            {/* File Upload */}
-            <label className="flex items-center gap-2 cursor-pointer text-blue-500 hover:underline">
-                <Upload className="h-5 w-5" />
-                <input type="file" accept=".txt,.docx,.pdf" className="hidden" onChange={handleFileUpload} />
-                Import Requirement Document
-            </label>
+                {/* Filter Section without action buttons */}
+                <FilterSection
+                    testCases={testCases}
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                />
 
-            {loading && <Loader2 className="animate-spin mt-4" />}
-
-            {/* Test Case List */}
-            <div className="mt-6 space-y-4">
-                {testCases.length > 0 ? (
-                    testCases.map((testCase, index) => (
-                        <div key={index} className="p-4 border rounded-lg">
-                            <h3 className="font-semibold">{testCase.title}</h3>
-                            <p><strong>Steps:</strong> {testCase.steps}</p>
-                            <p><strong>Expected Outcome:</strong> {testCase.expectedOutcome}</p>
-                            <div className="flex gap-2 mt-2">
-                                <button className="flex items-center gap-1 text-green-500">
-                                    <CheckCircle className="h-4 w-4" /> Pass
-                                </button>
-                                <button className="flex items-center gap-1 text-red-500">
-                                    <XCircle className="h-4 w-4" /> Fail
-                                </button>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-gray-500">No test cases available.</p>
-                )}
+                <div className="grid grid-cols-1 gap-6">
+                    <div className="col-span-1">
+                        <TestCaseList
+                            testCases={filteredTestCases}
+                            loading={loading}
+                            onEdit={handleEditTestCase}
+                            onDelete={handleDeleteTestCase}
+                        />
+                    </div>
+                </div>
             </div>
+
+            {showForm && (
+                <TestCaseForm
+                    testCase={selectedTestCase}
+                    onSave={handleSaveTestCase}
+                    onCancel={() => setShowForm(false)}
+                />
+            )}
+
+            {showImportModal && (
+                <ImportDocument
+                    onImport={handleDocumentImported}
+                    onCancel={() => setShowImportModal(false)}
+                />
+            )}
+
+            {showAIProcessingModal && (
+                <AIProcessingModal />
+            )}
+
+            {showExportModal && (
+                <ReportExportModal
+                    testCases={filteredTestCases}
+                    onClose={() => setShowExportModal(false)}
+                />
+            )}
         </div>
     );
 };
 
-export default TestScriptPage;
+export default TestCaseManagement;
