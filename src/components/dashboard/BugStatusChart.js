@@ -51,7 +51,7 @@ export const BugStatusChart = ({ data, isLoading }) => {
                         />
                     ))}
                 </Pie>
-                <Tooltip 
+                <Tooltip
                     formatter={(value, name) => [`${value} bugs`, name]}
                     separator=": "
                 />

@@ -167,14 +167,14 @@ const BugTracker = () => {
 
     return (
         <div className="p-4 md:p-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-                <h2 className="text-2xl font-semibold mb-4 md:mb-0 flex items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 mt-[-1rem]">
+                <h1 className="text-3xl font-semibold mb-4 md:mb-0 flex items-center">
                     <Bug className="h-6 w-6 mr-2" />
                     Bug Tracker
                     <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
                         {bugs.length} {bugs.length === 1 ? "bug" : "bugs"}
                     </span>
-                </h2>
+                </h1>
 
                 <div className="flex flex-wrap gap-2">
                     <div className="relative group">

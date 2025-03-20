@@ -80,7 +80,7 @@ export const KeyMetrics = ({ dashboardData, isLoading }) => {
     return (
         <>
             {metricsData.map((metric, index) => (
-                <Card key={index} className="p-6">
+                <Card key={index} className="p-6 rounded border-0">
                     <div className="flex items-center space-x-4">
                         <div className={`p-3 rounded-full ${metric.bgColor}`}>
                             {metric.icon}
