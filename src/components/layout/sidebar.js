@@ -40,7 +40,7 @@ const Sidebar = ({ setActivePage }) => {
         }
         
         setMounted(true);
-    }, []);
+    }, [setActivePage]);
 
     // Separate effect for auth handling to avoid conflicts
     useEffect(() => {

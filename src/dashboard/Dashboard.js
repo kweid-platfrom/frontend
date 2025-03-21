@@ -528,6 +528,7 @@ const Dashboard = () => {
     }, [activePage, isLoading, fetchDashboardData]);
 
     return (
+        <TestCaseMetricsProvider>
         <div className="flex h-screen bg-gray-50">
             <Sidebar activePage={activePage} setActivePage={setActivePage} />
 
@@ -604,6 +605,7 @@ const Dashboard = () => {
                 </TestCaseMetricsProvider>
             </div>
         </div>
+        </TestCaseMetricsProvider>
     );
 };
 
