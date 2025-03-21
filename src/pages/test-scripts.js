@@ -212,14 +212,14 @@ const TestCaseManagement = () => {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleImportDocument}
-                            className="px-4 py-2 bg-[#2D3142] text-white rounded hover:bg-[#1d1f27] flex items-center"
+                            className="px-4 py-2 bg-[#EAEBF1] text-[#2D3142] rounded hover:bg-[#E1E2E6] flex items-center"
                         >
                             <ArrowDownCircle className="w-4 h-4 mr-2" />
                             Import
                         </button>
                         <button
                             onClick={handleExportReport}
-                            className="px-4 py-2 bg-[#FF64BD] text-white rounded hover:bg-[#834468] flex items-center"
+                            className="px-4 py-2 border-gray-700 text-[#2D3142] rounded bg-[    ] hover:bg-[#E1E2E6] flex items-center"
                         >
                             <FileUp className="w-4 h-4 mr-2" />
                             Export

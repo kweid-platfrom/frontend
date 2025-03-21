@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { db } from "../config/firebase";
 import { collection, query, orderBy, getDocs, doc, updateDoc } from "firebase/firestore";
-import { Bug, AlertCircle, CheckCircle, Clock, Filter, ChevronDown, User } from "lucide-react";
+import { Bug, AlertCircle, Clock, Filter, ChevronDown,  } from "lucide-react";
+import BugDetailsOverlay from "../components/bug-report/BugDetails";
+import BugGroup from '../components/bug-report/BugGroup';
 
 const BugTracker = () => {
     const [bugs, setBugs] = useState([]);
@@ -15,8 +17,10 @@ const BugTracker = () => {
         category: "all",
     });
     const [expandedBug, setExpandedBug] = useState(null);
+    const [collapsedGroups, setCollapsedGroups] = useState({});
     const [sortBy, setSortBy] = useState("timestamp");
     const [sortDirection, setSortDirection] = useState("desc");
+    const [detailsOverlay, setDetailsOverlay] = useState(null);
 
     const fetchBugs = useCallback(async () => {
         setIsLoading(true);
@@ -110,30 +114,11 @@ const BugTracker = () => {
         }
     };
 
-    const getSeverityColor = (severity) => {
-        switch (severity) {
-            case "High":
-                return "text-red-600 bg-red-50";
-            case "Medium":
-                return "text-orange-600 bg-orange-50";
-            case "Low":
-                return "text-green-600 bg-green-50";
-            default:
-                return "text-gray-600 bg-gray-50";
-        }
-    };
-
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case "New":
-                return <AlertCircle className="h-4 w-4 text-blue-500" />;
-            case "In Progress":
-                return <Clock className="h-4 w-4 text-orange-500" />;
-            case "Resolved":
-                return <CheckCircle className="h-4 w-4 text-green-500" />;
-            default:
-                return <Bug className="h-4 w-4 text-gray-500" />;
-        }
+    const toggleGroupCollapse = (groupName) => {
+        setCollapsedGroups(prev => ({
+            ...prev,
+            [groupName]: !prev[groupName]
+        }));
     };
 
     const toggleSort = (field) => {
@@ -143,6 +128,31 @@ const BugTracker = () => {
             setSortBy(field);
             setSortDirection("desc");
         }
+    };
+
+    // Generate a deterministic color based on group name
+    const getGroupColor = (groupName) => {
+        const colors = [
+            "bg-blue-500", "bg-green-500", "bg-purple-500", 
+            "bg-red-500", "bg-yellow-500", "bg-pink-500",
+            "bg-indigo-500", "bg-teal-500", "bg-orange-500"
+        ];
+        
+        // Simple hash function to get consistent color from group name
+        let hash = 0;
+        for (let i = 0; i < groupName.length; i++) {
+            hash = groupName.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        
+        return colors[Math.abs(hash) % colors.length];
+    };
+
+    const openDetailsOverlay = (bug) => {
+        setDetailsOverlay(bug);
+    };
+
+    const closeDetailsOverlay = () => {
+        setDetailsOverlay(null);
     };
 
     if (isLoading) {
@@ -166,7 +176,7 @@ const BugTracker = () => {
     }
 
     return (
-        <div className="p-4 md:p-8">
+        <div className="p-4 md:p-8 relative">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 mt-[-1rem]">
                 <h1 className="text-3xl font-semibold mb-4 md:mb-0 flex items-center">
                     <Bug className="h-6 w-6 mr-2" />
@@ -245,121 +255,29 @@ const BugTracker = () => {
                 </div>
             ) : (
                 Object.keys(groupedBugs).map((monthYear) => (
-                    <div key={monthYear} className="mb-8">
-                        <h3 className="text-lg font-medium text-gray-700 border-b pb-1 mb-4">{monthYear}</h3>
-                        <div className="space-y-3">
-                            {groupedBugs[monthYear].map((bug) => (
-                                <div
-                                    key={bug.id}
-                                    className="border rounded-md overflow-hidden bg-white hover:shadow-md transition"
-                                >
-                                    <div
-                                        className="p-4 cursor-pointer flex flex-wrap md:flex-nowrap justify-between items-center"
-                                        onClick={() => setExpandedBug(expandedBug === bug.id ? null : bug.id)}
-                                    >
-                                        <div className="flex items-start space-x-3 w-full md:w-auto mb-3 md:mb-0">
-                                            {getStatusIcon(bug.status)}
-                                            <div>
-                                                <h4 className="font-medium text-gray-900">{bug.title}</h4>
-                                                <p className="text-sm text-gray-500 truncate max-w-md">
-                                                    {bug.description?.substring(0, 100)}
-                                                    {bug.description?.length > 100 ? "..." : ""}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
-                                            <span className={`text-xs px-2 py-1 rounded-full ${getSeverityColor(bug.severity)}`}>
-                                                {bug.severity}
-                                            </span>
-
-                                            <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">
-                                                {bug.category}
-                                            </span>
-
-                                            {bug.assignedTo && (
-                                                <span className="text-xs flex items-center bg-blue-50 text-blue-600 px-2 py-1 rounded-full">
-                                                    <User className="h-3 w-3 mr-1" />
-                                                    {bug.assignedTo}
-                                                </span>
-                                            )}
-
-                                            <span className="text-xs text-gray-500">
-                                                {bug.timestamp.toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {expandedBug === bug.id && (
-                                        <div className="border-t p-4 bg-gray-50">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                                <div>
-                                                    <h5 className="text-sm font-medium mb-1 text-gray-700">Description</h5>
-                                                    <p className="text-sm text-gray-600 whitespace-pre-line">{bug.description}</p>
-                                                </div>
-
-                                                <div>
-                                                    <h5 className="text-sm font-medium mb-1 text-gray-700">Steps to Reproduce</h5>
-                                                    <p className="text-sm text-gray-600 whitespace-pre-line">{bug.stepsToReproduce}</p>
-                                                </div>
-                                            </div>
-
-                                            {bug.attachments && bug.attachments.length > 0 && (
-                                                <div className="mb-4">
-                                                    <h5 className="text-sm font-medium mb-2 text-gray-700">Attachments</h5>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {bug.attachments.map((file, index) => (
-                                                            <a
-                                                                key={index}
-                                                                href={file.url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-xs bg-white border rounded px-2 py-1 flex items-center hover:bg-gray-50"
-                                                            >
-                                                                {file.name}
-                                                            </a>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="flex flex-wrap gap-2 mt-4 border-t pt-4">
-                                                <button
-                                                    className={`px-3 py-1 text-xs rounded ${bug.status === "New" ? "bg-blue-100 text-blue-700" : "bg-gray-100 hover:bg-blue-50"
-                                                        }`}
-                                                    onClick={() => updateBugStatus(bug.id, "New")}
-                                                >
-                                                    New
-                                                </button>
-                                                <button
-                                                    className={`px-3 py-1 text-xs rounded ${bug.status === "In Progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 hover:bg-orange-50"
-                                                        }`}
-                                                    onClick={() => updateBugStatus(bug.id, "In Progress")}
-                                                >
-                                                    In Progress
-                                                </button>
-                                                <button
-                                                    className={`px-3 py-1 text-xs rounded ${bug.status === "Resolved" ? "bg-green-100 text-green-700" : "bg-gray-100 hover:bg-green-50"
-                                                        }`}
-                                                    onClick={() => updateBugStatus(bug.id, "Resolved")}
-                                                >
-                                                    Resolved
-                                                </button>
-                                                <button
-                                                    className={`px-3 py-1 text-xs rounded ${bug.status === "Closed" ? "bg-gray-700 text-white" : "bg-gray-100 hover:bg-gray-200"
-                                                        }`}
-                                                    onClick={() => updateBugStatus(bug.id, "Closed")}
-                                                >
-                                                    Closed
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <BugGroup
+                        key={monthYear}
+                        groupName={monthYear}
+                        bugs={groupedBugs[monthYear]}
+                        color={getGroupColor(monthYear)}
+                        isCollapsed={collapsedGroups[monthYear] || false}
+                        toggleCollapse={() => toggleGroupCollapse(monthYear)}
+                        expandedBug={expandedBug}
+                        setExpandedBug={setExpandedBug}
+                        updateBugStatus={updateBugStatus}
+                        openDetailsOverlay={openDetailsOverlay}
+                    />
                 ))
+            )}
+
+            {/* Bug Details Overlay */}
+            {detailsOverlay && (
+                <BugDetailsOverlay
+                    bug={detailsOverlay}
+                    onClose={closeDetailsOverlay}
+                    updateBugStatus={updateBugStatus}
+                    setBugs={setBugs}
+                />
             )}
         </div>
     );
