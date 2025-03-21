@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { X, AlertCircle, CheckCircle, Clock, User, Edit, Send } from "lucide-react";
 import { doc, updateDoc, arrayUnion, Timestamp } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { db } from "../../config/firebase";
 
 const BugDetailsOverlay = ({ bug, onClose, updateBugStatus, setBugs }) => {
     const [activeTab, setActiveTab] = useState("details");
