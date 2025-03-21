@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Bug, Upload, File } from "lucide-react";
 import { db, storage } from "../config/firebase";
-import { collection, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
+import { collection, addDoc, getDocs, Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const BugReportButton = ({ className = "" }) => {
@@ -102,10 +102,12 @@ const BugReportButton = ({ className = "" }) => {
                 stepsToReproduce,
                 severity,
                 assignedTo,
+                createdBy: user.uid,
                 attachments: uploadedFiles,
                 status: "New",
-                timestamp: serverTimestamp(),
+                createdAt: Timestamp.now()
             });
+            await addBug(bugData);
 
             // Reset form and close modal
             setError("");

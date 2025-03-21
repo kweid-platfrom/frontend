@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { db } from "../config/firebase";
 import { collection, query, orderBy, getDocs, doc, updateDoc } from "firebase/firestore";
 import { Bug, AlertCircle, Clock, Filter, ChevronDown,  } from "lucide-react";
-import BugDetailsOverlay from "../components/bug-report/BugDetails";
 import BugGroup from '../components/bug-report/BugGroup';
 
 const BugTracker = () => {
@@ -20,7 +19,6 @@ const BugTracker = () => {
     const [collapsedGroups, setCollapsedGroups] = useState({});
     const [sortBy, setSortBy] = useState("timestamp");
     const [sortDirection, setSortDirection] = useState("desc");
-    const [detailsOverlay, setDetailsOverlay] = useState(null);
 
     const fetchBugs = useCallback(async () => {
         setIsLoading(true);
@@ -151,10 +149,6 @@ const BugTracker = () => {
         setDetailsOverlay(bug);
     };
 
-    const closeDetailsOverlay = () => {
-        setDetailsOverlay(null);
-    };
-
     if (isLoading) {
         return (
             <div className="p-8 flex justify-center">
@@ -270,15 +264,6 @@ const BugTracker = () => {
                 ))
             )}
 
-            {/* Bug Details Overlay */}
-            {detailsOverlay && (
-                <BugDetailsOverlay
-                    bug={detailsOverlay}
-                    onClose={closeDetailsOverlay}
-                    updateBugStatus={updateBugStatus}
-                    setBugs={setBugs}
-                />
-            )}
         </div>
     );
 };

@@ -1,165 +1,183 @@
-import React from "react";
-import { Bug, AlertCircle, CheckCircle, Clock, Info } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { ChevronDown, ChevronRight, Link } from "lucide-react"; // Added Link import
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "../../config/firebase";
+import BugItemDetails from "../bug-report/BugDetails";
 
-const BugItem = ({ 
-    bug, 
-    isSelected, 
-    toggleSelection, 
-    isExpanded, 
-    toggleExpand, 
+const BugItem = ({
+    bug,
+    isSelected,
+    toggleSelection,
+    isExpanded,
+    toggleExpand,
     updateBugStatus,
-    openDetailsOverlay
+    teamMembers
 }) => {
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case "New":
-                return <AlertCircle className="h-4 w-4 text-blue-500" />;
-            case "In Progress":
-                return <Clock className="h-4 w-4 text-orange-500" />;
-            case "Resolved":
-                return <CheckCircle className="h-4 w-4 text-green-500" />;
-            default:
-                return <Bug className="h-4 w-4 text-gray-500" />;
-        }
-    };
+    const [loading, setLoading] = useState(false);
+    const [bugData, setBugData] = useState(bug);
+
+    // Set up real-time listener for bug data
+    useEffect(() => {
+        const bugRef = doc(db, "bugReports", bug.id);
+        const unsubscribe = onSnapshot(bugRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const updatedBug = { id: snapshot.id, ...snapshot.data() };
+                setBugData(updatedBug);
+            }
+        }, (error) => {
+            console.error("Error listening to bug updates:", error);
+        });
+
+        // Clean up the listener on component unmount
+        return () => unsubscribe();
+    }, [bug.id]);
 
     const getSeverityColor = (severity) => {
         switch (severity) {
+            case "Critical":
+                return "text-red-700 bg-red-100";
             case "High":
-                return "text-red-600 bg-red-50";
+                return "text-orange-700 bg-orange-100";
             case "Medium":
-                return "text-orange-600 bg-orange-50";
+                return "text-yellow-700 bg-yellow-100";
             case "Low":
-                return "text-green-600 bg-green-50";
+                return "text-green-700 bg-green-100";
             default:
-                return "text-gray-600 bg-gray-50";
+                return "text-gray-700 bg-gray-100";
         }
     };
 
-    const handleInfoClick = (e) => {
-        e.stopPropagation();
-        openDetailsOverlay();
+    const getPriorityFromSeverity = (severity) => {
+        switch (severity) {
+            case "Critical":
+                return { level: "Critical", color: "text-red-700 bg-red-100" };
+            case "High":
+                return { level: "P1", color: "text-orange-700 bg-orange-100" };
+            case "Medium":
+                return { level: "P2", color: "text-yellow-700 bg-yellow-100" };
+            case "Low":
+                return { level: "P3", color: "text-green-700 bg-green-100" };
+            default:
+                return { level: "P4", color: "text-gray-700 bg-gray-100" };
+        }
     };
 
+    const getStatusColor = (status) => {
+        switch (status) {
+            case "New":
+                return "text-blue-700 bg-blue-100";
+            case "In Progress":
+                return "text-purple-700 bg-purple-100";
+            case "Blocked":
+                return "text-red-700 bg-red-100";
+            case "Resolved":
+                return "text-green-700 bg-green-100";
+            case "Closed":
+                return "text-gray-700 bg-gray-100";
+            default:
+                return "text-gray-700 bg-gray-100";
+        }
+    };
+
+    // Format date for display
+    const formatDate = (timestamp) => {
+        if (!timestamp) return "N/A";
+        if (typeof timestamp === 'object' && timestamp.seconds) {
+            return new Date(timestamp.seconds * 1000).toLocaleDateString();
+        }
+        return timestamp;
+    };
+
+    const priority = getPriorityFromSeverity(bugData.severity || "Low");
+
     return (
-        <div className="border-b hover:bg-gray-50 transition-colors">
-            <div className="p-3 flex items-center">
-                <div className="w-10 flex justify-center">
-                    <input 
-                        type="checkbox" 
-                        checked={isSelected}
-                        onChange={toggleSelection}
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded"
+        <>
+        <tr className={`hover:bg-gray-50 text-xs ${loading ? "opacity-50" : ""}`}>
+            <td className="p-3">
+                <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={isSelected}
+                    onChange={toggleSelection}
+                    onClick={(e) => e.stopPropagation()}
+                    disabled={loading}
+                />
+            </td>
+            <td className="px-4 py-3 cursor-pointer" onClick={toggleExpand}>
+                <div className="flex items-center">
+                    {isExpanded ? 
+                        <ChevronDown className="h-4 w-4 mr-2" /> : 
+                        <ChevronRight className="h-4 w-4 mr-2" />
+                    }
+                    <span className="truncate max-w-xs">{bugData.title}</span>
+                </div>
+            </td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.id.slice(0, 8)}</td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.category}</td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.assignedTo || "Unassigned"}</td>
+            <td className="px-4 py-3">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(bugData.status)}`}>
+                    {bugData.status}
+                </span>
+            </td>
+            <td className="px-4 py-3">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(bugData.severity)}`}>
+                    {bugData.severity}
+                </span>
+            </td>
+            <td className="px-4 py-3">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priority.color}`}>
+                    {priority.level}
+                </span>
+            </td>
+            
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.epicName || "N/A"}</td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.testCaseName || "N/A"}</td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.testStatus || "N/A"}</td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.dueDate ? formatDate(bugData.dueDate) : "N/A"}</td>
+            <td className="px-4 py-3">
+                {bugData.isAutomated ? 
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium text-green-700 bg-green-100">Yes</span> :
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-700 bg-gray-100">No</span>
+                }
+            </td>
+            <td className="px-4 py-3 text-xs text-gray-700">
+                {bugData.isAutomated && bugData.scriptLink && (
+                    <a 
+                        href={bugData.scriptLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline"
+                    >
+                        <Link className="h-4 w-4 inline" />
+                    </a>
+                )}
+            </td>
+            <td className="px-4 py-3 text-xs text-gray-700">{bugData.reportedBy || "System"}</td>
+            <td className="px-4 py-3 text-xs text-gray-700">{formatDate(bugData.createdAt) || "N/A"}</td>
+        </tr>
+
+        {/* Expanded details as a separate row */}
+        {isExpanded && (
+            <tr className="w-full">
+                <td colSpan="16" className="p-0">
+                    <BugItemDetails 
+                        bug={bugData}
+                        teamMembers={teamMembers}
+                        updateBugStatus={(status) => {
+                            setLoading(true);
+                            updateBugStatus(bugData.id, status)
+                                .finally(() => setLoading(false));
+                        }}
+                        getSeverityColor={getSeverityColor}
+                        getStatusColor={getStatusColor}
+                        getPriorityFromSeverity={getPriorityFromSeverity}
+                        formatDate={formatDate}
                     />
-                </div>
-                <div 
-                    className="flex-grow grid grid-cols-12 gap-2 items-center cursor-pointer"
-                    onClick={toggleExpand}
-                >
-                    <div className="col-span-5 flex items-center">
-                        <button 
-                            className="mr-2 p-1 rounded-full hover:bg-gray-200"
-                            onClick={handleInfoClick}
-                        >
-                            <Info className="h-4 w-4 text-gray-500" />
-                        </button>
-                        <div>
-                            <h4 className="font-medium text-gray-900 text-sm">{bug.title}</h4>
-                            <p className="text-xs text-gray-500 truncate max-w-md">
-                                {bug.description?.substring(0, 60)}
-                                {bug.description?.length > 60 ? "..." : ""}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="col-span-2 flex items-center">
-                        <span className="flex items-center text-xs py-1 px-2 rounded-full bg-gray-100">
-                            {getStatusIcon(bug.status)}
-                            <span className="ml-1">{bug.status}</span>
-                        </span>
-                    </div>
-                    <div className="col-span-2">
-                        <span className={`text-xs px-2 py-1 rounded-full ${getSeverityColor(bug.severity)}`}>
-                            {bug.severity}
-                        </span>
-                    </div>
-                    <div className="col-span-2">
-                        <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">
-                            {bug.category}
-                        </span>
-                    </div>
-                    <div className="col-span-1 text-xs text-gray-500">
-                        {bug.timestamp.toLocaleDateString()}
-                    </div>
-                </div>
-            </div>
-
-            {isExpanded && (
-                <div className="border-t p-4 bg-gray-50">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <h5 className="text-sm font-medium mb-1 text-gray-700">Description</h5>
-                            <p className="text-sm text-gray-600 whitespace-pre-line">{bug.description}</p>
-                        </div>
-
-                        <div>
-                            <h5 className="text-sm font-medium mb-1 text-gray-700">Steps to Reproduce</h5>
-                            <p className="text-sm text-gray-600 whitespace-pre-line">{bug.stepsToReproduce}</p>
-                        </div>
-                    </div>
-
-                    {bug.attachments && bug.attachments.length > 0 && (
-                        <div className="mb-4">
-                            <h5 className="text-sm font-medium mb-2 text-gray-700">Attachments</h5>
-                            <div className="flex flex-wrap gap-2">
-                                {bug.attachments.map((file, index) => (
-                                    <a
-                                        key={index}
-                                        href={file.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs bg-white border rounded px-2 py-1 flex items-center hover:bg-gray-50"
-                                    >
-                                        {file.name}
-                                    </a>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-2 mt-4 border-t pt-4">
-                        <button
-                            className={`px-3 py-1 text-xs rounded ${bug.status === "New" ? "bg-blue-100 text-blue-700" : "bg-gray-100 hover:bg-blue-50"
-                                }`}
-                            onClick={() => updateBugStatus(bug.id, "New")}
-                        >
-                            New
-                        </button>
-                        <button
-                            className={`px-3 py-1 text-xs rounded ${bug.status === "In Progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 hover:bg-orange-50"
-                                }`}
-                            onClick={() => updateBugStatus(bug.id, "In Progress")}
-                        >
-                            In Progress
-                        </button>
-                        <button
-                            className={`px-3 py-1 text-xs rounded ${bug.status === "Resolved" ? "bg-green-100 text-green-700" : "bg-gray-100 hover:bg-green-50"
-                                }`}
-                            onClick={() => updateBugStatus(bug.id, "Resolved")}
-                        >
-                            Resolved
-                        </button>
-                        <button
-                            className={`px-3 py-1 text-xs rounded ${bug.status === "Closed" ? "bg-gray-700 text-white" : "bg-gray-100 hover:bg-gray-200"
-                                }`}
-                            onClick={() => updateBugStatus(bug.id, "Closed")}
-                        >
-                            Closed
-                        </button>
-                    </div>
-                </div>
-            )}
-        </div>
+                </td>
+            </tr>
+        )}
+        </>
     );
 };
 

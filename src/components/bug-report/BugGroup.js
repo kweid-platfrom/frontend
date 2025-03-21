@@ -11,7 +11,7 @@ const BugGroup = ({
     expandedBug, 
     setExpandedBug, 
     updateBugStatus,
-    openDetailsOverlay
+    teamMembers
 }) => {
     const [selectedBugs, setSelectedBugs] = useState([]);
 
@@ -54,42 +54,81 @@ const BugGroup = ({
             </div>
 
             {!isCollapsed && (
-                <>
-                    {/* Group header row with column titles */}
-                    <div className="p-3 bg-gray-100 flex items-center border-b">
-                        <div className="w-10 flex justify-center">
-                            <input 
-                                type="checkbox" 
-                                className="rounded"
-                                onChange={toggleSelectAll}
-                                checked={selectedBugs.length === bugs.length && bugs.length > 0}
-                            />
-                        </div>
-                        <div className="flex-grow grid grid-cols-12 gap-2 text-xs text-gray-600 font-medium">
-                            <div className="col-span-5">Title</div>
-                            <div className="col-span-2">Status</div>
-                            <div className="col-span-2">Severity</div>
-                            <div className="col-span-2">Category</div>
-                            <div className="col-span-1">Date</div>
-                        </div>
-                    </div>
-
-                    {/* Bug items */}
-                    <div>
-                        {bugs.map((bug) => (
-                            <BugItem
-                                key={bug.id}
-                                bug={bug}
-                                isSelected={selectedBugs.includes(bug.id)}
-                                toggleSelection={() => toggleBugSelection(bug.id)}
-                                isExpanded={expandedBug === bug.id}
-                                toggleExpand={() => setExpandedBug(expandedBug === bug.id ? null : bug.id)}
-                                updateBugStatus={updateBugStatus}
-                                openDetailsOverlay={() => openDetailsOverlay(bug)}
-                            />
-                        ))}
-                    </div>
-                </>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th scope="col" className="w-10 p-3">
+                                    <input 
+                                        type="checkbox" 
+                                        className="rounded"
+                                        onChange={toggleSelectAll}
+                                        checked={selectedBugs.length === bugs.length && bugs.length > 0}
+                                    />
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-100 whitespace-nowrap">
+                                    Defect Title
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    BugID
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Category
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Assign To
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Status
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Severity
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Priority
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Epic
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Test Case
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Test Status
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Due Date
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Automated
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Script Link
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Created By
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                                    Creation Log
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {bugs.map((bug) => (
+                                <BugItem
+                                    key={bug.id}
+                                    bug={bug}
+                                    isSelected={selectedBugs.includes(bug.id)}
+                                    toggleSelection={() => toggleBugSelection(bug.id)}
+                                    isExpanded={expandedBug === bug.id}
+                                    toggleExpand={() => setExpandedBug(expandedBug === bug.id ? null : bug.id)}
+                                    updateBugStatus={updateBugStatus}
+                                    teamMembers={teamMembers}
+                                />
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             )}
         </div>
     );
