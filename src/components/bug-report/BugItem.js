@@ -103,7 +103,7 @@ const BugItem = ({
                     disabled={loading}
                 />
             </td>
-            <td className="px-4 py-3 cursor-pointer" onClick={toggleExpand}>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 cursor-pointer" onClick={toggleExpand}>
                 <div className="flex items-center">
                     {isExpanded ? 
                         <ChevronDown className="h-4 w-4 mr-2" /> : 
@@ -112,36 +112,36 @@ const BugItem = ({
                     <span className="truncate max-w-xs">{bugData.title}</span>
                 </div>
             </td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.id.slice(0, 8)}</td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.category}</td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.assignedTo || "Unassigned"}</td>
-            <td className="px-4 py-3">
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.id.slice(0, 8)}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.category}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.assignedTo || "Unassigned"}</td>
+            <td className="border border-gray-300 px-4 py-3 whitespace-nowrap">
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(bugData.status)}`}>
                     {bugData.status}
                 </span>
             </td>
-            <td className="px-4 py-3">
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3">
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(bugData.severity)}`}>
                     {bugData.severity}
                 </span>
             </td>
-            <td className="px-4 py-3">
+            <td className="border border-gray-300 px-4 py-3 whitespace-nowrap">
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priority.color}`}>
                     {priority.level}
                 </span>
             </td>
             
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.epicName || "N/A"}</td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.testCaseName || "N/A"}</td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.testStatus || "N/A"}</td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.dueDate ? formatDate(bugData.dueDate) : "N/A"}</td>
-            <td className="px-4 py-3">
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.epicName || "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.testCaseName || "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.testStatus || "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.dueDate ? formatDate(bugData.dueDate) : "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3">
                 {bugData.isAutomated ? 
                     <span className="px-2 py-0.5 rounded-full text-xs font-medium text-green-700 bg-green-100">Yes</span> :
                     <span className="px-2 py-0.5 rounded-full text-xs font-medium text-gray-700 bg-gray-100">No</span>
                 }
             </td>
-            <td className="px-4 py-3 text-xs text-gray-700">
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">
                 {bugData.isAutomated && bugData.scriptLink && (
                     <a 
                         href={bugData.scriptLink}
@@ -153,8 +153,8 @@ const BugItem = ({
                     </a>
                 )}
             </td>
-            <td className="px-4 py-3 text-xs text-gray-700">{bugData.reportedBy || "System"}</td>
-            <td className="px-4 py-3 text-xs text-gray-700">{formatDate(bugData.createdAt) || "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.reportedBy || "System"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{formatDate(bugData.createdAt) || "N/A"}</td>
         </tr>
 
         {/* Expanded details as a separate row */}
