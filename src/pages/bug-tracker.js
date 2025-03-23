@@ -24,8 +24,8 @@ const BugTracker = () => {
         setIsLoading(true);
         try {
             const q = query(
-                collection(db, "bugReports"),
-                orderBy("timestamp", "desc")
+                collection(db, "bugs"),
+                orderBy("createdAt", "desc")
             );
             const querySnapshot = await getDocs(q);
             const fetchedBugs = [];
@@ -35,7 +35,7 @@ const BugTracker = () => {
                 fetchedBugs.push({
                     id: doc.id,
                     ...data,
-                    timestamp: data.timestamp?.toDate() || new Date(),
+                    createdAt: data.timestamp?.toDate() || new Date(),
                 });
             });
 
