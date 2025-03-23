@@ -43,17 +43,25 @@ const ActivityFeed = ({ organizationId }) => {
                     setIsLoading(false);
                     return;
                 }
-
+    
                 // Create a query based on available filters
                 let activitiesQuery;
                 const activitiesRef = collection(db, "activities");
-
+    
                 if (organizationId) {
                     // Fetch activities for specific organization
-                    activitiesQuery = query(activitiesRef, where("organizationId", "==", organizationId));
+                    activitiesQuery = query(
+                        activitiesRef, 
+                        where("organizationId", "==", organizationId),
+                        // Add this condition to your query to ensure security rule compliance
+                        where("visibleTo", "array-contains", currentUser.uid)
+                    );
                 } else {
                     // Fetch activities for current user
-                    activitiesQuery = query(activitiesRef, where("userId", "==", currentUser.uid));
+                    activitiesQuery = query(
+                        activitiesRef, 
+                        where("userId", "==", currentUser.uid)
+                    );
                 }
 
                 // First, get the initial data

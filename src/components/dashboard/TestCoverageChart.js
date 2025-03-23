@@ -1,70 +1,35 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import SkeletonLoader from "../ui/Skeleton";
 
-export const TestCoverageChart = () => {
-    const [coverageData, setCoverageData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        fetchCoverageData();
-    }, []);
-
-    const fetchCoverageData = async () => {
-        setLoading(true);
-        try {
-            // Real API call to fetch test coverage data
-            const response = await fetch('/api/test-coverage');
-            
-            if (response.ok) {
-                const data = await response.json();
-                setCoverageData(data);
-            } else {
-                console.error('Error fetching test coverage data:', response.statusText);
-                setError('Failed to load coverage data');
-                // Fallback to sample data if API fails
-                setCoverageData([
-                    { name: "Core", coverage: 85 },
-                    { name: "Auth", coverage: 78 },
-                    { name: "UI", coverage: 62 },
-                    { name: "API", coverage: 91 },
-                    { name: "Utils", coverage: 73 },
-                ]);
-            }
-        } catch (error) {
-            console.error('Error fetching test coverage data:', error);
-            setError('Failed to load coverage data');
-            // Fallback to sample data
-            setCoverageData([
-                { name: "Core", coverage: 85 },
-                { name: "Auth", coverage: 78 },
-                { name: "UI", coverage: 62 },
-                { name: "API", coverage: 91 },
-                { name: "Utils", coverage: 73 },
-            ]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (loading) {
-        return <SkeletonLoader className="h-64 w-full rounded" />;
+export const TestCoverageChart = ({ data, isLoading }) => {
+    // If loading, show skeleton
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <SkeletonLoader className="h-64 w-full rounded" />
+            </div>
+        );
     }
 
-    if (error) {
-        return <div className="text-red-500 p-4 text-center">{error}</div>;
+    // If no data or empty data, show message
+    if (!data || data.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+                No test coverage data available
+            </div>
+        );
     }
 
     return (
-        <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={coverageData}>
+        <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis domain={[0, 100]} />
                 <Tooltip formatter={(value) => `${value}%`} />
                 <Legend />
-                <Bar dataKey="coverage" fill="#3B82F6" />
+                <Bar dataKey="coverage" fill="#3B82F6" name="Test Coverage %" />
             </BarChart>
         </ResponsiveContainer>
     );

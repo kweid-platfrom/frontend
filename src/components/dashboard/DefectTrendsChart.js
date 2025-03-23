@@ -1,26 +1,47 @@
 import React from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import SkeletonLoader from "../ui/Skeleton";
 
-export const DefectTrendsChart = () => {
-    const data = [
-        { name: "Jan", open: 12, closed: 8 },
-        { name: "Feb", open: 19, closed: 14 },
-        { name: "Mar", open: 15, closed: 18 },
-        { name: "Apr", open: 22, closed: 16 },
-        { name: "May", open: 18, closed: 21 },
-        { name: "Jun", open: 24, closed: 28 },
-    ];
+export const DefectTrendsChart = ({ data, isLoading }) => {
+    // If loading, show skeleton
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <SkeletonLoader className="h-64 w-full rounded" />
+            </div>
+        );
+    }
+
+    // If no data or empty data, show message
+    if (!data || data.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+                No defect trends data available
+            </div>
+        );
+    }
+
+    // Transform the data to the format expected by the chart
+    const chartData = data.map(item => ({
+        name: item.date,
+        defects: item.count || 0
+    }));
 
     return (
-        <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
+        <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip formatter={(value) => [`${value} defects`, "Reported"]} />
                 <Legend />
-                <Line type="monotone" dataKey="open" stroke="#EF4444" activeDot={{ r: 8 }} />
-                <Line type="monotone" dataKey="closed" stroke="#10B981" />
+                <Line 
+                    type="monotone" 
+                    dataKey="defects" 
+                    stroke="#EF4444" 
+                    activeDot={{ r: 8 }} 
+                    name="Reported Defects"
+                />
             </LineChart>
         </ResponsiveContainer>
     );
