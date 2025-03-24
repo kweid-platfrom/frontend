@@ -5,13 +5,13 @@ import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 
-import ProfileSection from '@/components/settings/ProfileSection';
-import NotificationSection from '@/components/settings/NotificationSection';
-import ThemeSection from '@/components/settings/ThemeSection';
-import SubscriptionSection from '@/components/settings/SubscriptionSection';
-import SecuritySection from '@/components/settings/SecuritySection';
-import OrganizationSection from '@/components/settings/OrganizationSection';
-import TeamSection from '@/components/settings/TeamSection';
+import ProfileSection from '@/components/settings/ProfileSec';
+import NotificationSection from '@/components/settings/NotificationsSec';
+import ThemeSection from '@/components/Settings/ThemeSec';
+import SubscriptionSection from '@/components/settings/SubscriptionSec';
+import SecuritySection from '@/components/settings/SecuritySec';
+import OrganizationSection from '@/components/settings/OrganizationSec';
+import TeamSection from '@/components/settings/TeamSec';
 import SettingsSkeleton from '@/components/settings/SettingsSkeleton';
 
 export default function SettingsPage() {

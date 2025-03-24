@@ -1,8 +1,8 @@
 // components/settings/NotificationSection.tsx
 import { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/contexts/AuthContext';
+import { db } from '../../config/firebase';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function NotificationSection({ userData }) {
     const { user } = useAuth();

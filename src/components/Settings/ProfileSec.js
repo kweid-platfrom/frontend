@@ -2,9 +2,9 @@
 import { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
-import { useAuth } from '@/contexts/AuthContext';
-import Avatar from '@/components/common/Avatar';
+import { db, storage } from '../../config/firebase';
+import {useAuth } from '../../hooks/useAuth';
+import Avatar from '../ui/avatar/Avatar';
 
 export default function ProfileSection({ userData }) {
     const { user } = useAuth();
