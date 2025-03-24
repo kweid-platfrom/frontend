@@ -1,8 +1,8 @@
-// components/settings/TeamSection.tsx
+"use client";
 import { useState, useEffect } from 'react';
 import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/contexts/AuthContext';
+import { db } from '../../config/firebase';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function TeamSection({ orgData, teamMembers: initialTeamMembers }) {
     const { user } = useAuth();

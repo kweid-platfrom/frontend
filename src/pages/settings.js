@@ -1,9 +1,9 @@
-// pages/settings.tsx
+"use client";
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/contexts/AuthContext';
+import { db } from '../config/firebase';
+import { useAuth } from '../hooks/useAuth';
 
 import ProfileSection from '@/components/settings/ProfileSec';
 import NotificationSection from '@/components/settings/NotificationsSec';
@@ -15,7 +15,8 @@ import TeamSection from '@/components/settings/TeamSec';
 import SettingsSkeleton from '@/components/settings/SettingsSkeleton';
 
 export default function SettingsPage() {
-    const { user } = useAuth();
+    // Assuming useAuth provides a loading state
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
@@ -24,10 +25,17 @@ export default function SettingsPage() {
     const [activeSection, setActiveSection] = useState('profile');
 
     useEffect(() => {
-        if (!user) {
-            router.push('/login');
-            return;
-        }
+        const timeout = setTimeout(() => {
+            if (!authLoading && user === null) {
+                router.replace('/login');
+            }
+        }, 500); // Delay to ensure Firebase completes auth check
+    
+        return () => clearTimeout(timeout); // Cleanup timeout
+    }, [authLoading, user, router]);
+
+    useEffect(() => {
+        if (!user) return; // Don't fetch if no user
 
         const fetchData = async () => {
             try {
@@ -62,13 +70,13 @@ export default function SettingsPage() {
         };
 
         fetchData();
-    }, [user, router]);
+    }, [user]);
 
     const handleSectionChange = (section) => {
         setActiveSection(section);
     };
 
-    if (loading) {
+    if (authLoading || loading) {
         return <SettingsSkeleton />;
     }
 
@@ -104,8 +112,8 @@ export default function SettingsPage() {
                                         <button
                                             onClick={() => handleSectionChange(section.id)}
                                             className={`w-full text-left px-4 py-2 rounded-md flex items-center gap-3 transition-colors ${activeSection === section.id
-                                                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
-                                                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                                                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                                                 }`}
                                         >
                                             <span>{section.label}</span>
