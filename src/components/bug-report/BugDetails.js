@@ -1,28 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Edit, Link, Send, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
+import { Edit, Link, Send, Loader2 } from "lucide-react";
 import { doc, updateDoc, arrayUnion, Timestamp, collection, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../../config/firebase";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import Image from "next/image";
-
-// Alert component for success/error notifications
-const Alert = ({ type, message, onClose }) => {
-    const bgColor = type === "success" ? "bg-green-100" : "bg-red-100";
-    const textColor = type === "success" ? "text-green-800" : "text-red-800";
-    const Icon = type === "success" ? CheckCircle : AlertTriangle;
-
-    return (
-        <div className={`${bgColor} ${textColor} p-4 rounded-md mb-4 flex items-start`}>
-            <Icon className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">{message}</div>
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-                &times;
-            </button>
-        </div>
-    );
-};
-
+import { useAlertContext } from "../CustomAlert";
 const BugItemDetails = ({
     bug,
     teamMembers,
@@ -39,9 +22,9 @@ const BugItemDetails = ({
     const [showTestCaseSelector, setShowTestCaseSelector] = useState(false);
     const [loading, setLoading] = useState(false);
     const [comments, setComments] = useState(bug.messages || []);
-
-    // Add state for alert
-    const [alert, setAlert] = useState(null);
+    
+    // Use the global alert context
+    const { showAlert } = useAlertContext();
 
     // Categories for dropdown
     const categories = [
@@ -60,7 +43,8 @@ const BugItemDetails = ({
 
     // Set up real-time listeners for bug data and test cases
     useEffect(() => {
-        const bugRef = doc(db, "bugReports", bug.id);
+        // Use the correct collection name consistently
+        const bugRef = doc(db, "bugs", bug.id);
 
         // Listen for changes to this specific bug
         const unsubscribeBug = onSnapshot(bugRef, (docSnapshot) => {
@@ -71,10 +55,7 @@ const BugItemDetails = ({
             }
         }, (error) => {
             console.error("Error listening to bug updates:", error);
-            setAlert({
-                type: "error",
-                message: "Error loading bug data: " + error.message
-            });
+            showAlert("Error loading bug data: " + error.message, "error");
         });
 
         // Listen for test cases
@@ -94,16 +75,16 @@ const BugItemDetails = ({
             unsubscribeBug();
             unsubscribeTestCases();
         };
-    }, [bug.id]);
+    }, [bug.id, showAlert]);
 
     const handleSaveChanges = async () => {
         try {
             setLoading(true);
-            const bugRef = doc(db, "bugReports", bug.id);
+            // Use the correct collection name
+            const bugRef = doc(db, "bugs", bug.id);
 
             // Create updated bug object without messages (to avoid overwriting them)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { messages, ...bugDataToUpdate } = editedBug;
+            const {...bugDataToUpdate } = editedBug;
 
             // Sanitize data before saving - ensure Firestore compatible data types
             // Convert any Date objects to Firestore Timestamps
@@ -134,29 +115,21 @@ const BugItemDetails = ({
                 activityLog: arrayUnion({
                     action: "updated",
                     user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-                    timestamp: Timestamp.now()
+                    createdAt: Timestamp.now()
                 })
             });
 
-            // Update parent state
-            updateBugStatus(bug.id, editedBug.status);
+            // Update parent state with status (not with the ID)
+            updateBugStatus(sanitizedData.status);
 
-            // Show success alert
-            setAlert({
-                type: "success",
-                message: "Bug updated successfully!"
-            });
+            // Show success alert using the global context
+            showAlert("Bug updated successfully!", "success");
 
             // Exit edit mode
             setEditMode(false);
         } catch (error) {
             console.error("Error updating bug:", error);
-
-            // Show error alert
-            setAlert({
-                type: "error",
-                message: `Error updating bug: ${error.message}`
-            });
+            showAlert(`Error updating bug: ${error.message}`, "error");
         } finally {
             setLoading(false);
         }
@@ -169,15 +142,18 @@ const BugItemDetails = ({
         const newMessage = {
             text: chatMessage,
             user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-            timestamp: Timestamp.now()
+            createdAt: Timestamp.now() // Use timestamp instead of createdAt for consistency
         };
 
         try {
-            const bugRef = doc(db, "bugReports", bug.id);
+            const bugRef = doc(db, "bugs", bug.id);
+            
+            // Add new message to the messages array
             await updateDoc(bugRef, {
                 messages: arrayUnion(newMessage)
             });
 
+            // Clear the message input
             setChatMessage("");
 
             // Add to activity log
@@ -185,15 +161,15 @@ const BugItemDetails = ({
                 activityLog: arrayUnion({
                     action: "commented",
                     user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-                    timestamp: Timestamp.now()
+                    createdAt: Timestamp.now()
                 })
             });
+            
+            // Show success alert
+            showAlert("Comment added successfully", "success");
         } catch (error) {
             console.error("Error sending message:", error);
-            setAlert({
-                type: "error",
-                message: `Error sending message: ${error.message}`
-            });
+            showAlert(`Error sending message: ${error.message}`, "error");
         } finally {
             setLoading(false);
         }
@@ -222,22 +198,16 @@ const BugItemDetails = ({
 
             setEditedBug(updatedBugData);
 
-            // Update in Firebase immediately
-            const bugRef = doc(db, "bugReports", bug.id);
+            // Update in Firebase immediately - use the correct collection
+            const bugRef = doc(db, "bugs", bug.id);
             await updateDoc(bugRef, updatedBugData);
 
             setShowTestCaseSelector(false);
 
-            setAlert({
-                type: "success",
-                message: "Test case linked successfully!"
-            });
+            showAlert("Test case linked successfully!", "success");
         } catch (error) {
             console.error("Error linking test case:", error);
-            setAlert({
-                type: "error",
-                message: `Error linking test case: ${error.message}`
-            });
+            showAlert(`Error linking test case: ${error.message}`, "error");
         } finally {
             setLoading(false);
         }
@@ -247,15 +217,6 @@ const BugItemDetails = ({
 
     return (
         <div className="p-4 bg-gray-50 border-t">
-            {/* Alert notification */}
-            {alert && (
-                <Alert
-                    type={alert.type}
-                    message={alert.message}
-                    onClose={() => setAlert(null)}
-                />
-            )}
-
             <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
                 {/* Left Column: Bug Details */}
                 <div className={`flex-1 ${editMode ? "bg-gray-100 p-4 rounded-lg shadow-inner" : ""}`}>
@@ -624,11 +585,11 @@ const BugItemDetails = ({
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-medium text-gray-500">Due Date</h4>
-                                    <p className="mt-1">{formatDate(editedBug.dueDate) || "N/A"}</p>
+                                    <p className="mt-1">{formatDate(editedBug.dueDate)}</p>
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-medium text-gray-500">Created At</h4>
-                                    <p className="mt-1">{formatDate(editedBug.createdAt) || "N/A"}</p>
+                                    <p className="mt-1">{formatDate(editedBug.createdAt)}</p>
                                 </div>
                             </div>
 
@@ -670,7 +631,7 @@ const BugItemDetails = ({
                                         <div className="flex justify-between items-center mb-1">
                                             <span className="font-medium">{message.user}</span>
                                             <span className="text-xs text-gray-500">
-                                                {message.timestamp ? new Date(message.timestamp.seconds * 1000).toLocaleString() : 'N/A'}
+                                                {formatDate(message.timestamp || message.createdAt)}
                                             </span>
                                         </div>
                                         <p className="text-sm">{message.text}</p>

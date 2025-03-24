@@ -2,8 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { db } from "../config/firebase";
-import { collection, query, orderBy, getDocs, doc, updateDoc } from "firebase/firestore";
-import { Bug, AlertCircle, Clock, Filter, ChevronDown,  } from "lucide-react";
+import {
+    collection,
+    query,
+    orderBy,
+    doc,
+    updateDoc,
+    onSnapshot
+} from "firebase/firestore";
+import { Bug, AlertCircle, Clock, Filter, ChevronDown } from "lucide-react";
 import BugGroup from '../components/bug-report/BugGroup';
 
 const BugTracker = () => {
@@ -17,34 +24,36 @@ const BugTracker = () => {
     });
     const [expandedBug, setExpandedBug] = useState(null);
     const [collapsedGroups, setCollapsedGroups] = useState({});
-    const [sortBy, setSortBy] = useState("timestamp");
+    const [sortBy, setSortBy] = useState("createdAt");
     const [sortDirection, setSortDirection] = useState("desc");
 
-    const fetchBugs = useCallback(async () => {
+    useEffect(() => {
         setIsLoading(true);
-        try {
-            const q = query(
-                collection(db, "bugs"),
-                orderBy("createdAt", "desc")
-            );
-            const querySnapshot = await getDocs(q);
-            const fetchedBugs = [];
+        // Set up real-time listener for bugs collection
+        const bugsRef = collection(db, "bugs");
+        const q = query(bugsRef, orderBy("createdAt", "desc"));
 
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const fetchedBugs = [];
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
                 fetchedBugs.push({
                     id: doc.id,
                     ...data,
-                    createdAt: data.timestamp?.toDate() || new Date(),
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    timestamp: data.createdAt?.toDate() || new Date(), // Normalize timestamp field
                 });
             });
 
             setBugs(fetchedBugs);
-        } catch (error) {
-            console.error("Error fetching bugs:", error);
-        } finally {
             setIsLoading(false);
-        }
+        }, (error) => {
+            console.error("Error fetching bugs:", error);
+            setIsLoading(false);
+        });
+
+        // Cleanup listener on component unmount
+        return () => unsubscribe();
     }, []);
 
     const groupBugsByMonth = useCallback(() => {
@@ -61,8 +70,11 @@ const BugTracker = () => {
         const sortedBugs = [...filteredBugs].sort((a, b) => {
             let comparison = 0;
 
-            if (sortBy === "timestamp") {
-                comparison = a.timestamp - b.timestamp;
+            if (sortBy === "timestamp" || sortBy === "createdAt") {
+                // Handle both timestamp field names
+                const aDate = a.createdAt || a.timestamp;
+                const bDate = b.createdAt || b.timestamp;
+                comparison = aDate - bDate;
             } else if (sortBy === "severity") {
                 const severityRank = { "High": 3, "Medium": 2, "Low": 1 };
                 comparison = severityRank[a.severity] - severityRank[b.severity];
@@ -76,7 +88,7 @@ const BugTracker = () => {
         // Group by month
         const grouped = {};
         sortedBugs.forEach((bug) => {
-            const date = new Date(bug.timestamp);
+            const date = new Date(bug.createdAt || bug.timestamp);
             const monthYear = `Defects ${date.getFullYear()} - ${date.toLocaleString("default", { month: "long" })}`;
 
             if (!grouped[monthYear]) grouped[monthYear] = [];
@@ -87,10 +99,6 @@ const BugTracker = () => {
     }, [bugs, activeFilters, sortBy, sortDirection]);
 
     useEffect(() => {
-        fetchBugs();
-    }, [fetchBugs]);
-
-    useEffect(() => {
         if (bugs.length > 0) {
             groupBugsByMonth();
         }
@@ -98,15 +106,11 @@ const BugTracker = () => {
 
     const updateBugStatus = async (bugId, newStatus) => {
         try {
-            const bugRef = doc(db, "bugReports", bugId);
+            // Use the correct collection name "bugs" instead of "bugReports"
+            const bugRef = doc(db, "bugs", bugId);
             await updateDoc(bugRef, { status: newStatus });
 
-            // Update local state
-            setBugs((prevBugs) =>
-                prevBugs.map((bug) =>
-                    bug.id === bugId ? { ...bug, status: newStatus } : bug
-                )
-            );
+            // No need to update local state since we have a real-time listener
         } catch (error) {
             console.error("Error updating bug status:", error);
         }
@@ -131,17 +135,17 @@ const BugTracker = () => {
     // Generate a deterministic color based on group name
     const getGroupColor = (groupName) => {
         const colors = [
-            "bg-blue-500", "bg-green-500", "bg-purple-500", 
+            "bg-blue-500", "bg-green-500", "bg-purple-500",
             "bg-red-500", "bg-yellow-500", "bg-pink-500",
             "bg-indigo-500", "bg-teal-500", "bg-orange-500"
         ];
-        
+
         // Simple hash function to get consistent color from group name
         let hash = 0;
         for (let i = 0; i < groupName.length; i++) {
             hash = groupName.charCodeAt(i) + ((hash << 5) - hash);
         }
-        
+
         return colors[Math.abs(hash) % colors.length];
     };
 
@@ -221,10 +225,10 @@ const BugTracker = () => {
 
                     <button
                         className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 flex items-center"
-                        onClick={() => toggleSort("timestamp")}
+                        onClick={() => toggleSort("createdAt")}
                     >
                         <Clock className="h-4 w-4 mr-1" />
-                        Date {sortBy === "timestamp" && (sortDirection === "asc" ? "↑" : "↓")}
+                        Date {(sortBy === "timestamp" || sortBy === "createdAt") && (sortDirection === "asc" ? "↑" : "↓")}
                     </button>
 
                     <button
@@ -263,7 +267,6 @@ const BugTracker = () => {
                     />
                 ))
             )}
-
         </div>
     );
 };

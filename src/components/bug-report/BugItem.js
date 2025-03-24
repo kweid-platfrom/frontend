@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, Link } from "lucide-react"; // Added Link import
+import { ChevronDown, ChevronRight, Link } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import BugItemDetails from "../bug-report/BugDetails";
@@ -75,17 +75,46 @@ const BugItem = ({
             case "Closed":
                 return "text-gray-700 bg-gray-100";
             default:
-                return "text-gray-700 bg-gray-100";
+                return "text-gray-700 bg-green-100";
         }
     };
 
-    // Format date for display
+    // Fixed formatDate function to handle all date formats properly
     const formatDate = (timestamp) => {
         if (!timestamp) return "N/A";
-        if (typeof timestamp === 'object' && timestamp.seconds) {
-            return new Date(timestamp.seconds * 1000).toLocaleDateString();
+        
+        try {
+            // Handle Firestore timestamp
+            if (typeof timestamp === 'object' && timestamp.seconds) {
+                return new Date(timestamp.seconds * 1000).toLocaleDateString();
+            }
+            
+            // Handle JavaScript Date objects
+            if (timestamp instanceof Date) {
+                return timestamp.toLocaleDateString();
+            }
+            
+            // Handle string timestamps
+            if (typeof timestamp === 'string') {
+                // Check if it's a valid date string
+                const date = new Date(timestamp);
+                if (!isNaN(date.getTime())) {
+                    return date.toLocaleDateString();
+                }
+                return timestamp; // Return the original string if not a valid date
+            }
+            
+            // Handle numeric timestamps (milliseconds)
+            if (typeof timestamp === 'number') {
+                return new Date(timestamp).toLocaleDateString();
+            }
+            
+            // Default fallback
+            return String(timestamp);
+        } catch (error) {
+            console.error("Error formatting date:", error);
+            return "Invalid Date";
         }
-        return timestamp;
     };
 
     const priority = getPriorityFromSeverity(bugData.severity || "Low");
@@ -134,7 +163,7 @@ const BugItem = ({
             <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.epicName || "N/A"}</td>
             <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.testCaseName || "N/A"}</td>
             <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.testStatus || "N/A"}</td>
-            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.dueDate ? formatDate(bugData.dueDate) : "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{formatDate(bugData.dueDate)}</td>
             <td className="border border-gray-300 whitespace-nowrap px-4 py-3">
                 {bugData.isAutomated ? 
                     <span className="px-2 py-0.5 rounded-full text-xs font-medium text-green-700 bg-green-100">Yes</span> :
@@ -154,7 +183,7 @@ const BugItem = ({
                 )}
             </td>
             <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{bugData.reportedBy || "System"}</td>
-            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{formatDate(bugData.createdAt) || "N/A"}</td>
+            <td className="border border-gray-300 whitespace-nowrap px-4 py-3 text-xs text-gray-700">{formatDate(bugData.createdAt)}</td>
         </tr>
 
         {/* Expanded details as a separate row */}

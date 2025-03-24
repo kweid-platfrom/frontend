@@ -226,7 +226,7 @@ const Sidebar = ({ setActivePage }) => {
                         <p className="text-xs font-medium text-[#A5D6A7] truncate">{user?.email || "No email available"}</p>
                     </div>
                     <div className={`ml-auto transition-opacity duration-300`}>
-                        <SignOutButton variant="icon" className="h-5 w-5" />
+                        <SignOutButton variant="icon" className="h-5 w-5 text-white" />
                     </div>
                 </div>
             </div>
@@ -264,7 +264,7 @@ const Sidebar = ({ setActivePage }) => {
                                         <TooltipTrigger asChild>
                                             <button
                                                 onClick={() => handlePageChange(item.page)}
-                                                className={`flex items-center justify-center h-10 w-10 rounded-md transition-colors
+                                                className={`flex items-center justify-center h-10 w-10 rounded transition-colors
                                                     ${selectedPage === item.page ? "bg-[#00897B] text-white" : "text-white hover:bg-[#00796B]"}
                                                 `}
                                                 aria-label={item.label}

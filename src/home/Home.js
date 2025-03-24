@@ -48,15 +48,15 @@ const Home = () => {
                     </div>
                 </div>
                 <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
-                <div className="h-96 w-full bg-[#F5F7FA] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
-    <Image 
-        src="/2.webp" 
-        alt="hero-image" 
-        width={900}  // Set appropriate width
-        height={900} // Set appropriate height
-        className="object-cover rounded-lg"
-    />
-</div>
+                    <div className="h-96 w-full bg-[#D3D5D4] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
+                        <Image
+                            src="/2.webp"
+                            alt="hero-image"
+                            width={900}  // Set appropriate width
+                            height={900} // Set appropriate height
+                            className="object-cover rounded-lg"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -140,7 +140,7 @@ const Home = () => {
                                 <div className="flex items-center">
                                     <div className="flex-shrink-0 bg-[#A5D6A7] rounded-full p-2">
                                         <svg className="h-8 w-8 text-[#00897B]" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8z"/>
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8z" />
                                         </svg>
                                     </div>
                                     <div className="ml-4">
@@ -183,7 +183,7 @@ const Home = () => {
 
             {/* Footer */}
             <footer className="bg-white">
-                    <Footer />
+                <Footer />
             </footer>
         </div>
     );

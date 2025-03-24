@@ -1,212 +1,162 @@
-"use client"
-import React, { useState, useEffect } from 'react';
-import Sidebar from '@/components/Settings/Sidebar';
-import ProfileSection from '@/components/ProfileSection';
-import NotificationsSection from '@/components/Settings/NotificationsSection';
-import ThemeSection from '@/components/Settings/ThemeSection';
-import SecuritySection from '@/components/Settings/SecuritySection';
-import OrganizationSection from '../components/Settings/OrganizationSection';
-import LoadingSpinner from '@/components/Settings/LoadingSpinner';
-import { useOrganization } from '../context/OrganizationContext';
-import { useAuth } from '../context/AuthProvider'; 
+// pages/settings.tsx
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
-const SettingsPage = () => {
-    const organizationContext = useOrganization() || {};
-    const { 
-        organizationUsers = [], 
-        handleUserPermissionChange = () => {}, 
-        isLoading: orgLoading = false 
-    } = organizationContext;
-    
-    const authContext = useAuth() || {};
-    const { user: authUser } = authContext;
-    
-    const [user, setUser] = useState(null);
+import ProfileSection from '@/components/settings/ProfileSection';
+import NotificationSection from '@/components/settings/NotificationSection';
+import ThemeSection from '@/components/settings/ThemeSection';
+import SubscriptionSection from '@/components/settings/SubscriptionSection';
+import SecuritySection from '@/components/settings/SecuritySection';
+import OrganizationSection from '@/components/settings/OrganizationSection';
+import TeamSection from '@/components/settings/TeamSection';
+import SettingsSkeleton from '@/components/settings/SettingsSkeleton';
+
+export default function SettingsPage() {
+    const { user } = useAuth();
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        bio: '',
-        companyName: '',
-        role: '',
-        notifications: {
-            email: true,
-            push: true,
-            sms: false
-        },
-        theme: 'light',
-        password: {
-            current: '',
-            new: '',
-            confirm: ''
-        }
-    });
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [message, setMessage] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [orgData, setOrgData] = useState(null);
+    const [teamMembers, setTeamMembers] = useState([]);
     const [activeSection, setActiveSection] = useState('profile');
 
     useEffect(() => {
-        console.log('Auth User:', authUser); // Debugging
-    
-        const fetchUserData = async () => {
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
+        const fetchData = async () => {
             try {
-                if (!authUser) return; // Prevents unnecessary API calls
-                
-                const response = await fetch('/api/user');
-                if (!response.ok) throw new Error(`Failed to fetch user data: ${response.status}`);
-                
-                const userData = await response.json();
-                console.log('Fetched User Data:', userData); // Debugging
-    
-                if (!userData || !userData.name) throw new Error('User data structure is incorrect');
-                
-                setUser(userData);
-                setFormData(prevData => ({
-                    ...prevData,
-                    name: userData.name || '',
-                    email: userData.email || '',
-                    bio: userData.bio || '',
-                    companyName: userData.companyName || '',
-                    role: userData.role || '',
-                }));
+                // Fetch user data
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    setUserData(userDoc.data());
+
+                    // Fetch organization data if user has an organization
+                    if (userDoc.data().organizationId) {
+                        const orgDoc = await getDoc(doc(db, 'organizations', userDoc.data().organizationId));
+                        if (orgDoc.exists()) {
+                            setOrgData(orgDoc.data());
+
+                            // Fetch team members if user is an admin
+                            if (userDoc.data().role === 'admin') {
+                                const teamSnapshot = await getDocs(collection(db, 'organizations', userDoc.data().organizationId, 'members'));
+                                const members = teamSnapshot.docs.map(doc => ({
+                                    id: doc.id,
+                                    ...doc.data()
+                                }));
+                                setTeamMembers(members);
+                            }
+                        }
+                    }
+                }
             } catch (error) {
-                console.error('Error fetching user data:', error);
-                setMessage({ type: 'error', text: 'Failed to load user data. Please refresh the page.' });
+                console.error('Error fetching data:', error);
             } finally {
                 setLoading(false);
             }
         };
-    
-        fetchUserData();
-    }, [authUser]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
-    const handlePasswordChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            password: {
-                ...prev.password,
-                [name]: value
-            }
-        }));
-    };
-
-    const handleNotificationChange = (e) => {
-        const { name, checked } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            notifications: {
-                ...prev.notifications,
-                [name]: checked
-            }
-        }));
-    };
-
-    const handleThemeChange = (theme) => {
-        setFormData(prev => ({
-            ...prev,
-            theme
-        }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-
-        try {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            setUser(prev => ({
-                ...prev,
-                ...formData
-            }));
-            setMessage({ type: 'success', text: 'Settings updated successfully!' });
-            setTimeout(() => {
-                setMessage(null);
-            }, 3000);
-        } catch (error) {
-            console.error('Error updating settings:', error);
-            setMessage({ type: 'error', text: 'Failed to update settings. Please try again.' });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+        fetchData();
+    }, [user, router]);
 
     const handleSectionChange = (section) => {
         setActiveSection(section);
     };
 
-    const handleAvatarUpload = (e) => {
-        console.log("Avatar upload triggered", e.target.files[0]);
-    };
-
     if (loading) {
-        return <LoadingSpinner />;
+        return <SettingsSkeleton />;
     }
 
-    if (!user) {
-        return (
-            <div className="container mx-auto py-8 px-4 text-center">
-                <p className="text-red-500">Failed to load user data. Please refresh the page.</p>
-            </div>
+    const isAdmin = userData?.role === 'admin';
+    const sections = [
+        { id: 'profile', label: 'Profile', icon: 'user' },
+        { id: 'notifications', label: 'Notifications', icon: 'bell' },
+        { id: 'theme', label: 'Theme', icon: 'palette' },
+        { id: 'subscription', label: 'Subscription', icon: 'credit-card' },
+        { id: 'security', label: 'Security', icon: 'shield' },
+    ];
+
+    // Admin-only sections
+    if (isAdmin) {
+        sections.push(
+            { id: 'organization', label: 'Organization', icon: 'building' },
+            { id: 'team', label: 'Team Members', icon: 'users' }
         );
     }
 
     return (
-        <div className="container mx-auto py-8 px-4">
-            <h1 className="text-2xl font-bold mb-6">Account Settings</h1>
-            {message && (
-                <div className={`p-4 mb-6 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {message.text}
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
+            <h1 className="text-3xl font-bold mb-8">Settings</h1>
+
+            <div className="flex flex-col md:flex-row gap-8">
+                {/* Sidebar */}
+                <div className="w-full md:w-64 shrink-0">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sticky top-20">
+                        <nav>
+                            <ul className="space-y-2">
+                                {sections.map((section) => (
+                                    <li key={section.id}>
+                                        <button
+                                            onClick={() => handleSectionChange(section.id)}
+                                            className={`w-full text-left px-4 py-2 rounded-md flex items-center gap-3 transition-colors ${activeSection === section.id
+                                                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                                                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                                }`}
+                                        >
+                                            <span>{section.label}</span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </nav>
+                    </div>
                 </div>
-            )}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                <div className="md:flex">
-                    <Sidebar 
-                        user={user} 
-                        activeSection={activeSection}
-                        onSectionChange={handleSectionChange}
-                        onAvatarUpload={handleAvatarUpload}
-                    />
-                    <div className="md:w-3/4 p-6">
-                        <form onSubmit={handleSubmit}>
-                            {activeSection === 'profile' && <ProfileSection formData={formData} onChange={handleChange} />}
-                            {activeSection === 'notifications' && <NotificationsSection formData={formData} onChange={handleNotificationChange} />}
-                            {activeSection === 'theme' && <ThemeSection theme={formData.theme} onThemeChange={handleThemeChange} />}
-                            {activeSection === 'security' && <SecuritySection formData={formData} onChange={handlePasswordChange} />}
-                            {activeSection === 'organization' && (
-                                orgLoading ? (
-                                    <div className="flex justify-center items-center h-64">
-                                        <LoadingSpinner />
-                                    </div>
-                                ) : (
-                                    <OrganizationSection 
-                                        formData={formData}
-                                        onChange={handleChange}
-                                        users={organizationUsers}
-                                        onPermissionChange={handleUserPermissionChange}
-                                        currentUserId={user?.id || '1'}
-                                    />
-                                )
-                            )}
-                            <div className="border-t pt-6 mt-6">
-                                <button type="submit" disabled={isSubmitting} className="flex items-center justify-center px-4 py-2 bg-[#00897b] text-white font-medium rounded hover:bg-[#00796B] focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50">
-                                    Save Changes
-                                </button>
-                            </div>
-                        </form>
+
+                {/* Main content */}
+                <div className="flex-1">
+                    <div className="space-y-8">
+                        {activeSection === 'profile' && (
+                            <ProfileSection userData={userData} />
+                        )}
+
+                        {activeSection === 'notifications' && (
+                            <NotificationSection userData={userData} />
+                        )}
+
+                        {activeSection === 'theme' && (
+                            <ThemeSection userData={userData} />
+                        )}
+
+                        {activeSection === 'subscription' && (
+                            <SubscriptionSection
+                                userData={userData}
+                                orgData={orgData}
+                                isAdmin={isAdmin}
+                            />
+                        )}
+
+                        {activeSection === 'security' && (
+                            <SecuritySection userData={userData} />
+                        )}
+
+                        {isAdmin && activeSection === 'organization' && (
+                            <OrganizationSection orgData={orgData} />
+                        )}
+
+                        {isAdmin && activeSection === 'team' && (
+                            <TeamSection
+                                orgData={orgData}
+                                teamMembers={teamMembers}
+                            />
+                        )}
                     </div>
                 </div>
             </div>
         </div>
     );
-};
-
-export default SettingsPage;
+}
