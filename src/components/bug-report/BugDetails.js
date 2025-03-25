@@ -434,7 +434,7 @@ const BugItemDetails = ({
                                             href={editedBug.scriptLink}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="ml-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                            className="ml-2 p-2 bg-[#00897B] text-white rounded hover:bg-[#00695C]"
                                         >
                                             <Link className="h-5 w-5" />
                                         </a>
@@ -479,7 +479,7 @@ const BugItemDetails = ({
 
                             <div className="flex justify-end mt-4">
                                 <button
-                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center"
+                                    className="px-4 py-2 bg-[#00897B] text-white rounded hover:bg-[#00695c] disabled:opacity-50 flex items-center"
                                     onClick={handleSaveChanges}
                                     disabled={loading}
                                 >
@@ -650,7 +650,7 @@ const BugItemDetails = ({
                         <input
                             type="text"
                             placeholder="Add a comment..."
-                            className="flex-1 bg-gray-100 p-2 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="flex-1 bg-gray-100 p-2 rounded-l focus:outline-none focus:ring-1 focus:ring-[#00897B] focus:border-transparent"
                             value={chatMessage}
                             onChange={(e) => setChatMessage(e.target.value)}
                             disabled={loading}
@@ -661,7 +661,7 @@ const BugItemDetails = ({
                             }}
                         />
                         <button
-                            className="bg-blue-500 text-white p-2 rounded-r-md hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                            className="bg-[#00897B] text-white p-3 rounded-r hover:bg-[#00695C] disabled:opacity-50 transition-colors"
                             onClick={handleSendMessage}
                             disabled={loading || !chatMessage.trim()}
                         >

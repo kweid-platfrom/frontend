@@ -135,7 +135,7 @@ const TestScriptPage = () => {
                         className={`flex items-center px-4 py-2 rounded ${
                             isRunning 
                                 ? 'bg-gray-400 cursor-not-allowed' 
-                                : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                : 'bg-[#00897B] hover:bg-[#00695C] text-white'
                         }`}
                     >
                         <Play className="mr-2" /> 
@@ -146,13 +146,13 @@ const TestScriptPage = () => {
                         <div className="flex space-x-2">
                             <button
                                 onClick={exportResultsPDF}
-                                className="flex items-center px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded"
+                                className="flex items-center px-4 py-2 bg-[#EAEBF1] hover:bg-[#E1E2E6] text-[#2d3142] rounded"
                             >
                                 <Download className="mr-2" /> Export PDF
                             </button>
                             <button
                                 onClick={exportResultsExcel}
-                                className="flex items-center px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded"
+                                className="flex items-center px-4 py-2 bg-[#EAEBF1] hover:bg-[#E1E2E6] text-[#2d3142] rounded"
                             >
                                 <Download className="mr-2" /> Export Excel
                             </button>
