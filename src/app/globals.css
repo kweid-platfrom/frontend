@@ -125,3 +125,20 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Scrollbar track */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 3px;
+}
+
+/* Scrollbar thumb (indicator) */
+::-webkit-scrollbar-thumb {
+  background-color: #00897B; /* Change color */
+  border-radius: 2px; /* Optional: Rounded corners */
+}
+
+/* Scrollbar track when hovered */
+::-webkit-scrollbar-thumb:hover {
+  background-color: #00695C; /* Darker shade on hover */
+}

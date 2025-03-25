@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import '../app/globals.css'
 import { db } from "../config/firebase";
 import {
     collection,

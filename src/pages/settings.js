@@ -25,6 +25,10 @@ export default function SettingsPage() {
     const [activeSection, setActiveSection] = useState('profile');
 
     useEffect(() => {
+
+        // Early return if authentication is still loading
+        if (authLoading) return;
+
         if (!user) {
             router.replace('/login');
             return;
@@ -81,7 +85,7 @@ export default function SettingsPage() {
         };
 
         fetchUserData();
-    }, [user, router]);
+    }, [user, router, authLoading]);
 
     if (authLoading || loading) {
         return <SettingsSkeleton />;
