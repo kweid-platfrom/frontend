@@ -1,28 +1,51 @@
 "use client"
-import { useState } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'react-hot-toast';
 
-export default function SecuritySection({ userData }) {
+export default function SecuritySection() {
     const { user, updatePassword } = useAuth();
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [formLoading, setFormLoading] = useState(false);
+
+    // Password update state
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
 
-    const [twoFactorEnabled, setTwoFactorEnabled] = useState(
-        userData?.security?.twoFactorEnabled || false
-    );
+    // Security settings state
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+    const [sessionTimeout, setSessionTimeout] = useState(30);
+    const [deviceHistory, setDeviceHistory] = useState([]);
 
-    const [sessionTimeout, setSessionTimeout] = useState(
-        userData?.security?.sessionTimeout || 30
-    );
+    useEffect(() => {
+        const fetchSecurityData = async () => {
+            if (!user) return;
 
-    const [deviceHistory, setDeviceHistory] = useState(
-        userData?.security?.deviceHistory || []
-    );
+            try {
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDoc = await getDoc(userDocRef);
+
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    const security = data.security || {};
+
+                    setTwoFactorEnabled(security.twoFactorEnabled || false);
+                    setSessionTimeout(security.sessionTimeout || 30);
+                    setDeviceHistory(security.deviceHistory || []);
+                }
+            } catch (error) {
+                console.error('Error fetching security data:', error);
+                toast.error('Failed to load security settings');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSecurityData();
+    }, [user]);
 
     const handlePasswordUpdate = async (e) => {
         e.preventDefault();
@@ -37,16 +60,16 @@ export default function SecuritySection({ userData }) {
             return;
         }
 
-        setLoading(true);
+        setFormLoading(true);
         try {
             await updatePassword(currentPassword, newPassword);
 
-            // Update the last password change timestamp
             await updateDoc(doc(db, 'users', user.uid), {
                 'security.lastPasswordChange': new Date(),
                 updatedAt: new Date()
             });
 
+            // Reset password fields
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
@@ -56,14 +79,14 @@ export default function SecuritySection({ userData }) {
             console.error('Error updating password:', error);
             toast.error(error.message || 'Failed to update password');
         } finally {
-            setLoading(false);
+            setFormLoading(false);
         }
     };
 
     const handleSecuritySettingsUpdate = async () => {
         if (!user) return;
 
-        setLoading(true);
+        setFormLoading(true);
         try {
             await updateDoc(doc(db, 'users', user.uid), {
                 'security.twoFactorEnabled': twoFactorEnabled,
@@ -76,31 +99,36 @@ export default function SecuritySection({ userData }) {
             console.error('Error updating security settings:', error);
             toast.error('Failed to update security settings');
         } finally {
-            setLoading(false);
+            setFormLoading(false);
         }
     };
 
     const handleRemoveDevice = async (deviceId) => {
         if (!user) return;
 
-        setLoading(true);
+        setFormLoading(true);
         try {
             const updatedDevices = deviceHistory.filter(device => device.id !== deviceId);
-            setDeviceHistory(updatedDevices);
 
             await updateDoc(doc(db, 'users', user.uid), {
                 'security.deviceHistory': updatedDevices,
                 updatedAt: new Date()
             });
 
+            setDeviceHistory(updatedDevices);
             toast.success('Device removed successfully');
         } catch (error) {
             console.error('Error removing device:', error);
             toast.error('Failed to remove device');
         } finally {
-            setLoading(false);
+            setFormLoading(false);
         }
     };
+
+    if (loading) {
+        return <div>Loading...</div>;
+    }
+
 
     return (
         <div className="space-y-8">
@@ -153,10 +181,10 @@ export default function SecuritySection({ userData }) {
                     <div className="flex justify-end">
                         <button
                             type="submit"
-                            disabled={loading}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled={formLoading}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                         >
-                            {loading ? 'Updating...' : 'Update Password'}
+                            {formLoading ? 'Updating...' : 'Update Password'}
                         </button>
                     </div>
                 </form>

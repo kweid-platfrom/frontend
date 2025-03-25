@@ -8,7 +8,8 @@ import {
     orderBy,
     doc,
     updateDoc,
-    onSnapshot
+    onSnapshot,
+    getDocs
 } from "firebase/firestore";
 import { Bug, AlertCircle, Clock, Filter, ChevronDown } from "lucide-react";
 import BugGroup from '../components/bug-report/BugGroup';
@@ -29,6 +30,34 @@ const BugTracker = () => {
 
     useEffect(() => {
         setIsLoading(true);
+        
+        // Fallback fetch function
+        const fetchBugs = async () => {
+            try {
+                const bugsRef = collection(db, "bugs");
+                const q = query(bugsRef, orderBy("createdAt", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                const initialBugs = [];
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    initialBugs.push({
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate() || new Date(),
+                        timestamp: data.createdAt?.toDate() || new Date(),
+                    });
+                });
+
+                setBugs(initialBugs);
+            } catch (error) {
+                console.error("Error fetching initial bugs:", error);
+            }
+        };
+
+        // Fetch initial bugs before setting up listener
+        fetchBugs();
+
         // Set up real-time listener for bugs collection
         const bugsRef = collection(db, "bugs");
         const q = query(bugsRef, orderBy("createdAt", "desc"));
@@ -41,7 +70,7 @@ const BugTracker = () => {
                     id: doc.id,
                     ...data,
                     createdAt: data.createdAt?.toDate() || new Date(),
-                    timestamp: data.createdAt?.toDate() || new Date(), // Normalize timestamp field
+                    timestamp: data.createdAt?.toDate() || new Date(),
                 });
             });
 
@@ -106,11 +135,8 @@ const BugTracker = () => {
 
     const updateBugStatus = async (bugId, newStatus) => {
         try {
-            // Use the correct collection name "bugs" instead of "bugReports"
             const bugRef = doc(db, "bugs", bugId);
             await updateDoc(bugRef, { status: newStatus });
-
-            // No need to update local state since we have a real-time listener
         } catch (error) {
             console.error("Error updating bug status:", error);
         }
@@ -132,7 +158,6 @@ const BugTracker = () => {
         }
     };
 
-    // Generate a deterministic color based on group name
     const getGroupColor = (groupName) => {
         const colors = [
             "bg-blue-500", "bg-green-500", "bg-purple-500",
@@ -140,7 +165,6 @@ const BugTracker = () => {
             "bg-indigo-500", "bg-teal-500", "bg-orange-500"
         ];
 
-        // Simple hash function to get consistent color from group name
         let hash = 0;
         for (let i = 0; i < groupName.length; i++) {
             hash = groupName.charCodeAt(i) + ((hash << 5) - hash);

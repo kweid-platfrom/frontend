@@ -5,9 +5,10 @@ import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 
+// Import your section components
 import ProfileSection from '@/components/settings/ProfileSec';
 import NotificationSection from '@/components/settings/NotificationsSec';
-import ThemeSection from '@/components/Settings/ThemeSec';
+import ThemeSection from '@/components/settings/ThemeSec';
 import SubscriptionSection from '@/components/settings/SubscriptionSec';
 import SecuritySection from '@/components/settings/SecuritySec';
 import OrganizationSection from '@/components/settings/OrganizationSec';
@@ -15,7 +16,6 @@ import TeamSection from '@/components/settings/TeamSec';
 import SettingsSkeleton from '@/components/settings/SettingsSkeleton';
 
 export default function SettingsPage() {
-    // Assuming useAuth provides a loading state
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -25,60 +25,71 @@ export default function SettingsPage() {
     const [activeSection, setActiveSection] = useState('profile');
 
     useEffect(() => {
-        const timeout = setTimeout(() => {
-            if (!authLoading && user === null) {
-                router.replace('/login');
-            }
-        }, 500); // Delay to ensure Firebase completes auth check
-    
-        return () => clearTimeout(timeout); // Cleanup timeout
-    }, [authLoading, user, router]);
+        if (!user) {
+            router.replace('/login');
+            return;
+        }
 
-    useEffect(() => {
-        if (!user) return; // Don't fetch if no user
-
-        const fetchData = async () => {
+        const fetchUserData = async () => {
             try {
-                // Fetch user data
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
-                if (userDoc.exists()) {
-                    setUserData(userDoc.data());
+                // Fetch user document from Firestore
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
 
-                    // Fetch organization data if user has an organization
-                    if (userDoc.data().organizationId) {
-                        const orgDoc = await getDoc(doc(db, 'organizations', userDoc.data().organizationId));
-                        if (orgDoc.exists()) {
-                            setOrgData(orgDoc.data());
+                if (userDocSnap.exists()) {
+                    const firestoreUserData = userDocSnap.data();
+                    
+                    // Combine Firebase Auth and Firestore data
+                    const combinedUserData = {
+                        ...user,
+                        ...firestoreUserData
+                    };
 
-                            // Fetch team members if user is an admin
-                            if (userDoc.data().role === 'admin') {
-                                const teamSnapshot = await getDocs(collection(db, 'organizations', userDoc.data().organizationId, 'members'));
-                                const members = teamSnapshot.docs.map(doc => ({
-                                    id: doc.id,
-                                    ...doc.data()
-                                }));
-                                setTeamMembers(members);
-                            }
+                    setUserData(combinedUserData);
+
+                    // Fetch organization data if exists
+                    if (firestoreUserData.organizationId) {
+                        const orgDocRef = doc(db, 'organizations', firestoreUserData.organizationId);
+                        const orgDocSnap = await getDoc(orgDocRef);
+                        
+                        if (orgDocSnap.exists()) {
+                            setOrgData(orgDocSnap.data());
+                        }
+
+                        // Fetch team members if user is admin
+                        if (firestoreUserData.role === 'admin') {
+                            const teamRef = collection(
+                                db, 
+                                'organizations', 
+                                firestoreUserData.organizationId, 
+                                'members'
+                            );
+                            const teamSnap = await getDocs(teamRef);
+                            const members = teamSnap.docs.map(doc => ({
+                                id: doc.id,
+                                ...doc.data()
+                            }));
+                            setTeamMembers(members);
                         }
                     }
                 }
             } catch (error) {
-                console.error('Error fetching data:', error);
+                console.error('Error fetching user data:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchData();
-    }, [user]);
-
-    const handleSectionChange = (section) => {
-        setActiveSection(section);
-    };
+        fetchUserData();
+    }, [user, router]);
 
     if (authLoading || loading) {
         return <SettingsSkeleton />;
     }
+
+    const handleSectionChange = (section) => {
+        setActiveSection(section);
+    };
 
     const isAdmin = userData?.role === 'admin';
     const sections = [
@@ -89,7 +100,6 @@ export default function SettingsPage() {
         { id: 'security', label: 'Security', icon: 'shield' },
     ];
 
-    // Admin-only sections
     if (isAdmin) {
         sections.push(
             { id: 'organization', label: 'Organization', icon: 'building' },
@@ -111,10 +121,11 @@ export default function SettingsPage() {
                                     <li key={section.id}>
                                         <button
                                             onClick={() => handleSectionChange(section.id)}
-                                            className={`w-full text-left px-4 py-2 rounded-md flex items-center gap-3 transition-colors ${activeSection === section.id
-                                                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
-                                                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                }`}
+                                            className={`w-full text-left px-4 py-2 rounded-md flex items-center gap-3 transition-colors ${
+                                                activeSection === section.id
+                                                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                                                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                            }`}
                                         >
                                             <span>{section.label}</span>
                                         </button>
