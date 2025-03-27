@@ -3,10 +3,14 @@ import { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
-import {useAuth } from '../../context/AuthProvider';
+import { useAuth } from '../../context/AuthProvider';
 import Avatar from '../ui/avatar/Avatar';
 
-export default function ProfileSection({ userData }) {
+export default function ProfileSection({ 
+    userData, 
+    isEditable = true, 
+    onProfileUpdate 
+}) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -55,8 +59,8 @@ export default function ProfileSection({ userData }) {
                 avatarUrl = await getDownloadURL(storageRef);
             }
 
-            // Update user document
-            await updateDoc(doc(db, 'users', user.uid), {
+            // Prepare update data
+            const updateData = {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
                 phone: formData.phone,
@@ -64,7 +68,15 @@ export default function ProfileSection({ userData }) {
                 jobRole: formData.jobRole,
                 avatarUrl,
                 updatedAt: new Date()
-            });
+            };
+
+            // Update user document
+            await updateDoc(doc(db, 'users', user.uid), updateData);
+
+            // Optional callback for parent component
+            if (onProfileUpdate) {
+                onProfileUpdate(updateData);
+            }
 
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
@@ -75,6 +87,31 @@ export default function ProfileSection({ userData }) {
             setLoading(false);
         }
     };
+
+    // If not editable, show a read-only view
+    if (!isEditable) {
+        return (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                <div className="flex items-center space-x-6">
+                    <Avatar
+                        src={avatarPreview}
+                        alt={`${formData.firstName} ${formData.lastName}`}
+                        size="lg"
+                        className="ring-4 ring-gray-100 dark:ring-gray-700"
+                    />
+                    <div>
+                        <h2 className="text-xl font-bold">{formData.firstName} {formData.lastName}</h2>
+                        <p className="text-gray-600 dark:text-gray-300">{formData.jobRole}</p>
+                        <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                            {formData.location && <div>{formData.location}</div>}
+                            {user?.email && <div>{user.email}</div>}
+                            {formData.phone && <div>{formData.phone}</div>}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">

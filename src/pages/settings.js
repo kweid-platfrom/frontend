@@ -1,17 +1,17 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, collection, onSnapshot } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthProvider";
 
-import ProfileSection from "../components/Settings/ProfileSection";
-import NotificationSection from "../components/Settings/NotificationSection";
-import ThemeSection from "../components/Settings/ThemeSection";
-import SubscriptionSection from "../components/Settings/SubscriptionSection";
-import SecuritySection from "../components/Settings/SecuritySection";
-import OrganizationSection from "../components/Settings/OrganizationSection";
-import TeamSection from "../components/Settings/TeamSection";
-import SettingsSkeleton from "../components/settings/SettingsSkeleton";
+import ProfileSection from "../components/appSetting/ProfileSection";
+import NotificationSection from "../components/appSetting/NotificationSection";
+import ThemeSection from "../components/appSetting/ThemeSection";
+import SubscriptionSection from "../components/appSetting/SubscriptionSection";
+import SecuritySection from "../components/appSetting/SecuritySection";
+import OrganizationSection from "../components/appSetting/OrganizationSection";
+import TeamSection from "../components/appSetting/TeamSection";
+import SettingsSkeleton from "../components/appSetting/SettingsSkeleton";
 
 export default function SettingsPage() {
     const auth = useAuth();
@@ -28,25 +28,31 @@ export default function SettingsPage() {
         if (!organizationId) return null;
 
         try {
-            // Fetch organization data
+            // Fetch organization data with real-time updates
             const orgDocRef = doc(db, "organizations", organizationId);
-            const orgDocSnap = await getDoc(orgDocRef);
+            const unsubscribeOrg = onSnapshot(orgDocRef, (orgDocSnap) => {
+                if (orgDocSnap.exists()) {
+                    const fetchedOrgData = orgDocSnap.data();
+                    setOrgData(fetchedOrgData);
+                }
+            });
 
-            let fetchedOrgData = null;
-            if (orgDocSnap.exists()) {
-                fetchedOrgData = orgDocSnap.data();
-                setOrgData(fetchedOrgData);
-            }
-
-            // Fetch team members if user is an admin
+            // Fetch team members if user is an admin with real-time updates
             if (role === "admin") {
                 const teamRef = collection(db, "organizations", organizationId, "members");
-                const teamSnap = await getDocs(teamRef);
-                const members = teamSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-                setTeamMembers(members);
+                const unsubscribeTeam = onSnapshot(teamRef, (teamSnap) => {
+                    const members = teamSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+                    setTeamMembers(members);
+                });
+
+                // Return both unsubscribe functions
+                return () => {
+                    unsubscribeOrg();
+                    unsubscribeTeam();
+                };
             }
 
-            return fetchedOrgData;
+            return unsubscribeOrg;
         } catch (error) {
             console.error("Error fetching organization data:", error);
             return null;
@@ -60,35 +66,53 @@ export default function SettingsPage() {
             return;
         }
 
-        const fetchUserData = async () => {
+        let unsubscribeUser = null;
+        let unsubscribeOrg = null;
+
+        const setupRealTimeListeners = async () => {
             try {
                 setLoading(true);
 
-                // Fetch user document from Firestore
+                // Set up real-time listener for user document
                 const userDocRef = doc(db, "users", user.uid);
-                const userDocSnap = await getDoc(userDocRef);
+                unsubscribeUser = onSnapshot(userDocRef, async (userDocSnap) => {
+                    if (userDocSnap.exists()) {
+                        const fetchedUserData = userDocSnap.data();
+                        setUserData(fetchedUserData);
 
-                if (userDocSnap.exists()) {
-                    const fetchedUserData = userDocSnap.data();
-                    setUserData(fetchedUserData);
+                        // Close previous org subscription if exists
+                        if (unsubscribeOrg) {
+                            unsubscribeOrg();
+                        }
 
-                    // Fetch organization data if user belongs to an organization
-                    if (fetchedUserData.organizationId) {
-                        await fetchOrganizationData(
-                            fetchedUserData.organizationId, 
-                            fetchedUserData.role
-                        );
+                        // Fetch organization data if user belongs to an organization
+                        if (fetchedUserData.organizationId) {
+                            unsubscribeOrg = await fetchOrganizationData(
+                                fetchedUserData.organizationId, 
+                                fetchedUserData.role
+                            );
+                        }
                     }
-                }
+                }, (error) => {
+                    console.error("Error listening to user document:", error);
+                });
             } catch (error) {
-                console.error("Error fetching user data:", error);
+                console.error("Error setting up real-time listeners:", error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchUserData();
+        setupRealTimeListeners();
+
+        // Cleanup function to unsubscribe from listeners
+        return () => {
+            if (unsubscribeUser) unsubscribeUser();
+            if (unsubscribeOrg) unsubscribeOrg();
+        };
     }, [user, authLoading, fetchOrganizationData]);
+
+    // Rest of the component remains the same as in the original code...
 
     // Show loading skeleton during authentication and data fetching
     if (authLoading || loading) {
