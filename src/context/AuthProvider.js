@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }) => {
     // Fetch user data from Firestore
     const fetchUserData = async (userId) => {
         try {
-            const userRef = doc(db, "users", userId);
+            const userRef = doc(db, "users", userId)
             const userSnap = await getDoc(userRef);
 
             if (userSnap.exists()) {
@@ -48,40 +48,18 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Create user document if it doesn't exist
-    const createUserIfNotExists = async (user) => {
-        try {
-            const userRef = doc(db, "users", user.uid);
-            const userSnap = await getDoc(userRef);
-
-            if (!userSnap.exists()) {
-                // Create new user document with default permissions
-                await setDoc(userRef, {
-                    email: user.email,
-                    displayName: user.displayName || "",
-                    photoURL: user.photoURL || "",
-                    permissions: {
-                        isAdmin: false,
-                        roles: ["user"],
-                        capabilities: ["read_tests"]
-                    },
-                    profile: {
-                        firstName: user.displayName ? user.displayName.split(' ')[0] : "",
-                        lastName: user.displayName ? user.displayName.split(' ').slice(1).join(' ') : "",
-                        company: "",
-                        position: "",
-                        createdAt: new Date().toISOString()
-                    },
-                    lastLogin: new Date().toISOString()
-                });
-                return true;
+        // Check if user exists in Firestore
+        const checkUserExists = async (email) => {
+            try {
+                // Query Firestore to find a user with this email
+                const q = doc(db, "users", email);
+                const userSnap = await getDoc(q);
+                return userSnap.exists();
+            } catch (error) {
+                console.error("Error checking user existence:", error);
+                return false;
             }
-            return false;
-        } catch (error) {
-            console.error("Error creating user:", error);
-            return false;
-        }
-    };
+        };
 
     // Update last login timestamp
     const updateUserLastLogin = async (userId) => {
@@ -94,15 +72,22 @@ export const AuthProvider = ({ children }) => {
             console.error("Error updating last login:", error);
         }
     };
-
     // Handle redirect result (for redirect sign-in)
     useEffect(() => {
         const handleRedirectResult = async () => {
             try {
                 const result = await getRedirectResult(auth);
                 if (result?.user) {
-                    // User signed in via redirect
-                    await createUserIfNotExists(result.user);
+                    // Check if existing user before allowing login
+                    const userExists = await checkUserExists(result.user.email);
+                    if (!userExists) {
+                        // If not an existing user, sign out and prevent access
+                        await firebaseSignOut(auth);
+                        setAuthError("Google SSO is only available for existing users.");
+                        return;
+                    }
+                    
+                    // Update last login for existing users
                     await updateUserLastLogin(result.user.uid);
                 }
             } catch (error) {
@@ -180,13 +165,21 @@ export const AuthProvider = ({ children }) => {
             const result = await signInWithPopup(auth, googleProvider);
             const user = result.user;
 
-            // Check if this is a new user
-            const isNewUser = await createUserIfNotExists(user);
+            // Check if user exists in Firestore before allowing login
+            const userExists = await checkUserExists(user.email);
+            if (!userExists) {
+                // If not an existing user, sign out and prevent access
+                await firebaseSignOut(auth);
+                return { 
+                    success: false, 
+                    error: "Google SSO is only available for existing users. Please register first." 
+                };
+            }
 
-            // Update last login timestamp
+            // Update last login timestamp for existing users
             await updateUserLastLogin(user.uid);
 
-            return { success: true, isNewUser };
+            return { success: true, isExistingUser: true };
         } catch (error) {
             console.error("Google sign-in error:", error);
             
@@ -217,7 +210,7 @@ export const AuthProvider = ({ children }) => {
             return { success: false, error: error.message };
         }
     };
-
+    
     // Sign out
     const signOut = async () => {
         try {

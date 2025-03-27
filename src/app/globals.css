@@ -134,7 +134,7 @@
 
 /* Scrollbar thumb (indicator) */
 ::-webkit-scrollbar-thumb {
-  background-color: #00897B; /* Change color */
+  background-color: #A5D6A7; /* Change color */
   border-radius: 2px; /* Optional: Rounded corners */
 }
 

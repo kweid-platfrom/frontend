@@ -1,9 +1,9 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
-import {useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
 import Avatar from '../ui/avatar/Avatar';
 
 export default function ProfileSection({ userData }) {
@@ -13,12 +13,24 @@ export default function ProfileSection({ userData }) {
     const [error, setError] = useState('');
 
     const [formData, setFormData] = useState({
-        firstName: userData?.firstName || '',
-        lastName: userData?.lastName || '',
-        phone: userData?.phone || '',
-        location: userData?.location || '',
-        jobRole: userData?.jobRole || '',
+        firstName: "",
+        lastName: "",
+        phone: "",
+        location: "",
+        jobRole: "",
     });
+    
+    useEffect(() => {
+        if (userData) {
+            setFormData({
+                firstName: userData.firstName || "",
+                lastName: userData.lastName || "",
+                phone: userData.phone || "",
+                location: userData.location || "",
+                jobRole: userData.jobRole || "",
+            });
+        }
+    }, [userData]);
 
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(userData?.avatarUrl || '');
@@ -34,6 +46,11 @@ export default function ProfileSection({ userData }) {
     const handleAvatarChange = (e) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            // Validate file size (1MB max)
+            if (file.size > 1 * 1024 * 1024) {
+                setError('File size must be less than 1MB');
+                return;
+            }
             setAvatarFile(file);
             setAvatarPreview(URL.createObjectURL(file));
         }
@@ -56,21 +73,23 @@ export default function ProfileSection({ userData }) {
             }
 
             // Update user document
-            await updateDoc(doc(db, 'users', user.uid), {
+            const userUpdateData = {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
                 phone: formData.phone,
                 location: formData.location,
                 jobRole: formData.jobRole,
-                avatarUrl,
+                ...(avatarUrl && { avatarUrl }),
                 updatedAt: new Date()
-            });
+            };
+
+            await updateDoc(doc(db, 'users', user.uid), userUpdateData);
 
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
         } catch (err) {
             console.error('Error updating profile:', err);
-            setError('Failed to update profile. Please try again.');
+            setError(err.message || 'Failed to update profile. Please try again.');
         } finally {
             setLoading(false);
         }
