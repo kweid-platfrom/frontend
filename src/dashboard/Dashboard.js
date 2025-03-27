@@ -22,8 +22,7 @@ import AutomatedScripts from "../pages/auto-scripts";
 import SettingsPage from "../pages/settings";
 import { db } from "../config/firebase";
 import { collection, query, orderBy, limit, getDocs, onSnapshot, doc } from "firebase/firestore";
-import { useTestCaseMetricsContext } from "../context/TestCaseMetricContext";
-import { TestCaseMetricsProvider } from "../context/TestCaseMetricContext";
+
 
 const Dashboard = () => {
     const auth = getAuth();
@@ -39,7 +38,6 @@ const Dashboard = () => {
         recentActivities: []
     });
     const [isLoading, setIsLoading] = useState(true);
-    const { metricsLastUpdated } = useTestCaseMetricsContext();
 
     const viewOptions = [
         { value: "weekly", label: "Weekly" },
@@ -559,7 +557,7 @@ const Dashboard = () => {
         if (metricsLastUpdated) {
             fetchDashboardData();
         }
-    }, [metricsLastUpdated, fetchDashboardData]);
+    }, [fetchDashboardData]);
 
     return (
         <div className="flex h-screen bg-gray-50">

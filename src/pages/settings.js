@@ -15,7 +15,9 @@ import TeamSection from "@/components/settings/TeamSec";
 import SettingsSkeleton from "@/components/settings/SettingsSkeleton";
 
 export default function SettingsPage() {
-    const { user, loading: authLoading } = useAuth();
+    const auth = useAuth();
+    const user = auth?.user || null;
+    const authLoading = auth?.loading || false;
 
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
