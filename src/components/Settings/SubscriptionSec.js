@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../context/AuthProvider';
 import { toast } from 'react-hot-toast';
 
 export default function SubscriptionSection({ userData, orgData, isAdmin }) {

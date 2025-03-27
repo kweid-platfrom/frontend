@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../context/AuthProvider';
 
 export default function TeamSection({ orgData, teamMembers: initialTeamMembers }) {
     const { user } = useAuth();

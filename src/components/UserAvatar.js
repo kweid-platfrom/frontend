@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import SignOutButton from "@/components/auth/SignOutButton";
 import { User, Settings, HelpCircle, ChevronDown } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "../context/AuthProvider";
 
 const UserAvatarDropdown = () => {
     const [isOpen, setIsOpen] = useState(false);

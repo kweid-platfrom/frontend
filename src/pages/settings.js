@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../context/AuthProvider";
 
 // Import section components
 import ProfileSection from "@/components/settings/ProfileSec";
