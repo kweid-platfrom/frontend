@@ -4,22 +4,13 @@ import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { useAuth } from "../context/AuthProvider";
 
-// Import section components
-// import ProfileSection from "../components/Settings/ProfileSec";
-// import NotificationSection from "../components/Settings/NotificationSec";
-// import ThemeSection from "../components/Settings/ThemeSec";
-// import SubscriptionSection from '../components/Settings/SubscriptionSec';
-// import SecuritySection from '../components/Settings/SecuritySec';
-// import OrganizationSection from "../components/settings/OrganizationSec";
-// import TeamSection from "../components/settings/TeamSec";
-// import SettingsSkeleton from "../components/settings/SettingsSkeleton";
-import ProfileSection from "../components/Settings/ProfileSec";
-import NotificationSection from "../components/Settings/NotificationSec";
-import ThemeSection from "../components/Settings/ThemeSec";
-import SubscriptionSection from "../components/Settings/SubscriptionSec";
-import SecuritySection from "../components/Settings/SecuritySec";
-import OrganizationSection from "../components/settings/OrganizationSec";
-import TeamSection from "../components/settings/TeamSec";
+import ProfileSection from "../components/Settings/ProfileSection";
+import NotificationSection from "../components/Settings/NotificationSection";
+import ThemeSection from "../components/Settings/ThemeSection";
+import SubscriptionSection from "../components/Settings/SubscriptionSection";
+import SecuritySection from "../components/Settings/SecuritySection";
+import OrganizationSection from "../components/Settings/OrganizationSection";
+import TeamSection from "../components/Settings/TeamSection";
 import SettingsSkeleton from "../components/settings/SettingsSkeleton";
 
 export default function SettingsPage() {
