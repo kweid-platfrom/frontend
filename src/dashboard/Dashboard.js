@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { where } from "firebase/firestore";
 import "../app/globals.css";
 import {
@@ -22,10 +22,13 @@ import AutomatedScripts from "../pages/auto-scripts";
 import SettingsPage from "../pages/settings";
 import { db } from "../config/firebase";
 import { collection, query, orderBy, limit, getDocs, onSnapshot, doc } from "firebase/firestore";
-
+import { useRouter } from "next/navigation";
 
 const Dashboard = () => {
     const auth = getAuth();
+    const router = useRouter();
+    const [user, setUser] = useState(null);
+    const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [activeModal, setActiveModal] = useState(null);
     const [bugData, setBugData] = useState(null);
     const [timeframeView, setTimeframeView] = useState({ value: "weekly", label: "Weekly" });
@@ -38,6 +41,7 @@ const Dashboard = () => {
         recentActivities: []
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [metricsLastUpdated, setMetricsLastUpdated] = useState(null);
 
     const viewOptions = [
         { value: "weekly", label: "Weekly" },
@@ -48,12 +52,26 @@ const Dashboard = () => {
     // Functions to control modals
     const openModal = (modalType) => setActiveModal(modalType);
     const closeModal = () => setActiveModal(null);
+
+    // Authentication tracking
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+            } else {
+                // Redirect to login if no user
+                router.push('/login');
+            }
+            setIsAuthLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [auth, router]);
     
     // Function to fetch bug status data
-    
     const fetchBugStatusData = useCallback(async (timeframe) => {
         try {
-            if (!auth.currentUser) {
+            if (!user) {
                 throw new Error("User not authenticated");
             }
     
@@ -61,9 +79,9 @@ const Dashboard = () => {
             const q = query(
                 collection(db, "bugs"),
                 // Either created by the current user OR in their organization
-                where("createdBy", "==", auth.currentUser.uid),
+                where("createdBy", "==", user.uid),
                 // You could also use a compound query with organizationId if needed
-                // where("organizationId", "==", auth.currentUser.organizationId),
+                // where("organizationId", "==", user.organizationId),
                 orderBy("createdAt", "desc")
             );
             
@@ -115,18 +133,18 @@ const Dashboard = () => {
                 { name: "Closed", value: 0 }
             ];
         }
-    }, [auth.currentUser]);
+    }, [user]);
     
     // Function to fetch defect trends data
     const fetchDefectTrendsData = useCallback(async (timeframe) => {
         try {
-            if (!auth.currentUser) {
+            if (!user) {
                 throw new Error("User not authenticated");
             }
     
             const q = query(
                 collection(db, "bugs"),
-                where("createdBy", "==", auth.currentUser.uid),
+                where("createdBy", "==", user.uid),
                 orderBy("createdAt", "desc")
             );
             
@@ -194,7 +212,7 @@ const Dashboard = () => {
                 { date: "Week 4", count: 10 }
             ];
         }
-    }, [auth.currentUser]);
+    }, [user]);
 
     // Function to fetch test coverage data
     const fetchTestCoverageData = useCallback(async () => {
@@ -361,14 +379,14 @@ const Dashboard = () => {
     // Function to fetch recent activities
     const fetchRecentActivities = useCallback(async () => {
         try {
-            if (!auth.currentUser) {
+            if (!user) {
                 throw new Error("User not authenticated");
             }
     
             // Fetch recent bugs with proper filters
             const bugsQuery = query(
                 collection(db, "bugs"),
-                where("createdBy", "==", auth.currentUser.uid),
+                where("createdBy", "==", user.uid),
                 orderBy("createdAt", "desc"),
                 limit(5)
             );
@@ -411,7 +429,7 @@ const Dashboard = () => {
             // Try to get activities from the dedicated collection
             const activitiesQuery = query(
                 collection(db, "activities"),
-                where("userId", "==", auth.currentUser.uid),
+                where("userId", "==", user.uid),
                 orderBy("createdAt", "desc"),
                 limit(5)
             );
@@ -438,7 +456,7 @@ const Dashboard = () => {
             // Return empty array in case of error
             return [];
         }
-    }, [auth.currentUser]);
+    }, [user]);
 
     // Auto refresh function
     const fetchDashboardData = useCallback(async () => {
@@ -508,12 +526,12 @@ const Dashboard = () => {
     useEffect(() => {
         let unsubscribers = [];
     
-        if (activePage === "dashboard" && auth.currentUser) {
+        if (activePage === "dashboard" && user) {
             // Listen for changes in bug reports
             try {
                 const bugsQuery = query(
                     collection(db, "bugs"),
-                    where("createdBy", "==", auth.currentUser.uid)
+                    where("createdBy", "==", user.uid)
                 );
                 
                 const bugsUnsubscribe = onSnapshot(
@@ -526,7 +544,7 @@ const Dashboard = () => {
                 // Similarly, add filters to other listeners
                 const resultsQuery = query(
                     collection(db, "testResults"),
-                    where("createdBy", "==", auth.currentUser.uid)
+                    where("createdBy", "==", user.uid)
                 );
                 
                 const resultsUnsubscribe = onSnapshot(
@@ -545,7 +563,7 @@ const Dashboard = () => {
         return () => {
             unsubscribers.forEach(unsubscribe => unsubscribe());
         };
-    }, [activePage, fetchDashboardData, auth.currentUser]);
+    }, [activePage, fetchDashboardData, user]);
 
     // Fetch data when component mounts or when timeframe changes
     useEffect(() => {
@@ -557,7 +575,16 @@ const Dashboard = () => {
         if (metricsLastUpdated) {
             fetchDashboardData();
         }
-    }, [fetchDashboardData]);
+    }, [fetchDashboardData, metricsLastUpdated]);
+
+    // Loading state while authentication is being determined
+    if (isAuthLoading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-500"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen bg-gray-50">
