@@ -32,13 +32,13 @@ const Home = () => {
                                     Streamline your quality assurance workflow with our comprehensive platform for test case management, defect tracking, and automated reporting.
                                 </p>
                                 <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
-                                    <div className="rounded-md shadow">
-                                        <Link href="/register" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xs text-white bg-[#00897B] hover:bg-[#00796B] md:py-4 md:text-lg md:px-10">
+                                    <div className="rounded shadow">
+                                        <Link href="/register" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded text-white bg-[#00897B] hover:bg-[#00796B] md:py-4 md:text-lg md:px-10">
                                             Get started
                                         </Link>
                                     </div>
                                     <div className="mt-3 sm:mt-0 sm:ml-3">
-                                        <Link href="/demo" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-[#00897B] bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10">
+                                        <Link href="/demo" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded text-[#00897B] bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10">
                                             Request demo
                                         </Link>
                                     </div>
@@ -50,7 +50,7 @@ const Home = () => {
                 <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
                     <div className="h-96 w-full bg-[#D3D5D4] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
                         <Image
-                            src="/hero-image.png" 
+                            src="/2.webp" 
                             alt="hero-image"
                             width={900}  // Set appropriate width
                             height={900} // Set appropriate height

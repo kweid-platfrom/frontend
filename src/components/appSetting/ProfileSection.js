@@ -150,7 +150,7 @@ export default function ProfileSection({
                             <button
                                 type="button"
                                 onClick={() => document.getElementById('avatar-upload').click()}
-                                className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                                className="text-[#00897B] dark:text-[#00695C] hover:underline text-sm"
                             >
                                 Change photo
                             </button>
@@ -173,7 +173,7 @@ export default function ProfileSection({
                                 type="text"
                                 value={formData.firstName}
                                 onChange={handleInputChange}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-[#00897B] dark:bg-gray-700"
                                 required
                             />
                         </div>
@@ -187,7 +187,7 @@ export default function ProfileSection({
                                 type="text"
                                 value={formData.lastName}
                                 onChange={handleInputChange}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-[#00897B] dark:bg-gray-700"
                                 required
                             />
                         </div>
@@ -219,7 +219,7 @@ export default function ProfileSection({
                             type="tel"
                             value={formData.phone}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-[#00897B] dark:bg-gray-700"
                         />
                     </div>
 
@@ -233,7 +233,7 @@ export default function ProfileSection({
                             type="text"
                             value={formData.location}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-[#00897B] dark:bg-gray-700"
                             placeholder="City, Country"
                         />
                     </div>
@@ -248,19 +248,19 @@ export default function ProfileSection({
                             type="text"
                             value={formData.jobRole}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-[#00897B] dark:bg-gray-700"
                         />
                     </div>
                 </div>
 
                 {error && (
-                    <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md">
+                    <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded">
                         {error}
                     </div>
                 )}
 
                 {success && (
-                    <div className="mt-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-md">
+                    <div className="mt-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 rounded">
                         Profile updated successfully!
                     </div>
                 )}
@@ -269,7 +269,7 @@ export default function ProfileSection({
                     <button
                         type="submit"
                         disabled={loading}
-                        className={`px-4 py-2 rounded-md text-white font-medium ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                        className={`px-4 py-2 rounded text-white font-medium ${loading ? 'bg-[#00695C] cursor-not-allowed' : 'bg-[#00897B]  hover:bg-[#00695C]'
                             }`}
                     >
                         {loading ? 'Updating...' : 'Update Profile'}
