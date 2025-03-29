@@ -5,7 +5,7 @@ import { Bell, Search, Play, UserPlus, FileText, Plus, Settings, User } from "lu
 import SignOutButton from "../auth/SignOutButton";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
 import BugReportButton from "../BugReport";
-import UserAvatar from "../UserAvatar";
+import UserAvatar from '../UserAvatar'
 import AddUserDropdown from "../modals/AddUserDropdown"
 
 const Header = ({ setShowBugForm }) => {

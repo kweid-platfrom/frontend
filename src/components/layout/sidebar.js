@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
-import Image from "next/image";
-import { getAuth, onAuthStateChanged } from "firebase/auth"; 
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import SignOutButton from "@/components/auth/SignOutButton";
 import {
-    LayoutDashboard, FileCode, BarChart3, Video, Bug, GitPullRequest, 
+    LayoutDashboard, FileCode, BarChart3, Video, Bug, GitPullRequest,
     Settings, HelpCircle, ChevronsLeft, ChevronsRight, ScrollText, Menu, X
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import UserAvatar from "@/components/UserAvatar";
 
 const Sidebar = ({ setActivePage }) => {
     // Better SSR handling with a stronger initial state
     const [mounted, setMounted] = useState(false);
     const initialSelectedPage = useRef(null);
-    
+
     // State declarations with server-safe defaults
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -31,26 +31,26 @@ const Sidebar = ({ setActivePage }) => {
                 // Update parent component immediately
                 setActivePage(storedPage);
             }
-            
+
             // Get saved sidebar state
             const storedCollapsed = localStorage.getItem("sidebarCollapsed");
             if (storedCollapsed !== null) {
                 setIsCollapsed(JSON.parse(storedCollapsed));
             }
         }
-        
+
         setMounted(true);
     }, [setActivePage]);
 
     // Separate effect for auth handling to avoid conflicts
     useEffect(() => {
         if (!mounted) return;
-        
+
         // Auth listener
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
-            
+
             // If user just logged in and we're still in initial render state
             if (currentUser && initialRenderRef.current) {
                 // Only set to dashboard if no specific page was already saved
@@ -90,13 +90,13 @@ const Sidebar = ({ setActivePage }) => {
     // Close mobile menu when window resizes to larger than mobile breakpoint
     useEffect(() => {
         if (!mounted) return;
-        
+
         const handleResize = () => {
             if (window.innerWidth >= 768) { // md breakpoint
                 setIsMobileMenuOpen(false);
             }
         };
-        
+
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, [mounted]);
@@ -111,12 +111,6 @@ const Sidebar = ({ setActivePage }) => {
 
     const toggleMobileMenu = () => {
         setIsMobileMenuOpen(prev => !prev);
-    };
-
-    const getInitials = (name) => {
-        if (!name) return "U";
-        const names = name.split(" ");
-        return names.map((n) => n[0]).join("").toUpperCase();
     };
 
     const navItems = [
@@ -146,26 +140,24 @@ const Sidebar = ({ setActivePage }) => {
             >
                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            
+
             {/* Desktop Sidebar */}
-            <div 
-                className={`bg-[#2D3142] text-white h-screen hidden md:flex flex-col transition-all duration-300 ease-in-out ${
-                    isCollapsed ? "w-20" : "w-56"
-                }`}
+            <div
+                className={`bg-[#2D3142] text-white h-screen hidden md:flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? "w-20" : "w-56"
+                    }`}
             >
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center">
                         <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center flex-shrink-0">
                             <span className="text-xl font-bold text-[#00897B]">QA</span>
                         </div>
-                        <div className={`ml-3 overflow-hidden transition-all duration-300 ease-in-out ${
-                            isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                        }`}>
+                        <div className={`ml-3 overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+                            }`}>
                             <h1 className="text-xl text-white font-bold whitespace-nowrap">TestTracker</h1>
                         </div>
                     </div>
-                    <button 
-                        onClick={toggleCollapse} 
+                    <button
+                        onClick={toggleCollapse}
                         className="text-white flex-shrink-0"
                         aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                     >
@@ -186,9 +178,8 @@ const Sidebar = ({ setActivePage }) => {
                                             `}
                                         >
                                             <item.icon className="h-5 w-5 flex-shrink-0" />
-                                            <span className={`ml-3 whitespace-nowrap transition-all duration-300 ease-in-out ${
-                                                isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100 inline"
-                                            }`}>
+                                            <span className={`ml-3 whitespace-nowrap transition-all duration-300 ease-in-out ${isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100 inline"
+                                                }`}>
                                                 {item.label}
                                             </span>
                                         </button>
@@ -206,22 +197,13 @@ const Sidebar = ({ setActivePage }) => {
 
                 {/* User Section */}
                 <div className="p-4 border-t border-[#00897B] flex items-center">
-                    {user?.photoURL ? (
-                        <Image
-                            className="h-8 w-8 rounded-full flex-shrink-0"
-                            src={user.photoURL}
-                            width={32}
-                            height={32}
-                            alt="User avatar"
-                        />
-                    ) : (
-                        <div className="h-8 w-8 rounded-full bg-[#00897B] flex items-center justify-center text-white font-bold flex-shrink-0">
-                            {getInitials(user?.displayName)}
-                        </div>
-                    )}
-                    <div className={`ml-3 transition-all duration-300 ease-in-out overflow-hidden ${
-                        isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                    }`}>
+                    <UserAvatar
+                        user={user}
+                        size="sm"
+                        className="flex-shrink-0"
+                    />
+                    <div className={`ml-3 transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+                        }`}>
                         <p className="text-sm font-medium text-white truncate">{user?.displayName || "Guest User"}</p>
                         <p className="text-xs font-medium text-[#A5D6A7] truncate">{user?.email || "No email available"}</p>
                     </div>
@@ -232,31 +214,28 @@ const Sidebar = ({ setActivePage }) => {
             </div>
 
             {/* Mobile Sidebar - Improved for better overlay */}
-            <div 
-                className={`md:hidden fixed inset-0 z-40 ${
-                    isMobileMenuOpen ? "pointer-events-auto" : "pointer-events-none"
-                }`}
+            <div
+                className={`md:hidden fixed inset-0 z-40 ${isMobileMenuOpen ? "pointer-events-auto" : "pointer-events-none"
+                    }`}
             >
                 {/* Backdrop with proper z-index */}
-                <div 
-                    className={`absolute inset-0 bg-black transition-opacity duration-300 ${
-                        isMobileMenuOpen ? "opacity-50" : "opacity-0"
-                    }`}
+                <div
+                    className={`absolute inset-0 bg-black transition-opacity duration-300 ${isMobileMenuOpen ? "opacity-50" : "opacity-0"
+                        }`}
                     onClick={toggleMobileMenu}
                     aria-hidden="true"
                 />
-                
+
                 {/* Mobile sidebar with proper z-index and transition */}
-                <div 
-                    className={`absolute top-0 left-0 h-full w-16 bg-[#2D3142] transform transition-transform duration-300 ease-in-out ${
-                        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-                    }`}
+                <div
+                    className={`absolute top-0 left-0 h-full w-16 bg-[#2D3142] transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+                        }`}
                 >
                     <div className="flex flex-col items-center py-4 pt-16">
                         <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center mb-6">
                             <span className="text-xl font-bold text-[#00897B]">QA</span>
                         </div>
-                        
+
                         <div className="flex flex-col space-y-6 items-center">
                             <TooltipProvider>
                                 {navItems.map((item) => (
@@ -279,21 +258,12 @@ const Sidebar = ({ setActivePage }) => {
                                 ))}
                             </TooltipProvider>
                         </div>
-                        
+
                         <div className="mt-auto">
-                            {user?.photoURL ? (
-                                <Image
-                                    className="h-8 w-8 rounded-full"
-                                    src={user.photoURL}
-                                    width={32}
-                                    height={32}
-                                    alt="User avatar"
-                                />
-                            ) : (
-                                <div className="h-8 w-8 rounded-full bg-[#00897B] flex items-center justify-center text-white font-bold">
-                                    {getInitials(user?.displayName)}
-                                </div>
-                            )}
+                            <UserAvatar
+                                user={user}
+                                size="sm"
+                            />
                         </div>
                     </div>
                 </div>
