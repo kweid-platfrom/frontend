@@ -50,7 +50,7 @@ const Home = () => {
                 <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
                     <div className="h-96 w-full bg-[#D3D5D4] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
                         <Image
-                            src="/2.webp" 
+                            src="/2.jpeg" 
                             alt="hero-image"
                             width={900}  // Set appropriate width
                             height={900} // Set appropriate height
