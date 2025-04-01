@@ -7,8 +7,6 @@ import { useAuth } from "../../context/AuthProvider";
 import { useAlert } from "../../components/CustomAlert";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
-import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "../../config/firebase";
 import "../../app/globals.css";
 
 const Login = () => {
@@ -19,7 +17,7 @@ const Login = () => {
     const [loadingGoogleLogin, setLoadingGoogleLogin] = useState(false);
     const [errors, setErrors] = useState({ email: "", password: "" });
     const router = useRouter();
-    const { signIn, currentUser, loading } = useAuth();
+    const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
     const { showAlert, alertComponent } = useAlert();
 
     // Redirect if already logged in
@@ -82,32 +80,21 @@ const Login = () => {
     const handleGoogleLogin = async () => {
         setLoadingGoogleLogin(true);
         try {
-            // Check if this is a Google sign-in attempt
-            // We want to handle this differently from a Google registration
-            
-            // First, attempt the sign-in
-            const result = await signInWithPopup(auth, googleProvider);
-            const user = result.user;
-            
-            console.log("User logged in:", user.email);
-            // Check if this was a new user account (registration, not login)
-            if (result.additionalUserInfo?.isNewUser) {
-                // This means they've never signed in before with Google
-                // We should indicate they need to register first
-                showAlert("No account found. Please register first to create an account.", "error");
+            const result = await signInWithGoogle();
+            if (result.success) {
+                // If the user doesn't exist, redirect to register
+                if (result.isNewUser) {
+                    showAlert("Please complete your registration first.", "info");
+                    router.push("/register");
+                    return;
+                }
                 
-                // Sign out the user since we don't want to keep them signed in
-                await auth.signOut();
-                
-                // Redirect to registration page
-                router.push("/register");
-                return;
+                // Otherwise, show success and redirect to dashboard
+                showAlert("Login successful!", "success");
+                router.push("/dashboard");
+            } else {
+                showAlert(result.error, "error");
             }
-            
-            // If we reach here, it's an existing user signing in
-            showAlert("Login successful!", "success");
-            router.push("/dashboard");
-            
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
@@ -220,7 +207,7 @@ const Login = () => {
                             disabled={loadingGoogleLogin}
                         >
                             <FcGoogle className="w-5 h-5 fill-[#4285F4]" />
-                            Sign In
+                            Google
                             {loadingGoogleLogin && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                         </button>
                     </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { sendSignInLinkToEmail, signInWithPopup, fetchSignInMethodsForEmail } from "firebase/auth";
+import { useState } from "react";
+import { sendSignInLinkToEmail, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -9,35 +9,14 @@ import { useAlert } from "../../components/CustomAlert";
 import { FcGoogle } from "react-icons/fc";
 import { Loader2 } from "lucide-react";
 import "../../app/globals.css";
-import { doc, setDoc, getFirestore } from "firebase/firestore";
-
-const db = getFirestore();
 
 const Register = () => {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [emailError, setEmailError] = useState("");
-    const [appUrl, setAppUrl] = useState("");
     const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
-
-    // Determine current app URL
-    useEffect(() => {
-        // Get URL from environment variable or dynamically build it
-        let dynamicUrl = process.env.NEXT_PUBLIC_APP_URL;
-        
-        // If not available (or in development), use window.location
-        if (!dynamicUrl || dynamicUrl === "undefined" || process.env.NODE_ENV === "development") {
-            const protocol = window.location.protocol;
-            const host = window.location.host;
-            dynamicUrl = `${protocol}//${host}`;
-        }
-        
-        setAppUrl(dynamicUrl);
-        console.log("Current environment:", process.env.NODE_ENV);
-        console.log("Using app URL:", dynamicUrl);
-    }, []);
 
     const validateEmail = (email) => {
         if (!email) {
@@ -50,6 +29,9 @@ const Register = () => {
             setEmailError("Please enter a valid email address");
             return false;
         }
+        
+        // You can add additional work email validation if needed
+        // For example, check for certain domains or patterns
         
         setEmailError("");
         return true;
@@ -65,129 +47,41 @@ const Register = () => {
         setLoading(true);
 
         try {
-            // Check if email already exists
-            const signInMethods = await fetchSignInMethodsForEmail(auth, email);
-            if (signInMethods.length > 0) {
-                setEmailError("This email is already registered. Please login instead.");
-                setLoading(false);
-                return;
-            }
-
-            // Get the current timestamp in seconds
-            const currentTime = Math.floor(Date.now() / 1000);
-            
-            // Set expiration to current time + 7 days (maximum allowed by Firebase)
-            const expirationTime = currentTime + 604800; // 7 days in seconds
-            
-            console.log(`Using continuation URL: ${appUrl}/account-setup`);
-            console.log(`Current time (seconds): ${currentTime}`);
-            console.log(`Expiration time (seconds): ${expirationTime}`);
-            
+            // Extended configuration for email link sign-in
             const actionCodeSettings = {
-                url: `${appUrl}/account-setup`,
+                url: process.env.NEXT_PUBLIC_APP_URL 
+                    ? `${process.env.NEXT_PUBLIC_APP_URL}/account-setup`
+                    : "https://your-domain.com/account-setup", // Fallback URL
                 handleCodeInApp: true,
-                // Maximum expiration time - 7 days
-                expires: expirationTime
+                // Set a longer expiration time (maximum 7 days = 604800 seconds)
+                // Firebase uses seconds for expiration time
+                // This sets it to 3 days (259200 seconds)
+                expires: 259200
             };
 
-            // Clear any existing emailForSignIn to avoid conflicts
-            window.localStorage.removeItem("emailForSignIn");
-            
             await sendSignInLinkToEmail(auth, email, actionCodeSettings);
             
-            // Store email in localStorage
+            // Store email in localStorage to verify on sign-in page
             window.localStorage.setItem("emailForSignIn", email);
+            
+            // Also store the timestamp when the email was sent
             window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
-            window.localStorage.setItem("isRegistering", "true");
             
-            // Also store the expected expiration time for client-side validation
-            window.localStorage.setItem("emailLinkExpiration", (Date.now() + 604800 * 1000).toString());
-            
-            showAlert("Verification email sent. Please check your inbox. The link will be valid for 7 days.", "success");
+            showAlert("Verification email sent. Please check your inbox. The link will be valid for 3 days.", "success");
         } catch (error) {
             console.error("Firebase error:", error.code, error.message);
-            
-            // Provide more specific error message for common issues
-            let errorMessage = error.message;
-            if (error.code === "auth/invalid-continue-uri") {
-                errorMessage = `Invalid URL format. Please check your environment configuration. (URL attempted: ${appUrl}/account-setup)`;
-            } else if (error.code === "auth/missing-continue-uri") {
-                errorMessage = "Missing URL. Please check your environment configuration.";
-            } else if (error.code === "auth/unauthorized-continue-uri") {
-                errorMessage = "This domain is not authorized in your Firebase console.";
-            } else if (error.code === "auth/argument-error" && error.message.includes("expires")) {
-                errorMessage = "Invalid expiration time format. Using default expiration.";
-                
-                // Try again without explicit expiration
-                try {
-                    const simpleActionCodeSettings = {
-                        url: `${appUrl}/account-setup`,
-                        handleCodeInApp: true
-                    };
-                    
-                    await sendSignInLinkToEmail(auth, email, simpleActionCodeSettings);
-                    window.localStorage.setItem("emailForSignIn", email);
-                    window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
-                    window.localStorage.setItem("isRegistering", "true");
-                    showAlert("Verification email sent. Please check your inbox.", "success");
-                    setLoading(false);
-                    return;
-                } catch (retryError) {
-                    errorMessage = `Retry failed: ${retryError.message}`;
-                }
-            }
-            
-            showAlert(`Registration failed: ${errorMessage}`, "error");
+            showAlert(`Registration failed: ${error.message}`, "error");
         } finally {
             setLoading(false);
         }
     };
 
-    // Generate a user-friendly ID
-    const generateFriendlyUserId = () => {
-        // Format: PREFIX-RANDOM-NUMBERS
-        const prefix = "USER";
-        const randomPart = Math.floor(1000 + Math.random() * 9000); // 4-digit number
-        return `${prefix}-${randomPart}`;
-    };
-
     const handleGoogleRegister = async () => {
         setGoogleLoading(true);
         try {
-            // Check if the user already exists
-            const result = await signInWithPopup(auth, googleProvider);
-            const user = result.user;
-            
-            // Check if this is a new user
-            // Firebase doesn't directly tell us if this is a new user with Google SSO
-            // But we can check metadata or make a Firestore query
-            
-            const isNewUser = result.additionalUserInfo?.isNewUser;
-            
-            if (isNewUser) {
-                // Generate a friendly user ID for new users
-                const friendlyUserId = generateFriendlyUserId();
-                
-                // Store the friendly ID in localStorage for the account setup page
-                window.localStorage.setItem("friendlyUserId", friendlyUserId);
-                window.localStorage.setItem("isGoogleSignUp", "true");
-                
-                // Create initial user document
-                await setDoc(doc(db, "users", user.uid), {
-                    email: user.email,
-                    friendlyUserId: friendlyUserId,
-                    googleAuth: true,
-                    createdAt: new Date(),
-                    setupCompleted: false
-                });
-                
-                showAlert("Account created! Please complete your profile setup.", "success");
-                router.push("/account-setup");
-            } else {
-                // Existing user - redirect to dashboard
-                showAlert("Welcome back! Redirecting to dashboard...", "success");
-                router.push("/dashboard");
-            }
+            await signInWithPopup(auth, googleProvider);
+            showAlert("Registration successful!", "success");
+            router.push("/dashboard");
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
@@ -218,7 +112,7 @@ const Register = () => {
                     disabled={googleLoading}
                 >
                     <FcGoogle className="w-5 h-5 fill-[#4285F4]" />
-                    Sign Up with Google
+                    Continue with Google
                     {googleLoading && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                 </button>
 
@@ -255,7 +149,7 @@ const Register = () => {
                     </button>
 
                     <p className="text-xs text-gray-500 text-center">
-                        Verification link will be valid for 7 days
+                        Verification link will be valid for 3 days
                     </p>
                 </form>
 
