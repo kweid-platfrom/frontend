@@ -32,6 +32,8 @@ const Register = () => {
         }
         
         setAppUrl(dynamicUrl);
+        console.log("Current environment:", process.env.NODE_ENV);
+        console.log("Using app URL:", dynamicUrl);
     }, []);
 
     const validateEmail = (email) => {
@@ -60,24 +62,36 @@ const Register = () => {
         setLoading(true);
 
         try {
-            // Log the URL being used (helpful for debugging)
+            // Get the current timestamp in seconds
+            const currentTime = Math.floor(Date.now() / 1000);
+            
+            // Set expiration to current time + 7 days (maximum allowed by Firebase)
+            const expirationTime = currentTime + 604800; // 7 days in seconds
+            
             console.log(`Using continuation URL: ${appUrl}/account-setup`);
+            console.log(`Current time (seconds): ${currentTime}`);
+            console.log(`Expiration time (seconds): ${expirationTime}`);
             
             const actionCodeSettings = {
-                // Use the dynamically set app URL
                 url: `${appUrl}/account-setup`,
                 handleCodeInApp: true,
-                // Extended expiration time (3 days)
-                expires: 259200
+                // Maximum expiration time - 7 days
+                expires: expirationTime
             };
 
+            // Clear any existing emailForSignIn to avoid conflicts
+            window.localStorage.removeItem("emailForSignIn");
+            
             await sendSignInLinkToEmail(auth, email, actionCodeSettings);
             
-            // Store email and timestamp in localStorage
+            // Store email in localStorage
             window.localStorage.setItem("emailForSignIn", email);
             window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
             
-            showAlert("Verification email sent. Please check your inbox. The link will be valid for 3 days.", "success");
+            // Also store the expected expiration time for client-side validation
+            window.localStorage.setItem("emailLinkExpiration", (Date.now() + 604800 * 1000).toString());
+            
+            showAlert("Verification email sent. Please check your inbox. The link will be valid for 7 days.", "success");
         } catch (error) {
             console.error("Firebase error:", error.code, error.message);
             
@@ -89,6 +103,25 @@ const Register = () => {
                 errorMessage = "Missing URL. Please check your environment configuration.";
             } else if (error.code === "auth/unauthorized-continue-uri") {
                 errorMessage = "This domain is not authorized in your Firebase console.";
+            } else if (error.code === "auth/argument-error" && error.message.includes("expires")) {
+                errorMessage = "Invalid expiration time format. Using default expiration.";
+                
+                // Try again without explicit expiration
+                try {
+                    const simpleActionCodeSettings = {
+                        url: `${appUrl}/account-setup`,
+                        handleCodeInApp: true
+                    };
+                    
+                    await sendSignInLinkToEmail(auth, email, simpleActionCodeSettings);
+                    window.localStorage.setItem("emailForSignIn", email);
+                    window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
+                    showAlert("Verification email sent. Please check your inbox.", "success");
+                    setLoading(false);
+                    return;
+                } catch (retryError) {
+                    errorMessage = `Retry failed: ${retryError.message}`;
+                }
             }
             
             showAlert(`Registration failed: ${errorMessage}`, "error");
@@ -170,7 +203,7 @@ const Register = () => {
                     </button>
 
                     <p className="text-xs text-gray-500 text-center">
-                        Verification link will be valid for 3 days
+                        Verification link will be valid for 7 days
                     </p>
                 </form>
 
