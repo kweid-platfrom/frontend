@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { sendSignInLinkToEmail, signInWithPopup } from "firebase/auth";
+import { sendSignInLinkToEmail, signInWithPopup, fetchSignInMethodsForEmail } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +9,9 @@ import { useAlert } from "../../components/CustomAlert";
 import { FcGoogle } from "react-icons/fc";
 import { Loader2 } from "lucide-react";
 import "../../app/globals.css";
+import { doc, setDoc, getFirestore } from "firebase/firestore";
+
+const db = getFirestore();
 
 const Register = () => {
     const [email, setEmail] = useState("");
@@ -62,6 +65,14 @@ const Register = () => {
         setLoading(true);
 
         try {
+            // Check if email already exists
+            const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+            if (signInMethods.length > 0) {
+                setEmailError("This email is already registered. Please login instead.");
+                setLoading(false);
+                return;
+            }
+
             // Get the current timestamp in seconds
             const currentTime = Math.floor(Date.now() / 1000);
             
@@ -87,6 +98,7 @@ const Register = () => {
             // Store email in localStorage
             window.localStorage.setItem("emailForSignIn", email);
             window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
+            window.localStorage.setItem("isRegistering", "true");
             
             // Also store the expected expiration time for client-side validation
             window.localStorage.setItem("emailLinkExpiration", (Date.now() + 604800 * 1000).toString());
@@ -116,6 +128,7 @@ const Register = () => {
                     await sendSignInLinkToEmail(auth, email, simpleActionCodeSettings);
                     window.localStorage.setItem("emailForSignIn", email);
                     window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
+                    window.localStorage.setItem("isRegistering", "true");
                     showAlert("Verification email sent. Please check your inbox.", "success");
                     setLoading(false);
                     return;
@@ -130,12 +143,51 @@ const Register = () => {
         }
     };
 
+    // Generate a user-friendly ID
+    const generateFriendlyUserId = () => {
+        // Format: PREFIX-RANDOM-NUMBERS
+        const prefix = "USER";
+        const randomPart = Math.floor(1000 + Math.random() * 9000); // 4-digit number
+        return `${prefix}-${randomPart}`;
+    };
+
     const handleGoogleRegister = async () => {
         setGoogleLoading(true);
         try {
-            await signInWithPopup(auth, googleProvider);
-            showAlert("Registration successful!", "success");
-            router.push("/dashboard");
+            // Check if the user already exists
+            const result = await signInWithPopup(auth, googleProvider);
+            const user = result.user;
+            
+            // Check if this is a new user
+            // Firebase doesn't directly tell us if this is a new user with Google SSO
+            // But we can check metadata or make a Firestore query
+            
+            const isNewUser = result.additionalUserInfo?.isNewUser;
+            
+            if (isNewUser) {
+                // Generate a friendly user ID for new users
+                const friendlyUserId = generateFriendlyUserId();
+                
+                // Store the friendly ID in localStorage for the account setup page
+                window.localStorage.setItem("friendlyUserId", friendlyUserId);
+                window.localStorage.setItem("isGoogleSignUp", "true");
+                
+                // Create initial user document
+                await setDoc(doc(db, "users", user.uid), {
+                    email: user.email,
+                    friendlyUserId: friendlyUserId,
+                    googleAuth: true,
+                    createdAt: new Date(),
+                    setupCompleted: false
+                });
+                
+                showAlert("Account created! Please complete your profile setup.", "success");
+                router.push("/account-setup");
+            } else {
+                // Existing user - redirect to dashboard
+                showAlert("Welcome back! Redirecting to dashboard...", "success");
+                router.push("/dashboard");
+            }
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
@@ -166,7 +218,7 @@ const Register = () => {
                     disabled={googleLoading}
                 >
                     <FcGoogle className="w-5 h-5 fill-[#4285F4]" />
-                    Continue with Google
+                    Sign Up with Google
                     {googleLoading && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                 </button>
 
