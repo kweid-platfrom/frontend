@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { sendSignInLinkToEmail, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
 import { useRouter } from "next/navigation";
@@ -15,8 +15,24 @@ const Register = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [emailError, setEmailError] = useState("");
+    const [appUrl, setAppUrl] = useState("");
     const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
+
+    // Determine current app URL
+    useEffect(() => {
+        // Get URL from environment variable or dynamically build it
+        let dynamicUrl = process.env.NEXT_PUBLIC_APP_URL;
+        
+        // If not available (or in development), use window.location
+        if (!dynamicUrl || dynamicUrl === "undefined" || process.env.NODE_ENV === "development") {
+            const protocol = window.location.protocol;
+            const host = window.location.host;
+            dynamicUrl = `${protocol}//${host}`;
+        }
+        
+        setAppUrl(dynamicUrl);
+    }, []);
 
     const validateEmail = (email) => {
         if (!email) {
@@ -29,9 +45,6 @@ const Register = () => {
             setEmailError("Please enter a valid email address");
             return false;
         }
-        
-        // You can add additional work email validation if needed
-        // For example, check for certain domains or patterns
         
         setEmailError("");
         return true;
@@ -47,17 +60,38 @@ const Register = () => {
         setLoading(true);
 
         try {
+            // Log the URL being used (helpful for debugging)
+            console.log(`Using continuation URL: ${appUrl}/account-setup`);
+            
             const actionCodeSettings = {
-                url: `${process.env.NEXT_PUBLIC_APP_URL}/account-setup`,
+                // Use the dynamically set app URL
+                url: `${appUrl}/account-setup`,
                 handleCodeInApp: true,
+                // Extended expiration time (3 days)
+                expires: 259200
             };
 
             await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+            
+            // Store email and timestamp in localStorage
             window.localStorage.setItem("emailForSignIn", email);
-            showAlert("Verification email sent. Please check your inbox.", "success");
+            window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
+            
+            showAlert("Verification email sent. Please check your inbox. The link will be valid for 3 days.", "success");
         } catch (error) {
-            console.error(error.message);
-            showAlert(error.message, "error");
+            console.error("Firebase error:", error.code, error.message);
+            
+            // Provide more specific error message for common issues
+            let errorMessage = error.message;
+            if (error.code === "auth/invalid-continue-uri") {
+                errorMessage = `Invalid URL format. Please check your environment configuration. (URL attempted: ${appUrl}/account-setup)`;
+            } else if (error.code === "auth/missing-continue-uri") {
+                errorMessage = "Missing URL. Please check your environment configuration.";
+            } else if (error.code === "auth/unauthorized-continue-uri") {
+                errorMessage = "This domain is not authorized in your Firebase console.";
+            }
+            
+            showAlert(`Registration failed: ${errorMessage}`, "error");
         } finally {
             setLoading(false);
         }
@@ -134,6 +168,10 @@ const Register = () => {
                         Sign Up
                         {loading && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                     </button>
+
+                    <p className="text-xs text-gray-500 text-center">
+                        Verification link will be valid for 3 days
+                    </p>
                 </form>
 
                 <p className="text-sm text-[#4A4B53] text-center">
