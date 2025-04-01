@@ -1,11 +1,13 @@
 import React from 'react';
 
-const TestCaseManagement = () => {
+
+const TestCasesPage = () => {
+    
     return (
-        <div className="flex flex-col h-screen">
-            <h1>Test Cases</h1>
-        </div>
+            <div className="p-6">
+                <h1 className="text-2xl font-bold mb-4">Test Cases</h1>
+            </div>
     );
 };
 
-export default TestCaseManagement;
+export default TestCasesPage;

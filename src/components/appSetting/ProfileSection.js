@@ -1,21 +1,22 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import { useAuth } from '../../context/AuthProvider';
 import Avatar from '../ui/avatar/Avatar';
 
-export default function ProfileSection({ 
-    userData, 
-    isEditable = true, 
-    onProfileUpdate 
+export default function ProfileSection({
+    userData = null,
+    isEditable = true,
+    onProfileUpdate
 }) {
-    const { user } = useAuth();
+    const { user } = useAuth(); // Get user from useAuth
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
 
+    // Initialize form data
     const [formData, setFormData] = useState({
         firstName: userData?.firstName || '',
         lastName: userData?.lastName || '',
@@ -26,6 +27,18 @@ export default function ProfileSection({
 
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(userData?.avatarUrl || '');
+
+    // Update form data when userData changes
+    useEffect(() => {
+        setFormData({
+            firstName: userData?.firstName || '',
+            lastName: userData?.lastName || '',
+            phone: userData?.phone || '',
+            location: userData?.location || '',
+            jobRole: userData?.jobRole || '',
+        });
+        setAvatarPreview(userData?.avatarUrl || '');
+    }, [userData]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -45,6 +58,12 @@ export default function ProfileSection({
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (!user?.uid) {
+            setError('User not authenticated. Please log in again.');
+            return;
+        }
+
         setLoading(true);
         setSuccess(false);
         setError('');
@@ -88,6 +107,29 @@ export default function ProfileSection({
         }
     };
 
+    // Render loading state
+    if (!userData) {
+        return (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                <div className="flex items-center justify-center h-40">
+                    <div className="animate-pulse flex space-x-4">
+                        <div className="rounded-full bg-gray-200 dark:bg-gray-700 h-16 w-16"></div>
+                        <div className="flex-1 space-y-4 py-1">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div className="space-y-2">
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Construct display name - using user?.displayName if available
+    const displayName = user?.displayName || (userData?.firstName ? userData.firstName : "") + " " + (userData?.lastName ? userData.lastName : "");
+
     // If not editable, show a read-only view
     if (!isEditable) {
         return (
@@ -95,12 +137,12 @@ export default function ProfileSection({
                 <div className="flex items-center space-x-6">
                     <Avatar
                         src={avatarPreview}
-                        alt={`${formData.firstName} ${formData.lastName}`}
+                        alt={displayName}
                         size="lg"
                         className="ring-4 ring-gray-100 dark:ring-gray-700"
                     />
                     <div>
-                        <h2 className="text-xl font-bold">{formData.firstName} {formData.lastName}</h2>
+                        <h2 className="text-xl font-bold">{displayName}</h2>
                         <p className="text-gray-600 dark:text-gray-300">{formData.jobRole}</p>
                         <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                             {formData.location && <div>{formData.location}</div>}
@@ -113,18 +155,20 @@ export default function ProfileSection({
         );
     }
 
+    // Main profile section
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-bold mb-6">Profile Information</h2>
 
             <form onSubmit={handleSubmit}>
+                {/* ... (avatar upload - unchanged) */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-3">Profile Photo</label>
                     <div className="flex items-center gap-6">
                         <div className="relative">
                             <Avatar
                                 src={avatarPreview}
-                                alt={`${formData.firstName} ${formData.lastName}`}
+                                alt={displayName}
                                 size="lg"
                                 className="ring-4 ring-gray-100 dark:ring-gray-700"
                             />
@@ -155,13 +199,15 @@ export default function ProfileSection({
                                 Change photo
                             </button>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                JPG or PNG. Max size of 1MB.
+                                JPG or PNG.
+                                Max size of 1MB.
                             </p>
                         </div>
                     </div>
                 </div>
 
                 <div className="space-y-4">
+                    {/* ... (form inputs - unchanged) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="firstName" className="block text-sm font-medium mb-1">
@@ -253,6 +299,7 @@ export default function ProfileSection({
                     </div>
                 </div>
 
+                {/* ... (error/success messages and update button - unchanged) */}
                 {error && (
                     <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded">
                         {error}
@@ -269,7 +316,8 @@ export default function ProfileSection({
                     <button
                         type="submit"
                         disabled={loading}
-                        className={`px-4 py-2 rounded text-white font-medium ${loading ? 'bg-[#00695C] cursor-not-allowed' : 'bg-[#00897B]  hover:bg-[#00695C]'
+                        className={`px-4 py-2 rounded text-white font-medium ${loading ?
+                            'bg-[#00695C] cursor-not-allowed' : 'bg-[#00897B]  hover:bg-[#00695C]'
                             }`}
                     >
                         {loading ? 'Updating...' : 'Update Profile'}

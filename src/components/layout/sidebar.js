@@ -194,7 +194,6 @@ const Sidebar = ({ setActivePage }) => {
                         </TooltipProvider>
                     </div>
                 </nav>
-
                 {/* User Section */}
                 <div className="p-4 border-t border-[#00897B] flex items-center">
                     <UserAvatar

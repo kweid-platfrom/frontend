@@ -22,6 +22,7 @@ export default function RootLayout({ children }) {
                     <SimpleOrganizationProvider>
                             <AlertProvider>
                                 {children}
+                                <div id="modal-root"></div>
                             </AlertProvider>
                     </SimpleOrganizationProvider>
                 </AuthProvider>
