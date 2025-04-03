@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -9,21 +9,12 @@ const AlertContext = createContext();
 
 // Custom Alert Component
 const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose }) => {
-    const [isVisible, setIsVisible] = useState(show);
+    const [isVisible, setIsVisible] = useState(false);
     const [portalElement, setPortalElement] = useState(null);
     const [isHovered, setIsHovered] = useState(false);
-
-    useEffect(() => {
-        setIsVisible(show);
-        if (show && duration && !isHovered) {
-            const timer = setTimeout(() => {
-                setIsVisible(false);
-                if (onClose) onClose();
-            }, duration);
-            return () => clearTimeout(timer);
-        }
-    }, [show, duration, onClose, isHovered]);
-
+    const timerRef = useRef(null);
+    
+    // Mount the component
     useEffect(() => {
         if (typeof window !== "undefined") {
             let element = document.getElementById("alert-root");
@@ -34,23 +25,61 @@ const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose
             }
             setPortalElement(element);
         }
-
+        
         return () => {
-            if (portalElement && portalElement.parentNode) {
-                portalElement.parentNode.removeChild(portalElement);
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
             }
         };
-    }, [portalElement]);
+    }, []);
+    
+    // Handle show/hide
+    useEffect(() => {
+        if (show) {
+            setIsVisible(true);
+            if (duration && !isHovered) {
+                if (timerRef.current) {
+                    clearTimeout(timerRef.current);
+                }
+                timerRef.current = setTimeout(() => {
+                    setIsVisible(false);
+                    if (onClose) onClose();
+                }, duration);
+            }
+        } else {
+            setIsVisible(false);
+        }
+        
+        return () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+            }
+        };
+    }, [show, duration, isHovered, onClose]);
 
     const handleClose = () => {
         setIsVisible(false);
         if (onClose) onClose();
     };
 
-    const handleMouseEnter = () => setIsHovered(true);
+    const handleMouseEnter = () => {
+        setIsHovered(true);
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+    };
+    
     const handleMouseLeave = () => {
         setIsHovered(false);
-        setTimeout(() => setIsVisible(false), 1000);
+        if (isVisible) {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+            }
+            timerRef.current = setTimeout(() => {
+                setIsVisible(false);
+                if (onClose) onClose();
+            }, 1000);
+        }
     };
 
     // Styling that matches the settings page alert
@@ -93,27 +122,38 @@ export const useAlert = () => {
         type: "success",
         duration: 3000,
     });
+    const alertShownRef = useRef(false);
 
+    // Function to show alert
     const showAlert = (message, type = "success", duration = 3000) => {
-        setAlertState({ show: true, message, type, duration });
+        // Prevent calling setState during update cycle
+        if (!alertShownRef.current || alertState.message !== message) {
+            alertShownRef.current = true;
+            setAlertState({ show: true, message, type, duration });
+        }
     };
 
+    // Function to hide alert
     const hideAlert = () => {
+        alertShownRef.current = false;
         setAlertState((prev) => ({ ...prev, show: false }));
     };
+
+    // Create alert component only once
+    const alertComponent = (
+        <CustomAlert
+            show={alertState.show}
+            message={alertState.message}
+            type={alertState.type}
+            duration={alertState.duration}
+            onClose={hideAlert}
+        />
+    );
 
     return {
         showAlert,
         hideAlert,
-        alertComponent: (
-            <CustomAlert
-                show={alertState.show}
-                message={alertState.message}
-                type={alertState.type}
-                duration={alertState.duration}
-                onClose={hideAlert}
-            />
-        ),
+        alertComponent
     };
 };
 

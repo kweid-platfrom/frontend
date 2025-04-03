@@ -30,9 +30,6 @@ const Register = () => {
             return false;
         }
         
-        // You can add additional work email validation if needed
-        // For example, check for certain domains or patterns
-        
         setEmailError("");
         return true;
     };
@@ -47,27 +44,19 @@ const Register = () => {
         setLoading(true);
 
         try {
-            // Extended configuration for email link sign-in
             const actionCodeSettings = {
                 url: process.env.NEXT_PUBLIC_APP_URL 
                     ? `${process.env.NEXT_PUBLIC_APP_URL}/account-setup`
-                    : "https://your-domain.com/account-setup", // Fallback URL
+                    : "https://your-domain.com/account-setup",
                 handleCodeInApp: true,
-                // Set a longer expiration time (maximum 7 days = 604800 seconds)
-                // Firebase uses seconds for expiration time
-                // This sets it to 3 days (259200 seconds)
                 expires: 259200
             };
 
             await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-            
-            // Store email in localStorage to verify on sign-in page
             window.localStorage.setItem("emailForSignIn", email);
-            
-            // Also store the timestamp when the email was sent
             window.localStorage.setItem("emailSentTimestamp", Date.now().toString());
-            
             showAlert("Verification email sent. Please check your inbox. The link will be valid for 3 days.", "success");
+            setEmail(""); // Clear input field after successful email sending
         } catch (error) {
             console.error("Firebase error:", error.code, error.message);
             showAlert(`Registration failed: ${error.message}`, "error");
@@ -79,9 +68,23 @@ const Register = () => {
     const handleGoogleRegister = async () => {
         setGoogleLoading(true);
         try {
-            await signInWithPopup(auth, googleProvider);
-            showAlert("Registration successful!", "success");
-            router.push("/dashboard");
+            const result = await signInWithPopup(auth, googleProvider);
+            
+            // Get user details from Google authentication
+            const user = result.user;
+            const displayName = user.displayName || "";
+            const email = user.email || "";
+            const photoURL = user.photoURL || "";
+            
+            // Store user details in localStorage for the account setup page
+            localStorage.setItem("googleUserName", displayName);
+            localStorage.setItem("googleUserEmail", email);
+            localStorage.setItem("googleUserPhoto", photoURL);
+            
+            showAlert("Google authentication successful!", "success");
+            
+            // Redirect to account setup instead of dashboard
+            router.push("/account-setup");
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
@@ -111,7 +114,7 @@ const Register = () => {
                     className="flex items-center justify-center gap-2 w-full bg-white text-[#4A4B53] border border-[#E1E2E6] rounded px-4 py-3 text-base hover:bg-gray-50 hover:border-[#9EA0A5] transition-colors"
                     disabled={googleLoading}
                 >
-                    <FcGoogle className="w-5 h-5 fill-[#4285F4]" />
+                    <FcGoogle className="w-5 h-5" />
                     Continue with Google
                     {googleLoading && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                 </button>
