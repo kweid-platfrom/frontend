@@ -181,7 +181,7 @@ const AccountSetup = () => {
             {alertComponent}
 
             <div className="min-h-screen bg-[#fff] flex flex-col items-center">
-                <header className="w-full h-[70px] bg-white flex items-center px-8 shadow-sm">
+                <header className="w-full h-[70px] bg-white flex items-center px-8 shadow-sm sticky top-0 z-10">
                     <span className="font-bold text-2xl text-[#00897B]">LOGO</span>
                 </header>
 
@@ -290,13 +290,15 @@ const AccountSetup = () => {
                                     required
                                     className="px-4 py-3 w-full border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-9 right-3 flex items-center text-gray-500"
-                                >
-                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
+                                {password && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute inset-y-9 right-3 flex items-center text-gray-500"
+                                    >
+                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                )}
                             </div>
 
                             {/* Confirm Password Input with Toggle Icon */}
@@ -313,13 +315,15 @@ const AccountSetup = () => {
                                     required
                                     className="px-4 py-3 w-full border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                    className="absolute inset-y-9 right-3 flex items-center text-gray-500"
-                                >
-                                    {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
+                                {confirmPassword && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                        className="absolute inset-y-9 right-3 flex items-center text-gray-500"
+                                    >
+                                        {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
