@@ -6,7 +6,7 @@ import { getFirestore, setDoc, doc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { app } from "../../config/firebase";
 import { useAlert } from "../../components/CustomAlert";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import "../../app/globals.css";
 
 const auth = getAuth(app);
@@ -19,13 +19,11 @@ const AccountSetup = () => {
     const [companySize, setCompanySize] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isGoogleAuth, setIsGoogleAuth] = useState(false);
     const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
-    
+
     // Use refs to prevent the infinite loop
     const authAttemptedRef = useRef(false);
     const authErrorMessageRef = useRef(null);
@@ -35,7 +33,7 @@ const AccountSetup = () => {
         // Check if user is coming from Google SSO first
         const googleUserName = localStorage.getItem("googleUserName");
         const googleUserEmail = localStorage.getItem("googleUserEmail");
-        
+
         if (googleUserName && googleUserEmail) {
             // User is coming from Google SSO
             setName(googleUserName);
@@ -43,12 +41,12 @@ const AccountSetup = () => {
             authAttemptedRef.current = true;
             return;
         }
-        
+
         // If not from Google SSO, proceed with email link verification
         if (authAttemptedRef.current) {
             return;
         }
-        
+
         authAttemptedRef.current = true;
         const storedEmail = window.localStorage.getItem("emailForSignIn");
 
@@ -86,7 +84,7 @@ const AccountSetup = () => {
         if (authAttemptedRef.current && authErrorMessageRef.current) {
             showAlert(authErrorMessageRef.current, "error");
             authErrorMessageRef.current = null; // Clear the message to prevent re-showing
-            
+
             if (redirectToRegisterRef.current) {
                 // Use a small timeout to avoid state updates during render
                 const timeoutId = setTimeout(() => {
@@ -133,7 +131,7 @@ const AccountSetup = () => {
         try {
             // Generate a unique organization ID (using the user's UID for simplicity)
             const orgId = user.uid;
-            
+
             // Create the organization document first
             await setDoc(doc(db, "organisations", orgId), {
                 name: company,
@@ -144,12 +142,12 @@ const AccountSetup = () => {
                 admin: [user.uid],
                 members: [user.uid]
             });
-            
+
             // Update password only for email link users, not for Google SSO
             if (!isGoogleAuth && password) {
                 await updatePassword(user, password);
             }
-            
+
             // Create the user document with reference to the organization
             await setDoc(doc(db, "users", user.uid), {
                 name,
@@ -161,6 +159,7 @@ const AccountSetup = () => {
             });
 
             // Clear Google data from localStorage if it exists
+            localStorage.removeItem("needsAccountSetup");
             localStorage.removeItem("googleUserName");
             localStorage.removeItem("googleUserEmail");
             localStorage.removeItem("googleUserPhoto");
@@ -193,7 +192,7 @@ const AccountSetup = () => {
                     {/* Organization Information Section */}
                     <div className="space-y-4">
                         <h3 className="text-lg font-medium text-[#2D3142]">Profile Information</h3>
-                        
+
                         {/* Full Name Input */}
                         <div>
                             <label htmlFor="name" className="block text-sm font-medium text-[#4A4B53] mb-1">
@@ -275,7 +274,7 @@ const AccountSetup = () => {
                     {!isGoogleAuth && (
                         <div className="space-y-4">
                             <h3 className="text-lg font-medium text-[#2D3142]">Set Password</h3>
-                            
+
                             {/* Password Input with Toggle Icon */}
                             <div className="relative">
                                 <label htmlFor="password" className="block text-sm font-medium text-[#4A4B53] mb-1">
@@ -283,23 +282,17 @@ const AccountSetup = () => {
                                 </label>
                                 <input
                                     id="password"
-                                    type={showPassword ? "text" : "password"}
+                                    type="password"
                                     placeholder="Enter a secure password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    className="px-4 py-3 w-full border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
+                                    className="px-4 py-3 w-full border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B] pr-10"
                                 />
-                                {password && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute inset-y-9 right-3 flex items-center text-gray-500"
-                                    >
-                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                    </button>
-                                )}
                             </div>
+
+
+
 
                             {/* Confirm Password Input with Toggle Icon */}
                             <div className="relative">
@@ -308,23 +301,16 @@ const AccountSetup = () => {
                                 </label>
                                 <input
                                     id="confirmPassword"
-                                    type={showConfirmPassword ? "text" : "password"}
+                                    type="password"
                                     placeholder="Confirm your password"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     required
-                                    className="px-4 py-3 w-full border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]"
+                                    className="px-4 py-3 w-full border border-[#E1E2E6] rounded text-[#2D3142] focus:outline-none focus:border-[#00897B] pr-10"
                                 />
-                                {confirmPassword && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                        className="absolute inset-y-9 right-3 flex items-center text-gray-500"
-                                    >
-                                        {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                    </button>
-                                )}
                             </div>
+
+
                         </div>
                     )}
 

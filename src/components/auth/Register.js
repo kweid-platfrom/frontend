@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { sendSignInLinkToEmail, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAlert } from "../../components/CustomAlert";
 import { FcGoogle } from "react-icons/fc";
@@ -15,7 +14,6 @@ const Register = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [emailError, setEmailError] = useState("");
-    const router = useRouter();
     const { showAlert, alertComponent } = useAlert();
 
     const validateEmail = (email) => {
@@ -23,13 +21,13 @@ const Register = () => {
             setEmailError("Email is required");
             return false;
         }
-        
+
         const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
         if (!emailPattern.test(email)) {
             setEmailError("Please enter a valid email address");
             return false;
         }
-        
+
         setEmailError("");
         return true;
     };
@@ -45,7 +43,7 @@ const Register = () => {
 
         try {
             const actionCodeSettings = {
-                url: process.env.NEXT_PUBLIC_APP_URL 
+                url: process.env.NEXT_PUBLIC_APP_URL
                     ? `${process.env.NEXT_PUBLIC_APP_URL}/account-setup`
                     : "https://your-domain.com/account-setup",
                 handleCodeInApp: true,
@@ -67,6 +65,10 @@ const Register = () => {
 
     const handleGoogleRegister = async () => {
         setGoogleLoading(true);
+        
+        // Set flag BEFORE authentication
+        localStorage.setItem("needsAccountSetup", "true");
+        
         try {
             const result = await signInWithPopup(auth, googleProvider);
             
@@ -83,11 +85,12 @@ const Register = () => {
             
             showAlert("Google authentication successful!", "success");
             
-            // Redirect to account setup instead of dashboard
-            router.push("/account-setup");
+            // The redirect will be handled by processUserAuthentication in the AuthProvider
         } catch (error) {
             console.error(error.message);
             showAlert(error.message, "error");
+            // Clear the flag if authentication fails
+            localStorage.removeItem("needsAccountSetup");
         } finally {
             setGoogleLoading(false);
         }
@@ -100,16 +103,16 @@ const Register = () => {
                     LOGO
                 </Link>
             </header>
-            
+
             {alertComponent}
-            
+
             <div className="justify-center text-center p-5">
                 <h2 className="text-[#2D3142] text-2xl font-bold text-center mb-3">Sign Up for QAID</h2>
                 <p>– Streamline Your Testing Workflow –</p>
             </div>
 
             <div className="w-full max-w-sm bg-white rounded-lg p-8 flex flex-col gap-6">
-                <button 
+                <button
                     onClick={handleGoogleRegister}
                     className="flex items-center justify-center gap-2 w-full bg-white text-[#4A4B53] border border-[#E1E2E6] rounded px-4 py-3 text-base hover:bg-gray-50 hover:border-[#9EA0A5] transition-colors"
                     disabled={googleLoading}
@@ -128,9 +131,8 @@ const Register = () => {
                 <form className="flex flex-col gap-4" onSubmit={handleRegister} noValidate>
                     <div className="flex flex-col gap-1">
                         <input
-                            className={`px-4 py-3 border ${
-                                emailError ? "border-red-500" : "border-[#E1E2E6]"
-                            } rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]`}
+                            className={`px-4 py-3 border ${emailError ? "border-red-500" : "border-[#E1E2E6]"
+                                } rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]`}
                             type="email"
                             placeholder="Company email"
                             value={email}

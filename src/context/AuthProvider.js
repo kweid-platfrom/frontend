@@ -118,17 +118,20 @@ export const AuthProvider = ({ children }) => {
             setUserProfile(null);
             return;
         }
-
+    
         try {
+            // Check if user needs to complete account setup (from localStorage)
+            const needsAccountSetup = localStorage.getItem("needsAccountSetup");
+            
             // Check if user exists and create if needed
             const { userData, isNewUser } = await createUserIfNotExists(user);
-
+    
             // Update last login for existing users
             let updatedUserData = userData;
             if (!isNewUser) {
                 updatedUserData = await updateUserLastLogin(user.uid) || userData;
             }
-
+    
             // Set user state
             setCurrentUser(user);
             setUserPermissions(updatedUserData?.permissions || {
@@ -137,6 +140,15 @@ export const AuthProvider = ({ children }) => {
                 capabilities: ["read_tests"]
             });
             setUserProfile(updatedUserData?.profile || {});
+            
+            // Redirect based on user state
+            if (isNewUser || needsAccountSetup === "true") {
+                // New user or needs account setup, redirect to account setup
+                router.push("/account-setup");
+            } else if (window.location.pathname === "/login" || window.location.pathname === "/register") {
+                // Existing user on login/register page, redirect to dashboard
+                router.push("/dashboard");
+            }
         } catch (error) {
             console.error("Error processing authentication:", error);
             // Set basic user info even if profile fetch fails
@@ -144,7 +156,7 @@ export const AuthProvider = ({ children }) => {
             setUserPermissions({ isAdmin: false, roles: ["user"], capabilities: ["read_tests"] });
             setUserProfile({});
         }
-    }, [createUserIfNotExists, updateUserLastLogin]);
+    }, [createUserIfNotExists, updateUserLastLogin, router]);
 
     // Handle redirect result (for redirect sign-in)
     useEffect(() => {
