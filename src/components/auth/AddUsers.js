@@ -37,8 +37,8 @@ const AddUsers = () => {
                             const userDoc = await getDoc(doc(db, "users", currentUser.uid));
                             if (userDoc.exists()) {
                                 const userData = userDoc.data();
-                                if (userData.organisationId) {
-                                    const orgDoc = await getDoc(doc(db, "organisations", userData.organisationId));
+                                if (userData.organizationId) {
+                                    const orgDoc = await getDoc(doc(db, "organizations", userData.organizationId));
                                     if (orgDoc.exists()) {
                                         setOrgName(orgDoc.data().name);
                                     }

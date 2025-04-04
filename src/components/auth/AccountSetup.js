@@ -133,7 +133,7 @@ const AccountSetup = () => {
             const orgId = user.uid;
 
             // Create the organization document first
-            await setDoc(doc(db, "organisations", orgId), {
+            await setDoc(doc(db, "organizations", orgId), {
                 name: company,
                 industry: industry,
                 size: companySize,
