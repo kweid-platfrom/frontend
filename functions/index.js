@@ -1,4 +1,3 @@
-// functions/index.js
 import { https } from 'firebase-functions';
 import { initializeApp, firestore } from 'firebase-admin';
 import { createTransport } from 'nodemailer';
@@ -14,10 +13,28 @@ const corsHandler = cors({ origin: true });
 
 // Configure nodemailer with your email service provider
 const transporter = createTransport({
-    service: 'gmail',  // Replace with your email service
+    service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,  // Set environment variables in Firebase
-        pass: process.env.EMAIL_PASSWORD
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS // Note: Use an app password if using Gmail with 2FA
+    }
+});
+
+// Test function to verify email configuration
+export const testEmail = https.onCall(async (data, context) => {
+    try {
+        const result = await transporter.sendMail({
+            from: `"Test" <${process.env.EMAIL_USER}>`,
+            to: data.testEmail,
+            subject: "Email Configuration Test",
+            html: "<p>This is a test email to verify your email configuration is working.</p>"
+        });
+        
+        logger.info("Test email sent", result);
+        return { success: true, messageId: result.messageId };
+    } catch (error) {
+        logger.error("Error sending test email:", error);
+        throw new https.HttpsError('internal', `Error sending test email: ${error.message}`);
     }
 });
 
@@ -26,131 +43,87 @@ export const helloWorld = onRequest((request, response) => {
     response.send("Hello from Firebase!");
 });
 
-// For callable function (what you're using in your React app)
-export const sendInviteEmails = https.onCall(async (data, context) => {
-    // Ensure user is authenticated
-    if (!context.auth) {
-        throw new https.HttpsError(
-            'unauthenticated',
-            'User must be authenticated to send invites.'
-        );
-    }
-
-    const { emails, inviterEmail, inviterName, organizationName } = data;
-    if (!emails || !Array.isArray(emails) || emails.length === 0) {
-        throw new https.HttpsError(
-            'invalid-argument',
-            'Email list is required and must be a non-empty array.'
-        );
-    }
-
-    try {
-        // Create a unique signup link that includes an invite token
-        const results = await Promise.all(
-            emails.map(async (email) => {
-                // Generate a signup URL with the invite token
-                const inviteToken = await firestore().collection('invites')
-                    .where('email', '==', email.toLowerCase())
-                    .where('status', '==', 'pending')
-                    .get()
-                    .then(snapshot => {
-                        if (snapshot.empty) return null;
-                        return snapshot.docs[0].id;
-                    });
-                if (!inviteToken) {
-                    throw new Error(`No pending invite found for ${email}`);
-                }
-                const signupUrl = `https://yourdomain.com/register?invite=${inviteToken}`;
-                // Email content
-                const mailOptions = {
-                    from: `"${organizationName}" <${process.env.EMAIL_USER}>`,
-                    to: email,
-                    subject: `You've been invited to join ${organizationName}`,
-                    html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #00897B;">Join ${organizationName}</h2>
-                <p>Hello,</p>
-                <p>${inviterName} (${inviterEmail}) has invited you to join ${organizationName}.</p>
-                <p>Click the button below to accept the invitation and set up your account:</p>
-                <div style="text-align: center; margin: 25px 0;">
-                    <a href="${signupUrl}" style="background-color: #00897B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Accept Invitation</a>
-                </div>
-                <p>If you have any questions, please contact ${inviterEmail}.</p>
-                <p>This invitation will expire in 7 days.</p>
-                <hr style="border: 1px solid #eee; margin: 20px 0;" />
-                <p style="color: #888; font-size: 12px;">If you received this invitation by mistake, you can safely ignore this email.</p>
-                </div>
-            `
-                };
-                // Send the email
-                return transporter.sendMail(mailOptions);
-            })
-        );
-        return { success: true, count: results.length };
-    } catch (error) {
-        console.error('Error sending invite emails:', error);
-        throw new https.HttpsError('internal', 'Error sending invite emails');
-    }
-});
-
-// Also create an HTTP version of the function with CORS handling
-// This is useful if you're making direct fetch requests instead of using httpsCallable
+// HTTP version with CORS for direct fetch calls
 export const sendInviteEmailsHttp = https.onRequest((request, response) => {
     return corsHandler(request, response, async () => {
-        try {
-            // Check if the user is authenticated using Firebase Auth token
-            // You'd need to verify the ID token that's sent in the Authorization header
-            
-            const { emails, inviterEmail, inviterName, organizationName } = request.body;
-            if (!emails || !Array.isArray(emails) || emails.length === 0) {
-                return response.status(400).json({
-                    error: 'Email list is required and must be a non-empty array.'
-                });
-            }
+        logger.info("Received HTTP invite request");
+        
+        // Only accept POST requests
+        if (request.method !== 'POST') {
+            response.status(405).send('Method Not Allowed');
+            return;
+        }
+        
+        const { emails, inviterEmail, inviterName, organizationName } = request.body;
+        
+        if (!emails || !Array.isArray(emails) || emails.length === 0) {
+            logger.error("Invalid email array in HTTP request");
+            return response.status(400).json({
+                error: 'Email list is required and must be a non-empty array.'
+            });
+        }
 
-            // Same logic as the callable function
+        // Process similar to the callable function
+        const db = firestore();
+        try {
             const results = await Promise.all(
                 emails.map(async (email) => {
-                    const inviteToken = await firestore().collection('invites')
+                    // Look up the invitation in Firestore
+                    const invitesRef = db.collection('invites');
+                    const snapshot = await invitesRef
                         .where('email', '==', email.toLowerCase())
                         .where('status', '==', 'pending')
-                        .get()
-                        .then(snapshot => {
-                            if (snapshot.empty) return null;
-                            return snapshot.docs[0].id;
-                        });
-                    if (!inviteToken) {
+                        .get();
+
+                    if (snapshot.empty) {
                         throw new Error(`No pending invite found for ${email}`);
                     }
-                    const signupUrl = `https://yourdomain.com/register?invite=${inviteToken}`;
+
+                    const inviteDoc = snapshot.docs[0];
+                    const inviteData = inviteDoc.data();
+                    const inviteId = inviteDoc.id;
+
+                    // Generate signup URL
+                    const signupUrl = `${process.env.APP_URL || 'https://your-app-domain.com'}/register?invite=${inviteId}`;
+                    const orgName = organizationName || inviteData.organizationName || "the organization";
+
                     const mailOptions = {
-                        from: `"${organizationName}" <${process.env.EMAIL_USER}>`,
+                        from: `"${orgName}" <${process.env.EMAIL_USER}>`,
                         to: email,
-                        subject: `You've been invited to join ${organizationName}`,
+                        subject: `You've been invited to join ${orgName}`,
                         html: `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #00897B;">Join ${organizationName}</h2>
-                    <p>Hello,</p>
-                    <p>${inviterName} (${inviterEmail}) has invited you to join ${organizationName}.</p>
-                    <p>Click the button below to accept the invitation and set up your account:</p>
-                    <div style="text-align: center; margin: 25px 0;">
-                        <a href="${signupUrl}" style="background-color: #00897B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Accept Invitation</a>
-                    </div>
-                    <p>If you have any questions, please contact ${inviterEmail}.</p>
-                    <p>This invitation will expire in 7 days.</p>
-                    <hr style="border: 1px solid #eee; margin: 20px 0;" />
-                    <p style="color: #888; font-size: 12px;">If you received this invitation by mistake, you can safely ignore this email.</p>
-                    </div>
-                `
+                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                                <h2 style="color: #00897B;">Join ${orgName}</h2>
+                                <p>Hello,</p>
+                                <p>${inviterName || inviteData.inviterName || "A team member"} (${inviterEmail || inviteData.invitedBy}) has invited you to join ${orgName}.</p>
+                                <p>Click the button below to accept the invitation and set up your account:</p>
+                                <div style="text-align: center; margin: 25px 0;">
+                                    <a href="${signupUrl}" style="background-color: #00897B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Accept Invitation</a>
+                                </div>
+                                <p>If you have any questions, please contact ${inviterEmail || inviteData.invitedBy}.</p>
+                                <p>This invitation will expire in 7 days.</p>
+                                <hr style="border: 1px solid #eee; margin: 20px 0;" />
+                                <p style="color: #888; font-size: 12px;">If you received this invitation by mistake, you can safely ignore this email.</p>
+                            </div>
+                        `
                     };
-                    return transporter.sendMail(mailOptions);
+
+                    const info = await transporter.sendMail(mailOptions);
+
+                    // Update the invite document to record that email was sent
+                    await invitesRef.doc(inviteId).update({
+                        emailSent: true,
+                        emailSentAt: firestore.FieldValue.serverTimestamp()
+                    });
+
+                    return { email, success: true, messageId: info.messageId };
                 })
             );
-            
-            response.status(200).json({ success: true, count: results.length });
+
+            response.status(200).json({ success: true, count: results.length, results });
         } catch (error) {
-            console.error('Error sending invite emails:', error);
-            response.status(500).json({ error: 'Internal server error' });
+            logger.error('Error in HTTP invite emails:', error);
+            response.status(500).json({ error: error.message });
         }
     });
 });
