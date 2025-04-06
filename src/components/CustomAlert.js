@@ -95,7 +95,7 @@ const CustomAlert = ({ show, message, type = "success", duration = 3000, onClose
     return createPortal(
         <div className="fixed inset-0 flex items-start justify-center pt-16 px-4 z-50 pointer-events-none">
             <div 
-                className={`max-w-full w-full ${alertStyles[type]} p-4 mb-6 rounded pointer-events-auto`} 
+                className={`max-w-fit w-full ${alertStyles[type]} p-4 mb-6 rounded pointer-events-auto`} 
                 onMouseEnter={handleMouseEnter} 
                 onMouseLeave={handleMouseLeave}
             >
