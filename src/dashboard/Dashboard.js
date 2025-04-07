@@ -227,10 +227,24 @@ const Dashboard = () => {
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
+                let createdAtDate;
+                
+                // Handle different timestamp formats
+                if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+                    createdAtDate = data.createdAt.toDate();
+                } else if (data.createdAt && data.createdAt instanceof Date) {
+                    createdAtDate = data.createdAt;
+                } else if (data.createdAt && data.createdAt._seconds) {
+                    // Handle timestamp stored as { _seconds: number, _nanoseconds: number }
+                    createdAtDate = new Date(data.createdAt._seconds * 1000);
+                } else {
+                    createdAtDate = new Date();
+                }
+                
                 coverage.push({
                     id: doc.id,
                     modules: data.modules || {},
-                    createdAt: data.createdAt?.toDate() || new Date()
+                    createdAt: createdAtDate
                 });
             });
 
@@ -380,7 +394,8 @@ const Dashboard = () => {
     const fetchRecentActivities = useCallback(async () => {
         try {
             if (!user) {
-                throw new Error("User not authenticated");
+                console.log("User not authenticated yet, skipping activity fetch");
+                return [];
             }
     
             // Fetch recent bugs with proper filters
@@ -453,7 +468,6 @@ const Dashboard = () => {
             return activities;
         } catch (error) {
             console.error("Error fetching recent activities:", error);
-            // Return empty array in case of error
             return [];
         }
     }, [user]);
@@ -461,7 +475,11 @@ const Dashboard = () => {
     // Auto refresh function
     const fetchDashboardData = useCallback(async () => {
         if (activePage !== "dashboard") return;
-
+        if (!user) {
+            console.log("User not authenticated yet, skipping dashboard data fetch");
+            return;
+        }
+    
         setIsLoading(true);
         try {
             const [
@@ -497,7 +515,8 @@ const Dashboard = () => {
         fetchDefectTrendsData,
         fetchTestCoverageData,
         fetchTestResultsData,
-        fetchRecentActivities
+        fetchRecentActivities,
+        user
     ]);
 
     // Helper function to get cutoff date based on timeframe

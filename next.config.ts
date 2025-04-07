@@ -13,4 +13,9 @@ module.exports = {
       },
     ],
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb', // or '20mb', depending on your file size needs
+    },
+  },
 };

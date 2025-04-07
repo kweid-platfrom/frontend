@@ -124,7 +124,7 @@ const TraceabilityMatrix = ({ requirements, testCases, onExport, error }) => {
                         <CardTitle className="text-sm font-medium">Actions</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <Button onClick={onExport} className="w-full">
+                        <Button onClick={onExport} className="w-full bg-[#00897B] hover:bg-[#00695C] rounded">
                             <Download className="h-4 w-4 mr-2" />
                             Export Matrix
                         </Button>

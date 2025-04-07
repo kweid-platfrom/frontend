@@ -99,14 +99,15 @@ export const AuthProvider = ({ children }) => {
             const userRef = doc(db, "users", userId);
             await setDoc(userRef, {
                 lastLogin: serverTimestamp(),
-                'metadata.lastUpdated': serverTimestamp()
+                updatedAt: serverTimestamp()
             }, { merge: true });
-
+    
             // Fetch the updated user data
             return await fetchUserData(userId);
         } catch (error) {
             console.error("Error updating last login:", error);
-            return null;
+            // Don't fail the authentication process due to last login update failure
+            return await fetchUserData(userId);
         }
     }, [fetchUserData]);
 

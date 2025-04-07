@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client'
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, getDoc, where, query } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from '../config/firebase';
 import { LoaderCircle, Search, Download } from 'lucide-react';
@@ -17,9 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TEST_CASE_STATUSES, INITIAL_TEST_CASE } from '../components/constants';
 import '../app/globals.css';
 
-// Main component
 const TestCaseManagement = () => {
-    // Add user state to handle auth
     const [user, setUser] = useState(null);
     const [testCases, setTestCases] = useState([]);
     const [requirements, setRequirements] = useState([]);
@@ -29,7 +27,7 @@ const TestCaseManagement = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     const [organizationId, setOrganizationId] = useState(null);
-    
+
     // Use the alert hook
     const { showAlert, alertComponent } = useAlert();
 
@@ -61,41 +59,42 @@ const TestCaseManagement = () => {
     // Data fetching
     useEffect(() => {
         if (user) {
-            fetchTestCases();
-            fetchRequirements();
+            if (!organizationId) {
+            } else {
+                fetchTestCases();
+                fetchRequirements();
+            }
         }
-    }, [user]);
+    }, [user, organizationId]);
 
     const fetchTestCases = async () => {
-        if (!user) return;
+        if (!user || !organizationId) return;
 
         setLoading(true);
         try {
-            // Add security rules check - only fetch documents for user's organization
             const testCasesRef = collection(db, 'testCases');
-            // You may need to create a query to filter by organizationId
-            const testCasesSnapshot = await getDocs(testCasesRef);
+            const q = query(testCasesRef, where("organizationId", "==", organizationId));
+            const testCasesSnapshot = await getDocs(q);
             const testCasesList = testCasesSnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
             setTestCases(testCasesList);
-            setLoading(false);
         } catch (err) {
             console.error("Error fetching test cases:", err);
             showAlert("Failed to load test cases. Please check your database permissions.", "error");
+        } finally {
             setLoading(false);
         }
     };
 
     const fetchRequirements = async () => {
-        if (!user) return;
+        if (!user || !organizationId) return;
 
         try {
-            // Add similar security rules check for requirements
             const requirementsRef = collection(db, 'requirements');
-            // You may need to create a query to filter by organizationId
-            const requirementsSnapshot = await getDocs(requirementsRef);
+            const q = query(requirementsRef, where("organizationId", "==", organizationId));
+            const requirementsSnapshot = await getDocs(q);
             const requirementsList = requirementsSnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -203,6 +202,7 @@ const TestCaseManagement = () => {
     };
 
     // Generate test cases using AI
+    // Generate test cases using AI
     const generateTestCases = async (promptData) => {
         if (!user) {
             showAlert("You must be logged in to generate test cases", "error");
@@ -234,42 +234,60 @@ const TestCaseManagement = () => {
                 body: JSON.stringify({
                     prompt: promptData.aiPrompt,
                     requirements: requirementsContext,
-                    organizationId: organizationId
+                    organizationId: organizationId,
+                    numberOfCases: promptData.numberOfCases || 5,
+                    requirementId: promptData.requirementId || ''
                 }),
             });
 
             if (!response.ok) {
-                throw new Error('Failed to generate test cases');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || 'Failed to generate test cases');
             }
 
             const generatedData = await response.json();
 
             // Process the generated test cases
-            if (generatedData.testCases && Array.isArray(generatedData.testCases)) {
+            if (generatedData && generatedData.testCases && Array.isArray(generatedData.testCases)) {
+                let addedCount = 0;
+
                 // Add each test case to Firestore
                 for (const testCase of generatedData.testCases) {
-                    await addDoc(collection(db, 'testCases'), {
-                        title: testCase.title,
-                        description: testCase.description || '',
-                        steps: testCase.steps || '',
-                        expectedResult: testCase.expectedResult || '',
-                        tags: testCase.tags || [],
-                        priority: testCase.priority || 'P2',
-                        status: TEST_CASE_STATUSES.DRAFT,
-                        createdBy: user.uid,
-                        assignTo: user.uid,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                        organizationId: organizationId || '',
-                        source: 'ai-generated',
-                        requirementId: testCase.requirementId || ''
-                    });
+                    if (testCase.title) {  // Validate minimum required data
+                        await addDoc(collection(db, 'testCases'), {
+                            title: testCase.title,
+                            description: testCase.description || '',
+                            steps: testCase.steps || '',
+                            expectedResult: testCase.expectedResult || '',
+                            tags: Array.isArray(testCase.tags) ? testCase.tags :
+                                (typeof testCase.tags === 'string' ? testCase.tags.split(',').map(t => t.trim()) : []),
+                            priority: testCase.priority || 'P2',
+                            status: TEST_CASE_STATUSES.DRAFT,
+                            createdBy: user.uid,
+                            assignTo: user.uid,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            organizationId: organizationId || '',
+                            source: 'ai-generated',
+                            requirementId: promptData.requirementId || testCase.requirementId || ''
+                        });
+                        addedCount++;
+                    }
                 }
 
                 fetchTestCases();
-                showAlert(`${generatedData.testCases.length} test cases generated successfully`, "success");
+                showAlert(`${addedCount} test cases generated successfully`, "success");
             } else {
-                throw new Error('Invalid response format from AI');
+                // Try to handle if API returns different format
+                if (generatedData && typeof generatedData === 'object') {
+                    if (generatedData.message) {
+                        showAlert(generatedData.message, "error");
+                    } else {
+                        throw new Error('Invalid response format from AI');
+                    }
+                } else {
+                    throw new Error('Invalid response format from AI');
+                }
             }
         } catch (err) {
             console.error("Error generating test cases:", err);
@@ -290,7 +308,7 @@ const TestCaseManagement = () => {
         try {
             // Add organization ID to formData
             formData.append('organizationId', organizationId || '');
-            
+
             // Call your API endpoint to process the uploaded document
             const response = await fetch('/api/process-requirement-document', {
                 method: 'POST',
@@ -317,10 +335,10 @@ const TestCaseManagement = () => {
                         status: 'active'
                     });
                 }
-                
+
                 // Refresh requirements list
                 fetchRequirements();
-                
+
                 // Generate test cases based on imported requirements if available
                 if (result.testCases && Array.isArray(result.testCases)) {
                     for (const testCase of result.testCases) {
@@ -341,10 +359,10 @@ const TestCaseManagement = () => {
                             requirementId: testCase.requirementId || ''
                         });
                     }
-                    
+
                     // Refresh test cases list
                     fetchTestCases();
-                    
+
                     showAlert(`${result.requirements.length} requirements and ${result.testCases.length} test cases imported successfully`, "success");
                 } else {
                     showAlert(`${result.requirements.length} requirements imported successfully`, "success");
@@ -464,7 +482,7 @@ const TestCaseManagement = () => {
             <h1 className="text-2xl font-bold mb-8">Test Case Management</h1>
 
             {!user ? (
-                <div className="text-center p-8 bg-gray-50 rounded-lg shadow-sm">
+                <div className="text-center p-8 bg-gray-50 rounded shadow-sm">
                     <p className="mb-4">Please log in to manage test cases</p>
                 </div>
             ) : (
@@ -478,33 +496,33 @@ const TestCaseManagement = () => {
                     </TabsList>
 
                     {renderAllTestCasesTab()}
-                    
+
                     <TabsContent value="create-test">
-                        <TestCaseForm 
+                        <TestCaseForm
                             initialTestCase={newTestCase}
                             requirements={requirements}
                             loading={loading}
                             onSubmit={handleAddTestCase}
                         />
                     </TabsContent>
-                    
+
                     <TabsContent value="ai-generation">
-                        <AIGenerationForm 
+                        <AIGenerationForm
                             requirements={requirements}
                             loading={loading}
                             onGenerate={generateTestCases}
                         />
                     </TabsContent>
-                    
+
                     <TabsContent value="import-requirements">
-                        <RequirementImportForm 
-                            loading={importLoading} 
-                            onImport={handleDocumentImport} 
+                        <RequirementImportForm
+                            loading={importLoading}
+                            onImport={handleDocumentImport}
                         />
                     </TabsContent>
-                    
+
                     <TabsContent value="traceability">
-                        <TraceabilityMatrix 
+                        <TraceabilityMatrix
                             requirements={requirements}
                             testCases={testCases}
                             loading={loading}
@@ -520,7 +538,7 @@ const TestCaseManagement = () => {
                     </div>
                 </Tabs>
             )}
-            
+
             {/* Include the Alert component */}
             {alertComponent}
         </div>
