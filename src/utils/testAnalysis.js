@@ -77,7 +77,7 @@ export function analyzeTestCaseForAutomation(testCase) {
  */
 export function extractRequirements(documentText) {
     const requirements = [];
-    const requirementId = 1;
+    let requirementId = 1;  // Changed from const to let to allow incrementing
 
     // Split document into sections/paragraphs
     const paragraphs = documentText.split(/\n\s*\n/);
@@ -363,13 +363,6 @@ function generateNegativeTestSteps(requirement) {
     const description = requirement.description.toLowerCase();
 
     let steps = "1. Set up test environment and prerequisites\n";
-
-    steps += "2. Identify expected valid input or action\n";
-    steps += "3. Prepare invalid or unauthorized input/action\n";
-    steps += "4. Attempt to execute the action with invalid data\n";
-    steps += "5. Verify the system rejects the input and shows appropriate error messages";
-
-    return steps;
 
     if (/login|authenticate|sign in|authoriz|permiss|access/i.test(description)) {
         steps += "2. Attempt to access the function with invalid credentials or insufficient permissions\n";

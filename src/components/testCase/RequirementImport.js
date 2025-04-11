@@ -3,63 +3,7 @@ import { Upload, FileText, LoaderCircle, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { analyzeTestCaseForAutomation } from '../../utils/testAnalysis';
 import { useRouter } from 'next/navigation';
-
-// Function to extract requirements from document content
-const extractRequirementsFromDocument = async (fileContent, fileName) => {
-    try {
-        // Here we would call an actual API endpoint instead of mocking data
-        const response = await fetch('/api/extract-requirements', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ fileContent, fileName }),
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to extract requirements: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        // Use the analyzeTestCaseForAutomation function on each test case
-        const automationRecommendations = data.testCases.map(testCase => 
-            analyzeTestCaseForAutomation(testCase)
-        );
-        
-        return {
-            ...data,
-            automationRecommendations
-        };
-    } catch (error) {
-        console.error('Error extracting requirements:', error);
-        throw error;
-    }
-};
-
-// Function to save test cases to the test case management system
-const saveTestCasesToManagementSystem = async (testCases) => {
-    try {
-        const response = await fetch('/api/test-cases', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ testCases }),
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to save test cases: ${response.statusText}`);
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error('Error saving test cases:', error);
-        throw error;
-    }
-};
 
 const DocumentUploader = () => {
     const router = useRouter();
@@ -90,12 +34,32 @@ const DocumentUploader = () => {
         setSavedSuccess(false);
 
         try {
-            const reader = new FileReader();
+            const fileReader = new FileReader();
             
-            reader.onload = async (e) => {
+            fileReader.onload = async (e) => {
                 try {
                     const fileContent = e.target.result;
-                    const data = await extractRequirementsFromDocument(fileContent, file.name);
+                    const fileType = file.name.split('.').pop().toLowerCase();
+                    
+                    // Call the API to extract requirements
+                    const response = await fetch('/api/extract-requirements', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            fileContent,
+                            fileName: file.name,
+                            fileType
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Failed to extract requirements: ${response.status} ${response.statusText} - ${errorText}`);
+                    }
+
+                    const data = await response.json();
                     setExtractedData(data);
                 } catch (err) {
                     setError(`Error processing file: ${err.message}`);
@@ -103,13 +67,19 @@ const DocumentUploader = () => {
                     setIsLoading(false);
                 }
             };
-            
-            reader.onerror = () => {
+
+            fileReader.onerror = () => {
                 setError("Failed to read the file");
                 setIsLoading(false);
             };
-            
-            reader.readAsText(file);
+
+            // Choose the appropriate reading method based on file type
+            const fileType = file.name.split('.').pop().toLowerCase();
+            if (fileType === 'pdf' || fileType === 'doc' || fileType === 'docx') {
+                fileReader.readAsArrayBuffer(file);
+            } else {
+                fileReader.readAsText(file);
+            }
         } catch (err) {
             setError(`Error uploading file: ${err.message}`);
             setIsLoading(false);
@@ -126,15 +96,20 @@ const DocumentUploader = () => {
         setError(null);
 
         try {
-            // Prepare test cases with automation recommendations
-            const testCasesWithAutomation = extractedData.testCases.map((testCase, index) => ({
-                ...testCase,
-                automationRecommendation: extractedData.automationRecommendations[index]
-            }));
+            const response = await fetch('/api/test-cases', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ testCases: extractedData.testCases }),
+            });
 
-            await saveTestCasesToManagementSystem(testCasesWithAutomation);
+            if (!response.ok) {
+                throw new Error(`Failed to save test cases: ${response.statusText}`);
+            }
+
             setSavedSuccess(true);
-            
+
             // Navigate to test case management page after a brief delay
             setTimeout(() => {
                 router.push('/test-cases');
@@ -152,6 +127,9 @@ const DocumentUploader = () => {
         setError(null);
         setSavedSuccess(false);
     };
+
+    // Get accepted file types
+    const acceptedFileTypes = ".txt,.doc,.docx,.pdf";
 
     return (
         <div className="w-full max-w-4xl mx-auto">
@@ -171,7 +149,7 @@ const DocumentUploader = () => {
                                     id="file-upload"
                                     className="hidden"
                                     onChange={handleFileChange}
-                                    accept=".txt,.doc,.docx,.pdf"
+                                    accept={acceptedFileTypes}
                                 />
                                 <label
                                     htmlFor="file-upload"
@@ -188,11 +166,19 @@ const DocumentUploader = () => {
                                     {isLoading ? "Processing..." : "Process Document"}
                                 </Button>
                             </div>
+                            {file && (
+                                <div className="text-sm text-gray-500">
+                                    File type: {file.name.split('.').pop().toUpperCase()}
+                                </div>
+                            )}
                             {error && (
                                 <Alert variant="destructive">
                                     <AlertDescription>{error}</AlertDescription>
                                 </Alert>
                             )}
+                            <div className="text-sm text-gray-500 mt-2">
+                                Supported file types: TXT, DOC, DOCX, PDF
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-8">
@@ -212,7 +198,7 @@ const DocumentUploader = () => {
                                     ))}
                                 </div>
                             </div>
-                            
+
                             <div>
                                 <h3 className="text-lg font-medium">Generated Test Cases</h3>
                                 <div className="mt-2 space-y-4">
@@ -235,7 +221,7 @@ const DocumentUploader = () => {
                                             </div>
                                             <div className="mt-2 text-sm">
                                                 <div className="font-medium">Automation Recommendation:</div>
-                                                <p>{extractedData.automationRecommendations[index]}</p>
+                                                <p>{test.automationRecommendation}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -250,8 +236,8 @@ const DocumentUploader = () => {
                             <Button variant="outline" onClick={resetUpload}>
                                 Upload Another Document
                             </Button>
-                            <Button 
-                                onClick={handleSaveTestCases} 
+                            <Button
+                                onClick={handleSaveTestCases}
                                 disabled={isSaving || savedSuccess}
                                 className="ml-2"
                             >
