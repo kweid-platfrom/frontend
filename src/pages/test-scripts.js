@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client'
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, getDoc, where, query } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, getDoc, where, query } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from '../config/firebase';
 import { LoaderCircle, Search, Download } from 'lucide-react';
@@ -15,6 +15,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TEST_CASE_STATUSES, INITIAL_TEST_CASE } from '../components/constants';
+import {
+    addTestCase,
+    getTestCases,
+    updateTestCase,
+    deleteTestCase
+} from '../services/testCaseService';
 import '../app/globals.css';
 
 const TestCaseManagement = () => {
@@ -58,12 +64,9 @@ const TestCaseManagement = () => {
 
     // Data fetching
     useEffect(() => {
-        if (user) {
-            if (!organizationId) {
-            } else {
-                fetchTestCases();
-                fetchRequirements();
-            }
+        if (user && organizationId) {
+            fetchTestCases();
+            fetchRequirements();
         }
     }, [user, organizationId]);
 
@@ -72,13 +75,8 @@ const TestCaseManagement = () => {
 
         setLoading(true);
         try {
-            const testCasesRef = collection(db, 'testCases');
-            const q = query(testCasesRef, where("organizationId", "==", organizationId));
-            const testCasesSnapshot = await getDocs(q);
-            const testCasesList = testCasesSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            // Use the service function instead of direct Firebase calls
+            const testCasesList = await getTestCases({ organizationId });
             setTestCases(testCasesList);
         } catch (err) {
             console.error("Error fetching test cases:", err);
@@ -106,7 +104,7 @@ const TestCaseManagement = () => {
         }
     };
 
-    // Add test case
+    // Add test case using service
     const handleAddTestCase = async (testCaseData) => {
         if (!user) {
             showAlert("You must be logged in to create test cases", "error");
@@ -120,34 +118,24 @@ const TestCaseManagement = () => {
 
         setLoading(true);
         try {
-            // Prepare the tags - either split from string or use empty array
-            // Check if tags is a string before trying to split
-            const formattedTags = typeof testCaseData.tags === 'string'
-                ? testCaseData.tags.split(',').map(tag => tag.trim()).filter(Boolean)
-                : (Array.isArray(testCaseData.tags) ? testCaseData.tags : []);
-
-            const formattedTestCase = {
-                title: testCaseData.title,
-                description: testCaseData.description || '',
-                assignTo: user.uid,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                createdBy: user.uid,
-                isAutomated: false,
-                steps: testCaseData.steps || '',
-                expectedResult: testCaseData.expectedResult || '',
-                tags: formattedTags,
-                requirementId: testCaseData.requirementId || '',
-                organizationId: organizationId || '', // Ensure organizationId is always set
-                priority: testCaseData.priority || 'P2',
-                status: testCaseData.status || 'draft',
-                testSteps: []
+            const currentUserData = {
+                id: user.uid,
+                organizationId: organizationId
             };
 
-            await addDoc(collection(db, 'testCases'), formattedTestCase);
+            // Pass the test case data to the service
+            const result = await addTestCase({
+                ...testCaseData,
+                createdBy: currentUserData.id,
+                organizationId: currentUserData.organizationId
+            });
+
+            // Reset form and refresh test cases
             setNewTestCase({ ...INITIAL_TEST_CASE });
-            fetchTestCases();
+            await fetchTestCases();
+
             showAlert("Test case added successfully", "success");
+            return result;
         } catch (err) {
             console.error("Error adding test case:", err);
             showAlert("Failed to add test case. Please try again.", "error");
@@ -156,7 +144,7 @@ const TestCaseManagement = () => {
         }
     };
 
-    // Delete test case
+    // Delete test case using the service
     const handleDeleteTestCase = async (id) => {
         if (!user) {
             showAlert("You must be logged in to delete test cases", "error");
@@ -166,8 +154,8 @@ const TestCaseManagement = () => {
         if (window.confirm("Are you sure you want to delete this test case?")) {
             setLoading(true);
             try {
-                await deleteDoc(doc(db, 'testCases', id));
-                fetchTestCases();
+                await deleteTestCase(id);
+                await fetchTestCases();
                 showAlert("Test case deleted successfully", "success");
             } catch (err) {
                 console.error("Error deleting test case:", err);
@@ -178,7 +166,7 @@ const TestCaseManagement = () => {
         }
     };
 
-    // Update test case status
+    // Update test case status using the service
     const updateTestCaseStatus = async (id, newStatus) => {
         if (!user) {
             showAlert("You must be logged in to update test cases", "error");
@@ -187,12 +175,18 @@ const TestCaseManagement = () => {
 
         setLoading(true);
         try {
-            const testCaseRef = doc(db, 'testCases', id);
-            await updateDoc(testCaseRef, {
+            const testCase = testCases.find(tc => tc.id === id);
+            if (!testCase) {
+                throw new Error("Test case not found");
+            }
+
+            await updateTestCase(id, {
+                ...testCase,
                 status: newStatus,
                 updatedAt: new Date().toISOString()
             });
-            fetchTestCases();
+
+            await fetchTestCases();
             showAlert("Test case status updated", "success");
         } catch (err) {
             console.error("Error updating test case status:", err);
@@ -201,101 +195,12 @@ const TestCaseManagement = () => {
             setLoading(false);
         }
     };
-
-    // Generate test cases using AI
-    // const generateTestCases = async (promptData) => {
-    //     if (!user) {
-    //         showAlert("You must be logged in to generate test cases", "error");
-    //         return;
-    //     }
-
-    //     if (!promptData.aiPrompt) {
-    //         showAlert("Please enter a prompt for test case generation", "error");
-    //         return;
-    //     }
-
-    //     setLoading(true);
-    //     try {
-    //         // Get requirements data to provide context for the AI
-    //         let requirementsContext = "";
-    //         if (requirements.length > 0) {
-    //             requirementsContext = "Here are the existing requirements:\n" +
-    //                 requirements.map(req =>
-    //                     `ID: ${req.id} - ${req.title}: ${req.description || 'No description'}`
-    //                 ).join("\n");
-    //         }
-
-    //         // Call your API endpoint for generating test cases
-    //         const response = await fetch('/api/generate-test-cases', {
-    //             method: 'POST',
-    //             headers: {
-    //                 'Content-Type': 'application/json'
-    //             },
-    //             body: JSON.stringify({
-    //                 prompt: promptData.aiPrompt,
-    //                 requirements: requirementsContext,
-    //                 organizationId: organizationId,
-    //                 numberOfCases: promptData.numberOfCases || 5,
-    //                 requirementId: promptData.requirementId || ''
-    //             }),
-    //         });
-
-    //         if (!response.ok) {
-    //             const errorData = await response.json().catch(() => ({}));
-    //             throw new Error(errorData.message || 'Failed to generate test cases');
-    //         }
-
-    //         const generatedData = await response.json();
-    //         console.log("API response:", generatedData);
-    //         // Process the generated test cases
-    //         if (generatedData && generatedData.testCases && Array.isArray(generatedData.testCases)) {
-    //             let addedCount = 0;
-
-    //             // Add each test case to Firestore
-    //             for (const testCase of generatedData.testCases) {
-    //                 if (testCase.title) {  // Validate minimum required data
-    //                     await addDoc(collection(db, 'testCases'), {
-    //                         title: testCase.title,
-    //                         description: testCase.description || '',
-    //                         steps: testCase.steps || '',
-    //                         expectedResult: testCase.expectedResult || '',
-    //                         tags: Array.isArray(testCase.tags) ? testCase.tags :
-    //                             (typeof testCase.tags === 'string' ? testCase.tags.split(',').map(t => t.trim()) : []),
-    //                         priority: testCase.priority || 'P2',
-    //                         status: TEST_CASE_STATUSES.DRAFT,
-    //                         createdBy: user.uid,
-    //                         assignTo: user.uid,
-    //                         createdAt: new Date().toISOString(),
-    //                         updatedAt: new Date().toISOString(),
-    //                         organizationId: organizationId || '',
-    //                         source: 'ai-generated',
-    //                         requirementId: promptData.requirementId || testCase.requirementId || ''
-    //                     });
-    //                     addedCount++;
-    //                 }
-    //             }
-
-    //             fetchTestCases();
-    //             showAlert(`${addedCount} test cases generated successfully`, "success");
-    //         } else {
-    //             // Try to handle if API returns different format
-    //             if (generatedData && typeof generatedData === 'object') {
-    //                 if (generatedData.message) {
-    //                     showAlert(generatedData.message, "error");
-    //                 } else {
-    //                     throw new Error('Invalid response format from AI');
-    //                 }
-    //             } else {
-    //                 throw new Error('Invalid response format from AI');
-    //             }
-    //         }
-    //     } catch (err) {
-    //         console.error("Error generating test cases:", err);
-    //         showAlert(`Failed to generate test cases: ${err.message}`, "error");
-    //     } finally {
-    //         setLoading(false);
-    //     }
-    // };
+    // Handle form success callback
+    const handleFormSuccess = async () => {
+        await fetchTestCases();
+        showAlert("Test case created successfully", "success");
+    };
+    
 
     // Generate test cases using AI
     const generateTestCases = async (promptData) => {
@@ -602,7 +507,9 @@ const TestCaseManagement = () => {
                             initialTestCase={newTestCase}
                             requirements={requirements}
                             loading={loading}
+                            currentUser={{ id: user.uid, organizationId }}
                             onSubmit={handleAddTestCase}
+                            onSuccess={handleFormSuccess}
                         />
                     </TabsContent>
 

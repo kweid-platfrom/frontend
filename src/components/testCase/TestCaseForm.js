@@ -15,14 +15,18 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PRIORITY_LEVELS, INITIAL_TEST_CASE } from '../constants';
+import { addTestCase } from '../../services/testCaseService';
+import toast from 'react-hot-toast';
 
 const TestCaseForm = ({
     initialTestCase = INITIAL_TEST_CASE,
     requirements = [],
     loading = false,
     currentUser = {},
-    onSubmit,
+    onSuccess,
 }) => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
     // Normalize initialTestCase to avoid undefined values
     const normalizedInitialTestCase = useMemo(() => {
         return { ...INITIAL_TEST_CASE, ...initialTestCase };
@@ -36,7 +40,6 @@ const TestCaseForm = ({
         organizationId: normalizedInitialTestCase.organizationId || currentUser?.organizationId || '',
         status: normalizedInitialTestCase.status || 'draft',
         isAutomated: false,
-        // Keep assignedTo as is since rules now expect this field
         assignedTo: normalizedInitialTestCase.assignedTo || currentUser?.id || '',
     });
 
@@ -113,52 +116,90 @@ const TestCaseForm = ({
         }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
-        // Ensure tags is always an array before submitting
-        let formattedTags = [];
-        if (typeof testCase.tags === 'string') {
-            formattedTags = testCase.tags.split(',').map(tag => tag.trim()).filter(Boolean);
-        } else if (Array.isArray(testCase.tags)) {
-            formattedTags = testCase.tags;
+        try {
+            // Ensure tags is always an array before submitting
+            let formattedTags = [];
+            if (typeof testCase.tags === 'string') {
+                formattedTags = testCase.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+            } else if (Array.isArray(testCase.tags)) {
+                formattedTags = testCase.tags;
+            }
+            
+            // Process test steps - convert from text to array if needed
+            const processedTestCase = {
+                ...testCase,
+                // Ensure we have valid values for key fields
+                title: testCase.title || '',
+                description: testCase.description || '',
+                steps: testCase.steps || '',
+                expectedResult: testCase.expectedResult || '',
+                testSteps: testCase.steps ? testCase.steps.split('\n').filter(step => step.trim()) : [],
+                isAutomated: analyzeAutomationPotential(testCase),
+                tags: formattedTags,
+                
+                // Ensure all required fields are present according to API expectations
+                assignedTo: testCase.assignedTo || currentUser?.id || '',
+                createdAt: testCase.createdAt || new Date().toISOString(),
+                createdBy: testCase.createdBy || currentUser?.id || '',
+                updatedAt: new Date().toISOString(),
+                organizationId: testCase.organizationId || currentUser?.organizationId || '',
+                
+                // Ensure priority is valid
+                priority: ['P0', 'P1', 'P2', 'P3'].includes(testCase.priority) ? testCase.priority : 'P2',
+                
+                // Ensure status is valid
+                status: ['draft', 'active', 'passed', 'failed', 'blocked'].includes(testCase.status) ? 
+                        testCase.status : 'draft',
+                        
+                // Ensure module is present even if empty
+                module: testCase.module || '',
+                
+                // Ensure execution is present
+                execution: testCase.execution || 'manual'
+            };
+            
+            console.log('Submitting test case:', processedTestCase);
+            
+            // Call the service function instead of direct Firebase call
+            const result = await addTestCase(processedTestCase);
+            
+            toast({
+                title: "Success",
+                description: "Test case created successfully",
+                variant: "success",
+            });
+            
+            // Reset form or call success callback
+            if (onSuccess) {
+                onSuccess(result);
+            }
+            
+            // Reset form to initial state
+            setTestCase({ 
+                ...INITIAL_TEST_CASE,
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser?.id || '',
+                updatedAt: new Date().toISOString(),
+                organizationId: currentUser?.organizationId || '',
+                status: 'draft',
+                isAutomated: false,
+                assignedTo: currentUser?.id || '',
+            });
+            
+        } catch (error) {
+            console.error('Error submitting test case:', error);
+            toast({
+                title: "Error",
+                description: error.message || "Failed to create test case",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSubmitting(false);
         }
-        
-        // Process test steps - convert from text to array if needed
-        const processedTestCase = {
-            ...testCase,
-            // Ensure we have valid values for key fields
-            title: testCase.title || '',
-            description: testCase.description || '',
-            steps: testCase.steps || '',
-            expectedResult: testCase.expectedResult || '',
-            testSteps: testCase.steps ? testCase.steps.split('\n').filter(step => step.trim()) : [],
-            isAutomated: analyzeAutomationPotential(testCase),
-            tags: formattedTags,
-            
-            // Ensure all required fields are present according to Firestore rules
-            assignedTo: testCase.assignedTo || currentUser?.id || '',
-            createdAt: testCase.createdAt || new Date().toISOString(),
-            createdBy: testCase.createdBy || currentUser?.id || '',
-            updatedAt: new Date().toISOString(),
-            organizationId: testCase.organizationId || currentUser?.organizationId || '',
-            
-            // Ensure priority is valid according to rules
-            priority: ['P0', 'P1', 'P2', 'P3'].includes(testCase.priority) ? testCase.priority : 'P2',
-            
-            // Ensure status is valid according to rules
-            status: ['draft', 'active', 'passed', 'failed', 'blocked'].includes(testCase.status) ? 
-                    testCase.status : 'draft',
-                    
-            // Ensure module is present even if empty
-            module: testCase.module || '',
-            
-            // Ensure execution is present
-            execution: testCase.execution || 'manual'
-        };
-        
-        console.log('Submitting test case:', processedTestCase);
-        onSubmit(processedTestCase);
     };
 
     return (
@@ -406,10 +447,10 @@ const TestCaseForm = ({
                 <Button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={loading}
+                    disabled={isSubmitting || loading}
                     className="bg-[#00897B] hover:bg-[#00965C] transition-colors rounded"
                 >
-                    {loading ? (
+                    {isSubmitting || loading ? (
                         <>
                             <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                             Saving...
