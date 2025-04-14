@@ -121,9 +121,10 @@ const TestCaseManagement = () => {
         setLoading(true);
         try {
             // Prepare the tags - either split from string or use empty array
-            const tags = testCaseData.tags
+            // Check if tags is a string before trying to split
+            const formattedTags = typeof testCaseData.tags === 'string'
                 ? testCaseData.tags.split(',').map(tag => tag.trim()).filter(Boolean)
-                : [];
+                : (Array.isArray(testCaseData.tags) ? testCaseData.tags : []);
 
             const formattedTestCase = {
                 title: testCaseData.title,
@@ -135,7 +136,7 @@ const TestCaseManagement = () => {
                 isAutomated: false,
                 steps: testCaseData.steps || '',
                 expectedResult: testCaseData.expectedResult || '',
-                tags: tags,
+                tags: formattedTags,
                 requirementId: testCaseData.requirementId || '',
                 organizationId: organizationId || '', // Ensure organizationId is always set
                 priority: testCaseData.priority || 'P2',
@@ -202,6 +203,100 @@ const TestCaseManagement = () => {
     };
 
     // Generate test cases using AI
+    // const generateTestCases = async (promptData) => {
+    //     if (!user) {
+    //         showAlert("You must be logged in to generate test cases", "error");
+    //         return;
+    //     }
+
+    //     if (!promptData.aiPrompt) {
+    //         showAlert("Please enter a prompt for test case generation", "error");
+    //         return;
+    //     }
+
+    //     setLoading(true);
+    //     try {
+    //         // Get requirements data to provide context for the AI
+    //         let requirementsContext = "";
+    //         if (requirements.length > 0) {
+    //             requirementsContext = "Here are the existing requirements:\n" +
+    //                 requirements.map(req =>
+    //                     `ID: ${req.id} - ${req.title}: ${req.description || 'No description'}`
+    //                 ).join("\n");
+    //         }
+
+    //         // Call your API endpoint for generating test cases
+    //         const response = await fetch('/api/generate-test-cases', {
+    //             method: 'POST',
+    //             headers: {
+    //                 'Content-Type': 'application/json'
+    //             },
+    //             body: JSON.stringify({
+    //                 prompt: promptData.aiPrompt,
+    //                 requirements: requirementsContext,
+    //                 organizationId: organizationId,
+    //                 numberOfCases: promptData.numberOfCases || 5,
+    //                 requirementId: promptData.requirementId || ''
+    //             }),
+    //         });
+
+    //         if (!response.ok) {
+    //             const errorData = await response.json().catch(() => ({}));
+    //             throw new Error(errorData.message || 'Failed to generate test cases');
+    //         }
+
+    //         const generatedData = await response.json();
+    //         console.log("API response:", generatedData);
+    //         // Process the generated test cases
+    //         if (generatedData && generatedData.testCases && Array.isArray(generatedData.testCases)) {
+    //             let addedCount = 0;
+
+    //             // Add each test case to Firestore
+    //             for (const testCase of generatedData.testCases) {
+    //                 if (testCase.title) {  // Validate minimum required data
+    //                     await addDoc(collection(db, 'testCases'), {
+    //                         title: testCase.title,
+    //                         description: testCase.description || '',
+    //                         steps: testCase.steps || '',
+    //                         expectedResult: testCase.expectedResult || '',
+    //                         tags: Array.isArray(testCase.tags) ? testCase.tags :
+    //                             (typeof testCase.tags === 'string' ? testCase.tags.split(',').map(t => t.trim()) : []),
+    //                         priority: testCase.priority || 'P2',
+    //                         status: TEST_CASE_STATUSES.DRAFT,
+    //                         createdBy: user.uid,
+    //                         assignTo: user.uid,
+    //                         createdAt: new Date().toISOString(),
+    //                         updatedAt: new Date().toISOString(),
+    //                         organizationId: organizationId || '',
+    //                         source: 'ai-generated',
+    //                         requirementId: promptData.requirementId || testCase.requirementId || ''
+    //                     });
+    //                     addedCount++;
+    //                 }
+    //             }
+
+    //             fetchTestCases();
+    //             showAlert(`${addedCount} test cases generated successfully`, "success");
+    //         } else {
+    //             // Try to handle if API returns different format
+    //             if (generatedData && typeof generatedData === 'object') {
+    //                 if (generatedData.message) {
+    //                     showAlert(generatedData.message, "error");
+    //                 } else {
+    //                     throw new Error('Invalid response format from AI');
+    //                 }
+    //             } else {
+    //                 throw new Error('Invalid response format from AI');
+    //             }
+    //         }
+    //     } catch (err) {
+    //         console.error("Error generating test cases:", err);
+    //         showAlert(`Failed to generate test cases: ${err.message}`, "error");
+    //     } finally {
+    //         setLoading(false);
+    //     }
+    // };
+
     // Generate test cases using AI
     const generateTestCases = async (promptData) => {
         if (!user) {
@@ -240,13 +335,18 @@ const TestCaseManagement = () => {
                 }),
             });
 
+            // Handle specific error status codes
+            if (response.status === 429) {
+                throw new Error('Rate limit exceeded. Please try again later or reduce the number of test cases.');
+            }
+
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.message || 'Failed to generate test cases');
             }
 
             const generatedData = await response.json();
-
+            console.log("API response:", generatedData);
             // Process the generated test cases
             if (generatedData && generatedData.testCases && Array.isArray(generatedData.testCases)) {
                 let addedCount = 0;

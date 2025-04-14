@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,30 +23,43 @@ const TestCaseForm = ({
     currentUser = {},
     onSubmit,
 }) => {
+    // Normalize initialTestCase to avoid undefined values
+    const normalizedInitialTestCase = useMemo(() => {
+        return { ...INITIAL_TEST_CASE, ...initialTestCase };
+    }, [initialTestCase]);
+
     const [testCase, setTestCase] = useState({ 
-        ...initialTestCase,
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser?.id || '',
+        ...normalizedInitialTestCase,
+        createdAt: normalizedInitialTestCase.createdAt || new Date().toISOString(),
+        createdBy: normalizedInitialTestCase.createdBy || currentUser?.id || '',
         updatedAt: new Date().toISOString(),
-        organizationId: currentUser?.organizationId || '',
-        status: 'draft',
+        organizationId: normalizedInitialTestCase.organizationId || currentUser?.organizationId || '',
+        status: normalizedInitialTestCase.status || 'draft',
         isAutomated: false,
+        // Keep assignedTo as is since rules now expect this field
+        assignedTo: normalizedInitialTestCase.assignedTo || currentUser?.id || '',
     });
 
-    // This effect will be triggered when initialTestCase changes
+    // This effect now has proper dependencies
     useEffect(() => {
-        if (initialTestCase) {
-            setTestCase(_prev => ({ 
-                ...initialTestCase,
-                createdAt: initialTestCase.createdAt || new Date().toISOString(),
-                createdBy: initialTestCase.createdBy || currentUser?.id || '',
-                updatedAt: new Date().toISOString(),
-                organizationId: initialTestCase.organizationId || currentUser?.organizationId || '',
-                status: initialTestCase.status || 'draft',
-                isAutomated: analyzeAutomationPotential(initialTestCase)
-            }));
-        }
-    }, [initialTestCase, currentUser]);
+        // Skip the effect if initialTestCase is empty or undefined
+        if (!initialTestCase || Object.keys(initialTestCase).length === 0) return;
+        
+        // Create a stable reference to prevent continuous updates
+        const updatedTestCase = { 
+            ...normalizedInitialTestCase,
+            createdAt: normalizedInitialTestCase.createdAt || new Date().toISOString(),
+            createdBy: normalizedInitialTestCase.createdBy || currentUser?.id || '',
+            updatedAt: new Date().toISOString(),
+            organizationId: normalizedInitialTestCase.organizationId || currentUser?.organizationId || '',
+            status: normalizedInitialTestCase.status || 'draft',
+            assignedTo: normalizedInitialTestCase.assignedTo || currentUser?.id || '',
+            isAutomated: analyzeAutomationPotential(normalizedInitialTestCase)
+        };
+        
+        setTestCase(updatedTestCase);
+    }, [initialTestCase.id, normalizedInitialTestCase, currentUser?.id, currentUser?.organizationId, initialTestCase]); 
+
 
     // Function to analyze if a test case can be automated
     const analyzeAutomationPotential = (tc) => {
@@ -91,21 +103,58 @@ const TestCaseForm = ({
     };
 
     const handleSelectChange = (name, value) => {
+        // Handle special case for "null" value
+        const finalValue = value === "null" ? "" : value;
+        
         setTestCase((prev) => ({ 
             ...prev, 
-            [name]: value,
+            [name]: finalValue,
             updatedAt: new Date().toISOString()
         }));
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
+
+        // Ensure tags is always an array before submitting
+        let formattedTags = [];
+        if (typeof testCase.tags === 'string') {
+            formattedTags = testCase.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+        } else if (Array.isArray(testCase.tags)) {
+            formattedTags = testCase.tags;
+        }
         
         // Process test steps - convert from text to array if needed
         const processedTestCase = {
             ...testCase,
+            // Ensure we have valid values for key fields
+            title: testCase.title || '',
+            description: testCase.description || '',
+            steps: testCase.steps || '',
+            expectedResult: testCase.expectedResult || '',
             testSteps: testCase.steps ? testCase.steps.split('\n').filter(step => step.trim()) : [],
-            isAutomated: analyzeAutomationPotential(testCase)
+            isAutomated: analyzeAutomationPotential(testCase),
+            tags: formattedTags,
+            
+            // Ensure all required fields are present according to Firestore rules
+            assignedTo: testCase.assignedTo || currentUser?.id || '',
+            createdAt: testCase.createdAt || new Date().toISOString(),
+            createdBy: testCase.createdBy || currentUser?.id || '',
+            updatedAt: new Date().toISOString(),
+            organizationId: testCase.organizationId || currentUser?.organizationId || '',
+            
+            // Ensure priority is valid according to rules
+            priority: ['P0', 'P1', 'P2', 'P3'].includes(testCase.priority) ? testCase.priority : 'P2',
+            
+            // Ensure status is valid according to rules
+            status: ['draft', 'active', 'passed', 'failed', 'blocked'].includes(testCase.status) ? 
+                    testCase.status : 'draft',
+                    
+            // Ensure module is present even if empty
+            module: testCase.module || '',
+            
+            // Ensure execution is present
+            execution: testCase.execution || 'manual'
         };
         
         console.log('Submitting test case:', processedTestCase);
@@ -129,7 +178,7 @@ const TestCaseForm = ({
                         <Input
                             id="title"
                             name="title"
-                            value={testCase.title ?? ''}
+                            value={testCase.title || ''}
                             onChange={handleChange}
                             placeholder="Enter test case title"
                             required
@@ -158,10 +207,10 @@ const TestCaseForm = ({
                                 Priority
                             </Label>
                             <Select 
-                                value={testCase.priority || ''} 
+                                defaultValue={testCase.priority || 'P2'}
                                 onValueChange={(value) => handleSelectChange('priority', value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id="priority">
                                     <SelectValue placeholder="Select priority" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -179,17 +228,17 @@ const TestCaseForm = ({
                                 Requirement ID
                             </Label>
                             <Select 
-                                value={testCase.requirementId || ''} 
+                                defaultValue={testCase.requirementId || ''}
                                 onValueChange={(value) => handleSelectChange('requirementId', value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id="requirementId">
                                     <SelectValue placeholder="Select requirement" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
+                                    <SelectItem value="null">None</SelectItem>
                                     {requirements.map((req) => (
                                         <SelectItem key={req.id} value={req.id}>
-                                            {req.id} - {req.title}
+                                            {req.id.substring(0, 6)}... - {req.title.substring(0, 20)}{req.title.length > 20 ? '...' : ''}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -243,10 +292,10 @@ const TestCaseForm = ({
                                 Execution Type
                             </Label>
                             <Select 
-                                value={testCase.execution || 'manual'} 
+                                defaultValue={testCase.execution || 'manual'}
                                 onValueChange={(value) => handleSelectChange('execution', value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id="execution">
                                     <SelectValue placeholder="Select execution type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -275,18 +324,18 @@ const TestCaseForm = ({
                                 Status
                             </Label>
                             <Select 
-                                value={testCase.status || 'draft'} 
+                                defaultValue={testCase.status || 'draft'}
                                 onValueChange={(value) => handleSelectChange('status', value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id="status">
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="draft">Draft</SelectItem>
                                     <SelectItem value="active">Active</SelectItem>
-                                    <SelectItem value="review">Under Review</SelectItem>
-                                    <SelectItem value="completed">Completed</SelectItem>
-                                    <SelectItem value="archived">Archived</SelectItem>
+                                    <SelectItem value="passed">Passed</SelectItem>
+                                    <SelectItem value="failed">Failed</SelectItem>
+                                    <SelectItem value="blocked">Blocked</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -345,7 +394,7 @@ const TestCaseForm = ({
                         <Input
                             id="tags"
                             name="tags"
-                            value={testCase.tags || ''}
+                            value={typeof testCase.tags === 'string' ? testCase.tags : (Array.isArray(testCase.tags) ? testCase.tags.join(', ') : '')}
                             onChange={handleChange}
                             placeholder="e.g., regression, login, critical"
                             className="focus:ring-2 focus:ring-[#00965C] transition-all"
