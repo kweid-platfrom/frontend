@@ -42,6 +42,7 @@ const Dashboard = () => {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [metricsLastUpdated, setMetricsLastUpdated] = useState(null);
+    const [isMobileView, setIsMobileView] = useState(false);
 
     const viewOptions = [
         { value: "weekly", label: "Weekly" },
@@ -52,6 +53,22 @@ const Dashboard = () => {
     // Functions to control modals
     const openModal = (modalType) => setActiveModal(modalType);
     const closeModal = () => setActiveModal(null);
+
+    // Check for mobile view on window resize
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobileView(window.innerWidth < 768);
+        };
+        
+        // Set initial value
+        handleResize();
+        
+        // Add event listener
+        window.addEventListener('resize', handleResize);
+        
+        // Clean up
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Authentication tracking
     useEffect(() => {
@@ -472,7 +489,7 @@ const Dashboard = () => {
         }
     }, [user]);
 
-    // Auto refresh function
+    // Fetch dashboard data (manual data fetch - auto-refresh removed)
     const fetchDashboardData = useCallback(async () => {
         if (activePage !== "dashboard") return;
         if (!user) {
@@ -541,7 +558,7 @@ const Dashboard = () => {
         return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
     };
 
-    // Setup real-time listeners for data changes
+    // Setup listeners for data changes - preserving this functionality as specified
     useEffect(() => {
         let unsubscribers = [];
     
@@ -572,8 +589,6 @@ const Dashboard = () => {
                     (error) => console.error("Error listening to test results:", error)
                 );
                 unsubscribers.push(resultsUnsubscribe);
-    
-                // Similarly for other listeners...
             } catch (error) {
                 console.error("Error setting up listeners:", error);
             }
@@ -589,7 +604,7 @@ const Dashboard = () => {
         fetchDashboardData();
     }, [timeframeView, fetchDashboardData]);
 
-    // Refresh when metrics are updated
+    // Refresh when metrics are updated - keeping this functionality
     useEffect(() => {
         if (metricsLastUpdated) {
             fetchDashboardData();
@@ -606,37 +621,34 @@ const Dashboard = () => {
     }
 
     return (
-        <div className="flex h-screen bg-gray-50">
+        <div className="flex flex-col md:flex-row h-screen bg-gray-50">
             <Sidebar activePage={activePage} setActivePage={setActivePage} />
 
             <div className="flex-grow overflow-auto">
                 <Header />
-                <main className="p-6 space-y-6">
+                <main className="p-3 md:p-6 space-y-4 md:space-y-6">
                     {activePage === "dashboard" && (
                         <>
-                            <div className="flex justify-between items-center">
-                                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Testing Dashboard</h1>
-                                <div className="flex items-center space-x-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Testing Dashboard</h1>
+                                <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                                     <ViewToggle
                                         options={viewOptions}
                                         defaultOption={viewOptions[0]}
                                         onChange={setTimeframeView}
                                     />
-                                    <div className="text-xs text-gray-500">
-                                        Auto-refreshing every 30s
-                                    </div>
                                 </div>
                             </div>
 
                             {/* Key Metrics Section */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                                 <KeyMetrics dashboardData={dashboardData} isLoading={isLoading} />
                             </div>
 
                             {/* Charts Section */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                                <div className="lg:col-span-2 space-y-4 md:space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                                         <ChartCard title={`Bug Status (${timeframeView.label})`}>
                                             <BugStatusChart data={dashboardData.bugStatusData} isLoading={isLoading} />
                                         </ChartCard>
@@ -657,7 +669,7 @@ const Dashboard = () => {
                                 </div>
 
                                 <div className="lg:col-span-1">
-                                    <div className="bg-white rounded-lg shadow p-6 h-full">
+                                    <div className="bg-white rounded-lg shadow p-4 md:p-6 h-full">
                                         <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
                                         <ActivityFeed activities={dashboardData.recentActivities} isLoading={isLoading} />
                                     </div>

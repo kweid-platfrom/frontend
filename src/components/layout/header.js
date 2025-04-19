@@ -1,18 +1,18 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
-import { Bell, Search, Play, UserPlus, FileText, Plus, Settings, User } from "lucide-react";
+import { Search, Play, UserPlus, FileText, Plus, Settings, User } from "lucide-react";
 import SignOutButton from "../auth/SignOutButton";
 import ScreenRecorderButton from "../bug-report/ScreenRecorder";
 import BugReportButton from "../BugReport";
 import UserAvatar from '../UserAvatar'
 import AddUserDropdown from "../modals/AddUserDropdown"
+import NotificationsDropdown from "../NotificationsDropdown";
 
 const Header = ({ setShowBugForm }) => {
     const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
     const [showUserProfileDropdown, setShowUserProfileDropdown] = useState(false);
     const [user, setUser] = useState(null);
-
 
     // Toggle user dropdown
     const toggleAddUserDropdown = () => {
@@ -106,6 +106,7 @@ const Header = ({ setShowBugForm }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [showReportOptions, showTestCaseOptions, showUserProfileDropdown, showAddUserDropdown]);
+    
     useEffect(() => {
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -127,7 +128,6 @@ const Header = ({ setShowBugForm }) => {
         const auth = getAuth();
         await signOut(auth);
     };
-
 
     return (
         <header className="relative bg-[#fff] shadow-sm z-[50] py-3 px-4 md:px-6 overflow-visible">
@@ -157,11 +157,11 @@ const Header = ({ setShowBugForm }) => {
                     {/* Report Bug */}
                     <BugReportButton className="text-[#2D3142] hover:bg-[rgb(165,214,167)] hover:text-[#2D3142] cursor-pointer" />
 
-
                     {/* Enhanced Screen Recorder Button */}
                     <div className="cursor-pointer">
                         <ScreenRecorderButton onRecordingComplete={handleRecordingComplete} />
                     </div>
+                    
                     {/* Generate Report Dropdown */}
                     <div className="relative">
                         <button
@@ -206,11 +206,7 @@ const Header = ({ setShowBugForm }) => {
                         </button>
                     </div>
 
-                    {/* Notification Bell */}
-                    <button className="p-1 rounded-full text-gray-600 hover:text-gray-800 relative cursor-pointer">
-                        <Bell className="h-5 w-5" />
-                        <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
-                    </button>
+                    <NotificationsDropdown />
 
                     {/* User Avatar */}
                     <div className="flex items-center relative user-avatar-container">
