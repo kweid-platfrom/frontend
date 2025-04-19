@@ -20,6 +20,7 @@ import BugTracker from "../pages/bug-tracker";
 import TestScripts from "../pages/test-scripts";
 import AutomatedScripts from "../pages/auto-scripts";
 import SettingsPage from "../pages/settings";
+import RecordingsPage from '../pages/recordings'
 import { db } from "../config/firebase";
 import { collection, query, orderBy, limit, getDocs, onSnapshot, doc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -686,6 +687,9 @@ const Dashboard = () => {
 
                     {/* 📝 Automated Scripts Page */}
                     {activePage === "auto-scripts" && <AutomatedScripts />}
+                    
+                    {/* 📝 Recordings Page */}
+                    {activePage === "recordings" && <RecordingsPage />}
 
                     {/* 📝 Settings Page */}
                     {activePage === "settings" && <SettingsPage />}

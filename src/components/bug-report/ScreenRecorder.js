@@ -15,6 +15,9 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
     const [showBugForm, setShowBugForm] = useState(false);
     const [networkError, setNetworkError] = useState(false);
     const [isSelectingSource, setIsSelectingSource] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [networkErrors, setNetworkErrors] = useState([]);
     const [bugReport, setBugReport] = useState({
         title: "",
         description: "",
@@ -32,6 +35,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
     const overlayRef = useRef(null);
     const timerRef = useRef(null);
     const videoRef = useRef(null);
+    const networkMonitorRef = useRef(null);
 
     // Calculate overlay position relative to button
     const [overlayPosition, setOverlayPosition] = useState({ top: 0, left: 0 });
@@ -61,6 +65,43 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [countdown, isCountdownActive]);
 
+    // Set up network error monitoring
+    useEffect(() => {
+        if (isRecording) {
+            // Start monitoring network errors
+            networkMonitorRef.current = new PerformanceObserver((list) => {
+                list.getEntries().forEach((entry) => {
+                    // Filter for failed network requests
+                    if (entry.entryType === 'resource' && (
+                        entry.transferSize === 0 || 
+                        entry.responseStatus >= 400 ||
+                        entry.name.includes('error')
+                    )) {
+                        setNetworkErrors(prev => [...prev, {
+                            url: entry.name,
+                            initiatorType: entry.initiatorType,
+                            startTime: entry.startTime,
+                            duration: entry.duration,
+                            responseStatus: entry.responseStatus || 'unknown',
+                            timestamp: new Date().toISOString()
+                        }]);
+                    }
+                });
+            });
+
+            networkMonitorRef.current.observe({ entryTypes: ['resource'] });
+        } else if (networkMonitorRef.current) {
+            // Stop monitoring when not recording
+            networkMonitorRef.current.disconnect();
+        }
+
+        return () => {
+            if (networkMonitorRef.current) {
+                networkMonitorRef.current.disconnect();
+            }
+        };
+    }, [isRecording]);
+
     // Clean up on unmount
     useEffect(() => {
         return () => {
@@ -69,6 +110,9 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             }
             if (timerRef.current) {
                 clearInterval(timerRef.current);
+            }
+            if (networkMonitorRef.current) {
+                networkMonitorRef.current.disconnect();
             }
         };
     }, [stream]);
@@ -94,11 +138,9 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         };
     }, [isRecording]);
 
-    // Mock function to check for network errors
+    // Real function to check for network errors
     const checkForNetworkErrors = () => {
-        // This would be replaced with actual network check logic
-        // For now, let's simulate random network errors for demonstration
-        return Math.random() < 0.5; // 50% chance of network error
+        return networkErrors.length > 0;
     };
 
     // Function to gather browser and system information
@@ -107,19 +149,16 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         const osInfo = navigator.platform;
         const now = new Date();
 
-        // Mock network error details - in a real app, you'd capture actual errors
-        const mockNetworkError = {
-            status: 503,
-            endpoint: "/api/upload-recording",
-            error: "Service Unavailable",
-            latency: "2541ms"
-        };
+        // Actual network error details from our monitoring
+        const networkErrorDetails = networkErrors.length > 0 
+            ? JSON.stringify(networkErrors, null, 2)
+            : "No network errors detected";
 
         return {
             browser: browserInfo,
             os: osInfo,
             timestamp: now.toISOString(),
-            networkDetails: JSON.stringify(mockNetworkError, null, 2)
+            networkDetails: networkErrorDetails
         };
     };
 
@@ -134,6 +173,8 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
 
     const initiateRecording = async () => {
         setIsSelectingSource(true);
+        // Reset network errors for new recording
+        setNetworkErrors([]);
 
         try {
             // This will prompt the browser's native UI for selecting what to record
@@ -217,19 +258,18 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             setNetworkError(hasNetworkError);
 
             if (hasNetworkError) {
-                // Automatically generate bug report
+                // Automatically generate bug report with actual network errors
                 const systemInfo = gatherSystemInfo();
 
                 // Create steps to reproduce
                 const stepsToReproduce = `
 1. Attempted to record screen for ${formatTime(recordingTime)}
-2. Tried to upload recording to server
-3. Received network error during upload process
-4. Error occurred at ${systemInfo.timestamp}`;
+2. Network errors detected during recording (see Network Details)
+3. Error(s) occurred at ${systemInfo.timestamp}`;
 
                 const generatedReport = {
-                    title: "Network Error During Screen Recording Upload",
-                    description: `Failed to upload screen recording due to network error. The recording lasted ${formatTime(recordingTime)} and was ${recordedChunks.reduce((total, chunk) => total + chunk.size, 0) / (1024 * 1024).toFixed(2)} MB in size.`,
+                    title: "Network Error During Screen Recording",
+                    description: `Network errors detected during screen recording session. The recording lasted ${formatTime(recordingTime)} and was ${recordedChunks.reduce((total, chunk) => total + chunk.size, 0) / (1024 * 1024).toFixed(2)} MB in size.`,
                     category: "Network",
                     stepsToReproduce: stepsToReproduce,
                     attachment: null, // Will be filled with the recording blob
@@ -263,7 +303,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         setRecordingTime(0);
         setShowOverlay(true);
 
-        // Handle the recording data (you can save it, send it, etc.)
+        // Handle the recording data for normal flow (no network error)
         if (onRecordingComplete && !networkError) {
             onRecordingComplete({
                 blob,
@@ -278,6 +318,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         setCountdown(3);
         setIsCountdownActive(false);
         setIsSelectingSource(false);
+        setSaveSuccess(false);
 
         // If recording is active, stop it
         if (isRecording) {
@@ -296,7 +337,7 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
         setShowBugForm(false);
     };
 
-    const handleBugReportSubmit = (event) => {
+    const handleBugReportSubmit = async (event) => {
         event.preventDefault();
 
         // Prepare form data for submission
@@ -318,20 +359,113 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
             formData.append('attachment', bugReport.attachment, 'screen-recording.webm');
         }
 
-        // Here you would make the actual API call to submit the bug report
-        // For example:
-        // fetch('/api/bug-reports', {
-        //     method: 'POST',
-        //     body: formData
-        // })
+        try {
+            // Make the actual API call to submit the bug report
+            const response = await fetch('/api/bug-reports', {
+                method: 'POST',
+                body: formData
+            });
 
-        console.log("Bug report ready to submit:", bugReport);
-        console.log("Form data prepared for API call");
+            if (!response.ok) {
+                throw new Error(`Error submitting bug report: ${response.status}`);
+            }
 
-        // Reset states
-        setShowBugForm(false);
-        setNetworkError(false);
-        setShowOverlay(false);
+            console.log("Bug report submitted successfully");
+            
+            // Reset states
+            setShowBugForm(false);
+            setNetworkError(false);
+            setShowOverlay(false);
+            setNetworkErrors([]);
+            
+        } catch (error) {
+            console.error("Error submitting bug report:", error);
+            // Handle submission error (could show an error message to the user)
+        }
+    };
+
+    // Save recording to recordings page
+    const saveRecording = async () => {
+        if (!videoPreviewUrl || recordedChunks.length === 0) return;
+        
+        setIsSaving(true);
+        
+        try {
+            // Create a blob from the recorded chunks
+            const blob = new Blob(recordedChunks, { type: "video/webm" });
+            
+            // Create form data to send to server
+            const formData = new FormData();
+            formData.append('recording', blob, `recording-${new Date().toISOString()}.webm`);
+            formData.append('duration', recordingTime.toString());
+            formData.append('timestamp', new Date().toISOString());
+            formData.append('fileSize', blob.size.toString());
+            
+            // Send to server
+            const response = await fetch('/api/recordings', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Error saving recording: ${response.status}`);
+            }
+            
+            // Show success message
+            setSaveSuccess(true);
+            
+            // Notify parent component if needed
+            if (onRecordingComplete) {
+                onRecordingComplete({
+                    blob,
+                    url: videoPreviewUrl,
+                    type: "video/webm",
+                    duration: recordingTime,
+                    saved: true
+                });
+            }
+            
+            // Close overlay after short delay
+            setTimeout(() => {
+                setShowOverlay(false);
+                setSaveSuccess(false);
+                // Reset for next recording
+                setVideoPreviewUrl(null);
+                setRecordedChunks([]);
+            }, 1500);
+            
+        } catch (error) {
+            console.error("Error saving recording:", error);
+            // Handle save error - could trigger the bug report form here
+            const hasNetworkError = true;
+            setNetworkError(hasNetworkError);
+            
+            if (hasNetworkError) {
+                // Generate bug report for save error
+                const systemInfo = gatherSystemInfo();
+                
+                const stepsToReproduce = `
+1. Recorded screen for ${formatTime(recordingTime)}
+2. Attempted to save recording to recordings page
+3. Received network error during save process
+4. Error occurred at ${systemInfo.timestamp}`;
+                
+                const generatedReport = {
+                    title: "Error Saving Recording",
+                    description: `Failed to save screen recording to recordings page. The recording was ${formatTime(recordingTime)} in duration.`,
+                    category: "Network",
+                    stepsToReproduce: stepsToReproduce,
+                    attachment: blob,
+                    severity: "High",
+                    ...systemInfo
+                };
+                
+                setBugReport(generatedReport);
+                setShowBugForm(true);
+            }
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     // Format seconds into HH:MM:SS
@@ -527,25 +661,39 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                     controls
                                     className="w-full h-40 bg-black rounded-md mb-3"
                                 />
-                                <div className="flex space-x-2">
-                                    <button
-                                        onClick={cancelRecording}
-                                        className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-xs hover:bg-gray-50 transition"
-                                    >
-                                        Discard
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setShowOverlay(false);
-                                            // Reset for next recording
-                                            setVideoPreviewUrl(null);
-                                            setRecordedChunks([]);
-                                        }}
-                                        className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-4 rounded-xs transition"
-                                    >
-                                        Save
-                                    </button>
-                                </div>
+                                {saveSuccess ? (
+                                    <div className="bg-green-100 border border-green-200 text-green-700 px-4 py-3 rounded mb-4 flex items-center">
+                                        <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                        <span>Successfully saved to recordings!</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex space-x-2">
+                                        <button
+                                            onClick={cancelRecording}
+                                            className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-xs hover:bg-gray-50 transition"
+                                            disabled={isSaving}
+                                        >
+                                            Discard
+                                        </button>
+                                        <button
+                                            onClick={saveRecording}
+                                            className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-4 rounded-xs transition"
+                                            disabled={isSaving}
+                                        >
+                                            {isSaving ? (
+                                                <span className="flex items-center justify-center">
+                                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    Saving...
+                                                </span>
+                                            ) : "Save to Recordings"}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="py-3">
@@ -554,12 +702,12 @@ const ScreenRecorderButton = ({ onRecordingComplete }) => {
                                     <button
                                         onClick={cancelRecording}
                                         className="flex-1 border border-gray-300 text-gray-700 py-2 px-2 rounded-xs hover:bg-gray-50 transition"
-        >
+                                    >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={initiateRecording}
-                                                className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-2 rounded-xs transition]"
+                                        className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white py-2 px-2 rounded-xs transition"
                                     >
                                         Start
                                     </button>
