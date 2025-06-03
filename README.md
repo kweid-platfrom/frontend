@@ -1,4 +1,4 @@
-# QAID – Quality Assurance Integrated Dashboard
+# QAID – Quality Assurance Aid
 
 **QAID** is an all-in-one platform for managing the entire software testing lifecycle — from test case creation to defect tracking, AI-powered test generation, screen recording, and insightful quality metrics. Built for QA teams, developers, and product owners who value speed, traceability, and automation in modern software delivery.
 
