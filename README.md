@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QAID – Quality Assurance Integrated Dashboard
 
-## Getting Started
+**QAID** is an all-in-one platform for managing the entire software testing lifecycle — from test case creation to defect tracking, AI-powered test generation, screen recording, and insightful quality metrics. Built for QA teams, developers, and product owners who value speed, traceability, and automation in modern software delivery.
 
-First, run the development server:
+---
+
+## 🚀 Features
+
+### 🔍 Test Case Management
+- Create, organize, and manage test cases in a flexible, taggable workspace
+- Import test cases via files or external APIs
+- AI-powered test case generation from product requirements
+
+### 🐞 Bug Reporting
+- Capture and submit detailed bug reports manually or directly from screen recordings
+- Attach console logs and network tab data for rich context
+- Integrated bug summary PDF generator (weekly/bi-weekly/monthly)
+
+### 🎥 Screen Recorder with Network Tab
+- In-browser screen recording with automatic bug reporting
+- Captures video, network traffic, and context in one action
+- Automatically links recording sessions to related test cases and bug reports
+
+### 🤖 AI Test Generation
+- Generate functional, edge, and negative test cases from user stories or uploaded requirement documents
+- OpenAI-powered logic with support for prompt fine-tuning
+
+### 🧪 Automated Testing Support
+- Generate Cypress test scripts directly from manual test cases
+- Store and manage automation metadata alongside manual cases
+- Optional GitHub integration for CI/CD syncing
+
+### 📊 QA Dashboards
+- Visualize test coverage, bug trends, automation ratio, and execution history
+- Export reports as PDF
+- Filters for team, feature, sprint, and release
+
+---
+
+## 🔐 Authentication
+- Google SSO and Email/Password sign-up
+- Firebase Authentication used for secure access and permission-based routing
+
+---
+
+## ☁️ Tech Stack
+
+| Layer        | Technology                     |
+|--------------|--------------------------------|
+| Frontend     | React (Next.js), Tailwind CSS  |
+| Backend      | Firebase Firestore             |
+| Auth         | Firebase Auth (Google, Email)  |
+| Storage      | Google Drive API               |
+| Documents    | Google Sheets API              |
+| AI           | OpenAI API                     |
+| Deployment   | Vercel                         |
+
+---
+
+## 🛠️ Dev Setup
 
 ```bash
+git clone https://github.com/your-org/qaid.git
+cd qaid
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Env Variables
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=...
+NEXT_PUBLIC_DRIVE_FOLDER_ID=...
+NEXT_PUBLIC_SHEETS_ID=...
+OPENAI_API_KEY=...
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Roadmap (Coming Soon)
+Mobile support (mirror of web UI)
+GitHub Actions for test sync
+Sprint-based execution planner
+Plugin SDK for custom integrations
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Contributing 🤝 
+Pull requests and issue reports are welcome. Please create a feature branch and follow the coding standards outlined in the CONTRIBUTING.md (coming soon).
 
-## Learn More
+About the Project
+QAID was built to modernize QA workflows by blending manual processes, automation, and AI assistance — giving teams clarity, speed, and confidence in every release.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Contact
+Feel free to reach out or contribute:
+Email: qaidfid37is@gmail.com
+Website: [https://qaid.app](https://qaid-phi.vercel.app/)
+LinkedIn: fid37is
