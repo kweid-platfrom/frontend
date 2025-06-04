@@ -1,189 +1,593 @@
-"use client";
+'use client'
 
-import React from "react";
-import Link from "next/link";
-import '../app/globals.css';
-import Footer from "../components/Footer"
-import Navbar from "../components/Navbar";
-import Image from "next/image";
+import React, { useState, useEffect } from "react";
+import '../app/globals.css'
+import {
+    CheckCircle,
+    Users,
+    BarChart3,
+    FileText,
+    Bug,
+    Zap,
+    ArrowRight,
+    Play,
+    Star,
+    Mail,
+    Menu,
+    X,
+    Shield,
+    Rocket,
+    Target
+} from "lucide-react";
 
-const Home = () => {
+// Features Component
+const Features = () => {
+    const features = [
+        {
+            icon: <FileText className="h-6 w-6" />,
+            title: "Smart Test Management",
+            description: "AI-powered test case creation and organization with intelligent coverage analysis that adapts to your workflow."
+        },
+        {
+            icon: <Bug className="h-6 w-6" />,
+            title: "Advanced Bug Tracking",
+            description: "Capture, categorize, and resolve issues with automated workflows and visual debugging tools."
+        },
+        {
+            icon: <BarChart3 className="h-6 w-6" />,
+            title: "Real-time Analytics",
+            description: "Live dashboards with predictive insights and performance metrics that drive decision-making."
+        },
+        {
+            icon: <Zap className="h-6 w-6" />,
+            title: "AI Test Generation",
+            description: "Automatically generate comprehensive test suites from requirements and user stories using advanced AI."
+        },
+        {
+            icon: <Shield className="h-6 w-6" />,
+            title: "Screen Recording Pro",
+            description: "Capture bugs with complete context including network logs, console errors, and user interactions."
+        },
+        {
+            icon: <Rocket className="h-6 w-6" />,
+            title: "Cypress Automation",
+            description: "Generate and maintain automated test scripts with AI-powered optimization and smart maintenance."
+        }
+    ];
+
     return (
-        <div className="min-h-screen flex flex-col bg-[#F5F7FA]">
-            {/* Navbar */}
-            <nav className="bg-white shadow-sm sticky top-0 z-10">
-                <Navbar />
+        <section id="features" className="py-32">
+            <div className="max-w-6xl mx-auto px-6">
+                <div className="text-center mb-20">
+                    <div className="inline-flex items-center space-x-2 bg-gray-50 rounded-full px-4 py-2 mb-8">
+                        <Target className="h-4 w-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">Features</span>
+                    </div>
+                    <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+                        Everything you need for quality assurance
+                    </h2>
+                    <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                        Advanced tools that adapt to your team&apos;s needs and scale with your growth
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {features.map((feature, index) => (
+                        <div key={index} className="group">
+                            <div className="bg-white p-8 rounded-lg border border-gray-100 hover:border-gray-200 transition-all duration-300 hover:shadow-sm">
+                                <div className="inline-flex p-3 bg-gray-50 rounded-lg text-gray-700 mb-6 group-hover:bg-gray-100 transition-colors">
+                                    {feature.icon}
+                                </div>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-4">{feature.title}</h3>
+                                <p className="text-gray-600 leading-relaxed">
+                                    {feature.description}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
+
+// Main Home Component
+const Home = () => {
+    const [billingCycle, setBillingCycle] = useState("monthly");
+    const [activeSection, setActiveSection] = useState("home");
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    const pricingPlans = [
+        {
+            name: "Starter",
+            price: { monthly: "$29", yearly: "$290" },
+            description: "Perfect for small teams getting started",
+            features: ["Up to 5 projects", "50GB storage", "Basic analytics", "Email support", "Team collaboration"],
+            recommended: false
+        },
+        {
+            name: "Professional",
+            price: { monthly: "$79", yearly: "$790" },
+            description: "Best for growing teams and businesses",
+            features: [
+                "Unlimited projects",
+                "500GB storage",
+                "Advanced AI features",
+                "Priority support",
+                "API access",
+                "Custom integrations"
+            ],
+            recommended: true
+        },
+        {
+            name: "Enterprise",
+            price: { monthly: "Custom", yearly: "Custom" },
+            description: "Tailored solutions for large organizations",
+            features: [
+                "Unlimited everything",
+                "Dedicated support",
+                "Custom workflows",
+                "SLA guarantees",
+                "Training & onboarding",
+                "White-label options"
+            ],
+            recommended: false
+        },
+    ];
+
+    const testimonials = [
+        {
+            name: "Sarah Chen",
+            role: "QA Director",
+            company: "TechFlow",
+            content: "QAID transformed our testing workflow completely. We've seen a 78% reduction in bug escapes and our team productivity has doubled.",
+            avatar: "SC",
+            rating: 5
+        },
+        {
+            name: "Marcus Rodriguez",
+            role: "Lead Engineer",
+            company: "StartupXYZ",
+            content: "The AI-powered test generation is incredible. What used to take us weeks now happens in hours with better coverage.",
+            avatar: "MR",
+            rating: 5
+        },
+        {
+            name: "Emily Johnson",
+            role: "Product Manager",
+            company: "ScaleApp",
+            content: "Finally, a QA tool that speaks our language. The reporting features have revolutionized our stakeholder communications.",
+            avatar: "EJ",
+            rating: 5
+        }
+    ];
+
+    const scrollToSection = (sectionId) => {
+        const element = document.getElementById(sectionId);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth' });
+            setActiveSection(sectionId);
+        }
+    };
+
+    const handleSignIn = () => {
+        // In a real app, this would navigate to the login page
+        window.location.href = '/login';
+    };
+
+    const handleStartTrial = () => {
+        // In a real app, this would navigate to the registration page
+        window.location.href = '/register';
+    };
+
+    useEffect(() => {
+        const handleScroll = () => {
+            const sections = ['home', 'features', 'pricing', 'testimonials'];
+            const scrollPosition = window.scrollY + 100;
+
+            for (const section of sections) {
+                const element = document.getElementById(section);
+                if (element) {
+                    const { offsetTop, offsetHeight } = element;
+                    if (scrollPosition >= offsetTop && scrollPosition < offsetTop + offsetHeight) {
+                        setActiveSection(section);
+                        break;
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    return (
+        <div className="min-h-screen bg-white">
+            {/* Navigation */}
+            <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-gray-100 z-50">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="flex justify-between items-center h-16">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-[#008374] rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">Q</span>
+                            </div>
+                            <span className="text-xl font-bold text-gray-900">QAID</span>
+                        </div>
+
+                        <div className="hidden md:flex items-center space-x-8">
+                            {[
+                                { id: 'home', label: 'Home' },
+                                { id: 'features', label: 'Features' },
+                                { id: 'pricing', label: 'Pricing' },
+                                { id: 'testimonials', label: 'Reviews' }
+                            ].map((item) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => scrollToSection(item.id)}
+                                    className={`relative font-medium transition-all duration-300 px-3 py-2 ${activeSection === item.id
+                                            ? 'text-[#00897B] font-semibold'
+                                            : 'text-gray-600 hover:text-gray-900'
+                                        }`}
+                                >
+                                    {/* Active indicator dot */}
+                                    {activeSection === item.id && (
+                                        <span className="absolute -left-2 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-[#00897B] rounded-full transition-all duration-300 ease-in-out"></span>
+                                    )}
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="hidden md:flex items-center space-x-4">
+                            <button
+                                onClick={handleSignIn}
+                                className="text-gray-600 hover:text-gray-900 font-medium transition-colors px-4 py-2 rounded hover:bg-gray-50"
+                            >
+                                Sign In
+                            </button>
+                            <button
+                                onClick={handleStartTrial}
+                                className="bg-[#00897B] hover:bg-[#00796B] text-white px-6 py-2 rounded font-medium transition-colors"
+                            >
+                                Start Free Trial
+                            </button>
+                        </div>
+
+                        <button
+                            className="md:hidden p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                        >
+                            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Mobile Menu */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden bg-white border-t border-gray-100">
+                        <div className="px-6 py-4 space-y-3">
+                            {[
+                                { id: 'home', label: 'Home' },
+                                { id: 'features', label: 'Features' },
+                                { id: 'pricing', label: 'Pricing' },
+                                { id: 'testimonials', label: 'Reviews' }
+                            ].map((item) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => {
+                                        scrollToSection(item.id);
+                                        setMobileMenuOpen(false);
+                                    }}
+                                    className={`relative flex items-center w-full text-left font-medium py-2 px-3 rounded transition-all duration-300 ${activeSection === item.id
+                                            ? 'text-[#00897B] font-semibold bg-[#00897B]/5'
+                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {/* Active indicator dot for mobile */}
+                                    {activeSection === item.id && (
+                                        <span className="absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-[#00897B] rounded-full transition-all duration-300 ease-in-out"></span>
+                                    )}
+                                    <span className={activeSection === item.id ? 'ml-4' : ''}>
+                                        {item.label}
+                                    </span>
+                                </button>
+                            ))}
+                            <div className="pt-3 space-y-3 border-t border-gray-100">
+                                <button
+                                    onClick={() => {
+                                        handleSignIn();
+                                        setMobileMenuOpen(false);
+                                    }}
+                                    className="block w-full text-left font-medium text-gray-600 py-2 px-3 rounded hover:bg-gray-50 transition-colors"
+                                >
+                                    Sign In
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        handleStartTrial();
+                                        setMobileMenuOpen(false);
+                                    }}
+                                    className="w-full bg-[#00897B] hover:bg-[#00796B] text-white px-6 py-3 rounded font-medium transition-colors"
+                                >
+                                    Start Free Trial
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </nav>
 
             {/* Hero Section */}
-            <div className="relative bg-white overflow-hidden">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
-                        <svg className="hidden lg:block absolute right-0 inset-y-0 h-full w-48 text-white transform translate-x-1/2" fill="currentColor" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                            <polygon points="50,0 100,0 50,100 0,100" />
-                        </svg>
-                        <div className="pt-10 sm:pt-16 lg:pt-8 xl:pt-16">
-                            <div className="sm:text-center lg:text-left">
-                                <h1 className="text-4xl tracking-tight font-extrabold text-[#2D3142] sm:text-5xl md:text-6xl mb-10">
-                                    <span className="block xl:inline">QA Testing,</span>{' '}
-                                    <span className="block text-[#00897B] xl:inline">Simplified</span>
-                                </h1>
-                                <p className="mt-3 text-base text-[#4A4B53] sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0 mb-13">
-                                    Streamline your quality assurance workflow with our comprehensive platform for test case management, defect tracking, and automated reporting.
-                                </p>
-                                <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
-                                    <div className="rounded shadow">
-                                        <Link href="/register" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded text-white bg-[#00897B] hover:bg-[#00796B] md:py-4 md:text-lg md:px-10">
-                                            Get started
-                                        </Link>
-                                    </div>
-                                    <div className="mt-3 sm:mt-0 sm:ml-3">
-                                        <Link href="/demo" className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded text-[#00897B] bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10">
-                                            Request demo
-                                        </Link>
-                                    </div>
-                                </div>
+            <section id="home" className="pt-32 pb-24">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="text-center max-w-4xl mx-auto">
+                        <div className="inline-flex items-center space-x-2 bg-gray-50 rounded-full px-4 py-2 mb-8">
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                            <span className="text-sm font-medium text-gray-700">AI-Powered QA Platform</span>
+                        </div>
+
+                        <h1 className="text-5xl md:text-7xl font-extrabold mb-8 leading-tight text-[#00897B]">
+                            Quality Assurance
+                            <br />
+                            <span className="text-gray-600">Reimagined</span>
+                        </h1>
+
+                        <p className="text-xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed">
+                            Transform your testing workflow with AI-powered automation, intelligent bug tracking, and real-time insights that accelerate your development cycle.
+                        </p>
+
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+                            <button
+                                onClick={handleStartTrial}
+                                className="bg-[#00897B] hover:bg-[#00796B] text-white px-8 py-4 rounded font-medium transition-all duration-300 flex items-center space-x-2 hover:shadow-lg hover:scale-105"
+                            >
+                                <span>Start Free Trial</span>
+                                <ArrowRight className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => scrollToSection('features')}
+                                className="bg-white text-gray-900 px-8 py-4 rounded font-medium border border-gray-300 hover:border-gray-400 transition-all duration-300 flex items-center space-x-2 hover:shadow-lg"
+                            >
+                                <Play className="h-4 w-4" />
+                                <span>Watch Demo</span>
+                            </button>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-gray-500">
+                            <div className="flex items-center space-x-2">
+                                <CheckCircle className="h-4 w-4 text-[#34bf49]" />
+                                <span>14-day free trial</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <CheckCircle className="h-4 w-4 text-[#34bf49]" />
+                                <span>No credit card required</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <CheckCircle className="h-4 w-4 text-[#34bf49]" />
+                                <span>Cancel anytime</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
-                    <div className="h-96 w-full bg-[#D3D5D4] sm:h-72 md:h-96 lg:w-full lg:h-full flex items-center justify-center">
-                        <Image
-                            src="/2.jpeg" 
-                            alt="hero-image"
-                            width={900}  // Set appropriate width
-                            height={900} // Set appropriate height
-                            className="object-cover rounded-lg"
-                        />
-                    </div>
-                </div>
-            </div>
+            </section>
 
-            {/* Feature Section */}
-            <div className="py-12 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="lg:text-center">
-                        <h2 className="text-base text-[#00897B] font-semibold mb-6 tracking-wide uppercase">Features</h2>
-                        <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-[#2D3142] sm:text-4xl mb-7">
-                            A better way to manage QA
+            {/* Features Section */}
+            <Features />
+
+            {/* Pricing Section */}
+            <section id="pricing" className="py-32 bg-gray-50">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="text-center mb-20">
+                        <div className="inline-flex items-center space-x-2 bg-white rounded-full px-4 py-2 mb-8 shadow-sm">
+                            <Star className="h-4 w-4 text-gray-600" />
+                            <span className="text-sm font-medium text-gray-700">Pricing</span>
+                        </div>
+                        <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+                            Choose your plan
+                        </h2>
+                        <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-12">
+                            Transparent pricing that grows with your team. All plans include our core features and dedicated support.
                         </p>
-                        <p className="mt-4 max-w-2xl text-xl text-[#4A4B53] lg:mx-auto mb-15">
-                            Powerful tools to help your team catch bugs before your users do.
-                        </p>
-                    </div>
 
-                    <div className="mt-10">
-                        <div className="space-y-10 md:space-y-0 md:grid md:grid-cols-3 md:gap-x-8 md:gap-y-10">
-                            {/* Feature 1 */}
-                            <div className="relative">
-                                <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-[#00897B] text-white">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                    </svg>
-                                </div>
-                                <div className="ml-16">
-                                    <h3 className="text-lg leading-6 font-medium text-[#2D3142]">Test Case Management</h3>
-                                    <p className="mt-2 text-base text-[#4A4B53]">
-                                        Create, organize, and execute test cases with ease. Track coverage and requirements traceability.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Feature 2 */}
-                            <div className="relative">
-                                <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-[#00897B] text-white">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                                    </svg>
-                                </div>
-                                <div className="ml-16">
-                                    <h3 className="text-lg leading-6 font-medium text-[#2D3142]">Bug Tracking</h3>
-                                    <p className="mt-2 text-base text-[#4A4B53]">
-                                        Log and track defects with detailed descriptions, screenshots, and priority ratings. Seamless integration with development tools.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Feature 3 */}
-                            <div className="relative">
-                                <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-[#00897B] text-white">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                    </svg>
-                                </div>
-                                <div className="ml-16">
-                                    <h3 className="text-lg leading-6 font-medium text-[#2D3142]">Advanced Reporting</h3>
-                                    <p className="mt-2 text-base text-[#4A4B53]">
-                                        Generate comprehensive reports with real-time metrics. Visualize testing progress and team performance.
-                                    </p>
-                                </div>
-                            </div>
+                        {/* Billing Toggle */}
+                        <div className="inline-flex bg-white rounded p-1 shadow-sm border border-gray-200">
+                            <button
+                                className={`px-6 py-2 rounded font-medium transition-colors ${billingCycle === "monthly"
+                                    ? "bg-[#00897B] hover:bg-[#00796B] text-white"
+                                    : "text-gray-600 hover:text-gray-900"
+                                    }`}
+                                onClick={() => setBillingCycle("monthly")}
+                            >
+                                Monthly
+                            </button>
+                            <button
+                                className={`px-6 py-2 rounded font-medium transition-colors relative ${billingCycle === "yearly"
+                                    ? "bg-[#00897B] hover:bg-[#00796B] text-white"
+                                    : "text-gray-600 hover:text-gray-900"
+                                    }`}
+                                onClick={() => setBillingCycle("yearly")}
+                            >
+                                Yearly
+                                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                                    Save 20%
+                                </span>
+                            </button>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Testimonial Section */}
-            <div className="bg-[#F5F7FA] py-12">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center">
-                        <h2 className="text-base text-[#00897B] font-semibold tracking-wide uppercase mb-8">Testimonials</h2>
-                        <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-[#2D3142] sm:text-4xl">
-                            Trusted by QA professionals
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {pricingPlans.map((plan) => (
+                            <div
+                                key={plan.name}
+                                className={`bg-white rounded-lg p-8 border transition-all duration-300 ${plan.recommended
+                                    ? "border-green-300 shadow-lg scale-105"
+                                    : "border-gray-200 hover:border-gray-300 hover:shadow-lg"
+                                    }`}
+                            >
+                                {plan.recommended && (
+                                    <div className="text-center mb-4">
+                                        <span className="bg-[#00897B] text-white px-3 py-1 rounded-full text-sm font-medium">
+                                            Most Popular
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="text-center mb-8">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+                                    <p className="text-gray-600 mb-6">{plan.description}</p>
+                                    <div className="mb-4">
+                                        <span className="text-5xl font-bold text-gray-900">{plan.price[billingCycle]}</span>
+                                        {plan.price[billingCycle] !== "Custom" && (
+                                            <span className="text-gray-500 ml-2">
+                                                {billingCycle === "monthly" ? "/mo" : "/yr"}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <ul className="space-y-4 mb-8">
+                                    {plan.features.map((feature, i) => (
+                                        <li key={i} className="flex items-start space-x-3">
+                                            <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-[#34bf49]" />
+                                            <span className="text-gray-600">{feature}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <button
+                                    onClick={plan.name === "Enterprise" ? () => window.location.href = '/contact' : handleStartTrial}
+                                    className={`w-full py-3 px-6 rounded font-medium transition-all duration-300 ${plan.recommended
+                                        ? "bg-[#00897B] hover:bg-[#00796B] text-white hover:shadow-lg"
+                                        : "bg-gray-50 text-gray-900 hover:bg-gray-100 border border-gray-200"
+                                        }`}
+                                >
+                                    {plan.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Testimonials Section */}
+            <section id="testimonials" className="py-32">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="text-center mb-20">
+                        <div className="inline-flex items-center space-x-2 bg-gray-50 rounded-full px-4 py-2 mb-8">
+                            <Users className="h-4 w-4 text-gray-600" />
+                            <span className="text-sm font-medium text-gray-700">Testimonials</span>
+                        </div>
+                        <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+                            Trusted by teams worldwide
+                        </h2>
+                        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                            See how leading companies are transforming their QA processes with QAID
                         </p>
                     </div>
 
-                    <div className="mt-15">
-                        <div className="max-w-lg mx-auto bg-white rounded-lg shadow-md overflow-hidden">
-                            <div className="px-6 py-8">
-                                <div className="flex items-center">
-                                    <div className="flex-shrink-0 bg-[#A5D6A7] rounded-full p-2">
-                                        <svg className="h-8 w-8 text-[#00897B]" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8z" />
-                                        </svg>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {testimonials.map((testimonial, index) => (
+                            <div key={index} className="bg-white rounded-lg p-8 border border-gray-100 hover:border-gray-200 transition-all duration-300 hover:shadow-lg">
+                                <div className="flex items-center mb-6">
+                                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-gray-700 font-semibold mr-4">
+                                        {testimonial.avatar}
                                     </div>
-                                    <div className="ml-4">
-                                        <h3 className="text-lg leading-6 font-medium text-[#2D3142]">Sarah Chen</h3>
-                                        <p className="text-[#9EA0A5]">QA Lead at TechSolutions</p>
+                                    <div>
+                                        <h4 className="font-semibold text-gray-900">{testimonial.name}</h4>
+                                        <p className="text-gray-600 text-sm">{testimonial.role}</p>
+                                        <p className="text-gray-500 text-sm">{testimonial.company}</p>
                                     </div>
                                 </div>
-                                <div className="mt-4">
-                                    <p className="text-[#4A4B53] italic">
-                                        &ldquo;Q-Aid has transformed our testing process. We have reduced our bug escape rate by 78% and cut our testing time in half. The reporting features have been invaluable for communicating with stakeholders.&rdquo;
-                                    </p>
+
+                                <div className="flex mb-4">
+                                    {[...Array(testimonial.rating)].map((_, i) => (
+                                        <Star key={i} className="h-4 w-4 text-yellow-400 fill-current" />
+                                    ))}
                                 </div>
+
+                                <p className="text-gray-700 leading-relaxed">&quot;{testimonial.content}&quot;</p>
                             </div>
-                        </div>
+                        ))}
                     </div>
                 </div>
-            </div>
+            </section>
 
             {/* CTA Section */}
-            <div className="bg-[#00897B]">
-                <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8 lg:flex lg:items-center lg:justify-between">
-                    <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-                        <span className="block mb-4">Ready to get started?</span>
-                        <span className="block text-[#A5D6A7]">Start your free trial today.</span>
+            <section className="py-32 bg-[#00897B]">
+                <div className="max-w-4xl mx-auto px-6 text-center">
+                    <h2 className="text-4xl md:text-5xl font-bold text-white mb-8 leading-tight">
+                        Ready to transform your QA process?
                     </h2>
-                    <div className="mt-8 flex lg:mt-0 lg:flex-shrink-0">
-                        <div className="inline-flex rounded-md shadow">
-                            <Link href="/register" className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-xs text-[#00897B] bg-white hover:bg-gray-50">
-                                Sign up for free
-                            </Link>
+                    <p className="text-xl text-gray-300 mb-12 max-w-2xl mx-auto">
+                        Join thousands of teams already using QAID to ship better software faster.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button
+                            onClick={handleStartTrial}
+                            className="bg-white text-black px-8 py-4 rounded font-medium hover:bg-gray-100 transition-all duration-300 hover:shadow-lg"
+                        >
+                            Start Free Trial
+                        </button>
+                        <button
+                            onClick={() => window.location.href = '/demo'}
+                            className="bg-transparent text-white px-8 py-4 rounded font-medium border border-white hover:bg-white hover:text-[#00897B] transition-all duration-300"
+                        >
+                            Schedule Demo
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            {/* Footer */}
+            <footer className="bg-gray-50 py-16">
+                <div className="max-w-6xl mx-auto px-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                        <div className="col-span-1 md:col-span-2">
+                            <div className="flex items-center space-x-2 mb-4">
+                                <div className="w-6 h-6 bg-[#00897B] rounded-md flex items-center justify-center">
+                                    <span className="text-white font-bold text-xs">Q</span>
+                                </div>
+                                <span className="text-lg font-bold text-gray-900">QAID</span>
+                            </div>
+                            <p className="text-gray-600 mb-6 max-w-md">
+                                Empowering teams to deliver exceptional software through intelligent quality assurance and testing automation.
+                            </p>
+                            <div className="flex space-x-4">
+                                <button className="bg-gray-200 p-2 rounded-lg hover:bg-gray-300 transition-colors">
+                                    <Mail className="h-4 w-4 text-gray-600" />
+                                </button>
+                            </div>
                         </div>
-                        <div className="ml-3 inline-flex rounded-md shadow">
-                            <Link href="/contact" className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-xs text-white bg-[#00796B] hover:bg-opacity-90">
-                                Contact sales
-                            </Link>
+                        <div>
+                            <h4 className="font-semibold text-gray-900 mb-4">Product</h4>
+                            <ul className="space-y-2">
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Features</a></li>
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Pricing</a></li>
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Integrations</a></li>
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">API</a></li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 className="font-semibold text-gray-900 mb-4">Support</h4>
+                            <ul className="space-y-2">
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Documentation</a></li>
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Help Center</a></li>
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Contact</a></li>
+                                <li><a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">Status</a></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
+                        <p className="text-gray-500">© 2025 QAID. All rights reserved.</p>
+                        <div className="flex space-x-6 mt-4 md:mt-0">
+                            <a href="#" className="text-gray-500 hover:text-gray-700 transition-colors">Privacy</a>
+                            <a href="#" className="text-gray-500 hover:text-gray-700 transition-colors">Terms</a>
+                            <a href="#" className="text-gray-500 hover:text-gray-700 transition-colors">Security</a>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            {/* Footer */}
-            <footer className="bg-white">
-                <Footer />
             </footer>
         </div>
     );
