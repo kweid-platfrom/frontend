@@ -61,9 +61,9 @@
 
 ```bash
 git clone https://github.com/your-org/qaid.git
-cd qaid
-npm install
-npm run dev
+cd frontend
+yarn install
+yarn dev
 
 Env Variables
 NEXT_PUBLIC_FIREBASE_API_KEY=...
