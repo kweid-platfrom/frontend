@@ -241,7 +241,7 @@ const Home = () => {
                         <div className="hidden md:flex items-center space-x-4">
                             <button
                                 onClick={handleSignIn}
-                                className="text-gray-600 hover:text-gray-900 font-medium transition-colors px-4 py-2 rounded hover:bg-gray-50"
+                                className="text-gray-700 hover:text-gray-900 font-medium transition-colors px-4 py-2 rounded hover:bg-gray-100"
                             >
                                 Sign In
                             </button>

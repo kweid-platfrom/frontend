@@ -1,8 +1,7 @@
 "use client"
 
 import React, { useState } from 'react';
-import Navbar from '../../components/Navbar';
-import Footer from '../../components/Footer';
+
 
 const ContactSalesPage = () => {
     const [formData, setFormData] = useState({ name: '', email: '', message: '' });
@@ -36,7 +35,6 @@ const ContactSalesPage = () => {
 
     return (
         <div className="min-h-screen flex flex-col">
-            <Navbar />
             <main className="flex-grow container mx-auto px-4 py-12">
                 <h1 className="text-3xl font-bold mb-4">Contact Sales</h1>
                 <p className="mb-6">
@@ -95,7 +93,6 @@ const ContactSalesPage = () => {
                     </button>
                 </form>
             </main>
-            <Footer />
         </div>
     );
 };
