@@ -174,29 +174,29 @@ const Login = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex items-center justify-center min-h-screen px-6 relative z-10">
+            <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-sm">
                     {/* Welcome Section */}
                     <div className="text-center mb-6">
                         <div className="inline-block mb-4">
-                            <div className="font-bold text-3xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                            <div className="font-bold text-2xl sm:text-3xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
                                 QAID
                             </div>
                         </div>
-                        <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome back</h1>
-                        <p className="text-slate-600">Your testing hub awaits</p>
+                        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">Welcome back</h1>
+                        <p className="text-sm sm:text-base text-slate-600">Your testing hub awaits</p>
                     </div>
 
                     {/* Login Form Card */}
-                    <div className="bg-white/90 backdrop-blur-sm rounded shadow-sm shadow-slate-200/50 border border-slate-200/50 p-6">
-                        <form className="space-y-5" onSubmit={handleLogin} noValidate>
+                    <div className="bg-white/90 backdrop-blur-sm rounded shadow-sm shadow-slate-200/50 border border-slate-200/50 p-4 sm:p-6">
+                        <form className="space-y-4 sm:space-y-5" onSubmit={handleLogin} noValidate>
                             {/* Email Input */}
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-slate-700 block">
                                     Email address
                                 </label>
                                 <input
-                                    className={`w-full px-4 py-2 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 ${
+                                    className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
                                         errors.email 
                                             ? "border-red-300 focus:border-red-500" 
                                             : "border-slate-200 focus:border-teal-500"
@@ -223,7 +223,7 @@ const Login = () => {
                                 </label>
                                 <div className="relative">
                                     <input
-                                        className={`w-full px-4 py-2 pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 ${
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
                                             errors.password 
                                                 ? "border-red-300 focus:border-red-500" 
                                                 : "border-slate-200 focus:border-teal-500"
@@ -238,10 +238,10 @@ const Login = () => {
                                     />
                                     <button
                                         type="button"
-                                        className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                        className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
                                         onClick={() => setShowPassword(!showPassword)}
                                     >
-                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                        {showPassword ? <EyeOff size={18} className="sm:w-5 sm:h-5" /> : <Eye size={18} className="sm:w-5 sm:h-5" />}
                                     </button>
                                 </div>
                                 {errors.password && (
@@ -256,7 +256,7 @@ const Login = () => {
                                 <button 
                                     type="button"
                                     onClick={handleForgotPassword} 
-                                    className="text-teal-600 text-sm font-medium hover:text-teal-700 hover:underline transition-colors"
+                                    className="text-teal-600 text-xs sm:text-sm font-medium hover:text-teal-700 hover:underline transition-colors"
                                 >
                                     Forgot password?
                                 </button>
@@ -264,19 +264,19 @@ const Login = () => {
 
                             {/* Sign In Button */}
                             <button
-                                className="w-full bg-[#00897B] hover:bg-[#00796B] text-white font-semibold rounded px-6 py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                className="w-full bg-[#00897B] hover:bg-[#00796B] text-white font-medium sm:font-semibold rounded px-4 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg text-sm sm:text-base"
                                 type="submit"
                                 disabled={loadingEmailLogin}
                             >
                                 Sign In
-                                {loadingEmailLogin && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
+                                {loadingEmailLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
                             </button>
                         </form>
 
                         {/* Divider */}
-                        <div className="flex items-center my-6">
+                        <div className="flex items-center my-4 sm:my-6">
                             <div className="flex-grow border-t border-slate-200"></div>
-                            <span className="px-3 text-sm text-slate-500 font-medium">or continue with</span>
+                            <span className="px-3 text-xs sm:text-sm text-slate-500 font-medium">or continue with</span>
                             <div className="flex-grow border-t border-slate-200"></div>
                         </div>
 
@@ -284,18 +284,18 @@ const Login = () => {
                         <button
                             type="button"
                             onClick={handleGoogleLogin}
-                            className="w-full bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 font-semibold border-2 border-slate-200 rounded px-6 py-2 transition-all duration-200 flex justify-center items-center gap-3 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 font-medium sm:font-semibold border-2 border-slate-200 rounded px-3 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 sm:gap-3 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                             disabled={loadingGoogleLogin}
                         >
-                            <FcGoogle className="w-5 h-5" />
-                            Google
-                            {loadingGoogleLogin && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
+                            <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                            <span className="truncate">Google</span>
+                            {loadingGoogleLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
                         </button>
 
                         {/* Register Link */}
-                        <p className="text-center text-slate-600 mt-6">
+                        <p className="text-center text-slate-600 mt-4 sm:mt-6 text-xs sm:text-sm">
                             Don&apos;t have an account?{" "}
-                            <Link href="/register" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
+                            <Link href="/register" className="text-teal-600 font-medium sm:font-semibold hover:text-teal-700 hover:underline transition-colors">
                                 Sign Up
                             </Link>
                         </p>

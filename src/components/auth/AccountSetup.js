@@ -48,10 +48,10 @@ const AccountSetup = () => {
     };
 
     const getNameFromSources = (firebaseUser) => {
-        const storedName = localStorage.getItem("userFullName") || 
-                          localStorage.getItem("googleUserName") ||
-                          localStorage.getItem("registeredUserName");
-        
+        const storedName = localStorage.getItem("userFullName") ||
+            localStorage.getItem("googleUserName") ||
+            localStorage.getItem("registeredUserName");
+
         if (storedName && storedName.trim()) {
             return storedName.trim();
         }
@@ -102,7 +102,7 @@ const AccountSetup = () => {
                         setEmail(result.user.email || "");
                         const extractedName = getNameFromSources(result.user);
                         setName(extractedName);
-                        
+
                         window.localStorage.removeItem("emailForSignIn");
                         window.localStorage.removeItem("emailSentTimestamp");
                     }
@@ -180,7 +180,7 @@ const AccountSetup = () => {
         if (step === 1) {
             const isNameValid = validateName(name);
             const isEmailValid = validateEmail(email);
-            
+
             let isPasswordValid = true;
             if (!isGoogleAuth) {
                 isPasswordValid = validatePassword(password, confirmPassword);
@@ -287,8 +287,8 @@ const AccountSetup = () => {
         switch (step) {
             case 1:
                 return (
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-slate-900 border-b border-slate-200 pb-2">
+                    <div className="space-y-4 sm:space-y-6">
+                        <h3 className="text-lg sm:text-xl font-semibold text-slate-900 border-b border-slate-200 pb-2">
                             Personal Information
                         </h3>
 
@@ -297,11 +297,10 @@ const AccountSetup = () => {
                                 Full name <span className="text-red-500">*</span>
                             </label>
                             <input
-                                className={`w-full px-4 py-2 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
-                                    nameError 
-                                        ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
+                                className={`w-full px-3 sm:px-4 py-3 sm:py-2 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-base ${nameError
+                                        ? "border-red-300 focus:border-red-500 focus:bg-red-50/50"
                                         : "border-slate-200 focus:border-teal-500 focus:bg-white"
-                                } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                    } focus:outline-none focus:ring focus:ring-teal-500/10`}
                                 type="text"
                                 placeholder="John Doe"
                                 value={name}
@@ -322,11 +321,10 @@ const AccountSetup = () => {
                                 Email address <span className="text-red-500">*</span>
                             </label>
                             <input
-                                className={`w-full px-4 py-2 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
-                                    emailError 
-                                        ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
+                                className={`w-full px-3 sm:px-4 py-3 sm:py-2 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-base ${emailError
+                                        ? "border-red-300 focus:border-red-500 focus:bg-red-50/50"
                                         : "border-slate-200 focus:border-teal-500 focus:bg-white"
-                                } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                    } focus:outline-none focus:ring- focus:ring-teal-500/10`}
                                 type="email"
                                 placeholder="name@company.com"
                                 value={email}
@@ -350,11 +348,10 @@ const AccountSetup = () => {
                                     </label>
                                     <div className="relative">
                                         <input
-                                            className={`w-full px-4 py-2 pr-12 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
-                                                passwordError 
-                                                    ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
+                                            className={`w-full px-3 sm:px-4 py-3 sm:py-2 pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-base ${passwordError
+                                                    ? "border-red-300 focus:border-red-500 focus:bg-red-50/50"
                                                     : "border-slate-200 focus:border-teal-500 focus:bg-white"
-                                            } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                                } focus:outline-none focus:ring focus:ring-teal-500/10`}
                                             type={showPassword ? "text" : "password"}
                                             placeholder="Enter a secure password"
                                             value={password}
@@ -365,13 +362,13 @@ const AccountSetup = () => {
                                         />
                                         <button
                                             type="button"
-                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors min-w-[44px] min-h-[44px] justify-center"
                                             onClick={() => setShowPassword(!showPassword)}
                                         >
                                             {showPassword ? (
-                                                <EyeOff className="h-4 w-4" />
+                                                <EyeOff className="h-5 w-5" />
                                             ) : (
-                                                <Eye className="h-4 w-4" />
+                                                <Eye className="h-5 w-5" />
                                             )}
                                         </button>
                                     </div>
@@ -383,11 +380,10 @@ const AccountSetup = () => {
                                     </label>
                                     <div className="relative">
                                         <input
-                                            className={`w-full px-4 py-2 pr-12 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
-                                                passwordError 
-                                                    ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
+                                            className={`w-full px-3 sm:px-4 py-3 sm:py-2 pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-base ${passwordError
+                                                    ? "border-red-300 focus:border-red-500 focus:bg-red-50/50"
                                                     : "border-slate-200 focus:border-teal-500 focus:bg-white"
-                                            } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                                } focus:outline-none focus:ring focus:ring-teal-500/10`}
                                             type={showConfirmPassword ? "text" : "password"}
                                             placeholder="Confirm your password"
                                             value={confirmPassword}
@@ -398,13 +394,13 @@ const AccountSetup = () => {
                                         />
                                         <button
                                             type="button"
-                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors min-w-[44px] min-h-[44px] justify-center"
                                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                         >
                                             {showConfirmPassword ? (
-                                                <EyeOff className="h-4 w-4" />
+                                                <EyeOff className="h-5 w-5" />
                                             ) : (
-                                                <Eye className="h-4 w-4" />
+                                                <Eye className="h-5 w-5" />
                                             )}
                                         </button>
                                     </div>
@@ -421,8 +417,8 @@ const AccountSetup = () => {
 
             case 2:
                 return (
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-slate-900 border-b border-slate-200 pb-2">
+                    <div className="space-y-4 sm:space-y-6">
+                        <h3 className="text-lg sm:text-xl font-semibold text-slate-900 border-b border-slate-200 pb-2">
                             Organization Information <span className="text-sm font-normal text-slate-500">(Optional)</span>
                         </h3>
 
@@ -431,7 +427,7 @@ const AccountSetup = () => {
                                 Company name
                             </label>
                             <input
-                                className="w-full px-4 py-2 border-2 border-slate-200 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                                className="w-full px-3 sm:px-4 py-3 sm:py-2 border border-slate-200 rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring focus:ring-teal-500/10 text-base"
                                 type="text"
                                 placeholder="Enter your company name"
                                 value={company}
@@ -444,7 +440,7 @@ const AccountSetup = () => {
                                 Industry
                             </label>
                             <select
-                                className="w-full px-4 py-2 border-2 border-slate-200 rounded text-slate-900 bg-slate-50/50 transition-all duration-200 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                                className="w-full px-3 sm:px-4 py-3 sm:py-2 border border-slate-200 rounded text-slate-900 transition-all duration-200 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring focus:ring-teal-500/10 text-base"
                                 value={industry}
                                 onChange={(e) => setIndustry(e.target.value)}
                             >
@@ -464,7 +460,7 @@ const AccountSetup = () => {
                                 Company size
                             </label>
                             <select
-                                className="w-full px-4 py-2 border-2 border-slate-200 rounded text-slate-900 bg-slate-50/50 transition-all duration-200 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                                className="w-full px-3 sm:px-4 py-3 sm:py-2 border border-slate-200 rounded text-slate-900 transition-all duration-200 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring focus:ring-teal-500/10 text-base"
                                 value={companySize}
                                 onChange={(e) => setCompanySize(e.target.value)}
                             >
@@ -482,7 +478,7 @@ const AccountSetup = () => {
             case 3:
                 return (
                     <form onSubmit={(e) => e.preventDefault()}>
-                        <TeamInvite 
+                        <TeamInvite
                             onSendInvites={handleSendInvites}
                             onSkip={handleSkip}
                             isLoading={isLoading}
@@ -500,9 +496,10 @@ const AccountSetup = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
-            <svg 
-                className="absolute inset-0 w-full h-full pointer-events-none opacity-30" 
-                viewBox="0 0 100 100" 
+            {/* Background decorative elements */}
+            <svg
+                className="absolute inset-0 w-full h-full pointer-events-none opacity-30"
+                viewBox="0 0 100 100"
                 preserveAspectRatio="none"
             >
                 <defs>
@@ -512,13 +509,13 @@ const AccountSetup = () => {
                         <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.2" />
                     </linearGradient>
                 </defs>
-                <path 
-                    d="M-10,10 L20,40 L50,10 L80,40 L110,10 L110,25 L80,55 L50,25 L20,55 L-10,25 Z" 
-                    fill="url(#zigzagGradient)" 
+                <path
+                    d="M-10,10 L20,40 L50,10 L80,40 L110,10 L110,25 L80,55 L50,25 L20,55 L-10,25 Z"
+                    fill="url(#zigzagGradient)"
                 />
-                <path 
-                    d="M-10,50 L20,80 L50,50 L80,80 L110,50 L110,65 L80,95 L50,65 L20,95 L-10,65 Z" 
-                    fill="url(#zigzagGradient)" 
+                <path
+                    d="M-10,50 L20,80 L50,50 L80,80 L110,50 L110,65 L80,95 L50,65 L20,95 L-10,65 Z"
+                    fill="url(#zigzagGradient)"
                 />
             </svg>
 
@@ -536,16 +533,16 @@ const AccountSetup = () => {
                 <div className="absolute top-2/3 right-1/4 w-12 h-px bg-gradient-to-r from-transparent via-teal-200 to-transparent transform rotate-45"></div>
             </div>
 
-            <div className="flex items-center justify-center min-h-screen px-6 relative z-10">
+            <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10 py-8">
                 <div className="w-full max-w-sm">
-                    <div className="text-center mb-6">
+                    <div className="text-center mb-6 sm:mb-8">
                         <div className="inline-block mb-4">
-                            <div className="font-bold text-3xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                            <div className="font-bold text-2xl sm:text-3xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
                                 QAID
                             </div>
                         </div>
-                        <h1 className="text-2xl font-bold text-slate-900 mb-1">Complete your setup</h1>
-                        <p className="text-slate-600">Complete your account setup to get started</p>
+                        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">Complete your setup</h1>
+                        <p className="text-slate-600 text-sm sm:text-base">Complete your account setup to get started</p>
                     </div>
 
                     <div className="mb-6">
@@ -554,24 +551,24 @@ const AccountSetup = () => {
                             <span className="text-sm text-slate-500">{Math.round((step / 3) * 100)}%</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div 
+                            <div
                                 className="bg-gradient-to-r from-teal-500 to-cyan-500 h-2 rounded-full transition-all duration-300"
                                 style={{ width: `${(step / 3) * 100}%` }}
                             ></div>
                         </div>
                     </div>
 
-                    <div className="bg-white/90 backdrop-blur-sm rounded shadow-sm shadow-slate-200/50 border border-slate-200/50 p-6">
+                    <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-sm shadow-slate-200/50 border border-slate-200/50 p-4 sm:p-6">
                         <div className="space-y-5">
                             {renderStepContent()}
 
                             {step < 3 && (
-                                <div className="flex gap-3 pt-4">
+                                <div className="flex flex-col sm:flex-row gap-3 pt-4">
                                     {step > 1 && (
                                         <button
                                             type="button"
                                             onClick={handlePrevStep}
-                                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded px-6 py-2 transition-all duration-200 flex justify-center items-center gap-2"
+                                            className="w-full sm:flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded px-6 py-3 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 min-h-[44px]"
                                         >
                                             <ChevronLeft className="h-4 w-4" />
                                             Back
@@ -581,7 +578,7 @@ const AccountSetup = () => {
                                     <button
                                         type="button"
                                         onClick={handleNextStep}
-                                        className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white font-semibold rounded px-6 py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5"
+                                        className="w-full sm:flex-1 bg-[#00897B] hover:bg-[#00796B] text-white font-semibold rounded px-6 py-3 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5 min-h-[44px]"
                                     >
                                         Next
                                         <ChevronRight className="h-4 w-4" />
