@@ -183,7 +183,7 @@ const Login = () => {
                     </div>
 
                     {/* Login Form Card */}
-                    <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg shadow-slate-200/50 border border-slate-200/50 p-6">
+                    <div className="bg-white/90 backdrop-blur-sm rounded shadow-sm shadow-slate-200/50 border border-slate-200/50 p-6">
                         <form className="space-y-5" onSubmit={handleLogin} noValidate>
                             {/* Email Input */}
                             <div className="space-y-2">
