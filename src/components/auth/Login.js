@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthProvider";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { toast } from "sonner";
+import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
 import '../../app/globals.css';
 
 const Login = () => {
@@ -68,11 +69,13 @@ const Login = () => {
                 // Manual redirect as backup if useEffect doesn't trigger
                 router.push("/dashboard");
             } else {
-                toast.error(result.error);
+                const friendlyError = getFirebaseErrorMessage(result.error || result);
+                toast.error(friendlyError);
             }
         } catch (error) {
-            console.error(error.message);
-            toast.error(error.message);
+            console.error('Login error:', error);
+            const friendlyError = getFirebaseErrorMessage(error);
+            toast.error(friendlyError);
         } finally {
             setLoadingEmailLogin(false);
         }
@@ -97,11 +100,13 @@ const Login = () => {
                 toast.success("Login successful!");
                 router.push("/dashboard");
             } else {
-                toast.error(result.error);
+                const friendlyError = getFirebaseErrorMessage(result.error || result);
+                toast.error(friendlyError);
             }
         } catch (error) {
-            console.error(error.message);
-            toast.error(error.message);
+            console.error('Google login error:', error);
+            const friendlyError = getFirebaseErrorMessage(error);
+            toast.error(friendlyError);
         } finally {
             setLoadingGoogleLogin(false);
         }
@@ -191,11 +196,11 @@ const Login = () => {
                                     Email address
                                 </label>
                                 <input
-                                    className={`w-full px-4 py-2 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
+                                    className={`w-full px-4 py-2 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 ${
                                         errors.email 
-                                            ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
-                                            : "border-slate-200 focus:border-teal-500 focus:bg-white"
-                                    } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                            ? "border-red-300 focus:border-red-500" 
+                                            : "border-slate-200 focus:border-teal-500"
+                                    } focus:outline-none focus:ring focus:ring-teal-500/10`}
                                     type="email"
                                     placeholder="name@company.com"
                                     value={email}
@@ -205,10 +210,7 @@ const Login = () => {
                                     }}
                                 />
                                 {errors.email && (
-                                    <p className="text-red-600 text-sm font-medium flex items-center mt-2">
-                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
+                                    <p className="text-red-600 text-xs font-medium mt-2">
                                         {errors.email}
                                     </p>
                                 )}
@@ -221,11 +223,11 @@ const Login = () => {
                                 </label>
                                 <div className="relative">
                                     <input
-                                        className={`w-full px-4 py-2 pr-12 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
+                                        className={`w-full px-4 py-2 pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 ${
                                             errors.password 
-                                                ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
-                                                : "border-slate-200 focus:border-teal-500 focus:bg-white"
-                                        } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                                ? "border-red-300 focus:border-red-500" 
+                                                : "border-slate-200 focus:border-teal-500"
+                                        } focus:outline-none focus:ring focus:ring-teal-500/10`}
                                         type={showPassword ? "text" : "password"}
                                         placeholder="Enter your password"
                                         value={password}
@@ -243,10 +245,7 @@ const Login = () => {
                                     </button>
                                 </div>
                                 {errors.password && (
-                                    <p className="text-red-600 text-sm font-medium flex items-center mt-2">
-                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
+                                    <p className="text-red-600 text-xs font-medium mt-2">
                                         {errors.password}
                                     </p>
                                 )}
@@ -297,7 +296,7 @@ const Login = () => {
                         <p className="text-center text-slate-600 mt-6">
                             Don&apos;t have an account?{" "}
                             <Link href="/register" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
-                                Create account
+                                Sign Up
                             </Link>
                         </p>
                     </div>

@@ -64,7 +64,7 @@ const Features = () => {
                         <span className="text-sm font-medium text-gray-700">Features</span>
                     </div>
                     <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
-                        Everything you need for quality assurance
+                        Everything you need <br/>for quality assurance
                     </h2>
                     <p className="text-xl text-gray-600 max-w-2xl mx-auto">
                         Advanced tools that adapt to your team&apos;s needs and scale with your growth
