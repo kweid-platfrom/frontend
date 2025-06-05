@@ -122,7 +122,7 @@ export const AuthProvider = ({ children }) => {
     
         try {
             // Check if user needs to complete account setup (from localStorage)
-            const needsAccountSetup = localStorage.getItem("needsAccountSetup");
+            const needsAccountSetup = typeof window !== 'undefined' ? localStorage.getItem("needsAccountSetup") : null;
             
             // Check if user exists and create if needed
             const { userData, isNewUser } = await createUserIfNotExists(user);
@@ -142,13 +142,24 @@ export const AuthProvider = ({ children }) => {
             });
             setUserProfile(updatedUserData?.profile || {});
             
-            // Redirect based on user state
-            if (isNewUser || needsAccountSetup === "true") {
-                // New user or needs account setup, redirect to account setup
-                router.push("/account-setup");
-            } else if (window.location.pathname === "/login" || window.location.pathname === "/register") {
-                // Existing user on login/register page, redirect to dashboard
-                router.push("/dashboard");
+            // Handle routing based on user state and current location
+            if (typeof window !== 'undefined') {
+                const currentPath = window.location.pathname;
+                
+                if (isNewUser || needsAccountSetup === "true") {
+                    // New user or needs account setup
+                    localStorage.setItem("needsAccountSetup", "true");
+                    if (currentPath === "/login" || currentPath === "/register") {
+                        router.push("/account-setup");
+                    }
+                } else {
+                    // Existing user - redirect from login/register pages to dashboard
+                    if (currentPath === "/login" || currentPath === "/register") {
+                        router.push("/dashboard");
+                    }
+                    // Clear any setup flags
+                    localStorage.removeItem("needsAccountSetup");
+                }
             }
         } catch (error) {
             console.error("Error processing authentication:", error);
@@ -199,15 +210,13 @@ export const AuthProvider = ({ children }) => {
     // Sign in with email and password
     const signIn = async (email, password) => {
         setAuthError(null);
-        setLoading(true);
 
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
             // Auth state change listener will handle the rest
-            return { success: true };
+            return { success: true, user: userCredential.user };
         } catch (error) {
             setAuthError(error.message);
-            setLoading(false);
             return { success: false, error: error.message };
         }
     };
@@ -215,7 +224,6 @@ export const AuthProvider = ({ children }) => {
     // Sign in with Google (popup method)
     const signInWithGoogle = async () => {
         setAuthError(null);
-        setLoading(true);
 
         try {
             // Configure Google provider
@@ -223,9 +231,13 @@ export const AuthProvider = ({ children }) => {
                 prompt: 'select_account'
             });
 
-            await signInWithPopup(auth, googleProvider);
+            const result = await signInWithPopup(auth, googleProvider);
             // Auth state change listener will handle the rest
-            return { success: true };
+            return { 
+                success: true, 
+                user: result.user,
+                isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime
+            };
         } catch (error) {
             console.error("Google sign-in error:", error);
 
@@ -235,7 +247,6 @@ export const AuthProvider = ({ children }) => {
             }
 
             setAuthError(error.message);
-            setLoading(false);
             return { success: false, error: error.message };
         }
     };
@@ -243,7 +254,6 @@ export const AuthProvider = ({ children }) => {
     // Sign in with Google (redirect method - fallback)
     const signInWithGoogleRedirect = async () => {
         setAuthError(null);
-        setLoading(true);
 
         try {
             // Configure Google provider
@@ -256,21 +266,22 @@ export const AuthProvider = ({ children }) => {
             return { success: true, isRedirect: true };
         } catch (error) {
             setAuthError(error.message);
-            setLoading(false);
             return { success: false, error: error.message };
         }
     };
 
     // Sign out
     const signOut = async () => {
-        setLoading(true);
         try {
             await firebaseSignOut(auth);
+            // Clear localStorage
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem("needsAccountSetup");
+            }
             router.push("/login");
             return { success: true };
         } catch (error) {
             console.error("Sign out error:", error);
-            setLoading(false);
             return { success: false, error: error.message };
         }
     };

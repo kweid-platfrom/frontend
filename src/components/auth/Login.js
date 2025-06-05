@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../context/AuthProvider";
-import { useAlert } from "../../components/CustomAlert";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
-import "../../app/globals.css";
+import { toast } from "sonner";
+import '../../app/globals.css';
 
 const Login = () => {
     const [email, setEmail] = useState("");
@@ -18,9 +18,8 @@ const Login = () => {
     const [errors, setErrors] = useState({ email: "", password: "" });
     const router = useRouter();
     const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
-    const { showAlert, alertComponent } = useAlert();
 
-    // Redirect if already logged in
+    // ADD BACK THE REDIRECT LOGIC - This was missing in Paste-1
     useEffect(() => {
         if (currentUser && !loading) {
             router.push("/dashboard");
@@ -55,6 +54,7 @@ const Login = () => {
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent event bubbling
         
         if (!validateForm()) {
             return;
@@ -64,40 +64,44 @@ const Login = () => {
         try {
             const result = await signIn(email, password);
             if (result.success) {
-                showAlert("Login successful!", "success");
+                toast.success("Login successful!");
+                // Manual redirect as backup if useEffect doesn't trigger
                 router.push("/dashboard");
             } else {
-                showAlert(result.error, "error");
+                toast.error(result.error);
             }
         } catch (error) {
             console.error(error.message);
-            showAlert(error.message, "error");
+            toast.error(error.message);
         } finally {
             setLoadingEmailLogin(false);
         }
     };
 
-    const handleGoogleLogin = async () => {
+    const handleGoogleLogin = async (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent event bubbling
+        
         setLoadingGoogleLogin(true);
         try {
             const result = await signInWithGoogle();
             if (result.success) {
                 // If the user doesn't exist, redirect to register
                 if (result.isNewUser) {
-                    showAlert("Please complete your registration first.", "info");
+                    toast.info("Please complete your registration first.");
                     router.push("/register");
                     return;
                 }
                 
                 // Otherwise, show success and redirect to dashboard
-                showAlert("Login successful!", "success");
+                toast.success("Login successful!");
                 router.push("/dashboard");
             } else {
-                showAlert(result.error, "error");
+                toast.error(result.error);
             }
         } catch (error) {
             console.error(error.message);
-            showAlert(error.message, "error");
+            toast.error(error.message);
         } finally {
             setLoadingGoogleLogin(false);
         }
@@ -105,13 +109,15 @@ const Login = () => {
     
     const handleForgotPassword = (e) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent event bubbling
         router.push("/forgot-password");
     };
 
+    // Show loading spinner during auth check
     if (loading) {
         return (
-            <div className="min-h-screen flex justify-center items-center">
-                <Loader2 className="animate-spin h-8 w-8 text-[#00897B]" />
+            <div className="min-h-screen flex justify-center items-center bg-gray-50">
+                <Loader2 className="animate-spin h-8 w-8 text-teal-600" />
             </div>
         );
     }
@@ -122,105 +128,182 @@ const Login = () => {
     }
 
     return (
-        <>
-            {alertComponent}
-            <div className="min-h-screen bg-[#fff] flex flex-col items-center">
-                <header className="w-full h-[70px] bg-white flex items-center px-8 shadow-sm">
-                    <Link href="/" className="font-bold text-2xl text-[#00897B] hover:text-[#00796B] transition-colors">
-                        LOGO
-                    </Link>
-                </header>
-                <div className="justify-center text-center p-5">
-                    <h2 className="text-[#2D3142] text-2xl font-bold text-center mb-3">Welcome Back to QAID</h2>
-                    <p>– Your Testing Hub Awaits –</p>
-                </div>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
+            {/* Diagonal Zigzag Background Decoration */}
+            <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none opacity-30" 
+                viewBox="0 0 100 100" 
+                preserveAspectRatio="none"
+            >
+                <defs>
+                    <linearGradient id="zigzagGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.4" />
+                        <stop offset="50%" stopColor="#0891b2" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.2" />
+                    </linearGradient>
+                </defs>
+                <path 
+                    d="M-10,10 L20,40 L50,10 L80,40 L110,10 L110,25 L80,55 L50,25 L20,55 L-10,25 Z" 
+                    fill="url(#zigzagGradient)" 
+                />
+                <path 
+                    d="M-10,50 L20,80 L50,50 L80,80 L110,50 L110,65 L80,95 L50,65 L20,95 L-10,65 Z" 
+                    fill="url(#zigzagGradient)" 
+                />
+            </svg>
 
-                <div className="w-full max-w-sm bg-white rounded-lg p-8 flex flex-col gap-6">
-                    <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
-                        <div className="flex flex-col gap-1">
-                            <input
-                                className={`px-4 py-3 border ${
-                                    errors.email ? "border-red-500" : "border-[#E1E2E6]"
-                                } rounded text-[#2D3142] focus:outline-none focus:border-[#00897B]`}
-                                type="email"
-                                placeholder="name@company.com"
-                                value={email}
-                                onChange={(e) => {
-                                    setEmail(e.target.value);
-                                    if (errors.email) setErrors({...errors, email: ""});
-                                }}
-                            />
-                            {errors.email && <span className="text-red-500 text-sm">{errors.email}</span>}
-                        </div>
+            {/* Additional Subtle Zigzag Lines */}
+            <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-1/4 left-0 w-full h-px bg-gradient-to-r from-transparent via-teal-200/60 to-transparent transform rotate-12"></div>
+                <div className="absolute top-3/4 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-200/50 to-transparent transform -rotate-12"></div>
+            </div>
 
-                        <div className="flex flex-col gap-1">
-                            <div className="relative">
-                                <input
-                                    className={`px-4 py-3 pr-10 border ${
-                                        errors.password ? "border-red-500" : "border-[#E1E2E6]"
-                                    } rounded text-[#2D3142] w-full focus:outline-none focus:border-[#00897B]`}
-                                    type={showPassword ? "text" : "password"}
-                                    placeholder="Password"
-                                    value={password}
-                                    onChange={(e) => {
-                                        setPassword(e.target.value);
-                                        if (errors.password) setErrors({...errors, password: ""});
-                                    }}
-                                />
-                                <button
-                                    type="button"
-                                    className="absolute inset-y-0 right-3 flex items-center text-gray-500"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                >
-                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
+            {/* Existing Decorative Lines */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-20 left-0 w-px h-32 bg-gradient-to-b from-transparent via-teal-200 to-transparent"></div>
+                <div className="absolute top-40 right-10 w-px h-24 bg-gradient-to-b from-transparent via-slate-200 to-transparent"></div>
+                <div className="absolute bottom-32 left-20 w-16 h-px bg-gradient-to-r from-transparent via-teal-200 to-transparent"></div>
+                <div className="absolute bottom-20 right-0 w-20 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
+                <div className="absolute top-1/3 left-1/4 w-px h-16 bg-gradient-to-b from-transparent via-slate-200 to-transparent transform rotate-45"></div>
+                <div className="absolute top-2/3 right-1/4 w-12 h-px bg-gradient-to-r from-transparent via-teal-200 to-transparent transform rotate-45"></div>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex items-center justify-center min-h-screen px-6 relative z-10">
+                <div className="w-full max-w-sm">
+                    {/* Welcome Section */}
+                    <div className="text-center mb-6">
+                        <div className="inline-block mb-4">
+                            <div className="font-bold text-3xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                                QAID
                             </div>
-                            {errors.password && <span className="text-red-500 text-sm">{errors.password}</span>}
                         </div>
-
-                        <div className="text-right">
-                            <button onClick={handleForgotPassword} className="text-[#00897B] text-sm hover:underline">
-                                Forgot password?
-                            </button>
-                        </div>
-
-                        <button
-                            className="bg-[#00897B] text-white border-none rounded px-4 py-3 text-base cursor-pointer hover:bg-[#00796B] transition-colors flex justify-center items-center gap-2"
-                            type="submit"
-                            disabled={loadingEmailLogin}
-                        >
-                            Sign In
-                            {loadingEmailLogin && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
-                        </button>
-                    </form>
-
-                    <div className="flex items-center text-[#9EA0A5] my-2">
-                        <div className="flex-grow border-t border-[#E1E2E6]"></div>
-                        <span className="px-3 text-sm">or Sign in with</span>
-                        <div className="flex-grow border-t border-[#E1E2E6]"></div>
+                        <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome back</h1>
+                        <p className="text-slate-600">Your testing hub awaits</p>
                     </div>
 
-                    <div className="flex justify-center">
+                    {/* Login Form Card */}
+                    <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg shadow-slate-200/50 border border-slate-200/50 p-6">
+                        <form className="space-y-5" onSubmit={handleLogin} noValidate>
+                            {/* Email Input */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-700 block">
+                                    Email address
+                                </label>
+                                <input
+                                    className={`w-full px-4 py-2 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
+                                        errors.email 
+                                            ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
+                                            : "border-slate-200 focus:border-teal-500 focus:bg-white"
+                                    } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                    type="email"
+                                    placeholder="name@company.com"
+                                    value={email}
+                                    onChange={(e) => {
+                                        setEmail(e.target.value);
+                                        if (errors.email) setErrors({...errors, email: ""});
+                                    }}
+                                />
+                                {errors.email && (
+                                    <p className="text-red-600 text-sm font-medium flex items-center mt-2">
+                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        {errors.email}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Password Input */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-700 block">
+                                    Password
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        className={`w-full px-4 py-2 pr-12 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
+                                            errors.password 
+                                                ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
+                                                : "border-slate-200 focus:border-teal-500 focus:bg-white"
+                                        } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Enter your password"
+                                        value={password}
+                                        onChange={(e) => {
+                                            setPassword(e.target.value);
+                                            if (errors.password) setErrors({...errors, password: ""});
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                </div>
+                                {errors.password && (
+                                    <p className="text-red-600 text-sm font-medium flex items-center mt-2">
+                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        {errors.password}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Forgot Password */}
+                            <div className="flex justify-end">
+                                <button 
+                                    type="button"
+                                    onClick={handleForgotPassword} 
+                                    className="text-teal-600 text-sm font-medium hover:text-teal-700 hover:underline transition-colors"
+                                >
+                                    Forgot password?
+                                </button>
+                            </div>
+
+                            {/* Sign In Button */}
+                            <button
+                                className="w-full bg-[#00897B] hover:bg-[#00796B] text-white font-semibold rounded px-6 py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                                type="submit"
+                                disabled={loadingEmailLogin}
+                            >
+                                Sign In
+                                {loadingEmailLogin && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
+                            </button>
+                        </form>
+
+                        {/* Divider */}
+                        <div className="flex items-center my-6">
+                            <div className="flex-grow border-t border-slate-200"></div>
+                            <span className="px-3 text-sm text-slate-500 font-medium">or continue with</span>
+                            <div className="flex-grow border-t border-slate-200"></div>
+                        </div>
+
+                        {/* Google Sign In */}
                         <button
+                            type="button"
                             onClick={handleGoogleLogin}
-                            className="flex items-center justify-center gap-2 w-[50%] bg-white text-[#4A4B53] border border-[#E1E2E6] rounded px-4 py-3 text-base hover:bg-gray-50 hover:border-[#9EA0A5] transition-colors"
+                            className="w-full bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 font-semibold border-2 border-slate-200 rounded px-6 py-2 transition-all duration-200 flex justify-center items-center gap-3 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={loadingGoogleLogin}
                         >
-                            <FcGoogle className="w-5 h-5 fill-[#4285F4]" />
+                            <FcGoogle className="w-5 h-5" />
                             Google
                             {loadingGoogleLogin && <Loader2 className="animate-spin h-5 w-5 ml-2" />}
                         </button>
-                    </div>
 
-                    <p className="text-md text-[#4A4B53] text-center">
-                        Don&apos;t have an account?{" "}
-                        <Link href="/register" className="text-[#00897B] font-medium hover:underline">
-                            Register
-                        </Link>
-                    </p>
+                        {/* Register Link */}
+                        <p className="text-center text-slate-600 mt-6">
+                            Don&apos;t have an account?{" "}
+                            <Link href="/register" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
+                                Create account
+                            </Link>
+                        </p>
+                    </div>
                 </div>
             </div>
-        </>
+        </div>
     );
 };
 
