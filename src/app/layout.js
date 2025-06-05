@@ -28,7 +28,7 @@ export default function RootLayout({ children }) {
                             {/* Sonner Toast Container */}
                             <Toaster 
                                 richColors 
-                                closeButton 
+                                closeButton={false}
                                 position="top-center"
                                 expand={true}
                                 visibleToasts={4}

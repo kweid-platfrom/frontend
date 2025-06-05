@@ -135,8 +135,7 @@ const Register = () => {
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
             {/* Toast Container */}
             <Toaster 
-                richColors 
-                closeButton 
+                richColors  
                 position="top-center"
                 toastOptions={{
                     style: {
