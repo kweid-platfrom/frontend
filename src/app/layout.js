@@ -24,10 +24,10 @@ export default function RootLayout({ children }) {
                         <AlertProvider>
                             {children}
                             <div id="modal-root"></div>
-                            
+
                             {/* Sonner Toast Container */}
-                            <Toaster 
-                                richColors 
+                            <Toaster
+                                richColors
                                 closeButton={false}
                                 position="top-center"
                                 expand={true}
@@ -37,12 +37,16 @@ export default function RootLayout({ children }) {
                                         background: 'rgba(255, 255, 255, 0.95)',
                                         backdropFilter: 'blur(12px)',
                                         border: '1px solid rgba(148, 163, 184, 0.2)',
-                                        borderRadius: '12px',
+                                        borderRadius: '5px',
                                         boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
                                         fontFamily: 'inherit'
                                     },
                                     className: 'font-medium',
-                                    duration: 4000
+                                    duration: 4000,
+                                    // 👇 override error toast specifically
+                                    error: {
+                                        icon: null
+                                    }
                                 }}
                                 theme="light"
                             />
