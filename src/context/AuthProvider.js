@@ -1,23 +1,38 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import {
-    onAuthStateChanged,
-    signOut as firebaseSignOut,
-    signInWithEmailAndPassword,
-    signInWithPopup,
-    signInWithRedirect,
-    getRedirectResult,
-    GoogleAuthProvider
-} from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db, environment } from "../config/firebase";
+import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
+import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
+
+// Import unified user service
+import { 
+    createUserIfNotExists, 
+    fetchUserData, 
+    completeUserSetup 
+} from "../services/userService";
+
+// Import AuthService functions
+import { 
+    signInWithGoogle as authSignInWithGoogle,
+    logInWithEmail as authLoginWithEmail,
+    logout as authLogout,
+    registerWithEmail as authRegisterWithEmail,
+    registerWithEmailLink as authRegisterWithEmailLink,
+    completeEmailLinkSignIn as authCompleteEmailLinkSignIn,
+    setUserPassword as authSetUserPassword
+} from "../services/authService";
 
 // Create context
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};
 
 export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
@@ -25,95 +40,19 @@ export const AuthProvider = ({ children }) => {
     const [userProfile, setUserProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [authError, setAuthError] = useState(null);
+    const [initialized, setInitialized] = useState(false);
     const router = useRouter();
 
-    // Create Google provider instance
-    const googleProvider = new GoogleAuthProvider();
-
-    // Fetch user data from Firestore
-    const fetchUserData = useCallback(async (userId) => {
-        try {
-            const userRef = doc(db, "users", userId);
-            const userSnap = await getDoc(userRef);
-
-            if (userSnap.exists()) {
-                return userSnap.data();
-            } else {
-                console.log("No user data found");
-                return null;
-            }
-        } catch (error) {
-            console.error("Error fetching user data:", error);
-            return null;
-        }
-    }, []);
-
-    // Create default user document structure
-    const createDefaultUserDocument = (user) => ({
-        email: user.email,
-        displayName: user.displayName || "",
-        photoURL: user.photoURL || "",
-        firstName: user.displayName ? user.displayName.split(' ')[0] : "",
-        lastName: user.displayName ? user.displayName.split(' ').slice(1).join(' ') : "",
-        phone: "",
-        location: "",
-        jobRole: "",
-        avatarUrl: user.photoURL || "",
-        permissions: {
-            isAdmin: false,
-            roles: ["user"],
-            capabilities: ["read_tests"]
-        },
-        organizationId: null,
-        role: "user",
-        lastLogin: serverTimestamp(),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        environment: environment // Record which environment the user was created in
-    });
-
-    // Create user document if it doesn't exist
-    const createUserIfNotExists = useCallback(async (user) => {
-        try {
-            const userRef = doc(db, "users", user.uid);
-            const userSnap = await getDoc(userRef);
-
-            if (!userSnap.exists()) {
-                // Create new user document with default structure
-                const userData = createDefaultUserDocument(user);
-                await setDoc(userRef, userData);
-                return { isNewUser: true, userData };
-            }
-
-            // User exists, just return the data
-            return { isNewUser: false, userData: userSnap.data() };
-        } catch (error) {
-            console.error("Error creating/checking user:", error);
-            return { isNewUser: false, userData: null, error };
-        }
-    }, []);
-
-    // Update last login timestamp
-    const updateUserLastLogin = useCallback(async (userId) => {
-        try {
-            const userRef = doc(db, "users", userId);
-            await setDoc(userRef, {
-                lastLogin: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            }, { merge: true });
-    
-            // Fetch the updated user data
-            return await fetchUserData(userId);
-        } catch (error) {
-            console.error("Error updating last login:", error);
-            // Don't fail the authentication process due to last login update failure
-            return await fetchUserData(userId);
-        }
-    }, [fetchUserData]);
-
-    // Process user authentication
+    // Process user authentication with unified user service
     const processUserAuthentication = useCallback(async (user) => {
+        console.log('🔐 Processing user authentication:', {
+            hasUser: !!user,
+            uid: user?.uid,
+            email: user?.email
+        });
+
         if (!user) {
+            console.log('👋 No user - clearing auth state');
             setCurrentUser(null);
             setUserPermissions(null);
             setUserProfile(null);
@@ -121,40 +60,69 @@ export const AuthProvider = ({ children }) => {
         }
     
         try {
-            // Check if user needs to complete account setup (from localStorage)
-            const needsAccountSetup = typeof window !== 'undefined' ? localStorage.getItem("needsAccountSetup") : null;
+            // Determine the source of authentication
+            let authSource = 'auth';  // default
+            if (user.providerData?.length > 0) {
+                const provider = user.providerData[0].providerId;
+                if (provider === 'google.com') authSource = 'google';
+                else if (provider === 'password') authSource = 'email';
+            }
+
+            console.log('🔍 Authentication source:', authSource);
             
-            // Check if user exists and create if needed
-            const { userData, isNewUser } = await createUserIfNotExists(user);
-    
-            // Update last login for existing users
-            let updatedUserData = userData;
-            if (!isNewUser) {
-                updatedUserData = await updateUserLastLogin(user.uid) || userData;
+            // Use unified user service to handle user creation/fetching
+            const { userData, isNewUser, needsSetup, error } = await createUserIfNotExists(
+                user, 
+                {}, // No additional data at this stage
+                authSource
+            );
+
+            if (error) {
+                console.error('❌ User creation/fetch failed:', error);
+                setAuthError(error);
+                return;
+            }
+
+            if (!userData) {
+                console.error('❌ No user data available after creation/fetch');
+                setAuthError('Failed to load user data');
+                return;
             }
     
             // Set user state
+            console.log('✅ Setting user state:', {
+                uid: user.uid,
+                isNewUser,
+                needsSetup,
+                setupCompleted: userData.setupCompleted
+            });
+
             setCurrentUser(user);
-            setUserPermissions(updatedUserData?.permissions || {
+            setUserPermissions(userData.permissions || {
                 isAdmin: false,
                 roles: ["user"],
                 capabilities: ["read_tests"]
             });
-            setUserProfile(updatedUserData?.profile || {});
+            setUserProfile(userData);
             
             // Handle routing based on user state and current location
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
+                console.log('🧭 Current path:', currentPath);
                 
-                if (isNewUser || needsAccountSetup === "true") {
-                    // New user or needs account setup
+                // Check if user needs account setup
+                const needsAccountSetup = isNewUser || needsSetup || !userData.setupCompleted;
+                
+                if (needsAccountSetup) {
+                    console.log('🆕 User needs account setup - redirecting to account-setup');
                     localStorage.setItem("needsAccountSetup", "true");
                     if (currentPath === "/login" || currentPath === "/register") {
                         router.push("/account-setup");
                     }
                 } else {
-                    // Existing user - redirect from login/register pages to dashboard
-                    if (currentPath === "/login" || currentPath === "/register") {
+                    console.log('👤 User setup complete - handling redirect');
+                    // Existing user with completed setup
+                    if (currentPath === "/login" || currentPath === "/register" || currentPath === "/account-setup") {
                         router.push("/dashboard");
                     }
                     // Clear any setup flags
@@ -162,76 +130,100 @@ export const AuthProvider = ({ children }) => {
                 }
             }
         } catch (error) {
-            console.error("Error processing authentication:", error);
+            console.error("💥 Error processing authentication:", {
+                code: error.code,
+                message: error.message,
+                uid: user?.uid
+            });
+            
             // Set basic user info even if profile fetch fails
             setCurrentUser(user);
             setUserPermissions({ isAdmin: false, roles: ["user"], capabilities: ["read_tests"] });
             setUserProfile({});
+            setAuthError(error.message);
         }
-    }, [createUserIfNotExists, updateUserLastLogin, router]);
+    }, [router]);
 
     // Handle redirect result (for redirect sign-in)
     useEffect(() => {
         const handleRedirectResult = async () => {
+            if (initialized) return;
+            
             try {
+                console.log('🔄 Handling redirect result...');
                 setLoading(true);
                 const result = await getRedirectResult(auth);
                 if (result?.user) {
-                    // User signed in via redirect
+                    console.log('✅ User signed in via redirect:', result.user.uid);
                     await processUserAuthentication(result.user);
+                } else {
+                    console.log('ℹ️ No redirect result found');
                 }
             } catch (error) {
-                console.error("Error handling redirect result:", error);
+                console.error("❌ Error handling redirect result:", error);
                 setAuthError(error.message);
             } finally {
                 setLoading(false);
+                setInitialized(true);
             }
         };
 
         handleRedirectResult();
-    }, [processUserAuthentication]);
+    }, [processUserAuthentication, initialized]);
 
     // Set up auth state listener
     useEffect(() => {
+        console.log('👂 Setting up auth state listener...');
+        
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            console.log('🔔 Auth state changed:', {
+                hasUser: !!user,
+                uid: user?.uid,
+                email: user?.email
+            });
+
             try {
                 await processUserAuthentication(user);
             } catch (error) {
-                console.error("Auth state change error:", error);
+                console.error("❌ Auth state change error:", error);
+                setAuthError(error.message);
             } finally {
-                setLoading(false);
+                if (!initialized) {
+                    setLoading(false);
+                    setInitialized(true);
+                }
             }
         });
 
         // Cleanup subscription on unmount
-        return () => unsubscribe();
-    }, [processUserAuthentication]);
+        return () => {
+            console.log('🧹 Cleaning up auth listener');
+            unsubscribe();
+        };
+    }, [processUserAuthentication, initialized]);
 
-    // Sign in with email and password
+    // AuthContext methods that use AuthService internally
     const signIn = async (email, password) => {
+        console.log('📧 Attempting sign in with email:', email);
         setAuthError(null);
-
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const result = await authLoginWithEmail(email, password);
+            console.log('✅ Sign in successful:', result.user.uid);
             // Auth state change listener will handle the rest
-            return { success: true, user: userCredential.user };
+            return { success: true, user: result.user };
         } catch (error) {
+            console.error('❌ Sign in failed:', error);
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
     };
 
-    // Sign in with Google (popup method)
     const signInWithGoogle = async () => {
+        console.log('🔍 Attempting Google sign in...');
         setAuthError(null);
-
         try {
-            // Configure Google provider
-            googleProvider.setCustomParameters({
-                prompt: 'select_account'
-            });
-
-            const result = await signInWithPopup(auth, googleProvider);
+            const result = await authSignInWithGoogle();
+            console.log('✅ Google sign in successful:', result.user.uid);
             // Auth state change listener will handle the rest
             return { 
                 success: true, 
@@ -239,49 +231,81 @@ export const AuthProvider = ({ children }) => {
                 isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime
             };
         } catch (error) {
-            console.error("Google sign-in error:", error);
-
-            // If popup is blocked or fails, try redirect method
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-                return signInWithGoogleRedirect();
-            }
-
+            console.error("❌ Google sign-in error:", error);
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
     };
 
-    // Sign in with Google (redirect method - fallback)
-    const signInWithGoogleRedirect = async () => {
+    const registerWithEmail = async (email, password) => {
+        console.log('📝 Attempting email registration:', email);
         setAuthError(null);
-
         try {
-            // Configure Google provider
-            googleProvider.setCustomParameters({
-                prompt: 'select_account'
-            });
-
-            await signInWithRedirect(auth, googleProvider);
-            // The result will be handled in useEffect with getRedirectResult
-            return { success: true, isRedirect: true };
+            const result = await authRegisterWithEmail(email, password);
+            console.log('✅ Email registration successful:', result.user.uid);
+            return { success: true, user: result.user };
         } catch (error) {
+            console.error('❌ Email registration failed:', error);
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
     };
 
-    // Sign out
-    const signOut = async () => {
+    const registerWithEmailLink = async (email, name) => {
+        console.log('🔗 Attempting email link registration:', email);
+        setAuthError(null);
         try {
-            await firebaseSignOut(auth);
+            await authRegisterWithEmailLink(email, name);
+            console.log('✅ Email link sent successfully');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Email link registration failed:', error);
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const completeEmailLinkSignIn = async (email, url, password = null) => {
+        console.log('🔗 Completing email link sign in:', email);
+        setAuthError(null);
+        try {
+            const result = await authCompleteEmailLinkSignIn(email, url, password);
+            console.log('✅ Email link sign in completed:', result.user.uid);
+            return { success: true, user: result.user };
+        } catch (error) {
+            console.error('❌ Email link sign in failed:', error);
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const setUserPassword = async (password) => {
+        console.log('🔑 Setting user password...');
+        setAuthError(null);
+        try {
+            await authSetUserPassword(password);
+            console.log('✅ Password set successfully');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Password setting failed:', error);
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const signOut = async () => {
+        console.log('👋 Signing out...');
+        try {
+            await authLogout();
             // Clear localStorage
             if (typeof window !== 'undefined') {
                 localStorage.removeItem("needsAccountSetup");
             }
+            console.log('✅ Sign out successful');
             router.push("/login");
             return { success: true };
         } catch (error) {
-            console.error("Sign out error:", error);
+            console.error("❌ Sign out error:", error);
             return { success: false, error: error.message };
         }
     };
@@ -300,10 +324,11 @@ export const AuthProvider = ({ children }) => {
         return userPermissions.roles?.includes(role) || false;
     }, [userPermissions]);
 
-    // Refresh user data
+    // Refresh user data using unified service
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
 
+        console.log('🔄 Refreshing user data...');
         try {
             setLoading(true);
             const userData = await fetchUserData(currentUser.uid);
@@ -314,17 +339,19 @@ export const AuthProvider = ({ children }) => {
                     roles: ["user"],
                     capabilities: ["read_tests"]
                 });
-                setUserProfile(userData.profile || {});
+                setUserProfile(userData);
+                console.log('✅ User data refreshed successfully');
                 return true;
             }
+            console.log('⚠️ No user data found during refresh');
             return false;
         } catch (error) {
-            console.error("Error refreshing user data:", error);
+            console.error("❌ Error refreshing user data:", error);
             return false;
         } finally {
             setLoading(false);
         }
-    }, [currentUser, fetchUserData]);
+    }, [currentUser]);
 
     const clearAuthError = () => {
         setAuthError(null);
@@ -337,15 +364,24 @@ export const AuthProvider = ({ children }) => {
         userProfile,
         loading,
         authError,
-        environment, // Directly use the imported environment value
+        environment,
+        initialized,
+        // Authentication methods (using AuthService internally)
         signIn,
         signInWithGoogle,
-        signInWithGoogleRedirect,
+        registerWithEmail,
+        registerWithEmailLink,
+        completeEmailLinkSignIn,
+        setUserPassword,
         signOut,
+        // Utility methods
         hasPermission,
         hasRole,
         clearAuthError,
-        refreshUserData
+        refreshUserData,
+        // Unified user service methods
+        createUserIfNotExists,
+        completeUserSetup
     };
 
     return (

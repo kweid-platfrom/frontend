@@ -2,8 +2,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { getAuth, isSignInWithEmailLink } from "firebase/auth";
-import { completeEmailLinkSignIn } from "../../utils/auth";
+import { getAuth, isSignInWithEmailLink, onAuthStateChanged } from "firebase/auth";
+import { completeEmailLinkSignIn, registerWithEmail, logInWithEmail } from "../../services/authService";
+import { createUserIfNotExists, completeUserSetup } from "../../services/userService";
 import { useRouter } from "next/navigation";
 import { app } from "../../config/firebase";
 import { toast } from "sonner";
@@ -13,7 +14,6 @@ import { OrganizationInfoStep } from "../../components/OrganizationInfoStep";
 import { ProgressBar } from "../../components/ProgressBar";
 import { StepNavigation } from "../../components/StepNavigation";
 import { useFormValidation } from "../../hooks/useFormValidation";
-import { accountService } from "../../services/accountService";
 import "../../app/globals.css";
 
 const auth = getAuth(app);
@@ -21,8 +21,8 @@ const auth = getAuth(app);
 const AccountSetup = () => {
     // State management
     const [step, setStep] = useState(1);
-    const [accountType, setAccountType] = useState('personal'); // Track account type
-    const [totalSteps, setTotalSteps] = useState(2); // Dynamic step count
+    const [accountType, setAccountType] = useState('personal');
+    const [totalSteps, setTotalSteps] = useState(2);
     const [formData, setFormData] = useState({
         name: "",
         email: "",
@@ -36,6 +36,8 @@ const AccountSetup = () => {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isGoogleAuth, setIsGoogleAuth] = useState(false);
+    const [authUser, setAuthUser] = useState(null);
+    const [authInitialized, setAuthInitialized] = useState(false);
 
     // Hooks
     const { errors, validateName, validateEmail, validatePassword, clearError, getAccountType } = useFormValidation();
@@ -81,20 +83,32 @@ const AccountSetup = () => {
     // Function to determine account type and set total steps
     const determineAccountTypeAndSteps = (email) => {
         if (!email) return;
-        
+
         const detectedAccountType = getAccountType(email);
         setAccountType(detectedAccountType);
-        
-        // Set total steps based on account type
+
         if (detectedAccountType === 'personal') {
-            setTotalSteps(2); // Personal: Step 1 (Personal Info) -> Step 2 (Complete)
+            setTotalSteps(2);
         } else {
-            setTotalSteps(3); // Business: Step 1 (Personal) -> Step 2 (Organization) -> Step 3 (Team Invite)
+            setTotalSteps(3);
         }
     };
 
+    // Set up auth state listener
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            console.log('Auth state changed:', user ? 'User authenticated' : 'No user');
+            setAuthUser(user);
+            setAuthInitialized(true);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
     // Authentication effect
     useEffect(() => {
+        if (!authInitialized) return;
+
         const googleUserName = localStorage.getItem("googleUserName");
         const googleUserEmail = localStorage.getItem("googleUserEmail");
 
@@ -151,7 +165,7 @@ const AccountSetup = () => {
                     redirectToRegisterRef.current = true;
                 });
         }
-    }, []);
+    }, [authInitialized]);
 
     // Watch for email changes to update account type
     useEffect(() => {
@@ -184,6 +198,9 @@ const AccountSetup = () => {
             ...prev,
             [field]: value
         }));
+        if (errors[field]) {
+            clearError(field);
+        }
     };
 
     const handleTogglePassword = (field) => {
@@ -198,27 +215,195 @@ const AccountSetup = () => {
         clearError(field);
     };
 
-    // Step navigation
-    const handleNextStep = () => {
-        if (step === 1) {
-            const isNameValid = validateName(formData.name);
-            const isEmailValid = validateEmail(formData.email);
+    // UPDATED: Simplified authentication logic using userService
+    const authenticateUser = async () => {
+        console.log('Starting authentication process...');
 
-            let isPasswordValid = true;
-            if (!isGoogleAuth) {
-                isPasswordValid = validatePassword(formData.password, formData.confirmPassword);
+        // If user is already authenticated (email link or Google), return them
+        if (authUser) {
+            console.log('User already authenticated:', authUser.uid);
+            return authUser;
+        }
+
+        // If this is Google auth, user should already be authenticated
+        if (isGoogleAuth) {
+            console.log('Google auth detected, user should be authenticated');
+            if (!authUser) {
+                throw new Error('Google authentication failed - user not found');
             }
+            return authUser;
+        }
 
-            if (isNameValid && isEmailValid && isPasswordValid) {
-                if (accountType === 'personal') {
-                    // For personal accounts, go directly to completion
-                    handleSetupAccount([]);
-                } else {
-                    // For business accounts, go to organization step
-                    setStep(2);
+        // For email link users, they should already be authenticated
+        // Only attempt email/password registration if they have a password (new manual registration)
+        if (formData.password && formData.password.trim()) {
+            try {
+                console.log('Attempting to register with email/password...');
+                const userCredential = await registerWithEmail(formData.email, formData.password);
+                console.log('Registration successful:', userCredential.user.uid);
+                return userCredential.user;
+            } catch (error) {
+                if (error.code === 'auth/email-already-in-use') {
+                    console.log('Email already exists, attempting sign in...');
+                    try {
+                        const signInResult = await logInWithEmail(formData.email, formData.password);
+                        console.log('Sign in successful:', signInResult.user.uid);
+                        return signInResult.user;
+                    } catch (signInError) {
+                        console.error('Sign in failed:', signInError);
+                        throw new Error('Email already exists but password is incorrect');
+                    }
                 }
+                throw error;
             }
-        } else if (step === 2 && accountType === 'business') {
+        }
+
+        // If we reach here, something is wrong - user should be authenticated
+        throw new Error('User authentication failed - no valid authentication method found');
+    };
+
+    // UPDATED: Using userService for user document creation
+    const createUserAccount = async (user) => {
+        console.log('Creating user account for:', user.uid);
+
+        try {
+            // Prepare additional data from form
+            const additionalData = {
+                name: formData.name.trim(),
+                company: formData.company?.trim() || '',
+                industry: formData.industry || '',
+                companySize: formData.companySize || '',
+                accountType: accountType,
+                setupCompleted: true,
+                setupStep: 'completed'
+            };
+
+            // Use userService to create or update user document
+            const result = await createUserIfNotExists(user, additionalData, 'setup');
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
+            console.log('User account created/updated successfully:', {
+                isNewUser: result.isNewUser,
+                needsSetup: result.needsSetup
+            });
+
+            return result.userData;
+        } catch (error) {
+            console.error('Failed to create user account:', error);
+            throw error;
+        }
+    };
+
+    // UPDATED: Complete user setup using userService
+    const completeAccountSetup = async (user) => {
+        console.log('Completing account setup for:', user.uid);
+
+        try {
+            // Prepare setup data
+            const setupData = {
+                name: formData.name.trim(),
+                company: formData.company?.trim() || '',
+                industry: formData.industry || '',
+                companySize: formData.companySize || '',
+                accountType: accountType
+            };
+
+            // Use userService to complete setup
+            const userData = await completeUserSetup(user.uid, setupData);
+
+            console.log('Account setup completed successfully');
+            return userData;
+        } catch (error) {
+            console.error('Failed to complete account setup:', error);
+            throw error;
+        }
+    };
+
+    // UPDATED: Streamlined handleNextStep function
+    const handleNextStep = async () => {
+        console.log('handleNextStep called', { step, accountType, formData });
+
+        // Validation
+        const isNameValid = formData.name && formData.name.trim().length > 0;
+        const isEmailValid = formData.email && /\S+@\S+\.\S+/.test(formData.email);
+        const isPasswordValid = isGoogleAuth || (formData.password && formData.password.length >= 6);
+
+        if (!isNameValid || !isEmailValid || !isPasswordValid) {
+            console.log('Validation failed:', { isNameValid, isEmailValid, isPasswordValid });
+
+            if (!isNameValid) validateName(formData.name);
+            if (!isEmailValid) validateEmail(formData.email);
+            if (!isPasswordValid && !isGoogleAuth) {
+                validatePassword(formData.password, formData.confirmPassword);
+            }
+
+            toast.error('Please fix the form errors before continuing', {
+                duration: 3000,
+                position: "top-center"
+            });
+            return;
+        }
+
+        // Handle personal account completion
+        if (step === 1 && accountType === 'personal') {
+            console.log('Completing personal account setup...');
+            setIsLoading(true);
+
+            try {
+                // Step 1: Authenticate user
+                const user = await authenticateUser();
+                if (!user) {
+                    throw new Error('Authentication failed - no user returned');
+                }
+
+                // Step 2: Create/update user document using userService
+                await createUserAccount(user);
+
+                // Step 3: Clean up and redirect
+                localStorage.removeItem("googleUserName");
+                localStorage.removeItem("googleUserEmail");
+                localStorage.removeItem("registeredUserName");
+                localStorage.removeItem("emailForSignIn");
+                localStorage.removeItem("emailSentTimestamp");
+
+                toast.success("Account setup complete! Redirecting to dashboard...", {
+                    duration: 3000,
+                    position: "top-center"
+                });
+
+                // Small delay to show success message
+                setTimeout(() => {
+                    console.log('Redirecting to dashboard...');
+                    router.push("/dashboard");
+                }, 1500);
+
+            } catch (error) {
+                console.error('Personal account setup failed:', error);
+                toast.error(error.message || 'Account setup failed. Please try again.', {
+                    duration: 4000,
+                    position: "top-center"
+                });
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        // Handle business account flow
+        else if (step === 1 && accountType === 'business') {
+            console.log('Business account - moving to organization info step');
+            setStep(2);
+        }
+        else if (step === 2 && accountType === 'business') {
+            if (!formData.company.trim() || !formData.industry || !formData.companySize) {
+                toast.error('Please fill in all organization details', {
+                    duration: 3000,
+                    position: "top-center"
+                });
+                return;
+            }
+            console.log('Organization info validated - moving to team invite step');
             setStep(3);
         }
     };
@@ -229,54 +414,57 @@ const AccountSetup = () => {
         }
     };
 
-    // Account setup handlers
+    // UPDATED: Business account setup with userService
     const handleSendInvites = async (inviteEmails) => {
-        await handleSetupAccount(inviteEmails);
-    };
-
-    const handleSkip = async () => {
-        await handleSetupAccount([]);
-    };
-
-    const handleSetupAccount = async (inviteEmails = []) => {
-        const user = auth.currentUser;
-        if (!user) {
-            toast.error("User authentication failed. Please log in again.", {
-                duration: 4000,
-                position: "top-center"
-            });
-            router.push("/login");
-            return;
-        }
-
+        console.log('Completing business account setup with invites...');
         setIsLoading(true);
 
         try {
-            await accountService.setupAccount({
-                name: formData.name,
-                email: formData.email,
-                company: accountType === 'business' ? formData.company : '',
-                industry: accountType === 'business' ? formData.industry : '',
-                companySize: accountType === 'business' ? formData.companySize : '',
-                password: formData.password,
-                isGoogleAuth,
-                inviteEmails: accountType === 'business' ? inviteEmails : []
-            });
+            // Step 1: Authenticate user
+            const user = await authenticateUser();
+            if (!user) {
+                throw new Error('Authentication failed - no user returned');
+            }
 
-            toast.success("Account setup complete. Redirecting...", {
+            // Step 2: Complete user setup using userService
+            await completeAccountSetup(user);
+
+            // Step 3: Handle invites (implement your invite logic here)
+            if (inviteEmails && inviteEmails.length > 0) {
+                console.log('Processing team invites:', inviteEmails);
+                // TODO: Implement your invite sending logic
+            }
+
+            // Step 4: Clean up and redirect
+            localStorage.removeItem("googleUserName");
+            localStorage.removeItem("googleUserEmail");
+            localStorage.removeItem("registeredUserName");
+            localStorage.removeItem("emailForSignIn");
+            localStorage.removeItem("emailSentTimestamp");
+
+            toast.success("Account setup complete! Redirecting to dashboard...", {
                 duration: 3000,
                 position: "top-center"
             });
-            setTimeout(() => router.push("/dashboard"), 2000);
+
+            setTimeout(() => {
+                console.log('Redirecting to dashboard...');
+                router.push("/dashboard");
+            }, 1500);
+
         } catch (error) {
-            console.error("Setup error:", error);
-            toast.error(error.message || "An error occurred during account setup.", {
-                duration: 5000,
+            console.error('Business account setup failed:', error);
+            toast.error(error.message || 'Account setup failed. Please try again.', {
+                duration: 4000,
                 position: "top-center"
             });
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSkip = async () => {
+        await handleSendInvites([]);
     };
 
     // Step content renderer
@@ -298,7 +486,6 @@ const AccountSetup = () => {
                 );
 
             case 2:
-                // Only show organization step for business accounts
                 if (accountType === 'business') {
                     return (
                         <OrganizationInfoStep
@@ -310,7 +497,6 @@ const AccountSetup = () => {
                 return null;
 
             case 3:
-                // Only show team invite for business accounts
                 if (accountType === 'business') {
                     return (
                         <form onSubmit={(e) => e.preventDefault()}>
@@ -335,12 +521,13 @@ const AccountSetup = () => {
     // Validation for step navigation
     const canProceedToNextStep = () => {
         if (step === 1) {
-            if (!formData.name.trim() || !formData.email.trim()) return false;
-            if (!isGoogleAuth && (!formData.password || !formData.confirmPassword)) return false;
-            return !errors.name && !errors.email && !errors.password;
+            const hasRequiredFields = formData.name.trim() && formData.email.trim();
+            const hasPasswordFields = isGoogleAuth || (formData.password && formData.confirmPassword);
+            const noValidationErrors = !errors.name && !errors.email && !errors.password;
+
+            return hasRequiredFields && hasPasswordFields && noValidationErrors;
         }
         if (step === 2 && accountType === 'business') {
-            // Validate organization info
             return formData.company.trim() && formData.industry && formData.companySize;
         }
         return true;
@@ -359,6 +546,34 @@ const AccountSetup = () => {
         }
         return 'Next';
     };
+
+    // Show loading screen while auth is initializing
+    if (!authInitialized) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+                    <p className="text-slate-600">Initializing authentication...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Show loading screen only during account creation process
+    if (isLoading && (
+        (step === 1 && accountType === 'personal') ||
+        (step === 3 && accountType === 'business')
+    )) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+                    <p className="text-slate-600">Setting up your account...</p>
+                    <p className="text-slate-500 text-sm mt-2">This may take a moment</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
@@ -411,7 +626,7 @@ const AccountSetup = () => {
                         </div>
                         <h1 className="text-2xl font-bold text-slate-900 mb-1">Complete your setup</h1>
                         <p className="text-slate-600">
-                            {accountType === 'personal' 
+                            {accountType === 'personal'
                                 ? 'Complete your personal account setup to get started'
                                 : 'Complete your business account setup to get started'
                             }
@@ -439,10 +654,12 @@ const AccountSetup = () => {
                         </div>
                     </div>
 
-                    {/* Account type indicator (optional - for debugging) */}
+                    {/* Debug info for development */}
                     {process.env.NODE_ENV === 'development' && (
                         <div className="text-center mt-4 text-sm text-slate-500">
-                            Account Type: {accountType} | Steps: {totalSteps}
+                            Account Type: {accountType} | Steps: {totalSteps} | Current Step: {step}
+                            <br />
+                            Auth User: {authUser ? 'Yes' : 'No'} | Auth Initialized: {authInitialized ? 'Yes' : 'No'}
                         </div>
                     )}
                 </div>

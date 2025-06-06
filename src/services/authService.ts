@@ -14,8 +14,17 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "../config/firebase";
 
+/**
+ * Sign in with Google using popup
+ * @returns {Promise<UserCredential>}
+ */
 const signInWithGoogle = async (): Promise<UserCredential> => {
     try {
+        // Configure Google provider
+        googleProvider.setCustomParameters({
+            prompt: 'select_account'
+        });
+
         const result = await signInWithPopup(auth, googleProvider);
         return result;
     } catch (error) {
@@ -24,6 +33,10 @@ const signInWithGoogle = async (): Promise<UserCredential> => {
     }
 };
 
+/**
+ * Sign out current user
+ * @returns {Promise<void>}
+ */
 const logout = async (): Promise<void> => {
     try {
         await signOut(auth);
@@ -33,7 +46,12 @@ const logout = async (): Promise<void> => {
     }
 };
 
-// Traditional email/password registration
+/**
+ * Register user with email and password
+ * @param {string} email 
+ * @param {string} password 
+ * @returns {Promise<UserCredential>}
+ */
 const registerWithEmail = async (email: string, password: string): Promise<UserCredential> => {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -46,7 +64,12 @@ const registerWithEmail = async (email: string, password: string): Promise<UserC
     }
 };
 
-// Email link registration (passwordless)
+/**
+ * Register user with email link (passwordless)
+ * @param {string} email 
+ * @param {string} name 
+ * @returns {Promise<{success: boolean}>}
+ */
 const registerWithEmailLink = async (email: string, name: string): Promise<{ success: boolean }> => {
     try {
         const actionCodeSettings = {
@@ -68,7 +91,13 @@ const registerWithEmailLink = async (email: string, name: string): Promise<{ suc
     }
 };
 
-// Complete email link sign-in and optionally set password
+/**
+ * Complete email link sign-in and optionally set password
+ * @param {string} email 
+ * @param {string} url 
+ * @param {string|null} password 
+ * @returns {Promise<UserCredential>}
+ */
 const completeEmailLinkSignIn = async (email: string, url: string, password: string | null = null): Promise<UserCredential> => {
     try {
         if (!isSignInWithEmailLink(auth, url)) {
@@ -97,7 +126,12 @@ const completeEmailLinkSignIn = async (email: string, url: string, password: str
     }
 };
 
-// Traditional email/password login
+/**
+ * Sign in with email and password
+ * @param {string} email 
+ * @param {string} password 
+ * @returns {Promise<UserCredential>}
+ */
 const logInWithEmail = async (email: string, password: string): Promise<UserCredential> => {
     try {
         const result = await signInWithEmailAndPassword(auth, email, password);
@@ -109,7 +143,11 @@ const logInWithEmail = async (email: string, password: string): Promise<UserCred
     }
 };
 
-// Set password for existing user (useful after email link auth)
+/**
+ * Set password for existing user (useful after email link auth)
+ * @param {string} password 
+ * @returns {Promise<{success: boolean}>}
+ */
 const setUserPassword = async (password: string): Promise<{ success: boolean }> => {
     try {
         const user = auth.currentUser;
@@ -137,6 +175,15 @@ const setUserPassword = async (password: string): Promise<{ success: boolean }> 
     }
 };
 
+/**
+ * Check if current URL is a sign-in link
+ * @param {string} url 
+ * @returns {boolean}
+ */
+const isEmailSignInLink = (url: string): boolean => {
+    return isSignInWithEmailLink(auth, url);
+};
+
 export {
     signInWithGoogle,
     logInWithEmail,
@@ -145,5 +192,5 @@ export {
     registerWithEmailLink,
     completeEmailLinkSignIn,
     setUserPassword,
-    isSignInWithEmailLink
+    isEmailSignInLink
 };

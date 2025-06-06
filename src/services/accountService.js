@@ -67,7 +67,7 @@ export const accountService = {
         if (!isGoogleAuth && password) {
             try {
                 // Import the password setting function
-                const { setUserPassword } = await import('../services/authService');
+                const { setUserPassword } = await import('./authService');
                 await setUserPassword(password);
                 console.log('Password set successfully');
             } catch (error) {
