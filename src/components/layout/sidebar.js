@@ -1,271 +1,234 @@
-import React, { useState, useEffect, useRef } from "react";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import SignOutButton from "@/components/auth/SignOutButton";
+// components/layout/Sidebar.js
+'use client'
+import { useState } from 'react';
+import '../../app/globals.css';
+import { useRouter, usePathname } from 'next/navigation';
+import { useProject } from '../../context/ProjectContext';
 import {
-    LayoutDashboard, FileCode, BarChart3, Video, Bug, GitPullRequest,
-    Settings, HelpCircle, ChevronsLeft, ChevronsRight, ScrollText, Menu, X
-} from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import UserAvatar from "@/components/UserAvatar";
+    HomeIcon,
+    DocumentTextIcon,
+    BugAntIcon,
+    VideoCameraIcon,
+    BeakerIcon,
+    ChartBarIcon,
+    CogIcon,
+    PlusIcon,
+    FolderIcon,
+    CheckCircleIcon,
+    XMarkIcon,
+    ArrowPathIcon
+} from '@heroicons/react/24/outline';
 
-const Sidebar = ({ setActivePage }) => {
-    // Better SSR handling with a stronger initial state
-    const [mounted, setMounted] = useState(false);
-    const initialSelectedPage = useRef(null);
+const Sidebar = ({ isOpen, onClose }) => {
+    const router = useRouter();
+    const pathname = usePathname();
+    const { 
+        projects, 
+        activeProject, 
+        setActiveProject, 
+        canCreateProject,
+        userProfile,
+        refetchProjects
+    } = useProject();
+    
+    const [showProjectList, setShowProjectList] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // State declarations with server-safe defaults
-    const [isCollapsed, setIsCollapsed] = useState(false);
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [selectedPage, setSelectedPage] = useState("dashboard");
-    const [user, setUser] = useState(null);
-    const initialRenderRef = useRef(true);
-
-    // First effect - only handle initial mounting and data loading
-    useEffect(() => {
-        // Get saved active page first to avoid flashing
-        if (typeof window !== 'undefined') {
-            const storedPage = localStorage.getItem("activePage");
-            if (storedPage) {
-                initialSelectedPage.current = storedPage;
-                setSelectedPage(storedPage);
-                // Update parent component immediately
-                setActivePage(storedPage);
-            }
-
-            // Get saved sidebar state
-            const storedCollapsed = localStorage.getItem("sidebarCollapsed");
-            if (storedCollapsed !== null) {
-                setIsCollapsed(JSON.parse(storedCollapsed));
-            }
-        }
-
-        setMounted(true);
-    }, [setActivePage]);
-
-    // Separate effect for auth handling to avoid conflicts
-    useEffect(() => {
-        if (!mounted) return;
-
-        // Auth listener
-        const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-
-            // If user just logged in and we're still in initial render state
-            if (currentUser && initialRenderRef.current) {
-                // Only set to dashboard if no specific page was already saved
-                if (!initialSelectedPage.current) {
-                    setSelectedPage("dashboard");
-                    setActivePage("dashboard");
-                    localStorage.setItem("activePage", "dashboard");
-                }
-                initialRenderRef.current = false;
-            }
-        });
-
-        return () => unsubscribe();
-    }, [mounted, setActivePage]);
-
-    // Save collapsed state to localStorage when it changes
-    useEffect(() => {
-        if (mounted) {
-            localStorage.setItem("sidebarCollapsed", JSON.stringify(isCollapsed));
-        }
-    }, [isCollapsed, mounted]);
-
-    // Update parent component whenever selectedPage changes
-    useEffect(() => {
-        if (mounted && selectedPage) {
-            setActivePage(selectedPage);
-            // Save to localStorage when page changes
-            localStorage.setItem("activePage", selectedPage);
-        }
-    }, [selectedPage, setActivePage, mounted]);
-
-    // Close mobile menu on page change
-    useEffect(() => {
-        setIsMobileMenuOpen(false);
-    }, [selectedPage]);
-
-    // Close mobile menu when window resizes to larger than mobile breakpoint
-    useEffect(() => {
-        if (!mounted) return;
-
-        const handleResize = () => {
-            if (window.innerWidth >= 768) { // md breakpoint
-                setIsMobileMenuOpen(false);
-            }
-        };
-
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [mounted]);
-
-    const handlePageChange = (page) => {
-        setSelectedPage(page);
-    };
-
-    const toggleCollapse = () => {
-        setIsCollapsed(prev => !prev);
-    };
-
-    const toggleMobileMenu = () => {
-        setIsMobileMenuOpen(prev => !prev);
-    };
-
-    const navItems = [
-        { icon: LayoutDashboard, label: "Dashboard", page: "dashboard" },
-        { icon: Bug, label: "Bug Tracker", page: "bug-tracker" },
-        { icon: ScrollText, label: "Test Scripts", page: "test-scripts" },
-        { icon: FileCode, label: "Automated Scripts", page: "auto-scripts" },
-        { icon: BarChart3, label: "Reports", page: "reports" },
-        { icon: Video, label: "Recordings", page: "recordings" },
-        { icon: GitPullRequest, label: "Pull Requests", page: "pull-requests" },
-        { icon: Settings, label: "Settings", page: "settings" },
-        { icon: HelpCircle, label: "Help", page: "help" },
+    const navigation = [
+        { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+        { name: 'Test Cases', href: '/dashboard/test-cases', icon: DocumentTextIcon },
+        { name: 'Bug Reports', href: '/dashboard/bugs', icon: BugAntIcon },
+        { name: 'Screen Recorder', href: '/dashboard/recorder', icon: VideoCameraIcon },
+        { name: 'Automation', href: '/dashboard/automation', icon: BeakerIcon },
+        { name: 'Reports', href: '/dashboard/reports', icon: ChartBarIcon },
+        { name: 'Settings', href: '/dashboard/settings', icon: CogIcon },
     ];
 
-    // Display nothing during SSR to prevent layout shifts
-    if (!mounted) {
-        return null;
-    }
+    const handleProjectSwitch = (project) => {
+        setActiveProject(project);
+        setShowProjectList(false);
+        router.push('/dashboard');
+    };
+
+    const handleCreateProject = () => {
+        router.push('/dashboard/projects/new');
+        setShowProjectList(false);
+    };
+
+    const handleRefreshProjects = async () => {
+        setIsRefreshing(true);
+        await refetchProjects();
+        setIsRefreshing(false);
+    };
+
+    const getSubscriptionBadge = () => {
+        if (!userProfile) return null;
+        
+        const { subscriptionType } = userProfile;
+        const colors = {
+            free: 'bg-gray-100 text-gray-800',
+            individual: 'bg-blue-100 text-blue-800',
+            team: 'bg-green-100 text-green-800',
+            enterprise: 'bg-purple-100 text-purple-800'
+        };
+
+        return (
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colors[subscriptionType] || colors.free}`}>
+                {subscriptionType?.charAt(0).toUpperCase() + subscriptionType?.slice(1) || 'Free'}
+            </span>
+        );
+    };
+
+    const getProjectLimitInfo = () => {
+        if (!userProfile) return '';
+        
+        const { subscriptionType } = userProfile;
+        const limits = {
+            free: 1,
+            individual: 1,
+            team: 5,
+            enterprise: '∞'
+        };
+        
+        return `${projects.length}/${limits[subscriptionType] || 1}`;
+    };
 
     return (
         <>
-            {/* Mobile Toggle Button - Always visible on mobile */}
-            <button
-                onClick={toggleMobileMenu}
-                className="md:hidden fixed top-4 left-4 z-50 bg-[#2D3142] text-white p-2 rounded-md"
-                aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-            >
-                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+            {/* Mobile backdrop */}
+            {isOpen && (
+                <div 
+                    className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
+                    onClick={onClose}
+                />
+            )}
 
-            {/* Desktop Sidebar */}
-            <div
-                className={`bg-[#2D3142] text-white h-screen hidden md:flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? "w-20" : "w-56"
-                    }`}
-            >
-                <div className="p-4 flex items-center justify-between">
+            {/* Sidebar */}
+            <div className={`
+                fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
+                lg:translate-x-0 lg:static lg:inset-0
+                ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}>
+                {/* Sidebar Header */}
+                <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
                     <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center flex-shrink-0">
-                            <span className="text-xl font-bold text-[#00897B]">QA</span>
+                        <div className="flex-shrink-0">
+                            <BeakerIcon className="h-8 w-8 text-blue-600" />
                         </div>
-                        <div className={`ml-3 overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                            }`}>
-                            <h1 className="text-xl text-white font-bold whitespace-nowrap">TestTracker</h1>
-                        </div>
+                        <span className="ml-2 text-xl font-semibold text-gray-900">QA Suite</span>
                     </div>
                     <button
-                        onClick={toggleCollapse}
-                        className="text-white flex-shrink-0"
-                        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        onClick={onClose}
+                        className="lg:hidden p-1 rounded-md hover:bg-gray-100"
                     >
-                        {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
+                        <XMarkIcon className="h-6 w-6" />
                     </button>
                 </div>
 
-                <nav className="mt-5 px-2 flex-1">
-                    <div className="space-y-1">
-                        <TooltipProvider>
-                            {navItems.map((item) => (
-                                <Tooltip key={item.page}>
-                                    <TooltipTrigger asChild>
+                {/* Project Selector */}
+                <div className="p-4 border-b border-gray-200">
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowProjectList(!showProjectList)}
+                            className="w-full flex items-center justify-between p-3 text-left bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center">
+                                    <FolderIcon className="h-5 w-5 text-gray-400 mr-2" />
+                                    <span className="text-sm font-medium text-gray-900 truncate">
+                                        {activeProject?.name || 'Select Project'}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {getProjectLimitInfo()} projects • {getSubscriptionBadge()}
+                                </p>
+                            </div>
+                            <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                        </button>
+
+                        {/* Project Dropdown */}
+                        {showProjectList && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                <div className="p-2">
+                                    <div className="flex items-center justify-between mb-2 px-2">
+                                        <span className="text-xs font-medium text-gray-500">Your Projects</span>
                                         <button
-                                            onClick={() => handlePageChange(item.page)}
-                                            className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded transition-colors duration-200
-                                                ${selectedPage === item.page ? "bg-[#00897B] text-white" : "text-white hover:bg-[#00796B]"}
-                                            `}
+                                            onClick={handleRefreshProjects}
+                                            className="p-1 hover:bg-gray-100 rounded"
+                                            disabled={isRefreshing}
                                         >
-                                            <item.icon className="h-5 w-5 flex-shrink-0" />
-                                            <span className={`ml-3 whitespace-nowrap transition-all duration-300 ease-in-out ${isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100 inline"
-                                                }`}>
-                                                {item.label}
-                                            </span>
+                                            <ArrowPathIcon className={`h-3 w-3 text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} />
                                         </button>
-                                    </TooltipTrigger>
-                                    {isCollapsed && (
-                                        <TooltipContent side="right" className="bg-[#2D3142] text-white border-[#00897B]">
-                                            {item.label}
-                                        </TooltipContent>
+                                    </div>
+                                    
+                                    {projects.map((project) => (
+                                        <button
+                                            key={project.id}
+                                            onClick={() => handleProjectSwitch(project)}
+                                            className={`w-full flex items-center p-2 text-left rounded-md hover:bg-gray-50 ${
+                                                activeProject?.id === project.id ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
+                                            }`}
+                                        >
+                                            <FolderIcon className="h-4 w-4 mr-2" />
+                                            <div className="min-w-0 flex-1">
+                                                <span className="text-sm truncate block">{project.name}</span>
+                                                {project.description && (
+                                                    <span className="text-xs text-gray-500 truncate block">{project.description}</span>
+                                                )}
+                                            </div>
+                                            {activeProject?.id === project.id && (
+                                                <CheckCircleIcon className="h-4 w-4 ml-2 text-blue-600 flex-shrink-0" />
+                                            )}
+                                        </button>
+                                    ))}
+                                    
+                                    {canCreateProject() && (
+                                        <button
+                                            onClick={handleCreateProject}
+                                            className="w-full flex items-center p-2 text-left rounded-md hover:bg-gray-50 text-gray-600 border-t border-gray-100 mt-2 pt-3"
+                                        >
+                                            <PlusIcon className="h-4 w-4 mr-2" />
+                                            <span className="text-sm">Create New Project</span>
+                                        </button>
                                     )}
-                                </Tooltip>
-                            ))}
-                        </TooltipProvider>
+                                    
+                                    {!canCreateProject() && (
+                                        <div className="text-xs text-gray-500 p-2 border-t border-gray-100 mt-2 pt-3">
+                                            Project limit reached. Upgrade to create more.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
+                </div>
+
+                {/* Navigation */}
+                <nav className="flex-1 px-4 py-4 space-y-1">
+                    {navigation.map((item) => {
+                        const isActive = pathname === item.href;
+                        return (
+                            <button
+                                key={item.name}
+                                onClick={() => router.push(item.href)}
+                                className={`group flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                                    isActive
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                }`}
+                            >
+                                <item.icon
+                                    className={`mr-3 h-5 w-5 ${
+                                        isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
+                                    }`}
+                                />
+                                {item.name}
+                            </button>
+                        );
+                    })}
                 </nav>
-                {/* User Section */}
-                <div className="p-4 border-t border-[#00897B] flex items-center">
-                    <UserAvatar
-                        user={user}
-                        size="sm"
-                        className="flex-shrink-0"
-                    />
-                    <div className={`ml-3 transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                        }`}>
-                        <p className="text-sm font-medium text-white truncate">{user?.displayName || "Guest User"}</p>
-                        <p className="text-xs font-medium text-[#A5D6A7] truncate">{user?.email || "No email available"}</p>
-                    </div>
-                    <div className={`ml-auto transition-opacity duration-300`}>
-                        <SignOutButton variant="icon" className="h-5 w-5 text-white" />
-                    </div>
-                </div>
-            </div>
-
-            {/* Mobile Sidebar - Improved for better overlay */}
-            <div
-                className={`md:hidden fixed inset-0 z-40 ${isMobileMenuOpen ? "pointer-events-auto" : "pointer-events-none"
-                    }`}
-            >
-                {/* Backdrop with proper z-index */}
-                <div
-                    className={`absolute inset-0 bg-black transition-opacity duration-300 ${isMobileMenuOpen ? "opacity-50" : "opacity-0"
-                        }`}
-                    onClick={toggleMobileMenu}
-                    aria-hidden="true"
-                />
-
-                {/* Mobile sidebar with proper z-index and transition */}
-                <div
-                    className={`absolute top-0 left-0 h-full w-16 bg-[#2D3142] transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-                        }`}
-                >
-                    <div className="flex flex-col items-center py-4 pt-16">
-                        <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center mb-6">
-                            <span className="text-xl font-bold text-[#00897B]">QA</span>
-                        </div>
-
-                        <div className="flex flex-col space-y-6 items-center">
-                            <TooltipProvider>
-                                {navItems.map((item) => (
-                                    <Tooltip key={item.page}>
-                                        <TooltipTrigger asChild>
-                                            <button
-                                                onClick={() => handlePageChange(item.page)}
-                                                className={`flex items-center justify-center h-10 w-10 rounded transition-colors
-                                                    ${selectedPage === item.page ? "bg-[#00897B] text-white" : "text-white hover:bg-[#00796B]"}
-                                                `}
-                                                aria-label={item.label}
-                                            >
-                                                <item.icon className="h-5 w-5" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right" className="bg-[#2D3142] text-white border-[#00897B]">
-                                            {item.label}
-                                        </TooltipContent>
-                                    </Tooltip>
-                                ))}
-                            </TooltipProvider>
-                        </div>
-
-                        <div className="mt-auto">
-                            <UserAvatar
-                                user={user}
-                                size="sm"
-                            />
-                        </div>
-                    </div>
-                </div>
             </div>
         </>
     );

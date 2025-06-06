@@ -1,290 +1,207 @@
-"use client"
-import React, { useState, useRef, useEffect } from "react";
-import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
-import { Search, Play, UserPlus, FileText, Plus, Settings, User } from "lucide-react";
-import SignOutButton from "../auth/SignOutButton";
-import ScreenRecorderButton from "../bug-report/ScreenRecorder";
-import BugReportButton from "../BugReport";
-import UserAvatar from '../UserAvatar'
-import AddUserDropdown from "../modals/AddUserDropdown"
-import NotificationsDropdown from "../NotificationsDropdown";
+/* eslint-disable @next/next/no-img-element */
+// components/layout/Header.js
+'use client'
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useProject } from '../../context/ProjectContext';
+import { getAuth, signOut } from 'firebase/auth';
+import '../../app/globals.css';
+import {
+    Bars3Icon,
+    VideoCameraIcon,
+    BugAntIcon,
+    BellIcon,
+    UserCircleIcon,
+    ArrowRightOnRectangleIcon,
+    CogIcon,
+    FolderIcon
+} from '@heroicons/react/24/outline';
 
-const Header = ({ setShowBugForm }) => {
-    const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
-    const [showUserProfileDropdown, setShowUserProfileDropdown] = useState(false);
-    const [user, setUser] = useState(null);
+const Header = ({ onMenuClick }) => {
+    const router = useRouter();
+    const { user, userProfile, activeProject, projects, setActiveProject } = useProject();
+    const [showUserMenu, setShowUserMenu] = useState(false);
+    const [showProjectMenu, setShowProjectMenu] = useState(false);
+    const userMenuRef = useRef(null);
+    const projectMenuRef = useRef(null);
 
-    // Toggle user dropdown
-    const toggleAddUserDropdown = () => {
-        setShowAddUserDropdown(!showAddUserDropdown);
-        // Close other dropdowns when opening this one
-        if (!showAddUserDropdown) {
-            setShowUserProfileDropdown(false);
-            setShowReportOptions(false);
-            setShowTestCaseOptions(false);
-        }
-    };
-
-    // Toggle profile dropdown
-    const toggleUserProfileDropdown = () => {
-        setShowUserProfileDropdown(!showUserProfileDropdown);
-        // Close other dropdowns when opening this one
-        if (!showUserProfileDropdown) {
-            setShowAddUserDropdown(false);
-            setShowReportOptions(false);
-            setShowTestCaseOptions(false);
-        }
-    };
-
-    const [showReportOptions, setShowReportOptions] = useState(false);
-    const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
-
-    const reportButtonRef = useRef(null);
-    const testCaseButtonRef = useRef(null);
-    const reportDropdownRef = useRef(null);
-    const testCaseDropdownRef = useRef(null);
-    const userDropdownRef = useRef(null);
-    const addUserDropdownRef = useRef(null);
-
-    // State for dropdown positions
-    const [reportDropdownPosition, setReportDropdownPosition] = useState({ top: 0, left: 0 });
-    const [testCaseDropdownPosition, setTestCaseDropdownPosition] = useState({ top: 0, left: 0 });
-
-    // Handle recording completion
-    const handleRecordingComplete = (recordingData) => {
-        // In a real app, you might want to store this data or pass it to the bug form
-        console.log('Recording completed:', recordingData);
-
-        // Automatically open bug report form with recording data
-        setShowBugForm(true);
-    };
-
-    // Calculate dropdown positions when toggling
+    // Close menus when clicking outside
     useEffect(() => {
-        if (showReportOptions && reportButtonRef.current) {
-            const rect = reportButtonRef.current.getBoundingClientRect();
-            setReportDropdownPosition({
-                top: rect.bottom + window.scrollY,
-                left: rect.left
-            });
-        }
-    }, [showReportOptions]);
-
-    useEffect(() => {
-        if (showTestCaseOptions && testCaseButtonRef.current) {
-            const rect = testCaseButtonRef.current.getBoundingClientRect();
-            setTestCaseDropdownPosition({
-                top: rect.bottom + window.scrollY,
-                left: rect.left
-            });
-        }
-    }, [showTestCaseOptions]);
-
-    // Close dropdowns when clicking outside
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (reportDropdownRef.current && !reportDropdownRef.current.contains(event.target) &&
-                reportButtonRef.current && !reportButtonRef.current.contains(event.target)) {
-                setShowReportOptions(false);
+        const handleClickOutside = (event) => {
+            if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+                setShowUserMenu(false);
             }
-            if (testCaseDropdownRef.current && !testCaseDropdownRef.current.contains(event.target) &&
-                testCaseButtonRef.current && !testCaseButtonRef.current.contains(event.target)) {
-                setShowTestCaseOptions(false);
+            if (projectMenuRef.current && !projectMenuRef.current.contains(event.target)) {
+                setShowProjectMenu(false);
             }
-            if (userDropdownRef.current && !userDropdownRef.current.contains(event.target) &&
-                !event.target.closest('.user-avatar-container')) {
-                setShowUserProfileDropdown(false);
-            }
-            if (addUserDropdownRef.current && !addUserDropdownRef.current.contains(event.target) &&
-                !event.target.closest('.add-user-button')) {
-                setShowAddUserDropdown(false);
-            }
-        }
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [showReportOptions, showTestCaseOptions, showUserProfileDropdown, showAddUserDropdown]);
-    
-    useEffect(() => {
-        const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            if (currentUser) {
-                setUser({
-                    name: currentUser.displayName || "User",
-                    email: currentUser.email,
-                    photoURL: currentUser.photoURL || "/default-avatar.png",
-                });
-            } else {
-                setUser(null);
-            }
-        });
 
-        return () => unsubscribe();
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-    
-    const handleLogout = async () => {
-        const auth = getAuth();
-        await signOut(auth);
+
+    const handleSignOut = async () => {
+        try {
+            const auth = getAuth();
+            await signOut(auth);
+            router.push('/auth/login');
+        } catch (error) {
+            console.error('Error signing out:', error);
+        }
     };
+
+    const handleStartRecording = () => {
+        router.push('/dashboard/recorder');
+    };
+
+    const handleReportBug = () => {
+        router.push('/dashboard/bugs/new');
+    };
+
+    const handleProjectSwitch = (project) => {
+        setActiveProject(project);
+        setShowProjectMenu(false);
+        router.push('/dashboard');
+    };
+
+    const quickActions = [
+        {
+            name: 'Record Screen',
+            icon: VideoCameraIcon,
+            onClick: handleStartRecording,
+            className: 'bg-red-600 hover:bg-red-700 text-white'
+        },
+        {
+            name: 'Report Bug',
+            icon: BugAntIcon,
+            onClick: handleReportBug,
+            className: 'bg-orange-600 hover:bg-orange-700 text-white'
+        }
+    ];
 
     return (
-        <header className="relative bg-[#fff] shadow-sm z-[50] py-3 px-4 md:px-6 overflow-visible">
-            <div className="flex items-center justify-between space-x-2">
-
-                {/* Search Bar */}
-                <div className="relative flex-1 max-w-xs md:max-w-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-4 w-4 text-gray-600" />
-                    </div>
-                    <input
-                        type="text"
-                        className="block w-full pl-10 pr-3 py-2 rounded-md border border-gray-400 text-sm placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-[#00897B] focus:border-[#00897B]"
-                        placeholder="Search test cases, bugs, reports..."
-                    />
-                </div>
-
-                {/* Buttons Container */}
-                <div className="flex items-center space-x-3 overflow-x-auto whitespace-nowrap rounded-sm px-3 py-2 bg-white">
-
-                    {/* Run Tests */}
-                    <button className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2d3142] transition">
-                        <Play className="h-4 w-4" />
-                        <span className="hidden md:inline">Run Tests</span>
-                    </button>
-
-                    {/* Report Bug */}
-                    <BugReportButton className="text-[#2D3142] hover:bg-[rgb(165,214,167)] hover:text-[#2D3142] cursor-pointer" />
-
-                    {/* Enhanced Screen Recorder Button */}
-                    <div className="cursor-pointer">
-                        <ScreenRecorderButton onRecordingComplete={handleRecordingComplete} />
-                    </div>
-                    
-                    {/* Generate Report Dropdown */}
-                    <div className="relative">
+        <header className="bg-white shadow-sm border-b border-gray-200">
+            <div className="px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between h-16">
+                    {/* Left Section */}
+                    <div className="flex items-center">
+                        {/* Mobile menu button */}
                         <button
-                            ref={reportButtonRef}
-                            onClick={() => {
-                                setShowReportOptions(!showReportOptions);
-                                setShowTestCaseOptions(false);
-                                setShowUserProfileDropdown(false);
-                                setShowAddUserDropdown(false);
-                            }}
-                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5D6A7] hover:text-[#2D3142] transition"
+                            onClick={onMenuClick}
+                            className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
                         >
-                            <FileText className="h-4 w-4" />
-                            <span className="hidden md:inline cursor-pointer">Generate Report</span>
+                            <Bars3Icon className="h-6 w-6" />
                         </button>
+
+                        {/* Project Context */}
+                        <div className="hidden lg:flex items-center ml-4">
+                            <div className="relative" ref={projectMenuRef}>
+                                <button
+                                    onClick={() => setShowProjectMenu(!showProjectMenu)}
+                                    className="flex items-center px-3 py-2 text-sm bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                >
+                                    <FolderIcon className="h-4 w-4 text-gray-500 mr-2" />
+                                    <span className="font-medium text-gray-900">{activeProject?.name}</span>
+                                    <svg className="ml-2 h-4 w-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+
+                                {/* Project Dropdown */}
+                                {showProjectMenu && (
+                                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                        <div className="p-2">
+                                            <div className="px-2 py-1 text-xs font-medium text-gray-500 mb-1">
+                                                Switch Project
+                                            </div>
+                                            {projects.map((project) => (
+                                                <button
+                                                    key={project.id}
+                                                    onClick={() => handleProjectSwitch(project)}
+                                                    className={`w-full flex items-center p-2 text-left rounded-md hover:bg-gray-50 ${activeProject?.id === project.id ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
+                                                        }`}
+                                                >
+                                                    <FolderIcon className="h-4 w-4 mr-2" />
+                                                    <div className="min-w-0 flex-1">
+                                                        <span className="text-sm font-medium truncate block">{project.name}</span>
+                                                        {project.description && (
+                                                            <span className="text-xs text-gray-500 truncate block">{project.description}</span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Add Test Case Dropdown */}
-                    <div className="relative">
-                        <button
-                            ref={testCaseButtonRef}
-                            onClick={() => {
-                                setShowTestCaseOptions(!showTestCaseOptions);
-                                setShowReportOptions(false);
-                                setShowUserProfileDropdown(false);
-                                setShowAddUserDropdown(false);
-                            }}
-                            className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center space-x-2 hover:bg-[#A5d6a7] hover:text-[#2D3142] transition cursor-pointer"
-                        >
-                            <Plus className="h-4 w-4" />
-                            <span className="hidden md:inline">Add Test Case</span>
-                        </button>
-                    </div>
-                    
-                    {/* Add Team Member Button */}
-                    <div className="text-[#2D3142] px-3 py-2 text-sm rounded-xs flex items-center hover:bg-[#A5d6a7] transition cursor-pointer">
-                        <button
-                            onClick={toggleAddUserDropdown}
-                            className="relative add-user-button" 
-                        >
-                            <UserPlus className="h-4 w-4" />
-                        </button>
-                    </div>
+                    {/* Right Section */}
+                    <div className="flex items-center space-x-4">
+                        {/* Quick Actions */}
+                        <div className="hidden sm:flex items-center space-x-2">
+                            {quickActions.map((action) => (
+                                <button
+                                    key={action.name}
+                                    onClick={action.onClick}
+                                    className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${action.className}`}
+                                >
+                                    <action.icon className="h-4 w-4 mr-2" />
+                                    {action.name}
+                                </button>
+                            ))}
+                        </div>
 
-                    <NotificationsDropdown />
+                        {/* Notifications */}
+                        <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md">
+                            <BellIcon className="h-6 w-6" />
+                        </button>
 
-                    {/* User Avatar */}
-                    <div className="flex items-center relative user-avatar-container">
-                        <div onClick={toggleUserProfileDropdown} className="cursor-pointer">
-                            {user && <UserAvatar user={user} />}
+                        {/* User Menu */}
+                        <div className="relative" ref={userMenuRef}>
+                            <button
+                                onClick={() => setShowUserMenu(!showUserMenu)}
+                                className="flex items-center space-x-2 p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md"
+                            >
+                                {user?.photoURL ? (
+                                    <img
+                                        className="h-8 w-8 rounded-full"
+                                        src={user.photoURL}
+                                        alt=""
+                                    />
+                                ) : (
+                                    <UserCircleIcon className="h-8 w-8" />
+                                )}
+                            </button>
+
+                            {showUserMenu && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                                    <div className="p-2">
+                                        <div className="px-3 py-2 text-sm text-gray-700 font-medium border-b">
+                                            {userProfile?.name || user?.displayName || 'User'}
+                                        </div>
+                                        <button
+                                            onClick={() => router.push('/settings')}
+                                            className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                                        >
+                                            <CogIcon className="h-4 w-4 mr-2 text-gray-500" />
+                                            Settings
+                                        </button>
+                                        <button
+                                            onClick={handleSignOut}
+                                            className="w-full flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
+                                        >
+                                            <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2 text-red-500" />
+                                            Sign Out
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             </div>
-
-            {/* Report Options Dropdown - Fixed Position */}
-            {showReportOptions && (
-                <div
-                    ref={reportDropdownRef}
-                    className="fixed bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
-                    style={{
-                        top: `${reportDropdownPosition.top}px`,
-                        left: `${reportDropdownPosition.left}px`,
-                        minWidth: '160px'
-                    }}
-                >
-                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Summary</button>
-                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Bug Report</button>
-                </div>
-            )}
-
-            {/* Test Case Options Dropdown - Fixed Position */}
-            {showTestCaseOptions && (
-                <div
-                    ref={testCaseDropdownRef}
-                    className="fixed bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
-                    style={{
-                        top: `${testCaseDropdownPosition.top}px`,
-                        left: `${testCaseDropdownPosition.left}px`,
-                        minWidth: '160px'
-                    }}
-                >
-                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">New Test Case</button>
-                    <button className="block w-full text-left px-3 py-2 hover:bg-gray-100">Import Test Cases</button>
-                </div>
-            )}
-
-            {/* User Profile Dropdown */}
-            {showUserProfileDropdown && (
-                <div
-                    ref={userDropdownRef}
-                    className="absolute top-16 right-4 bg-white border border-gray-300 shadow-lg rounded-md text-sm z-50"
-                    style={{ minWidth: '200px' }}
-                >
-                    <div className="px-4 py-3 border-b border-gray-200">
-                        <p className="text-sm font-medium">{user.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                    </div>
-                    <div className="py-1">
-                        <button className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100">
-                            <User className="h-4 w-4 mr-2" />
-                            <span>Profile</span>
-                        </button>
-                        <button className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100">
-                            <Settings className="h-4 w-4 mr-2" />
-                            <span>Settings</span>
-                        </button>
-                        <div onClick={handleLogout} className="flex items-center w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600">
-                            <SignOutButton variant="text" />
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Add User Dropdown */}
-            {showAddUserDropdown && (
-                <div 
-                    ref={addUserDropdownRef}
-                    className="absolute right-16 top-16 bg-white border border-gray-300 shadow-lg rounded-md z-50"
-                >
-                    <AddUserDropdown onClose={() => setShowAddUserDropdown(false)} />
-                </div>
-            )}
         </header>
     );
 };
