@@ -1,8 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 // components/layout/Sidebar.js
 'use client'
 import { useState, useEffect } from 'react';
 import '../../app/globals.css';
-import { useRouter, usePathname } from 'next/navigation';
 import { useProject } from '../../context/ProjectContext';
 import {
     HomeIcon,
@@ -19,11 +19,11 @@ import {
     ArrowPathIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
+    StarIcon,
+    LockClosedIcon
 } from '@heroicons/react/24/outline';
 
-const Sidebar = ({ isOpen, onClose, setActivePage }) => {
-    const router = useRouter();
-    const pathname = usePathname();
+const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
     const { 
         projects, 
         activeProject, 
@@ -37,7 +37,6 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [mounted, setMounted] = useState(false);
-    const [selectedPage, setSelectedPage] = useState('dashboard');
 
     // Handle mounting and localStorage
     useEffect(() => {
@@ -47,18 +46,15 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
             if (storedCollapsed !== null) {
                 setIsCollapsed(JSON.parse(storedCollapsed));
             }
-
+            
             // Get saved active page
             const storedPage = localStorage.getItem("activePage");
-            if (storedPage) {
-                setSelectedPage(storedPage);
-                if (setActivePage) {
-                    setActivePage(storedPage);
-                }
+            if (storedPage && setActivePage) {
+                setActivePage(storedPage);
             }
         }
         setMounted(true);
-    }, [setActivePage]);
+    }, []);
 
     // Save collapsed state to localStorage
     useEffect(() => {
@@ -67,34 +63,67 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
         }
     }, [isCollapsed, mounted]);
 
-    // Update parent component and localStorage when page changes
+    // Save active page to localStorage
     useEffect(() => {
-        if (mounted && selectedPage) {
-            if (setActivePage) {
-                setActivePage(selectedPage);
-            }
-            localStorage.setItem("activePage", selectedPage);
+        if (mounted && activePage) {
+            localStorage.setItem("activePage", activePage);
         }
-    }, [selectedPage, setActivePage, mounted]);
+    }, [activePage, mounted]);
+
+    // Close project list when collapsing
+    useEffect(() => {
+        if (isCollapsed) {
+            setShowProjectList(false);
+        }
+    }, [isCollapsed]);
 
     const navigation = [
-        { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, page: 'dashboard' },
-        { name: 'Test Cases', href: '/dashboard/test-cases', icon: DocumentTextIcon, page: 'test-cases' },
-        { name: 'Bug Reports', href: '/dashboard/bugs', icon: BugAntIcon, page: 'bug-reports' },
-        { name: 'Screen Recorder', href: '/dashboard/recorder', icon: VideoCameraIcon, page: 'recorder' },
-        { name: 'Automation', href: '/dashboard/automation', icon: BeakerIcon, page: 'automation' },
-        { name: 'Reports', href: '/dashboard/reports', icon: ChartBarIcon, page: 'reports' },
-        { name: 'Settings', href: '/dashboard/settings', icon: CogIcon, page: 'settings' },
+        { name: 'Dashboard', icon: HomeIcon, page: 'dashboard' },
+        { name: 'Bug Tracker', icon: BugAntIcon, page: 'bug-tracker' },
+        { name: 'Test Scripts', icon: DocumentTextIcon, page: 'test-scripts' },
+        { name: 'Automated Scripts', icon: BeakerIcon, page: 'auto-scripts' },
+        { name: 'Reports', icon: ChartBarIcon, page: 'reports' },
+        { name: 'Recordings', icon: VideoCameraIcon, page: 'recordings' },
+        { name: 'Settings', icon: CogIcon, page: 'settings' },
     ];
 
+    // Check if user has premium features (team/enterprise subscriptions)
+    const isPremiumUser = () => {
+        return userProfile?.subscriptionType === 'team' || userProfile?.subscriptionType === 'enterprise';
+    };
+
+    // Check if user can create projects (function or boolean)
+    const canUserCreateProject = () => {
+        if (typeof canCreateProject === 'function') {
+            return canCreateProject();
+        }
+        return canCreateProject === true;
+    };
+
     const handleProjectSwitch = (project) => {
-        setActiveProject(project);
-        setShowProjectList(false);
-        router.push('/dashboard');
+        if (isPremiumUser()) {
+            setActiveProject(project);
+            setShowProjectList(false);
+            // Optionally switch to dashboard when changing projects
+            if (setActivePage) {
+                setActivePage('dashboard');
+            }
+        }
     };
 
     const handleCreateProject = () => {
-        router.push('/dashboard/projects/new');
+        if (canUserCreateProject()) {
+            if (setActivePage) {
+                setActivePage('create-project');
+            }
+            setShowProjectList(false);
+        }
+    };
+
+    const handleUpgrade = () => {
+        if (setActivePage) {
+            setActivePage('upgrade');
+        }
         setShowProjectList(false);
     };
 
@@ -105,8 +134,11 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
     };
 
     const handlePageChange = (item) => {
-        setSelectedPage(item.page);
-        router.push(item.href);
+        // Smooth page transition - no URL changes, just state updates
+        if (setActivePage) {
+            setActivePage(item.page);
+        }
+        
         // Close mobile sidebar on page change
         if (onClose) {
             onClose();
@@ -129,7 +161,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
         };
 
         return (
-            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colors[subscriptionType] || colors.free}`}>
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors ${colors[subscriptionType] || colors.free}`}>
                 {subscriptionType?.charAt(0).toUpperCase() + subscriptionType?.slice(1) || 'Free'}
             </span>
         );
@@ -158,162 +190,235 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
             {/* Mobile backdrop */}
             {isOpen && (
                 <div 
-                    className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
+                    className="fixed inset-0 z-40 bg-gray-600/75 lg:hidden transition-opacity duration-300"
                     onClick={onClose}
                 />
             )}
 
             {/* Sidebar */}
             <div className={`
-                fixed inset-y-0 left-0 z-50 bg-white shadow-lg transform transition-all duration-300 ease-in-out
+                fixed inset-y-0 left-0 z-50 bg-white shadow-xl transform transition-all duration-300 ease-out
                 lg:translate-x-0 lg:static lg:inset-0
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-                ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}
+                ${isCollapsed ? 'lg:w-16' : 'lg:w-64'}
                 w-64
             `}>
                 {/* Sidebar Header */}
-                <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-                    <div className="flex items-center min-w-0">
-                        <div className="flex-shrink-0">
+                <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white">
+                    <div className="flex items-center min-w-0 flex-1">
+                        <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
                             <BeakerIcon className="h-8 w-8 text-blue-600" />
                         </div>
-                        <div className={`ml-2 overflow-hidden transition-all duration-300 ease-in-out ${
+                        <div className={`ml-3 overflow-hidden transition-all duration-300 ease-out ${
                             isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'
                         }`}>
-                            <span className="text-xl font-semibold text-gray-900 whitespace-nowrap">QA Suite</span>
+                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                QA Suite
+                            </span>
                         </div>
                     </div>
                     
-                    {/* Mobile close button */}
-                    <button
-                        onClick={onClose}
-                        className="lg:hidden p-1 rounded-md hover:bg-gray-100 flex-shrink-0"
-                    >
-                        <XMarkIcon className="h-6 w-6" />
-                    </button>
-                    
-                    {/* Desktop collapse button */}
-                    <button
-                        onClick={toggleCollapse}
-                        className="hidden lg:block p-1 rounded-md hover:bg-gray-100 flex-shrink-0"
-                        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                    >
-                        {isCollapsed ? 
-                            <ChevronRightIcon className="h-5 w-5 text-gray-600" /> : 
-                            <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
-                        }
-                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* Desktop collapse button */}
+                        <button
+                            onClick={toggleCollapse}
+                            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 hover:scale-105"
+                            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        >
+                            <div className="transition-all duration-300">
+                                {isCollapsed ? 
+                                    <ChevronRightIcon className="h-4 w-4 text-gray-600" /> : 
+                                    <ChevronLeftIcon className="h-4 w-4 text-gray-600" />
+                                }
+                            </div>
+                        </button>
+                        
+                        {/* Mobile close button */}
+                        <button
+                            onClick={onClose}
+                            className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-all duration-200"
+                        >
+                            <XMarkIcon className="h-5 w-5 text-gray-600" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Project Selector */}
-                <div className={`p-4 border-b border-gray-200 ${isCollapsed ? 'lg:px-3' : ''}`}>
-                    <div className="relative">
+                <div className={`p-4 border-b border-gray-200/50 transition-all duration-300 ${
+                    isCollapsed ? 'lg:px-2' : 'px-4'
+                }`}>
+                    <div className="relative group">
                         <button
-                            onClick={() => setShowProjectList(!showProjectList)}
-                            className={`w-full flex items-center justify-between p-3 text-left bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors ${
-                                isCollapsed ? 'lg:justify-center lg:px-2' : ''
+                            onClick={() => !isCollapsed && setShowProjectList(!showProjectList)}
+                            disabled={isCollapsed}
+                            className={`w-full flex items-center p-3 text-left bg-gray-50/80 backdrop-blur-sm rounded-xl hover:bg-gray-100/80 hover:shadow-sm transition-all duration-200 hover:scale-[1.02] ${
+                                isCollapsed ? 'lg:justify-center lg:px-2 lg:cursor-default' : 'justify-between'
                             }`}
                             title={isCollapsed ? activeProject?.name || 'Select Project' : ''}
                         >
                             <div className="min-w-0 flex-1 flex items-center">
-                                <FolderIcon className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                                <div className={`ml-2 min-w-0 transition-all duration-300 ease-in-out ${
-                                    isCollapsed ? 'lg:w-0 lg:opacity-0 lg:hidden' : 'w-auto opacity-100'
+                                <FolderIcon className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                                <div className={`ml-3 min-w-0 transition-all duration-300 ease-out ${
+                                    isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'
                                 }`}>
-                                    <span className="text-sm font-medium text-gray-900 truncate block">
-                                        {activeProject?.name || 'Select Project'}
+                                    <span className="text-sm font-semibold text-gray-900 truncate block">
+                                        {activeProject?.name || 'My Project'}
                                     </span>
-                                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                        {getProjectLimitInfo()} projects • {getSubscriptionBadge()}
-                                    </p>
+                                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+                                        <span>{getProjectLimitInfo()} projects</span>
+                                        <span>•</span>
+                                        {getSubscriptionBadge()}
+                                    </div>
                                 </div>
                             </div>
-                            <svg className={`h-5 w-5 text-gray-400 flex-shrink-0 transition-all duration-300 ${
-                                isCollapsed ? 'lg:hidden' : ''
-                            }`} fill="currentColor" viewBox="0 0 20 20">
+                            <svg className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-all duration-300 ${
+                                isCollapsed ? 'lg:opacity-0 lg:w-0' : 'opacity-100 w-4'
+                            } ${showProjectList ? 'rotate-180' : 'rotate-0'}`} fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                             </svg>
                         </button>
 
-                        {/* Project Dropdown */}
-                        {showProjectList && !isCollapsed && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                                <div className="p-2">
-                                    <div className="flex items-center justify-between mb-2 px-2">
-                                        <span className="text-xs font-medium text-gray-500">Your Projects</span>
-                                        <button
-                                            onClick={handleRefreshProjects}
-                                            className="p-1 hover:bg-gray-100 rounded"
-                                            disabled={isRefreshing}
-                                        >
-                                            <ArrowPathIcon className={`h-3 w-3 text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-                                        </button>
-                                    </div>
-                                    
-                                    {projects.map((project) => (
-                                        <button
-                                            key={project.id}
-                                            onClick={() => handleProjectSwitch(project)}
-                                            className={`w-full flex items-center p-2 text-left rounded-md hover:bg-gray-50 ${
-                                                activeProject?.id === project.id ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
-                                            }`}
-                                        >
-                                            <FolderIcon className="h-4 w-4 mr-2 flex-shrink-0" />
-                                            <div className="min-w-0 flex-1">
-                                                <span className="text-sm truncate block">{project.name}</span>
-                                                {project.description && (
-                                                    <span className="text-xs text-gray-500 truncate block">{project.description}</span>
-                                                )}
-                                            </div>
-                                            {activeProject?.id === project.id && (
-                                                <CheckCircleIcon className="h-4 w-4 ml-2 text-blue-600 flex-shrink-0" />
-                                            )}
-                                        </button>
-                                    ))}
-                                    
-                                    {canCreateProject() && (
-                                        <button
-                                            onClick={handleCreateProject}
-                                            className="w-full flex items-center p-2 text-left rounded-md hover:bg-gray-50 text-gray-600 border-t border-gray-100 mt-2 pt-3"
-                                        >
-                                            <PlusIcon className="h-4 w-4 mr-2 flex-shrink-0" />
-                                            <span className="text-sm">Create New Project</span>
-                                        </button>
-                                    )}
-                                    
-                                    {!canCreateProject() && (
-                                        <div className="text-xs text-gray-500 p-2 border-t border-gray-100 mt-2 pt-3">
-                                            Project limit reached. Upgrade to create more.
+                        {/* Project Dropdown with smooth animation */}
+                        <div className={`absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-md border border-gray-200/50 rounded-xl shadow-lg z-10 transition-all duration-300 origin-top ${
+                            showProjectList && !isCollapsed 
+                                ? 'opacity-100 scale-100 translate-y-0' 
+                                : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+                        }`}>
+                            <div className="p-3">
+                                {isPremiumUser() ? (
+                                    <>
+                                        {/* Premium User - Full Project Management */}
+                                        <div className="flex items-center justify-between mb-3 px-2">
+                                            <span className="text-xs font-semibold text-gray-600">Your Projects</span>
+                                            <button
+                                                onClick={handleRefreshProjects}
+                                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-all duration-200 hover:scale-105"
+                                                disabled={isRefreshing}
+                                            >
+                                                <ArrowPathIcon className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-300 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                            </button>
                                         </div>
-                                    )}
+                                        
+                                        <div className="space-y-1">
+                                            {projects.map((project) => (
+                                                <button
+                                                    key={project.id}
+                                                    onClick={() => handleProjectSwitch(project)}
+                                                    className={`w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 transition-all duration-200 hover:scale-[1.01] ${
+                                                        activeProject?.id === project.id ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'text-gray-900'
+                                                    }`}
+                                                >
+                                                    <FolderIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                                    <div className="min-w-0 flex-1">
+                                                        <span className="text-sm font-medium truncate block">{project.name}</span>
+                                                        {project.description && (
+                                                            <span className="text-xs text-gray-500 truncate block mt-0.5">{project.description}</span>
+                                                        )}
+                                                    </div>
+                                                    {activeProject?.id === project.id && (
+                                                        <CheckCircleIcon className="h-4 w-4 ml-2 text-blue-600 flex-shrink-0" />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        
+                                        {canUserCreateProject() && (
+                                            <button
+                                                onClick={handleCreateProject}
+                                                className="w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 text-gray-600 border-t border-gray-100 mt-3 pt-3 transition-all duration-200 hover:scale-[1.01]"
+                                            >
+                                                <PlusIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                                <span className="text-sm font-medium">Create New Project</span>
+                                            </button>
+                                        )}
+                                        
+                                        {!canUserCreateProject() && (
+                                            <div className="text-xs text-gray-500 p-2.5 border-t border-gray-100 mt-3 pt-3 text-center">
+                                                Project limit reached for your plan.
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Free/Individual User - Upgrade Prompt */}
+                                        <div className="text-center py-4">
+                                            <div className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-3">
+                                                <StarIcon className="h-6 w-6 text-white" />
+                                            </div>
+                                            <h3 className="text-sm font-semibold text-gray-900 mb-1">Multiple Projects</h3>
+                                            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                                                Upgrade to Team or Enterprise to manage multiple projects and unlock advanced features.
+                                            </p>
+                                            
+                                            {/* Current project display */}
+                                            <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                                                <div className="flex items-center justify-center">
+                                                    <FolderIcon className="h-4 w-4 text-gray-400 mr-2" />
+                                                    <span className="text-sm text-gray-600">Current Project</span>
+                                                </div>
+                                                <div className="text-sm font-medium text-gray-900 mt-1">
+                                                    {activeProject?.name || 'My Project'}
+                                                </div>
+                                            </div>
+                                            
+                                            <button
+                                                onClick={handleUpgrade}
+                                                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200 hover:scale-[1.02] shadow-sm"
+                                            >
+                                                Upgrade Now
+                                            </button>
+                                            
+                                            <div className="mt-3 text-xs text-gray-400">
+                                                <LockClosedIcon className="h-3 w-3 inline mr-1" />
+                                                Team: 5 projects • Enterprise: Unlimited
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Collapsed state tooltip */}
+                        {isCollapsed && (
+                            <div className="hidden lg:group-hover:block absolute left-full top-0 ml-3 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none transition-all duration-200">
+                                <div className="font-medium">{activeProject?.name || 'My Project'}</div>
+                                <div className="text-xs opacity-75 mt-1">
+                                    {getProjectLimitInfo()} projects • {userProfile?.subscriptionType || 'Free'}
                                 </div>
+                                {!isPremiumUser() && (
+                                    <div className="text-xs opacity-75 mt-1 text-yellow-300">
+                                        <StarIcon className="h-3 w-3 inline mr-1" />
+                                        Upgrade for multiple projects
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
                 </div>
 
                 {/* Navigation */}
-                <nav className={`flex-1 py-4 space-y-1 ${isCollapsed ? 'px-3' : 'px-4'}`}>
+                <nav className={`flex-1 py-4 space-y-1 transition-all duration-300 ${
+                    isCollapsed ? 'px-2' : 'px-4'
+                }`}>
                     {navigation.map((item) => {
-                        const isActive = selectedPage === item.page || pathname === item.href;
+                        const isActive = activePage === item.page;
                         return (
-                            <div key={item.name} className="relative">
+                            <div key={item.name} className="relative group">
                                 <button
                                     onClick={() => handlePageChange(item)}
-                                    className={`group flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                                    className={`group/btn flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 hover:scale-[1.02] ${
                                         isActive
-                                            ? 'bg-blue-100 text-blue-700'
+                                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25'
                                             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                                     } ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
-                                    title={isCollapsed ? item.name : ''}
                                 >
                                     <item.icon
-                                        className={`h-5 w-5 flex-shrink-0 ${
-                                            isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
+                                        className={`h-5 w-5 flex-shrink-0 transition-all duration-200 ${
+                                            isActive ? 'text-white' : 'text-gray-400 group-hover/btn:text-gray-600'
                                         }`}
                                     />
-                                    <span className={`ml-3 transition-all duration-300 ease-in-out ${
-                                        isCollapsed ? 'lg:w-0 lg:opacity-0 lg:hidden' : 'w-auto opacity-100'
+                                    <span className={`ml-3 transition-all duration-300 ease-out font-semibold ${
+                                        isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'
                                     }`}>
                                         {item.name}
                                     </span>
@@ -321,7 +426,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
                                 
                                 {/* Tooltip for collapsed state */}
                                 {isCollapsed && (
-                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded whitespace-nowrap z-50">
+                                    <div className="hidden lg:group-hover:block absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none transition-all duration-200">
                                         {item.name}
                                     </div>
                                 )}
@@ -332,19 +437,23 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
 
                 {/* User Profile Section */}
                 {userProfile && (
-                    <div className={`p-4 border-t border-gray-200 ${isCollapsed ? 'px-3' : ''}`}>
-                        <div className={`flex items-center ${isCollapsed ? 'lg:justify-center' : ''}`}>
+                    <div className={`p-4 border-t border-gray-200/50 bg-gradient-to-r from-gray-50/50 to-white transition-all duration-300 ${
+                        isCollapsed ? 'px-2' : 'px-4'
+                    }`}>
+                        <div className={`flex items-center p-2 rounded-xl hover:bg-gray-50/80 transition-all duration-200 hover:scale-[1.02] cursor-pointer group ${
+                            isCollapsed ? 'lg:justify-center' : ''
+                        }`}>
                             <div className="flex-shrink-0">
-                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                                    <span className="text-sm font-medium text-blue-600">
+                                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
+                                    <span className="text-sm font-bold text-white">
                                         {userProfile.name?.charAt(0) || 'U'}
                                     </span>
                                 </div>
                             </div>
-                            <div className={`ml-3 min-w-0 transition-all duration-300 ease-in-out ${
-                                isCollapsed ? 'lg:w-0 lg:opacity-0 lg:hidden' : 'w-auto opacity-100'
+                            <div className={`ml-3 min-w-0 transition-all duration-300 ease-out ${
+                                isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'
                             }`}>
-                                <p className="text-sm font-medium text-gray-900 truncate">
+                                <p className="text-sm font-semibold text-gray-900 truncate">
                                     {userProfile.name || 'User'}
                                 </p>
                                 <p className="text-xs text-gray-500 truncate">
@@ -352,6 +461,14 @@ const Sidebar = ({ isOpen, onClose, setActivePage }) => {
                                 </p>
                             </div>
                         </div>
+                        
+                        {/* Collapsed state tooltip for user profile */}
+                        {isCollapsed && (
+                            <div className="hidden group-hover:block absolute left-full bottom-4 ml-3 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none transition-all duration-200">
+                                <div className="font-medium">{userProfile.name || 'User'}</div>
+                                <div className="text-xs opacity-75">{userProfile.email}</div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
