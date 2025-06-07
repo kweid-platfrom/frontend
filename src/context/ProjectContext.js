@@ -1,6 +1,6 @@
 // contexts/ProjectContext.js
 'use client'
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../config/firebase';
 import {
@@ -10,7 +10,8 @@ import {
     getDocs,
     doc,
     getDoc,
-    orderBy
+    orderBy,
+    limit
 } from 'firebase/firestore';
 
 const ProjectContext = createContext();
@@ -29,10 +30,40 @@ export const ProjectProvider = ({ children }) => {
     const [projects, setProjects] = useState([]);
     const [activeProject, setActiveProject] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [needsOnboarding, setNeedsOnboarding] = useState(false);
+    const [isUserLoading, setIsUserLoading] = useState(true);
+    const [isProjectsLoading, setIsProjectsLoading] = useState(true);
 
-    // Check subscription status
-    const checkSubscriptionStatus = (userProfile) => {
+    // Cache for reducing Firebase calls
+    const [cache, setCache] = useState({
+        userProfile: null,
+        projects: null,
+        timestamp: null
+    });
+
+    // Memoized values for better performance
+    const needsOnboarding = useMemo(() => {
+        return !isUserLoading && !isProjectsLoading && projects.length === 0;
+    }, [isUserLoading, isProjectsLoading, projects.length]);
+
+    const canCreateProject = useMemo(() => {
+        if (!userProfile) return false;
+        const { subscriptionType } = userProfile;
+        const projectCount = projects.length;
+
+        switch (subscriptionType) {
+            case 'free':
+            case 'individual':
+                return projectCount < 1;
+            case 'team':
+                return projectCount < 5;
+            case 'enterprise':
+                return true;
+            default:
+                return false;
+        }
+    }, [userProfile, projects.length]);
+
+    const subscriptionStatus = useMemo(() => {
         if (!userProfile) return { isValid: false, isExpired: true };
 
         const now = new Date();
@@ -47,154 +78,211 @@ export const ProjectProvider = ({ children }) => {
         }
 
         return { isValid: true, isExpired: false };
-    };
+    }, [userProfile]);
 
-    // Fetch user profile
-    const fetchUserProfile = async (uid) => {
+    // Optimized cache check (5 minutes cache)
+    const isCacheValid = useCallback(() => {
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+        return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
+    }, [cache.timestamp]);
+
+    // Fetch user profile with caching
+    const fetchUserProfile = useCallback(async (uid) => {
         try {
+            // Return cached data if valid
+            if (isCacheValid() && cache.userProfile) {
+                return cache.userProfile;
+            }
+
             const userDoc = await getDoc(doc(db, 'users', uid));
             if (userDoc.exists()) {
-                return userDoc.data();
+                const profileData = userDoc.data();
+                setCache(prev => ({
+                    ...prev,
+                    userProfile: profileData,
+                    timestamp: Date.now()
+                }));
+                return profileData;
             }
             return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
-            return null;
+            // Return cached data as fallback
+            return cache.userProfile || null;
         }
-    };
+    }, [cache.userProfile, isCacheValid]);
 
-    // Fetch user projects
-    const fetchUserProjects = async (uid, organizationId = null) => {
+    // Optimized project fetching with pagination and caching
+    const fetchUserProjects = useCallback(async (uid, organizationId = null) => {
         try {
+            // Return cached data if valid
+            if (isCacheValid() && cache.projects) {
+                return cache.projects;
+            }
+
             let q;
             if (organizationId) {
-                // Company account - fetch organization projects
                 q = query(
                     collection(db, 'projects'),
                     where('organizationId', '==', organizationId),
-                    orderBy('createdAt', 'desc')
+                    orderBy('createdAt', 'desc'),
+                    limit(50) // Limit initial load
                 );
             } else {
-                // Personal account - fetch user's projects
                 q = query(
                     collection(db, 'projects'),
                     where('createdBy', '==', uid),
                     where('organizationId', '==', null),
-                    orderBy('createdAt', 'desc')
+                    orderBy('createdAt', 'desc'),
+                    limit(50) // Limit initial load
                 );
             }
 
             const querySnapshot = await getDocs(q);
-            const projectList = [];
+            const projectList = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
 
-            querySnapshot.forEach((doc) => {
-                projectList.push({
-                    id: doc.id,
-                    ...doc.data()
-                });
-            });
+            setCache(prev => ({
+                ...prev,
+                projects: projectList,
+                timestamp: Date.now()
+            }));
 
             return projectList;
         } catch (error) {
             console.error('Error fetching projects:', error);
-            return [];
+            // Return cached data as fallback
+            return cache.projects || [];
         }
-    };
+    }, [cache.projects, isCacheValid]);
 
-    // Check if user can create more projects
-    const canCreateProject = () => {
-        if (!userProfile) return false;
+    // Optimized data loading with parallel requests
+    const loadUserData = useCallback(async (currentUser) => {
+        if (!currentUser) return;
 
-        const { subscriptionType } = userProfile;
-        const projectCount = projects.length;
+        try {
+            // Load user profile first (needed for project query)
+            setIsUserLoading(true);
+            const profile = await fetchUserProfile(currentUser.uid);
+            setUserProfile(profile);
+            setIsUserLoading(false);
 
-        switch (subscriptionType) {
-            case 'free':
-            case 'individual':
-                return projectCount < 1;
-            case 'team':
-                return projectCount < 5;
-            case 'enterprise':
-                return true; // Unlimited
-            default:
-                return false;
+            // Load projects in parallel if we have profile
+            if (profile) {
+                setIsProjectsLoading(true);
+                const userProjects = await fetchUserProjects(
+                    currentUser.uid,
+                    profile.organizationId
+                );
+                setProjects(userProjects);
+
+                // Set active project from localStorage or first project
+                if (userProjects.length > 0) {
+                    const savedProjectId = localStorage.getItem('activeProjectId');
+                    const activeProj = userProjects.find(p => p.id === savedProjectId) || userProjects[0];
+                    setActiveProject(activeProj);
+                }
+                setIsProjectsLoading(false);
+            }
+        } catch (error) {
+            console.error('Error loading user data:', error);
+            setIsUserLoading(false);
+            setIsProjectsLoading(false);
         }
-    };
+    }, [fetchUserProfile, fetchUserProjects]);
 
-    // Auth state listener
+    // Optimized auth state listener
     useEffect(() => {
         const auth = getAuth();
+        let mounted = true;
+
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (!mounted) return;
+
             setIsLoading(true);
 
             if (currentUser) {
                 setUser(currentUser);
-
-                // Fetch user profile
-                const profile = await fetchUserProfile(currentUser.uid);
-                setUserProfile(profile);
-
-                if (profile) {
-                    // Fetch projects
-                    const userProjects = await fetchUserProjects(
-                        currentUser.uid,
-                        profile.organizationId
-                    );
-                    setProjects(userProjects);
-
-                    // Check if onboarding is needed
-                    if (userProjects.length === 0) {
-                        setNeedsOnboarding(true);
-                    } else {
-                        setNeedsOnboarding(false);
-                        // Set active project (last created or from localStorage)
-                        const savedProjectId = localStorage.getItem('activeProjectId');
-                        const activeProj = userProjects.find(p => p.id === savedProjectId) || userProjects[0];
-                        setActiveProject(activeProj);
-                    }
-                }
+                await loadUserData(currentUser);
             } else {
+                // Clear all user data
                 setUser(null);
                 setUserProfile(null);
                 setProjects([]);
                 setActiveProject(null);
-                setNeedsOnboarding(false);
+                setIsUserLoading(false);
+                setIsProjectsLoading(false);
+                // Clear cache
+                setCache({ userProfile: null, projects: null, timestamp: null });
             }
 
-            setIsLoading(false);
+            if (mounted) {
+                setIsLoading(false);
+            }
         });
 
-        return () => unsubscribe();
-    }, []);
+        return () => {
+            mounted = false;
+            unsubscribe();
+        };
+    }, [loadUserData]);
 
-    // Save active project to localStorage
+    // Save active project to localStorage (debounced)
     useEffect(() => {
-        if (activeProject) {
-            localStorage.setItem('activeProjectId', activeProject.id);
+        if (activeProject?.id) {
+            const timeoutId = setTimeout(() => {
+                localStorage.setItem('activeProjectId', activeProject.id);
+            }, 100);
+            return () => clearTimeout(timeoutId);
         }
-    }, [activeProject]);
+    }, [activeProject?.id]);
 
-    const value = {
+    // Optimized refetch function
+    const refetchProjects = useCallback(async () => {
+        if (!user || !userProfile) return;
+
+        setIsProjectsLoading(true);
+        // Clear cache to force fresh data
+        setCache(prev => ({ ...prev, projects: null, timestamp: null }));
+        
+        try {
+            const userProjects = await fetchUserProjects(
+                user.uid,
+                userProfile.organizationId
+            );
+            setProjects(userProjects);
+        } finally {
+            setIsProjectsLoading(false);
+        }
+    }, [user, userProfile, fetchUserProjects]);
+
+    const value = useMemo(() => ({
         user,
         userProfile,
         projects,
         activeProject,
         setActiveProject,
-        isLoading,
+        isLoading: isLoading || isUserLoading, // Dashboard can show once user is loaded
+        isProjectsLoading,
         needsOnboarding,
-        setNeedsOnboarding,
         canCreateProject,
-        checkSubscriptionStatus: () => checkSubscriptionStatus(userProfile),
-        refetchProjects: async () => {
-            if (user && userProfile) {
-                const userProjects = await fetchUserProjects(
-                    user.uid,
-                    userProfile.organizationId
-                );
-                setProjects(userProjects);
-            }
-        }
-    };
+        checkSubscriptionStatus: () => subscriptionStatus,
+        refetchProjects
+    }), [
+        user,
+        userProfile,
+        projects,
+        activeProject,
+        isLoading,
+        isUserLoading,
+        isProjectsLoading,
+        needsOnboarding,
+        canCreateProject,
+        subscriptionStatus,
+        refetchProjects
+    ]);
 
     return (
         <ProjectContext.Provider value={value}>

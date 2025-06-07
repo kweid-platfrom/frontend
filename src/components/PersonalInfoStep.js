@@ -29,7 +29,7 @@ export const PersonalInfoStep = ({
                     } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
                     type="text"
                     placeholder="John Doe"
-                    value={formData.name}
+                    value={formData.name || ''}
                     onChange={(e) => {
                         onInputChange('name', e.target.value);
                         if (errors.name) onClearError('name');
@@ -52,7 +52,8 @@ export const PersonalInfoStep = ({
                     } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
                     type="email"
                     placeholder="name@company.com"
-                    value={formData.email}
+                    value={formData.email || ''}
+                    disabled={isGoogleAuth} // Disable email field for Google auth users
                     onChange={(e) => {
                         onInputChange('email', e.target.value);
                         if (errors.email) onClearError('email');
@@ -60,6 +61,9 @@ export const PersonalInfoStep = ({
                 />
                 {errors.email && (
                     <p className="text-red-600 text-xs mt-2">{errors.email}</p>
+                )}
+                {isGoogleAuth && (
+                    <p className="text-sm text-slate-500">Email from Google account</p>
                 )}
             </div>
 
@@ -78,7 +82,7 @@ export const PersonalInfoStep = ({
                                 } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
                                 type={showPassword ? "text" : "password"}
                                 placeholder="Enter a secure password"
-                                value={formData.password}
+                                value={formData.password || ''}
                                 onChange={(e) => {
                                     onInputChange('password', e.target.value);
                                     if (errors.password) onClearError('password');
@@ -92,6 +96,9 @@ export const PersonalInfoStep = ({
                                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                         </div>
+                        {errors.password && (
+                            <p className="text-red-600 text-xs mt-2">{errors.password}</p>
+                        )}
                     </div>
 
                     <div className="space-y-2">
@@ -101,16 +108,16 @@ export const PersonalInfoStep = ({
                         <div className="relative">
                             <input
                                 className={`w-full px-4 py-2 pr-12 border-2 rounded text-slate-900 placeholder-slate-400 bg-slate-50/50 transition-all duration-200 ${
-                                    errors.password 
+                                    errors.confirmPassword 
                                         ? "border-red-300 focus:border-red-500 focus:bg-red-50/50" 
                                         : "border-slate-200 focus:border-teal-500 focus:bg-white"
                                 } focus:outline-none focus:ring-4 focus:ring-teal-500/10`}
                                 type={showConfirmPassword ? "text" : "password"}
                                 placeholder="Confirm your password"
-                                value={formData.confirmPassword}
+                                value={formData.confirmPassword || ''}
                                 onChange={(e) => {
                                     onInputChange('confirmPassword', e.target.value);
-                                    if (errors.password) onClearError('password');
+                                    if (errors.confirmPassword) onClearError('confirmPassword');
                                 }}
                             />
                             <button
@@ -121,8 +128,8 @@ export const PersonalInfoStep = ({
                                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                         </div>
-                        {errors.password && (
-                            <p className="text-red-600 text-xs mt-2">{errors.password}</p>
+                        {errors.confirmPassword && (
+                            <p className="text-red-600 text-xs mt-2">{errors.confirmPassword}</p>
                         )}
                     </div>
                 </>

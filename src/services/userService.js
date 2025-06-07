@@ -19,17 +19,22 @@ const extractNameFromEmail = (email) => {
         .join(' ');
 };
 
-// Determine account type based on email domain
+// FIXED: Determine account type based on email domain
 const determineAccountType = (email) => {
     if (!email) return 'personal';
 
-    const businessDomains = [
+    // Common personal/public email domains
+    const personalDomains = [
         'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
-        'icloud.com', 'aol.com', 'protonmail.com'
+        'icloud.com', 'aol.com', 'protonmail.com', 'live.com',
+        'ymail.com', 'rocketmail.com', 'mail.com', 'zoho.com'
     ];
 
     const domain = email.split('@')[1]?.toLowerCase();
-    return businessDomains.includes(domain) ? 'personal' : 'business';
+    
+    // If it's a public domain, it's personal
+    // If it's a custom domain, it's business
+    return personalDomains.includes(domain) ? 'personal' : 'business';
 };
 
 // Parse display name into first/last name
@@ -134,9 +139,24 @@ export const createUserDocument = async (firebaseUser, additionalData = {}, sour
             setupCompleted: userData.setupCompleted
         });
 
-        // Write to Firestore
+        // Write to Firestore with retry logic for offline issues
         const userRef = doc(db, 'users', firebaseUser.uid);
-        await setDoc(userRef, userData);
+        
+        try {
+            await setDoc(userRef, userData);
+        } catch (firestoreError) {
+            console.error('Firestore write error:', firestoreError);
+            
+            // If offline, try to enable offline persistence
+            if (firestoreError.code === 'unavailable') {
+                console.log('🔄 Retrying Firestore operation...');
+                // Wait a bit and retry
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                await setDoc(userRef, userData);
+            } else {
+                throw firestoreError;
+            }
+        }
 
         // Verify document was created
         const createdDoc = await getDoc(userRef);
@@ -158,7 +178,7 @@ export const createUserDocument = async (firebaseUser, additionalData = {}, sour
         if (error.code === 'permission-denied') {
             throw new Error('Permission denied. Please check your account permissions and try again.');
         } else if (error.code === 'unavailable') {
-            throw new Error('Network error. Please check your connection and try again.');
+            throw new Error('Service temporarily unavailable. Please check your connection and try again.');
         } else if (error.code === 'unauthenticated') {
             throw new Error('Authentication error. Please sign in again.');
         } else {
@@ -280,8 +300,18 @@ export const completeUserSetup = async (userId, setupData) => {
             updatedAt: serverTimestamp()
         };
 
-        // Merge with existing document
-        await setDoc(userRef, updateData, { merge: true });
+        // Merge with existing document with retry logic
+        try {
+            await setDoc(userRef, updateData, { merge: true });
+        } catch (firestoreError) {
+            if (firestoreError.code === 'unavailable') {
+                console.log('🔄 Retrying setup completion...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                await setDoc(userRef, updateData, { merge: true });
+            } else {
+                throw firestoreError;
+            }
+        }
 
         // Fetch and return updated document
         const updatedDoc = await getDoc(userRef);

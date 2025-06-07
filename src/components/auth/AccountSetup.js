@@ -198,8 +198,25 @@ const AccountSetup = () => {
             ...prev,
             [field]: value
         }));
+
+        // Clear existing error for this field
         if (errors[field]) {
             clearError(field);
+        }
+
+        // Real-time validation for better UX
+        if (field === 'name' && value.trim()) {
+            validateName(value);
+        } else if (field === 'email' && value.trim()) {
+            validateEmail(value);
+        } else if (field === 'password' || field === 'confirmPassword') {
+            // Only validate if both fields have values to avoid premature error display
+            const currentPassword = field === 'password' ? value : formData.password;
+            const currentConfirmPassword = field === 'confirmPassword' ? value : formData.confirmPassword;
+
+            if (currentPassword && currentConfirmPassword) {
+                validatePassword(currentPassword, currentConfirmPassword);
+            }
         }
     };
 
@@ -322,23 +339,22 @@ const AccountSetup = () => {
         }
     };
 
-    // UPDATED: Streamlined handleNextStep function
     const handleNextStep = async () => {
         console.log('handleNextStep called', { step, accountType, formData });
 
         // Validation
-        const isNameValid = formData.name && formData.name.trim().length > 0;
-        const isEmailValid = formData.email && /\S+@\S+\.\S+/.test(formData.email);
-        const isPasswordValid = isGoogleAuth || (formData.password && formData.password.length >= 6);
+        const isNameValid = validateName(formData.name);
+        const isEmailValid = validateEmail(formData.email);
 
+        // Password validation - only for non-Google auth users
+        let isPasswordValid = true;
+        if (!isGoogleAuth) {
+            isPasswordValid = validatePassword(formData.password, formData.confirmPassword);
+        }
+
+        // Check if all validations passed
         if (!isNameValid || !isEmailValid || !isPasswordValid) {
             console.log('Validation failed:', { isNameValid, isEmailValid, isPasswordValid });
-
-            if (!isNameValid) validateName(formData.name);
-            if (!isEmailValid) validateEmail(formData.email);
-            if (!isPasswordValid && !isGoogleAuth) {
-                validatePassword(formData.password, formData.confirmPassword);
-            }
 
             toast.error('Please fix the form errors before continuing', {
                 duration: 3000,
@@ -521,15 +537,27 @@ const AccountSetup = () => {
     // Validation for step navigation
     const canProceedToNextStep = () => {
         if (step === 1) {
-            const hasRequiredFields = formData.name.trim() && formData.email.trim();
-            const hasPasswordFields = isGoogleAuth || (formData.password && formData.confirmPassword);
+            const hasName = formData.name && formData.name.trim().length > 0;
+            const hasEmail = formData.email && formData.email.trim().length > 0;
+
+            // For Google auth users, skip password validation
+            if (isGoogleAuth) {
+                return hasName && hasEmail && !errors.name && !errors.email;
+            }
+
+            // For regular users, check password requirements
+            const hasPassword = formData.password && formData.password.length >= 8;
+            const hasConfirmPassword = formData.confirmPassword && formData.confirmPassword.length >= 8;
+            const passwordsMatch = formData.password === formData.confirmPassword;
             const noValidationErrors = !errors.name && !errors.email && !errors.password;
 
-            return hasRequiredFields && hasPasswordFields && noValidationErrors;
+            return hasName && hasEmail && hasPassword && hasConfirmPassword && passwordsMatch && noValidationErrors;
         }
+
         if (step === 2 && accountType === 'business') {
             return formData.company.trim() && formData.industry && formData.companySize;
         }
+
         return true;
     };
 
