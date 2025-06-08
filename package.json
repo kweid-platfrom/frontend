@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@firebase/firestore": "^4.7.9",
+    "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
     "@mui/icons-material": "^6.4.8",
     "@mui/material": "^6.4.8",

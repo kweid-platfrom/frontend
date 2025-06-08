@@ -1,11 +1,11 @@
-// app/dashboard/reports/page.js - Reports Page
+// app/dashboard/test-cases/page.js - Test Cases Page
 'use client'
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
-export default function ReportsPage() {
+export default function TestScriptsPage() {
     return (
         <DashboardLayout>
-            <ReportsPage />
+            <TestScriptsPage />
         </DashboardLayout>
     );
 }

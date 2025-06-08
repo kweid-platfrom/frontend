@@ -1,10 +1,8 @@
 // app/dashboard/test-cases/page.js - Test Cases Page
 'use client'
-import DashboardLayout from '@/components/layout/DashboardLayout';
 
-export default function TestCasesPage() {
+export default function TestScriptsPage() {
     return (
-        <DashboardLayout>
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
                     <div>
@@ -38,6 +36,5 @@ export default function TestCasesPage() {
                     </div>
                 </div>
             </div>
-        </DashboardLayout>
     );
 }

@@ -1,10 +1,7 @@
 // app/dashboard/automation/page.js - Automation Page
-'use client'
-import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function AutomationPage() {
     return (
-        <DashboardLayout>
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
                     <div>
@@ -48,6 +45,5 @@ export default function AutomationPage() {
                     </div>
                 </div>
             </div>
-        </DashboardLayout>
     );
 }

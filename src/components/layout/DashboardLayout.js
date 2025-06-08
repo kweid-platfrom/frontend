@@ -1,50 +1,37 @@
 'use client'
-import { useState, Suspense, lazy } from 'react';
+import { useState, Suspense, lazy, memo, useCallback } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import Header from './header';
+import Sidebar from './sidebar'; // Remove lazy loading for critical navigation
 import '../../app/globals.css';
 
-// Lazy load heavy components
-const Sidebar = lazy(() => import('./sidebar'));
+// Only lazy load heavy components and onboarding
 const CreateProjectOnboarding = lazy(() => import('../onboarding/CreateProjectOnboarding'));
 
 // Lazy load page components
-const DashboardPage = lazy(() => import('../dashboard/DashboardPage'));
-const BugTrackerPage = lazy(() => import('../bug-tracker/BugTrackerPage'));
-const TestScriptsPage = lazy(() => import('../test-scripts/TestScriptsPage'));
-const AutoScriptsPage = lazy(() => import('../auto-scripts/AutoScriptsPage'));
-const ReportsPage = lazy(() => import('../reports/ReportsPage'));
-const RecordingsPage = lazy(() => import('../recordings/RecordingsPage'));
-const SettingsPage = lazy(() => import('../settings/SettingsPage'));
-const CreateProjectPage = lazy(() => import('../../components/modals/CreateProjectModal'));
-const UpgradePage = lazy(() => import('../../pages/upgrade/UpgradePage'));
+const DashboardPage = lazy(() => import('../../pages/dashboard/DashboardPage'));
+const BugTrackerPage = lazy(() => import('../../pages/dashboard/BugTrackerPage'));
+const TestScriptsPage = lazy(() => import('../../pages/dashboard/TestScriptsPage'));
+const AutoScriptsPage = lazy(() => import('../../pages/dashboard/AutoScriptsPage'));
+const ReportsPage = lazy(() => import('../../pages/dashboard/ReportsPage'));
+const RecordingsPage = lazy(() => import('../../pages/dashboard/RecordingsPage'));
+const SettingsPage = lazy(() => import('../../pages/dashboard/SettingsPage'));
+const CreateProjectPage = lazy(() => import('../modals/CreateProjectModal'));
+const UpgradePage = lazy(() => import('../../pages/dashboard/UpgradePage'));
 
 // Optimized loading skeleton component
-const LoadingSkeleton = () => (
+const LoadingSkeleton = memo(() => (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading your workspace...</p>
         </div>
     </div>
-);
-
-// Sidebar loading fallback
-const SidebarFallback = () => (
-    <div className="w-64 bg-white shadow-lg border-r border-gray-200 animate-pulse">
-        <div className="p-4 space-y-4">
-            <div className="h-8 bg-gray-200 rounded"></div>
-            <div className="space-y-2">
-                {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-6 bg-gray-200 rounded"></div>
-                ))}
-            </div>
-        </div>
-    </div>
-);
+));
+LoadingSkeleton.displayName = 'LoadingSkeleton';
 
 // Page content loading fallback
-const PageLoadingFallback = () => (
+const PageLoadingFallback = memo(() => (
     <div className="animate-pulse space-y-4">
         <div className="h-8 bg-gray-200 rounded w-1/3"></div>
         <div className="space-y-2">
@@ -53,12 +40,17 @@ const PageLoadingFallback = () => (
             <div className="h-4 bg-gray-200 rounded w-4/6"></div>
         </div>
     </div>
-);
+));
+PageLoadingFallback.displayName = 'PageLoadingFallback';
 
 const DashboardLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [activePage, setActivePage] = useState('dashboard'); // Add page state management
+    const [activePage, setActivePage] = useState('dashboard');
     const { needsOnboarding, isLoading } = useProject();
+    
+    // Memoize callbacks to prevent unnecessary re-renders
+    const handleMenuClick = useCallback(() => setSidebarOpen(true), []);
+    const handleSidebarClose = useCallback(() => setSidebarOpen(false), []);
     
     // Show loading state immediately
     if (isLoading) {
@@ -152,22 +144,20 @@ const DashboardLayout = ({ children }) => {
 
     return (
         <div className="flex h-screen bg-gray-50">
-            {/* Lazy-loaded Sidebar with fallback */}
-            <Suspense fallback={sidebarOpen ? <SidebarFallback /> : null}>
-                <Sidebar 
-                    isOpen={sidebarOpen} 
-                    onClose={() => setSidebarOpen(false)}
-                    activePage={activePage}
-                    setActivePage={setActivePage}
-                />
-            </Suspense>
+            {/* Sidebar - Load immediately, no lazy loading */}
+            <Sidebar 
+                isOpen={sidebarOpen} 
+                onClose={handleSidebarClose}
+                activePage={activePage}
+                setActivePage={setActivePage}
+            />
 
             {/* Main Content - Load immediately */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header - Keep immediate loading for critical UI */}
                 <Header 
-                    onMenuClick={() => setSidebarOpen(true)}
-                    activePage={activePage} // Optional: pass to header if needed
+                    onMenuClick={handleMenuClick}
+                    activePage={activePage}
                 />
 
                 {/* Main Content Area with optimized rendering */}
