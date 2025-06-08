@@ -8,6 +8,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { toast } from "sonner";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
+import BackgroundDecorations from "../BackgroundDecorations";
 import '../../app/globals.css';
 
 const Login = () => {
@@ -134,62 +135,31 @@ const Login = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
-            {/* Diagonal Zigzag Background Decoration */}
-            <svg 
-                className="absolute inset-0 w-full h-full pointer-events-none opacity-30" 
-                viewBox="0 0 100 100" 
-                preserveAspectRatio="none"
-            >
-                <defs>
-                    <linearGradient id="zigzagGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.4" />
-                        <stop offset="50%" stopColor="#0891b2" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.2" />
-                    </linearGradient>
-                </defs>
-                <path 
-                    d="M-10,10 L20,40 L50,10 L80,40 L110,10 L110,25 L80,55 L50,25 L20,55 L-10,25 Z" 
-                    fill="url(#zigzagGradient)" 
-                />
-                <path 
-                    d="M-10,50 L20,80 L50,50 L80,80 L110,50 L110,65 L80,95 L50,65 L20,95 L-10,65 Z" 
-                    fill="url(#zigzagGradient)" 
-                />
-            </svg>
-
-            {/* Additional Subtle Zigzag Lines */}
-            <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-1/4 left-0 w-full h-px bg-gradient-to-r from-transparent via-teal-200/60 to-transparent transform rotate-12"></div>
-                <div className="absolute top-3/4 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-200/50 to-transparent transform -rotate-12"></div>
-            </div>
-
-            {/* Existing Decorative Lines */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-20 left-0 w-px h-32 bg-gradient-to-b from-transparent via-teal-200 to-transparent"></div>
-                <div className="absolute top-40 right-10 w-px h-24 bg-gradient-to-b from-transparent via-slate-200 to-transparent"></div>
-                <div className="absolute bottom-32 left-20 w-16 h-px bg-gradient-to-r from-transparent via-teal-200 to-transparent"></div>
-                <div className="absolute bottom-20 right-0 w-20 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-                <div className="absolute top-1/3 left-1/4 w-px h-16 bg-gradient-to-b from-transparent via-slate-200 to-transparent transform rotate-45"></div>
-                <div className="absolute top-2/3 right-1/4 w-12 h-px bg-gradient-to-r from-transparent via-teal-200 to-transparent transform rotate-45"></div>
-            </div>
+            <BackgroundDecorations />
 
             {/* Main Content */}
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
-                <div className="w-full max-w-sm">
-                    {/* Welcome Section */}
-                    <div className="text-center mb-6">
-                        <div className="inline-block mb-4">
-                            <div className="font-bold text-2xl sm:text-3xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                <div className="w-full max-w-md">
+                    {/* Logo - Outside the card */}
+                    <div className="text-center mb-8">
+                        <div className="inline-block">
+                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
                                 QAID
                             </div>
                         </div>
-                        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">Welcome back</h1>
-                        <p className="text-sm sm:text-base text-slate-600">Your testing hub awaits</p>
                     </div>
 
-                    {/* Login Form Card */}
-                    <div className="bg-white/90 backdrop-blur-sm rounded shadow-sm shadow-slate-200/50 border border-slate-200/50 p-4 sm:p-6">
-                        <form className="space-y-4 sm:space-y-5" onSubmit={handleLogin} noValidate>
+                    {/* Login Form Card - More prominent */}
+                    <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
+                        {/* Card glow effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
+                        
+                        {/* Header - Inside the card */}
+                        <div className="text-center mb-8">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Welcome back</h1>
+                            <p className="text-base sm:text-lg text-slate-600">Your testing hub awaits</p>
+                        </div>
+                        <form className="space-y-6" onSubmit={handleLogin} noValidate>
                             {/* Email Input */}
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-slate-700 block">
@@ -274,10 +244,10 @@ const Login = () => {
                         </form>
 
                         {/* Divider */}
-                        <div className="flex items-center my-4 sm:my-6">
-                            <div className="flex-grow border-t border-slate-200"></div>
-                            <span className="px-3 text-xs sm:text-sm text-slate-500 font-medium">or continue with</span>
-                            <div className="flex-grow border-t border-slate-200"></div>
+                        <div className="flex items-center my-8">
+                            <div className="flex-grow border-t border-slate-300"></div>
+                            <span className="px-4 text-sm text-slate-500 font-medium bg-white">or continue with</span>
+                            <div className="flex-grow border-t border-slate-300"></div>
                         </div>
 
                         {/* Google Sign In */}

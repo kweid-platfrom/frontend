@@ -13,7 +13,7 @@ import {
     BeakerIcon
 } from '@heroicons/react/24/outline';
 
-const CreateProjectOnboarding = () => {
+const ProjectCreationForm = () => {
     const router = useRouter();
     const { user, userProfile, refetchProjects, setNeedsOnboarding } = useProject();
     const [projectName, setProjectName] = useState('');
@@ -210,4 +210,4 @@ const CreateProjectOnboarding = () => {
     );
 };
 
-export default CreateProjectOnboarding;
+export default ProjectCreationForm;

@@ -16,17 +16,17 @@ const RegistrationForm = ({
             {/* Name Fields Row */}
             <div className="grid grid-cols-2 gap-4">
                 <FormInput
-                    label="First name"
+                    // label="First name"
                     type="text"
-                    placeholder="John"
+                    placeholder="Firstname  "
                     value={formData.firstName}
                     error={errors.firstName}
                     onChange={(value) => onInputChange('firstName', value)}
                 />
                 <FormInput
-                    label="Last name"
+                    // label="Last name"
                     type="text"
-                    placeholder="Doe"
+                    placeholder="Lastname"
                     value={formData.lastName}
                     error={errors.lastName}
                     onChange={(value) => onInputChange('lastName', value)}
@@ -41,7 +41,7 @@ const RegistrationForm = ({
 
             {/* Email Input */}
             <FormInput
-                label={formData.userType === "organization" ? "Company Email" : "Email"}
+                // label={formData.userType === "organization" ? "Company Email" : "Email"}
                 type="email"
                 placeholder={formData.userType === "organization" ? "name@yourcompany.com" : "name@example.com"}
                 value={formData.email}
@@ -52,7 +52,7 @@ const RegistrationForm = ({
 
             {/* Password Fields */}
             <FormInput
-                label="Password"
+                // label="Password"
                 type="password"
                 placeholder="Enter your password"
                 value={formData.password}
@@ -62,7 +62,7 @@ const RegistrationForm = ({
             />
 
             <FormInput
-                label="Confirm password"
+                // label="Confirm password"
                 type="password"
                 placeholder="Confirm your password"
                 value={formData.confirmPassword}
@@ -80,7 +80,7 @@ const RegistrationForm = ({
             {/* Submit Button */}
             <button
                 type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg px-6 py-3 transition-all duration-200 flex justify-center items-center gap-2 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded px-4 py-2 transition-all duration-200 flex justify-center items-center gap-2 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 disabled={loading}
             >
                 {loading ? (

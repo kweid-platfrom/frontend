@@ -6,7 +6,7 @@ import Sidebar from './sidebar'; // Remove lazy loading for critical navigation
 import '../../app/globals.css';
 
 // Only lazy load heavy components and onboarding
-const CreateProjectOnboarding = lazy(() => import('../onboarding/CreateProjectOnboarding'));
+const CreateProjectOnboarding = lazy(() => import('../onboarding/ProjectCreationForm'));
 
 // Lazy load page components
 const DashboardPage = lazy(() => import('../../pages/dashboard/DashboardPage'));
