@@ -1,7 +1,7 @@
 // components/onboarding/OrganizationInfoForm.js
 import React, { useState } from 'react';
 import { Building2, ArrowRight, Loader2 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthProvider';
 
 const OrganizationInfoForm = ({ onComplete }) => {
     const [formData, setFormData] = useState({

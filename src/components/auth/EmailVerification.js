@@ -1,263 +1,211 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { applyActionCode, checkActionCode } from "firebase/auth";
-import { auth } from "../../config/firebase";
-import { toast, Toaster } from "sonner";
-import BackgroundDecorations from "../BackgroundDecorations";
+// components/auth/EmailVerificationSuccess.js
+'use client'
+import React, { useEffect, useState } from 'react';
+import { CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthProvider';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { applyActionCode, checkActionCode } from 'firebase/auth';
+import { auth } from '../../config/firebase'; // Adjust path as needed
 
 const EmailVerification = () => {
-    const [verificationState, setVerificationState] = useState('verifying'); // 'verifying', 'success', 'error', 'expired'
-    const [errorMessage, setErrorMessage] = useState('');
-    const [userEmail, setUserEmail] = useState('');
+    const [status, setStatus] = useState('verifying'); // verifying, success, error
+    const [message, setMessage] = useState('Verifying your email...');
+    const { currentUser, updateUserProfile } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
 
     useEffect(() => {
-        const verifyEmail = async () => {
+        const verifyEmailFromURL = async () => {
             try {
-                // Get action code from URL parameters
-                const actionCode = searchParams.get('oobCode');
+                // Get the action code from URL parameters
                 const mode = searchParams.get('mode');
+                const oobCode = searchParams.get('oobCode');
+                const continueUrl = searchParams.get('continueUrl');
 
-                if (!actionCode || mode !== 'verifyEmail') {
-                    setVerificationState('error');
-                    setErrorMessage('Invalid verification link. Please check your email for the correct link.');
-                    return;
-                }
+                console.log('URL params:', { mode, oobCode, continueUrl });
 
-                console.log('Verifying email with action code:', actionCode);
+                // Check if this is an email verification request
+                if (mode === 'verifyEmail' && oobCode) {
+                    try {
+                        // Verify the action code first
+                        await checkActionCode(auth, oobCode);
+                        
+                        // Apply the email verification
+                        await applyActionCode(auth, oobCode);
+                        
+                        // Wait a moment for Firebase to update
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        // Reload the current user to get updated status
+                        if (auth.currentUser) {
+                            await auth.currentUser.reload();
+                            
+                            // Update user record in Firestore
+                            await updateUserProfile(auth.currentUser.uid, {
+                                emailVerified: true,
+                                emailVerifiedAt: new Date()
+                            });
+                        }
 
-                // First, check if the action code is valid
-                const info = await checkActionCode(auth, actionCode);
-                console.log('Action code info:', info);
-                
-                // Get user email from the action code info
-                const email = info.data.email;
-                setUserEmail(email);
+                        setStatus('success');
+                        setMessage('Email verified successfully!');
 
-                // Apply the email verification
-                await applyActionCode(auth, actionCode);
-                console.log('Email verification successful');
+                        // Redirect to onboarding after 3 seconds
+                        setTimeout(() => {
+                            router.push('/onboarding');
+                        }, 3000);
 
-                // Check if we have stored registration data
-                const registrationData = localStorage.getItem("registrationData");
-                const googleRegistrationData = localStorage.getItem("googleRegistrationData");
-                
-                setVerificationState('success');
-                
-                // Show success message
-                toast.success("Email verified successfully! Redirecting to complete your setup...", {
-                    duration: 4000,
-                    position: "top-center"
-                });
-
-                // Redirect to onboarding/setup after a short delay
-                setTimeout(() => {
-                    if (registrationData || googleRegistrationData) {
-                        router.push('/onboarding');
-                    } else {
-                        router.push('/dashboard');
+                    } catch (codeError) {
+                        console.error('Action code error:', codeError);
+                        
+                        if (codeError.code === 'auth/expired-action-code') {
+                            setMessage('Verification link has expired. Please request a new one.');
+                        } else if (codeError.code === 'auth/invalid-action-code') {
+                            setMessage('Invalid verification link. Please request a new one.');
+                        } else {
+                            setMessage('Verification failed. Please try again.');
+                        }
+                        
+                        setStatus('error');
                     }
-                }, 3000);
+                } else {
+                    // If no action code, check current user's email verification status
+                    await checkCurrentUserVerification();
+                }
 
             } catch (error) {
                 console.error('Email verification error:', error);
-                
-                let errorMsg = 'Email verification failed. ';
-                
-                switch (error.code) {
-                    case 'auth/expired-action-code':
-                        setVerificationState('expired');
-                        errorMsg = 'This verification link has expired. Please request a new verification email.';
-                        break;
-                    case 'auth/invalid-action-code':
-                        setVerificationState('error');
-                        errorMsg = 'This verification link is invalid or has already been used.';
-                        break;
-                    case 'auth/user-disabled':
-                        setVerificationState('error');
-                        errorMsg = 'This user account has been disabled.';
-                        break;
-                    case 'auth/user-not-found':
-                        setVerificationState('error');
-                        errorMsg = 'No user account found for this verification link.';
-                        break;
-                    default:
-                        setVerificationState('error');
-                        errorMsg += 'Please try again or contact support if the problem persists.';
-                }
-                
-                setErrorMessage(errorMsg);
-                
-                toast.error(errorMsg, {
-                    duration: 6000,
-                    position: "top-center"
-                });
+                setStatus('error');
+                setMessage('An error occurred during verification. Please try again.');
             }
         };
 
-        verifyEmail();
-    }, [searchParams, router]);
+        const checkCurrentUserVerification = async () => {
+            try {
+                if (currentUser) {
+                    // Reload user to get the latest status
+                    await currentUser.reload();
+                    
+                    if (currentUser.emailVerified) {
+                        // Update user record in Firestore
+                        await updateUserProfile(currentUser.uid, {
+                            emailVerified: true,
+                            emailVerifiedAt: new Date()
+                        });
 
-    const handleResendVerification = async () => {
-        try {
-            // Get stored email
-            const storedEmail = localStorage.getItem("emailForVerification");
-            if (!storedEmail && !userEmail) {
-                toast.error("No email found. Please try registering again.", {
-                    duration: 4000,
-                    position: "top-center"
-                });
-                router.push('/register');
-                return;
+                        setStatus('success');
+                        setMessage('Email verified successfully!');
+
+                        // Redirect to onboarding after 2 seconds
+                        setTimeout(() => {
+                            router.push('/onboarding');
+                        }, 2000);
+                    } else {
+                        setStatus('error');
+                        setMessage('Email not yet verified. Please check your email and click the verification link.');
+                    }
+                } else {
+                    setStatus('error');
+                    setMessage('No user found. Please log in first.');
+                }
+            } catch (error) {
+                console.error('User verification check error:', error);
+                setStatus('error');
+                setMessage('Unable to verify email status. Please try again.');
             }
+        };
 
-            // You'll need to implement a function to resend verification email
-            // This would typically require the user to sign in first
-            toast.info("Please sign in to resend verification email.", {
-                duration: 4000,
-                position: "top-center"
-            });
-            
-            router.push('/login');
-            
-        } catch (error) {
-            console.error('Resend verification error:', error);
-            toast.error("Failed to resend verification email. Please try again.", {
-                duration: 4000,
-                position: "top-center"
-            });
-        }
+        // Add a small delay to ensure auth state is loaded
+        const timer = setTimeout(() => {
+            verifyEmailFromURL();
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [currentUser, updateUserProfile, router, searchParams]);
+
+    const handleResendVerification = () => {
+        router.push('/resend-verification');
     };
 
-    const renderContent = () => {
-        switch (verificationState) {
-            case 'verifying':
-                return (
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-teal-600 mx-auto mb-6"></div>
-                        <h2 className="text-2xl font-bold text-slate-900 mb-4">Verifying your email...</h2>
-                        <p className="text-slate-600">Please wait while we verify your email address.</p>
-                    </div>
-                );
+    const handleBackToLogin = () => {
+        router.push('/login');
+    };
 
-            case 'success':
-                return (
-                    <div className="text-center">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-900 mb-4">Email Verified Successfully!</h2>
-                        <p className="text-slate-600 mb-6">
-                            Your email address has been verified. You&apos;ll be redirected to complete your account setup.
-                        </p>
-                        {userEmail && (
-                            <p className="text-sm text-slate-500 mb-4">
-                                Verified: {userEmail}
-                            </p>
-                        )}
-                        <div className="flex items-center justify-center">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
-                            <span className="ml-2 text-slate-600">Redirecting...</span>
-                        </div>
-                    </div>
-                );
-
-            case 'expired':
-                return (
-                    <div className="text-center">
-                        <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
-                            </svg>
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-900 mb-4">Verification Link Expired</h2>
-                        <p className="text-slate-600 mb-6">{errorMessage}</p>
-                        <div className="space-y-3">
-                            <button
-                                onClick={handleResendVerification}
-                                className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
-                            >
-                                Resend Verification Email
-                            </button>
-                            <button
-                                onClick={() => router.push('/register')}
-                                className="w-full bg-gray-100 text-slate-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                                Back to Registration
-                            </button>
-                        </div>
-                    </div>
-                );
-
-            case 'error':
-            default:
-                return (
-                    <div className="text-center">
-                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-900 mb-4">Verification Failed</h2>
-                        <p className="text-slate-600 mb-6">{errorMessage}</p>
-                        <div className="space-y-3">
-                            <button
-                                onClick={() => router.push('/register')}
-                                className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
-                            >
-                                Try Registering Again
-                            </button>
-                            <button
-                                onClick={() => router.push('/login')}
-                                className="w-full bg-gray-100 text-slate-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                                Already have an account? Sign In
-                            </button>
-                        </div>
-                    </div>
-                );
-        }
+    const handleTryAgain = () => {
+        setStatus('verifying');
+        setMessage('Verifying your email...');
+        
+        // Retry verification after a short delay
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
-            <Toaster
-                richColors
-                position="top-center"
-                toastOptions={{
-                    style: {
-                        background: 'rgba(255, 255, 255, 0.95)',
-                        backdropFilter: 'blur(12px)',
-                        border: '1px solid rgba(148, 163, 184, 0.2)',
-                        borderRadius: '12px'
-                    }
-                }}
-            />
-
-            <BackgroundDecorations />
-
-            <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
-                <div className="w-full max-w-md">
-                    {/* Logo */}
-                    <div className="text-center mb-8">
-                        <div className="inline-block">
-                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                                QAID
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+                <div className="text-center">
+                    {status === 'verifying' && (
+                        <>
+                            <div className="mx-auto mb-4 w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                             </div>
-                        </div>
-                    </div>
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                                Verifying Email
+                            </h1>
+                            <p className="text-gray-600">{message}</p>
+                        </>
+                    )}
 
-                    {/* Verification Card */}
-                    <div className="bg-white rounded-2xl shadow-xl border border-white/20 p-8 relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
-                        
-                        {renderContent()}
-                    </div>
+                    {status === 'success' && (
+                        <>
+                            <div className="mx-auto mb-4 w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                                <CheckCircle className="w-8 h-8 text-green-600" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                                Email Verified! ✨
+                            </h1>
+                            <p className="text-gray-600 mb-4">{message}</p>
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                                <p className="text-sm text-green-700">
+                                    Redirecting you to complete your account setup...
+                                </p>
+                            </div>
+                        </>
+                    )}
+
+                    {status === 'error' && (
+                        <>
+                            <div className="mx-auto mb-4 w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                                <AlertCircle className="w-8 h-8 text-red-600" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                                Verification Failed
+                            </h1>
+                            <p className="text-gray-600 mb-6">{message}</p>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={handleTryAgain}
+                                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                                >
+                                    Try Again
+                                </button>
+                                <button
+                                    onClick={handleResendVerification}
+                                    className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                >
+                                    Resend Verification Email
+                                </button>
+                                <button
+                                    onClick={handleBackToLogin}
+                                    className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                                >
+                                    Back to Login
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

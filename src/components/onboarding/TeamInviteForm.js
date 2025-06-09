@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import "../../app/globals.css";
 
-export const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
+const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
     const [emails, setEmails] = useState([""]);
     const [orgDomain, setOrgDomain] = useState("");
     const [externalEmails, setExternalEmails] = useState([]);
@@ -284,3 +284,5 @@ export const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) 
         </div>
     );
 };
+
+export default TeamInviteForm

@@ -5,13 +5,13 @@ import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
 import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
 
-import { 
-    createUserIfNotExists, 
-    fetchUserData, 
-    completeUserSetup 
+import {
+    createUserIfNotExists,
+    fetchUserData,
+    completeUserSetup
 } from "../services/userService";
 
-import { 
+import {
     signInWithGoogle as authSignInWithGoogle,
     logInWithEmail as authLoginWithEmail,
     logout as authLogout,
@@ -44,7 +44,8 @@ export const AuthProvider = ({ children }) => {
         console.log('Processing user authentication:', {
             hasUser: !!user,
             uid: user?.uid,
-            email: user?.email
+            email: user?.email,
+            emailVerified: user?.emailVerified,
         });
 
         if (!user) {
@@ -53,7 +54,7 @@ export const AuthProvider = ({ children }) => {
             setUserProfile(null);
             return;
         }
-    
+
         try {
             let authSource = 'auth';
             if (user.providerData?.length > 0) {
@@ -61,7 +62,7 @@ export const AuthProvider = ({ children }) => {
                 if (provider === 'google.com') authSource = 'google';
                 else if (provider === 'password') authSource = 'email';
             }
-            
+
             const result = await createUserIfNotExists(user, {}, authSource);
 
             if (result.error) {
@@ -75,52 +76,90 @@ export const AuthProvider = ({ children }) => {
                 setAuthError('Failed to load user data');
                 return;
             }
-    
+
             setCurrentUser(user);
             setUserPermissions(result.userData.permissions || {
                 isAdmin: false,
-                roles: ["user"], 
+                roles: ["user"],
                 capabilities: ["read_tests"]
             });
             setUserProfile(result.userData);
-            
-            // Handle routing
+
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
-                const needsAccountSetup = result.isNewUser || result.needsSetup;
-                
-                if (needsAccountSetup) {
-                    localStorage.setItem("needsAccountSetup", "true");
-                    if (currentPath === "/login" || currentPath === "/register") {
-                        router.push("/account-setup");
+
+                // 1️⃣ EMAIL VERIFICATION GATE
+                if (!user.emailVerified) {
+                    // If user is not on verify-email page, redirect there
+                    if (currentPath !== "/verify-email") {
+                        router.push("/verify-email");
                     }
+                    return; // stop further routing
+                }
+
+                // 2️⃣ ONBOARDING GATE
+                // Define onboarding need - either new user or incomplete setup flag from your API
+                const needsOnboarding = result.isNewUser || result.needsSetup;
+
+                if (needsOnboarding) {
+                    localStorage.setItem("needsOnboarding", "true");
+
+                    // Route to onboarding only if user is on login/register/verify-email pages or at root
+                    if (
+                        currentPath === "/login" ||
+                        currentPath === "/register" ||
+                        currentPath === "/verify-email" ||
+                        currentPath === "/"
+                    ) {
+                        // You mentioned onboarding depends on account type in userData:
+                        // e.g. userData.accountType = 'individual' or 'organization'
+                        const accountType = result.userData.accountType || "individual";
+
+                        // Route onboarding dynamically based on account type
+                        if (accountType === "organization") {
+                            router.push("/onboarding/organization");
+                        } else {
+                            router.push("/onboarding/individual");
+                        }
+                    }
+                    return;
                 } else {
-                    if (currentPath === "/login" || currentPath === "/register" || currentPath === "/account-setup") {
+                    localStorage.removeItem("needsOnboarding");
+
+                    // If user is already on login/register/verify-email/onboarding, redirect to dashboard
+                    if (
+                        currentPath === "/login" ||
+                        currentPath === "/register" ||
+                        currentPath === "/verify-email" ||
+                        currentPath.startsWith("/onboarding")
+                    ) {
                         router.push("/dashboard");
                     }
-                    localStorage.removeItem("needsAccountSetup");
                 }
             }
+
         } catch (error) {
             console.error("Error processing authentication:", error);
-            
+
             // Set basic user info even if profile fetch fails
             setCurrentUser(user);
-            setUserPermissions({ 
-                isAdmin: false, 
-                roles: ["user"], 
-                capabilities: ["read_tests"] 
+            setUserPermissions({
+                isAdmin: false,
+                roles: ["user"],
+                capabilities: ["read_tests"]
             });
             setUserProfile({});
             setAuthError(error.message);
         }
     }, [router]);
 
+
+
     // Handle redirect result
     useEffect(() => {
         const handleRedirectResult = async () => {
             if (initialized) return;
-            
+
             try {
                 setLoading(true);
                 const result = await getRedirectResult(auth);
@@ -173,8 +212,8 @@ export const AuthProvider = ({ children }) => {
         setAuthError(null);
         try {
             const result = await authSignInWithGoogle();
-            return { 
-                success: true, 
+            return {
+                success: true,
                 user: result.user,
                 isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime
             };

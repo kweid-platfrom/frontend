@@ -1,4 +1,3 @@
-// services/userService.js
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db, environment } from "../config/firebase";
 
@@ -14,26 +13,11 @@ const extractNameFromEmail = (email) => {
         .join(' ');
 };
 
-// Determine account type based on email domain
-const determineAccountType = (email) => {
-    if (!email) return 'personal';
-
-    const personalDomains = [
-        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
-        'icloud.com', 'aol.com', 'protonmail.com', 'live.com',
-        'ymail.com', 'rocketmail.com', 'mail.com', 'zoho.com'
-    ];
-
-    const domain = email.split('@')[1]?.toLowerCase();
-    return personalDomains.includes(domain) ? 'personal' : 'business';
-};
-
 // Parse display name into first/last name
 const parseDisplayName = (displayName) => {
     if (!displayName || !displayName.trim()) {
         return { firstName: "", lastName: "" };
     }
-
     const nameParts = displayName.trim().split(' ');
     return {
         firstName: nameParts[0] || "",
@@ -46,115 +30,133 @@ export const createUserDocument = async (firebaseUser, additionalData = {}, sour
         throw new Error('Invalid Firebase user provided');
     }
 
-    console.log('Creating user document:', {
-        uid: firebaseUser.uid,
-        source,
-        email: firebaseUser.email,
-        hasAdditionalData: Object.keys(additionalData).length > 0
-    });
-
     try {
-        // Parse display name for Google users
-        const { firstName: parsedFirstName, lastName: parsedLastName } =
-            parseDisplayName(firebaseUser.displayName);
+        // Parse display name for Google users or fallback
+        const { firstName: parsedFirstName, lastName: parsedLastName } = parseDisplayName(firebaseUser.displayName);
 
-        // Determine account type
-        const accountType = additionalData.accountType ||
-            determineAccountType(firebaseUser.email) || 'personal';
+        // Use additionalData or parsed names, fallback to email extraction
+        let firstName = (additionalData.firstName?.trim() || parsedFirstName || "").trim();
+        let lastName = (additionalData.lastName?.trim() || parsedLastName || "").trim();
 
-        // Build user data with proper fallbacks
+        if (!firstName && !lastName) {
+            const extractedName = extractNameFromEmail(firebaseUser.email);
+            const nameParts = extractedName.split(' ');
+            firstName = nameParts[0] || "User";
+            lastName = nameParts.slice(1).join(' ') || "";
+        }
+
+        // Normalize userType/accountType - default to 'individual'
+        const userTypeRaw = additionalData.userType || additionalData.accountType || 'individual';
+        const userType = ['individual', 'organization'].includes(userTypeRaw) ? userTypeRaw : 'individual';
+        const accountType = userType;
+
+        // Build user data aligned with your security rules & register flow
         const userData = {
             uid: firebaseUser.uid,
             email: firebaseUser.email?.toLowerCase().trim() || "",
+            firstName,
+            lastName,
+
             emailVerified: firebaseUser.emailVerified || false,
+            displayName: additionalData.displayName?.trim() ||
+                firebaseUser.displayName?.trim() ||
+                `${firstName} ${lastName}`.trim() ||
+                extractNameFromEmail(firebaseUser.email) || "",
+            avatarURL: additionalData.avatarURL || firebaseUser.photoURL || null,
+            accountType,
+            userType,
+            organizationId: additionalData.organizationId || null,
+            setupCompleted: Boolean(additionalData.setupCompleted) || false,
 
-            // Name handling with proper fallbacks
-            firstName: additionalData.firstName?.trim() || parsedFirstName || "",
-            lastName: additionalData.lastName?.trim() || parsedLastName || "",
-            
-            // Account configuration
-            accountType: accountType,
+            bio: additionalData.bio?.trim() || "",
+            location: additionalData.location?.trim() || "",
+            phone: additionalData.phone?.trim() || "",
+            role: additionalData.role || ['member'],
 
-            // Timestamps
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
+            registrationMethod: source === 'google' ? 'google' : 'email',
+            lastLogin: serverTimestamp(),
+            lastPasswordChange: source === 'email' ? serverTimestamp() : null,
+            deviceHistory: [],
 
-            // Setup tracking - Fix the boolean logic here
-            setupCompleted: Boolean(additionalData.setupCompleted) || source === 'setup',
-            setupStep: additionalData.setupStep || 
-                      (source === 'setup' ? 'completed' : 'pending'),
-
-            // Permissions with defaults
-            permissions: {
-                isAdmin: false,
-                roles: ["user"],
-                capabilities: ["read_tests"]
+            setupStep: additionalData.setupStep || 'pending',
+            onboardingProgress: {
+                emailVerified: firebaseUser.emailVerified || false,
+                organizationInfo: accountType === 'organization',
+                teamInvites: accountType === 'organization',
+                projectCreation: false,
+                ...(additionalData.onboardingProgress || {})
             },
 
-            // Optional fields
-            ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL }),
-            ...(additionalData.phone && { phone: additionalData.phone.trim() }),
-            ...(additionalData.company && { company: additionalData.company.trim() }),
-            ...(additionalData.organizationId && { organizationId: additionalData.organizationId }),
-            ...(environment && { environment: environment }),
-            ...(source && { source: source })
+            preferences: {
+                notifications: {
+                    newMessages: true,
+                    productUpdates: false,
+                    securityAlerts: true
+                },
+                pushNotifications: {
+                    approvalRequests: true,
+                    newMessages: true,
+                    productUpdates: true,
+                    reminders: false
+                },
+                ...(additionalData.preferences || {})
+            },
+
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            environment: environment || 'development',
+            source
         };
 
-        // Compute name field after firstName/lastName are set
-        userData.name = additionalData.name?.trim() ||
-                      firebaseUser.displayName?.trim() ||
-                      `${userData.firstName} ${userData.lastName}`.trim() ||
-                      extractNameFromEmail(firebaseUser.email) || "";
+        // Validate required fields
+        if (!userData.uid || !userData.email || !userData.firstName) {
+            throw new Error('Missing required fields: uid, email, or firstName');
+        }
+
+        // Security check
+        if (userData.uid !== firebaseUser.uid) {
+            throw new Error('UID mismatch: document UID must match authenticated user UID');
+        }
 
         const userRef = doc(db, 'users', firebaseUser.uid);
-        
-        // Single write operation with better error handling
-        await setDoc(userRef, userData);
-        
-        console.log('User document created successfully');
+
+        await Promise.race([
+            setDoc(userRef, userData),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Database write timeout')), 10000))
+        ]);
+
         return userData;
 
     } catch (error) {
-        console.error('User document creation failed:', {
-            code: error.code,
-            message: error.message,
-            uid: firebaseUser.uid
-        });
-
-        // Specific Firebase error handling
-        if (error.code === 'permission-denied') {
-            throw new Error('Permission denied creating user account');
-        }
-        if (error.code === 'unavailable') {
-            throw new Error('Database temporarily unavailable');
-        }
-        
-        throw new Error(error.message || 'Failed to create user account');
+        // More explicit error handling here if needed
+        throw new Error(`Failed to create user profile: ${error.message}`);
     }
 };
 
 export const createUserIfNotExists = async (firebaseUser, additionalData = {}, source = 'auth') => {
     if (!firebaseUser?.uid) {
-        return { 
-            isNewUser: false, 
-            userData: null, 
+        return {
+            isNewUser: false,
+            userData: null,
             needsSetup: false,
-            error: 'Invalid user provided' 
+            error: 'Invalid user provided'
         };
     }
 
     try {
         const userRef = doc(db, "users", firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
+        const userSnap = await Promise.race([
+            getDoc(userRef),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Database read timeout')), 5000))
+        ]);
 
         if (userSnap.exists()) {
             const existingData = userSnap.data();
-            
-            // Update last login
-            await setDoc(userRef, {
+            // Update last login timestamp but don't fail if error
+            setDoc(userRef, {
                 lastLogin: serverTimestamp(),
                 updatedAt: serverTimestamp()
-            }, { merge: true });
+            }, { merge: true }).catch(() => {});
 
             return {
                 isNewUser: false,
@@ -164,7 +166,6 @@ export const createUserIfNotExists = async (firebaseUser, additionalData = {}, s
             };
         }
 
-        // Create new user
         const userData = await createUserDocument(firebaseUser, additionalData, source);
 
         return {
@@ -175,7 +176,6 @@ export const createUserIfNotExists = async (firebaseUser, additionalData = {}, s
         };
 
     } catch (error) {
-        console.error('createUserIfNotExists failed:', error);
         return {
             isNewUser: false,
             userData: null,
@@ -186,38 +186,89 @@ export const createUserIfNotExists = async (firebaseUser, additionalData = {}, s
 };
 
 export const completeUserSetup = async (userId, setupData) => {
-    if (!userId) {
-        throw new Error('User ID is required');
-    }
+    if (!userId) throw new Error('User ID is required');
 
     try {
         const userRef = doc(db, 'users', userId);
 
         const updateData = {
-            ...(setupData.name && { name: setupData.name.trim() }),
+            ...(setupData.displayName && { displayName: setupData.displayName.trim() }),
             ...(setupData.firstName && { firstName: setupData.firstName.trim() }),
             ...(setupData.lastName && { lastName: setupData.lastName.trim() }),
+            ...(setupData.email && { email: setupData.email.toLowerCase().trim() }),
+            ...(typeof setupData.emailVerified === 'boolean' && { emailVerified: setupData.emailVerified }),
+            ...(setupData.avatarURL !== undefined && { avatarURL: setupData.avatarURL }),
+            ...(setupData.accountType && { 
+                accountType: setupData.accountType,
+                userType: setupData.accountType
+            }),
+            ...(setupData.organizationId !== undefined && { organizationId: setupData.organizationId }),
+            ...(typeof setupData.setupCompleted === 'boolean' && { setupCompleted: setupData.setupCompleted }),
+
             ...(setupData.phone && { phone: setupData.phone.trim() }),
-            ...(setupData.company && { company: setupData.company.trim() }),
-            ...(setupData.industry && { industry: setupData.industry }),
-            ...(setupData.companySize && { companySize: setupData.companySize }),
-            ...(setupData.accountType && { accountType: setupData.accountType }),
+            ...(setupData.bio && { bio: setupData.bio.trim() }),
+            ...(setupData.location && { location: setupData.location.trim() }),
 
             setupCompleted: true,
             setupStep: 'completed',
-            lastLogin: serverTimestamp(),
-            updatedAt: serverTimestamp()
+            updatedAt: serverTimestamp(),
+            lastLogin: serverTimestamp()
         };
 
         await setDoc(userRef, updateData, { merge: true });
 
-        // Return updated data
         const updatedDoc = await getDoc(userRef);
         return updatedDoc.data();
 
     } catch (error) {
-        console.error('Setup completion failed:', error);
-        throw new Error('Failed to complete user setup');
+        if (error.code === 'permission-denied') {
+            throw new Error('You do not have permission to update this user profile.');
+        }
+        throw new Error(`Failed to complete user setup: ${error.message}`);
+    }
+};
+
+export const updateUserProfile = async (userId, updateData, currentUserUid) => {
+    if (!userId) throw new Error('User ID is required');
+    if (currentUserUid !== userId) throw new Error('You can only update your own profile');
+
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) throw new Error('User profile not found');
+        const existingData = userSnap.data();
+
+        const safeUpdateData = {
+            uid: existingData.uid, // immutable
+
+            ...(updateData.email && updateData.email !== existingData.email && {
+                email: updateData.email.toLowerCase().trim()
+            }),
+            ...(updateData.firstName && { firstName: updateData.firstName.trim() }),
+            ...(updateData.lastName && { lastName: updateData.lastName.trim() }),
+            ...(typeof updateData.emailVerified === 'boolean' && { emailVerified: updateData.emailVerified }),
+            ...(updateData.displayName && { displayName: updateData.displayName.trim() }),
+            ...(updateData.avatarURL !== undefined && { avatarURL: updateData.avatarURL }),
+            ...(updateData.accountType && {
+                accountType: updateData.accountType,
+                userType: updateData.accountType
+            }),
+            ...(updateData.organizationId !== undefined && { organizationId: updateData.organizationId }),
+            ...(typeof updateData.setupCompleted === 'boolean' && { setupCompleted: updateData.setupCompleted }),
+
+            updatedAt: serverTimestamp()
+        };
+
+        await setDoc(userRef, safeUpdateData, { merge: true });
+
+        const updatedDoc = await getDoc(userRef);
+        return updatedDoc.data();
+
+    } catch (error) {
+        if (error.code === 'permission-denied') {
+            throw new Error('You do not have permission to update this profile.');
+        }
+        throw new Error(`Failed to update profile: ${error.message}`);
     }
 };
 
@@ -227,14 +278,44 @@ export const fetchUserData = async (userId) => {
     try {
         const userRef = doc(db, "users", userId);
         const userSnap = await getDoc(userRef);
-        
+
         if (userSnap.exists()) {
             return userSnap.data();
         }
-        
+
         return null;
     } catch (error) {
-        console.error("Error fetching user data:", error);
+        if (error.code === 'permission-denied') {
+            console.error('Permission denied: User may not have access to this profile');
+        }
         return null;
     }
+};
+
+// Utility to validate user data against rules
+export const validateUserData = (userData, isCreate = false) => {
+    const errors = [];
+
+    if (isCreate) {
+        if (!userData.uid) errors.push('uid is required');
+        if (!userData.email) errors.push('email is required');
+        if (!userData.firstName) errors.push('firstName is required');
+    }
+
+    if (userData.uid && typeof userData.uid !== 'string') errors.push('uid must be string');
+    if (userData.email && typeof userData.email !== 'string') errors.push('email must be string');
+    if (userData.firstName && typeof userData.firstName !== 'string') errors.push('firstName must be string');
+    if (userData.lastName && typeof userData.lastName !== 'string') errors.push('lastName must be string');
+    if (userData.emailVerified && typeof userData.emailVerified !== 'boolean') errors.push('emailVerified must be boolean');
+    if (userData.displayName && typeof userData.displayName !== 'string') errors.push('displayName must be string');
+    if (userData.avatarURL && userData.avatarURL !== null && typeof userData.avatarURL !== 'string') errors.push('avatarURL must be string or null');
+    if (userData.accountType && !['individual', 'organization'].includes(userData.accountType)) errors.push('accountType must be individual or organization');
+    if (userData.userType && !['individual', 'organization'].includes(userData.userType)) errors.push('userType must be individual or organization');
+    if (userData.organizationId && userData.organizationId !== null && typeof userData.organizationId !== 'string') errors.push('organizationId must be string or null');
+    if (userData.setupCompleted && typeof userData.setupCompleted !== 'boolean') errors.push('setupCompleted must be boolean');
+
+    return {
+        isValid: errors.length === 0,
+        errors
+    };
 };
