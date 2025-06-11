@@ -1,10 +1,12 @@
 // components/onboarding/ProjectCreationForm.js
 'use client'
 import { useState } from 'react';
-import { useAuth } from '../../context/AuthProvider'; // Changed from useProject
+import { useAuth } from '../../context/AuthProvider';
+import { useProject } from '../../context/ProjectContext'; // Add ProjectContext back
+import { useRouter } from 'next/navigation'; // Add router for navigation
 import { db } from '../../config/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { toast } from 'sonner'; // Add success notification
+import { toast } from 'sonner';
 import {
     RocketLaunchIcon,
     DocumentTextIcon,
@@ -13,8 +15,10 @@ import {
     BeakerIcon
 } from '@heroicons/react/24/outline';
 
-const ProjectCreationForm = ({ onComplete }) => { // Accept onComplete prop
-    const { currentUser, userProfile } = useAuth(); // Use AuthProvider instead
+const ProjectCreationForm = ({ onComplete }) => {
+    const { currentUser, userProfile } = useAuth();
+    const { refetchProjects } = useProject(); // Get refetch function
+    const router = useRouter(); // Add router
     const [projectName, setProjectName] = useState('');
     const [description, setDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -76,15 +80,30 @@ const ProjectCreationForm = ({ onComplete }) => { // Accept onComplete prop
                 }
             };
 
-            await addDoc(collection(db, 'projects'), projectData);
+            // Create the project
+            const docRef = await addDoc(collection(db, 'projects'), projectData);
+            const newProjectId = docRef.id;
             
             // Show success message
             toast.success('Project created successfully! Welcome to QA Suite!');
             
-            // For all account types, redirect to dashboard after project creation
+            // Store the new project ID for the dashboard to pick up
+            localStorage.setItem('activeProjectId', newProjectId);
+            
+            // Mark onboarding as complete first
             if (typeof onComplete === 'function') {
-                onComplete(); // This will mark onboarding as complete and redirect to dashboard
+                await onComplete(); // Wait for onboarding completion
             }
+            
+            // Refresh projects to include the new one
+            if (refetchProjects) {
+                await refetchProjects();
+            }
+            
+            // Small delay to ensure state updates, then navigate to dashboard
+            setTimeout(() => {
+                router.push('/dashboard');
+            }, 500);
             
         } catch (error) {
             console.error('Error creating project:', error);

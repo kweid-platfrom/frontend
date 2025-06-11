@@ -33,6 +33,15 @@ const ProtectedRoute = ({
     // Check onboarding completion requirement
     if (requireOnboardingComplete && userProfile) {
         if (!userProfile.onboardingStatus?.onboardingComplete) {
+            // Simply redirect to /onboarding - let OnboardingRouter handle the routing
+            return <Navigate to="/onboarding" replace />;
+        }
+    }
+
+    // Special case: if user is on login/signup but onboarding is incomplete
+    if (userProfile && !userProfile.onboardingStatus?.onboardingComplete) {
+        const currentPath = window.location.pathname;
+        if (currentPath === '/login' || currentPath === '/signup' || currentPath === '/') {
             return <Navigate to="/onboarding" replace />;
         }
     }

@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import {
     createUserIfNotExists,
     fetchUserData,
-    completeUserSetup
+    completeUserSetup,
+    updateUserProfile as updateUserProfileService
 } from "../services/userService";
 
 import {
@@ -40,6 +41,119 @@ export const AuthProvider = ({ children }) => {
     const [initialized, setInitialized] = useState(false);
     const router = useRouter();
 
+    // Get user profile from Firestore
+    const getUserProfile = async (uid) => {
+        try {
+            if (!uid) {
+                console.error('getUserProfile: No UID provided');
+                return null;
+            }
+            
+            const profile = await fetchUserData(uid);
+            
+            if (profile) {
+                setUserProfile(profile);
+                setUserPermissions(profile.permissions || {
+                    isAdmin: false,
+                    roles: ["user"],
+                    capabilities: ["read_tests"]
+                });
+                return profile;
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+            return null;
+        }
+    };
+
+    // Update user profile in Firestore
+    const updateUserProfile = async (uid, updateData) => {
+        try {
+            if (!uid) {
+                throw new Error('No UID provided for profile update');
+            }
+
+            // Use the current user's UID for security
+            const currentUserUid = currentUser?.uid;
+            if (!currentUserUid) {
+                throw new Error('No authenticated user');
+            }
+
+            const updatedProfile = await updateUserProfileService(uid, updateData, currentUserUid);
+            
+            if (updatedProfile) {
+                setUserProfile(updatedProfile);
+                setUserPermissions(updatedProfile.permissions || {
+                    isAdmin: false,
+                    roles: ["user"],
+                    capabilities: ["read_tests"]
+                });
+                return updatedProfile;
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error updating user profile:', error);
+            throw error;
+        }
+    };
+
+    // Create or get existing user profile
+    const createOrGetUserProfile = async (firebaseUser, additionalData = {}, source = 'auth') => {
+        try {
+            const result = await createUserIfNotExists(firebaseUser, additionalData, source);
+            
+            if (result.userData) {
+                setUserProfile(result.userData);
+                setUserPermissions(result.userData.permissions || {
+                    isAdmin: false,
+                    roles: ["user"],
+                    capabilities: ["read_tests"]
+                });
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('Error creating/getting user profile:', error);
+            throw error;
+        }
+    };
+
+    // Complete user setup
+    const completeSetup = async (setupData) => {
+        try {
+            if (!currentUser?.uid) {
+                throw new Error('No authenticated user');
+            }
+
+            const updatedProfile = await completeUserSetup(currentUser.uid, setupData);
+            
+            if (updatedProfile) {
+                setUserProfile(updatedProfile);
+                setUserPermissions(updatedProfile.permissions || {
+                    isAdmin: false,
+                    roles: ["user"],
+                    capabilities: ["read_tests"]
+                });
+                return updatedProfile;
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error completing user setup:', error);
+            throw error;
+        }
+    };
+
+    // Refresh user profile
+    const refreshUserProfile = async () => {
+        if (currentUser?.uid) {
+            await getUserProfile(currentUser.uid);
+        }
+    };
+
     const processUserAuthentication = useCallback(async (user) => {
         console.log('Processing user authentication:', {
             hasUser: !!user,
@@ -68,12 +182,12 @@ export const AuthProvider = ({ children }) => {
 
             // Check if we're in an email verification flow
             const justVerified = localStorage.getItem('emailVerificationComplete') === 'true';
-            
+
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 const searchParams = new URLSearchParams(window.location.search);
                 const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
-                
+
                 // If this is a verification callback, let the verify-email page handle it
                 if (isVerificationCallback) {
                     if (currentPath !== "/verify-email") {
@@ -124,7 +238,7 @@ export const AuthProvider = ({ children }) => {
                 }
 
                 // 2️⃣ ONBOARDING GATE
-                const needsOnboarding = result.isNewUser || result.needsSetup || 
+                const needsOnboarding = result.isNewUser || result.needsSetup ||
                     !result.userData.onboardingStatus?.onboardingComplete;
 
                 console.log('Onboarding check:', {
@@ -147,15 +261,10 @@ export const AuthProvider = ({ children }) => {
                         currentPath === "/dashboard" ||
                         currentPath.startsWith("/handle-email-verification")
                     ) {
-                        const accountType = result.userData.accountType || "individual";
+                        console.log('Routing to onboarding from:', currentPath);
 
-                        console.log('Routing to onboarding:', { accountType, currentPath });
-
-                        if (accountType === "organization") {
-                            router.push("/onboarding/organization");
-                        } else {
-                            router.push("/onboarding/individual");
-                        }
+                        // Just route to /onboarding - let OnboardingRouter handle the account type logic
+                        router.push("/onboarding");
                     }
                     return;
                 } else {
@@ -263,7 +372,7 @@ export const AuthProvider = ({ children }) => {
         try {
             // Set flag that we expect email verification
             localStorage.setItem('awaitingEmailVerification', 'true');
-            
+
             const result = await authRegisterWithEmail(email, password);
             return { success: true, user: result.user };
         } catch (error) {
@@ -374,6 +483,7 @@ export const AuthProvider = ({ children }) => {
         authError,
         environment,
         initialized,
+        // Auth methods
         signIn,
         signInWithGoogle,
         registerWithEmail,
@@ -381,10 +491,18 @@ export const AuthProvider = ({ children }) => {
         completeEmailLinkSignIn,
         setUserPassword,
         signOut,
+        // Permission methods
         hasPermission,
         hasRole,
         clearAuthError,
         refreshUserData,
+        // Profile methods - these were missing!
+        getUserProfile,
+        updateUserProfile,
+        createOrGetUserProfile,
+        completeSetup,
+        refreshUserProfile,
+        // Legacy methods for backward compatibility
         createUserIfNotExists,
         completeUserSetup
     };

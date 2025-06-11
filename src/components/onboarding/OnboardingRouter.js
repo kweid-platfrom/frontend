@@ -11,7 +11,7 @@ import TeamInviteForm from './TeamInviteForm';
 import ProjectCreationForm from './ProjectCreationForm';
 
 const OnboardingRouter = () => {
-    const { currentUser, userProfile, getUserProfile, updateUserProfile } = useAuth();
+    const { currentUser, userProfile, getUserProfile, updateUserProfile, initialized } = useAuth();
     const [loading, setLoading] = useState(true);
     const [currentStep, setCurrentStep] = useState(null);
     const [error, setError] = useState(null);
@@ -23,6 +23,11 @@ const OnboardingRouter = () => {
                 setLoading(true);
                 setError(null);
 
+                // Wait for auth to be fully initialized
+                if (!initialized) {
+                    return;
+                }
+
                 if (!currentUser) {
                     console.log('No current user, redirecting to login');
                     router.push('/login');
@@ -30,7 +35,6 @@ const OnboardingRouter = () => {
                 }
 
                 // Check if email is verified with a more robust approach
-                // Sometimes the emailVerified status takes time to update after verification
                 const isEmailVerified = currentUser.emailVerified || 
                     (typeof window !== 'undefined' && 
                      localStorage.getItem('emailVerificationComplete') === 'true');
@@ -56,7 +60,6 @@ const OnboardingRouter = () => {
                 }
 
                 if (!profile) {
-                    // This shouldn't happen, but handle gracefully
                     console.error('User profile not found');
                     setError('User profile not found. Please try logging in again.');
                     setTimeout(() => {
@@ -114,7 +117,6 @@ const OnboardingRouter = () => {
                     }
                 } else {
                     // No account type selected - this shouldn't happen post-verification
-                    // but handle gracefully
                     console.error('No account type found for user:', profile);
                     setError('Account setup incomplete. Please complete your account setup.');
                     setTimeout(() => {
@@ -125,19 +127,22 @@ const OnboardingRouter = () => {
 
             } catch (error) {
                 console.error('Error determining onboarding step:', error);
-                setError('An error occurred while setting up your account. Please try again.');
+                setError(`An error occurred while setting up your account: ${error.message}`);
             } finally {
                 setLoading(false);
             }
         };
 
-        // Add a delay to ensure auth context is fully loaded and Firebase auth state is updated
-        const timer = setTimeout(() => {
-            determineOnboardingStep();
-        }, 500); // Increased delay to give more time for auth state to update
+        // Only run after auth is initialized
+        if (initialized) {
+            // Add a small delay to ensure auth context is fully loaded
+            const timer = setTimeout(() => {
+                determineOnboardingStep();
+            }, 100);
 
-        return () => clearTimeout(timer);
-    }, [currentUser, userProfile, router, getUserProfile, updateUserProfile]);
+            return () => clearTimeout(timer);
+        }
+    }, [currentUser, userProfile, router, getUserProfile, updateUserProfile, initialized]);
 
     const handleStepComplete = async (nextStep = null) => {
         try {
@@ -194,7 +199,7 @@ const OnboardingRouter = () => {
             }
         } catch (error) {
             console.error('Error completing onboarding step:', error);
-            setError('An error occurred. Please try again.');
+            setError(`An error occurred: ${error.message}`);
         }
     };
 
@@ -215,11 +220,11 @@ const OnboardingRouter = () => {
             setCurrentStep('project-creation');
         } catch (error) {
             console.error('Error completing team invite step:', error);
-            setError('An error occurred. Please try again.');
+            setError(`An error occurred: ${error.message}`);
         }
     };
 
-    if (loading) {
+    if (loading || !initialized) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
@@ -240,9 +245,15 @@ const OnboardingRouter = () => {
                     </div>
                     <button
                         onClick={() => window.location.reload()}
-                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors mr-2"
                     >
                         Try Again
+                    </button>
+                    <button
+                        onClick={() => router.push('/login')}
+                        className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
+                    >
+                        Back to Login
                     </button>
                 </div>
             </div>

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,6 +10,9 @@ import { FcGoogle } from "react-icons/fc";
 import { toast, Toaster } from "sonner";
 import { sendEmailVerification } from "firebase/auth";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
+import { isOnboardingComplete, getNextOnboardingStep } from "../../utils/onboardingUtils";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../config/firebase";
 import BackgroundDecorations from "../BackgroundDecorations";
 import '../../app/globals.css';
 
@@ -71,15 +75,80 @@ const Login = () => {
         }
     }, []);
 
-    // Clean redirect logic - authenticated users always go to dashboard
+    // Helper function to check user's onboarding status and route appropriately
+    const checkOnboardingAndRoute = async (user) => {
+        try {
+            // Get user document from Firestore
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                const { accountType, onboardingStatus } = userData;
+                
+                // Check if onboarding is complete
+                if (isOnboardingComplete(accountType, onboardingStatus)) {
+                    // Onboarding complete - go to dashboard
+                    router.push("/dashboard");
+                } else {
+                    // Onboarding incomplete - determine next step
+                    const nextStep = getNextOnboardingStep(accountType, onboardingStatus);
+                    
+                    if (nextStep) {
+                        // Route to appropriate onboarding step
+                        switch (nextStep) {
+                            case 'organization-info':
+                                router.push("/onboarding/organization-info");
+                                break;
+                            case 'team-invites':
+                                router.push("/onboarding/team-invites");
+                                break;
+                            case 'project-creation':
+                                if (accountType === 'individual') {
+                                    router.push("/onboarding/individual/project-creation");
+                                } else {
+                                    router.push("/onboarding/organization/project-creation");
+                                }
+                                break;
+                            default:
+                                // Fallback to general onboarding
+                                router.push("/onboarding");
+                        }
+                        
+                        toast.info("Please complete your setup to continue.", {
+                            duration: 4000,
+                            position: "top-center"
+                        });
+                    } else {
+                        // No specific step found, go to general onboarding
+                        router.push("/onboarding");
+                    }
+                }
+            } else {
+                // User document doesn't exist - this shouldn't happen, but handle gracefully
+                console.error("User document not found for authenticated user");
+                toast.error("Account setup incomplete. Please contact support.");
+                // Optionally sign out the user
+                await user.auth.signOut();
+            }
+        } catch (error) {
+            console.error("Error checking onboarding status:", error);
+            toast.error("Failed to load account information. Please try again.");
+            // Fallback to dashboard
+            router.push("/dashboard");
+        }
+    };
+
+    // Clean redirect logic - authenticated users go through onboarding check
     useEffect(() => {
         if (currentUser && !loading) {
-            // User is authenticated - clear any stale registration data and go to dashboard
+            // Clear any stale registration data
             localStorage.removeItem("registrationData");
             localStorage.removeItem("needsOnboarding");
             localStorage.removeItem("awaitingEmailVerification");
             
-            router.push("/dashboard");
+            // Check onboarding status and route appropriately
+            checkOnboardingAndRoute(currentUser);
         }
     }, [currentUser, loading, router]);
 
@@ -181,12 +250,8 @@ const Login = () => {
                 
                 toast.success("Login successful!");
                 
-                // Login successful - clear any stale registration data and go to dashboard
-                localStorage.removeItem("registrationData");
-                localStorage.removeItem("needsOnboarding");
-                localStorage.removeItem("awaitingEmailVerification");
-                
-                router.push("/dashboard");
+                // Don't navigate here - let the useEffect handle routing based on onboarding status
+                // The useEffect will trigger since currentUser will be set
                 
             } else {
                 // Handle specific Firebase auth errors
@@ -229,12 +294,8 @@ const Login = () => {
                 
                 toast.success("Login successful!");
                 
-                // Existing user logging in - clear stale data and go to dashboard
-                localStorage.removeItem("registrationData");
-                localStorage.removeItem("needsOnboarding");
-                localStorage.removeItem("awaitingEmailVerification");
-                
-                router.push("/dashboard");
+                // Don't navigate here - let the useEffect handle routing based on onboarding status
+                // The useEffect will trigger since currentUser will be set
                 
             } else {
                 const friendlyError = getFirebaseErrorMessage(result.error || result);
@@ -314,7 +375,11 @@ const Login = () => {
 
     // If already logged in, don't render the login form
     if (currentUser) {
-        return null;
+        return (
+            <div className="min-h-screen flex justify-center items-center bg-gray-50">
+                <Loader2 className="animate-spin h-8 w-8 text-teal-600" />
+            </div>
+        );
     }
 
     return (
@@ -469,15 +534,6 @@ const Login = () => {
                                 Sign Up
                             </Link>
                         </p>
-
-                        {/* Email Verification Notice */}
-                        <div className="mt-6 p-3 bg-teal-50 border border-teal-200 rounded-lg">
-                            <p className="text-xs text-teal-700 text-center">
-                                <span className="font-medium">New user?</span> Please verify your email before signing in.
-                                <br />
-                                Check your inbox for the verification link.
-                            </p>
-                        </div>
                     </div>
                 </div>
             </div>

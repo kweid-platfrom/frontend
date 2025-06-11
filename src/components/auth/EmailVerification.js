@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { sendEmailVerification, applyActionCode } from "firebase/auth";
+import { auth } from '../../config/firebase'; // Add this import
 import { useAuth } from '../../context/AuthProvider'; 
 import BubbleBackground from '../BackgroundDecorations';
 import '../../app/globals.css'
@@ -25,7 +26,7 @@ export default function VerifyEmailPage() {
                 setMessage("Verifying your email...");
                 
                 try {
-                    await applyActionCode(auth, oobCode);
+                    await applyActionCode(auth, oobCode); // Now auth is properly imported
                     
                     // Mark verification as complete
                     localStorage.setItem('emailVerificationComplete', 'true');

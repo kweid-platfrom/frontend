@@ -158,6 +158,16 @@ export const ProjectProvider = ({ children }) => {
         }
     }, [cache.projects, isCacheValid]);
 
+    // Set active project with localStorage sync
+    const setActiveProjectWithStorage = useCallback((project) => {
+        setActiveProject(project);
+        if (project?.id) {
+            localStorage.setItem('activeProjectId', project.id);
+        } else {
+            localStorage.removeItem('activeProjectId');
+        }
+    }, []);
+
     // Optimized data loading with parallel requests
     const loadUserData = useCallback(async (currentUser) => {
         if (!currentUser) return;
@@ -178,11 +188,25 @@ export const ProjectProvider = ({ children }) => {
                 );
                 setProjects(userProjects);
 
-                // Set active project from localStorage or first project
+                // Set active project logic
                 if (userProjects.length > 0) {
                     const savedProjectId = localStorage.getItem('activeProjectId');
-                    const activeProj = userProjects.find(p => p.id === savedProjectId) || userProjects[0];
-                    setActiveProject(activeProj);
+                    let activeProj = null;
+                    
+                    // Try to find the saved project first
+                    if (savedProjectId) {
+                        activeProj = userProjects.find(p => p.id === savedProjectId);
+                    }
+                    
+                    // If no saved project or saved project not found, use the first (most recent)
+                    if (!activeProj) {
+                        activeProj = userProjects[0];
+                    }
+                    
+                    setActiveProjectWithStorage(activeProj);
+                } else {
+                    // No projects found, clear active project
+                    setActiveProjectWithStorage(null);
                 }
                 setIsProjectsLoading(false);
             }
@@ -191,7 +215,7 @@ export const ProjectProvider = ({ children }) => {
             setIsUserLoading(false);
             setIsProjectsLoading(false);
         }
-    }, [fetchUserProfile, fetchUserProjects]);
+    }, [fetchUserProfile, fetchUserProjects, setActiveProjectWithStorage]);
 
     // Optimized auth state listener
     useEffect(() => {
@@ -216,6 +240,8 @@ export const ProjectProvider = ({ children }) => {
                 setIsProjectsLoading(false);
                 // Clear cache
                 setCache({ userProfile: null, projects: null, timestamp: null });
+                // Clear localStorage
+                localStorage.removeItem('activeProjectId');
             }
 
             if (mounted) {
@@ -229,17 +255,7 @@ export const ProjectProvider = ({ children }) => {
         };
     }, [loadUserData]);
 
-    // Save active project to localStorage (debounced)
-    useEffect(() => {
-        if (activeProject?.id) {
-            const timeoutId = setTimeout(() => {
-                localStorage.setItem('activeProjectId', activeProject.id);
-            }, 100);
-            return () => clearTimeout(timeoutId);
-        }
-    }, [activeProject?.id]);
-
-    // Optimized refetch function
+    // Optimized refetch function with better active project handling
     const refetchProjects = useCallback(async () => {
         if (!user || !userProfile) return;
 
@@ -253,17 +269,37 @@ export const ProjectProvider = ({ children }) => {
                 userProfile.organizationId
             );
             setProjects(userProjects);
+
+            // Handle active project after refetch
+            if (userProjects.length > 0) {
+                const savedProjectId = localStorage.getItem('activeProjectId');
+                let activeProj = null;
+                
+                // Try to find the saved project first
+                if (savedProjectId) {
+                    activeProj = userProjects.find(p => p.id === savedProjectId);
+                }
+                
+                // If no saved project or saved project not found, use the first (most recent)
+                if (!activeProj) {
+                    activeProj = userProjects[0];
+                }
+                
+                setActiveProjectWithStorage(activeProj);
+            } else {
+                setActiveProjectWithStorage(null);
+            }
         } finally {
             setIsProjectsLoading(false);
         }
-    }, [user, userProfile, fetchUserProjects]);
+    }, [user, userProfile, fetchUserProjects, setActiveProjectWithStorage]);
 
     const value = useMemo(() => ({
         user,
         userProfile,
         projects,
         activeProject,
-        setActiveProject,
+        setActiveProject: setActiveProjectWithStorage, // Use the version that syncs with localStorage
         isLoading: isLoading || isUserLoading, // Dashboard can show once user is loaded
         isProjectsLoading,
         needsOnboarding,
@@ -275,6 +311,7 @@ export const ProjectProvider = ({ children }) => {
         userProfile,
         projects,
         activeProject,
+        setActiveProjectWithStorage,
         isLoading,
         isUserLoading,
         isProjectsLoading,
