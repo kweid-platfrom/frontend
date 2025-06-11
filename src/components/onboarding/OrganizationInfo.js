@@ -71,7 +71,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
 
         // Optional website validation
         if (formData.website && !formData.website.match(/^https?:\/\/.+/)) {
-            newErrors.website = 'Please enter a valid URL (including http:// or https://)';
+            newErrors.website = 'Please enter a valid URL (including http://localhost:3000 or https://qaid-phi.vercel.app/)';
         }
 
         setErrors(newErrors);
@@ -112,12 +112,12 @@ const OrganizationInfoForm = ({ onComplete }) => {
 
     return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-md mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-8">
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="mx-auto mb-4 w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Building2 className="w-8 h-8 text-blue-600" />
+                        <div className="mx-auto mb-4 w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                            <Building2 className="w-8 h-8 text-[#00695C]   " />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900 mb-2">
                             Tell us about your organization
@@ -134,7 +134,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                             <span>Organization Info</span>
                         </div>
                         <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                            <div className="bg-blue-600 h-2 rounded-full w-1/3"></div>
+                            <div className="bg-teal-600 h-2 rounded-full w-1/3"></div>
                         </div>
                     </div>
 
@@ -151,7 +151,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="companyName"
                                 value={formData.companyName}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.companyName ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.companyName ? 'border-red-500' : 'border-gray-300'
                                     }`}
                                 placeholder="Enter your company name"
                             />
@@ -170,7 +170,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="industry"
                                 value={formData.industry}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.industry ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.industry ? 'border-red-500' : 'border-gray-300'
                                     }`}
                             >
                                 <option value="">Select your industry</option>
@@ -193,7 +193,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="companySize"
                                 value={formData.companySize}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.companySize ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.companySize ? 'border-red-500' : 'border-gray-300'
                                     }`}
                             >
                                 <option value="">Select company size</option>
@@ -217,7 +217,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="website"
                                 value={formData.website}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.website ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.website ? 'border-red-500' : 'border-gray-300'
                                     }`}
                                 placeholder="https://www.yourcompany.com"
                             />
@@ -237,7 +237,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 value={formData.description}
                                 onChange={handleInputChange}
                                 rows={3}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-600"
                                 placeholder="Tell us a bit about what your company does..."
                             />
                         </div>
@@ -247,7 +247,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                                className="w-full  bg-teal-600 hover:bg-teal-700 text-white py-3 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                             >
                                 {loading ? (
                                     <>
