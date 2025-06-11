@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../context/AuthProvider";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
+import { sendEmailVerification } from "firebase/auth";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
 import BackgroundDecorations from "../BackgroundDecorations";
 import '../../app/globals.css';
@@ -17,13 +18,67 @@ const Login = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [loadingEmailLogin, setLoadingEmailLogin] = useState(false);
     const [loadingGoogleLogin, setLoadingGoogleLogin] = useState(false);
+    const [loadingResendVerification, setLoadingResendVerification] = useState(false);
     const [errors, setErrors] = useState({ email: "", password: "" });
+    const [showVerificationHelper, setShowVerificationHelper] = useState(false);
+    const [unverifiedUser, setUnverifiedUser] = useState(null);
     const router = useRouter();
     const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
 
-    // ADD BACK THE REDIRECT LOGIC - This was missing in Paste-1
+    // Handle email verification success and other URL parameters
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const verified = urlParams.get('verified');
+        const message = urlParams.get('message');
+        
+        if (verified === 'true') {
+            toast.success("Email verified successfully! You can now sign in.", {
+                duration: 5000,
+                position: "top-center"
+            });
+            
+            // Clear the URL parameter
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        
+        if (message) {
+            // Handle other messages from redirects
+            switch (message) {
+                case 'password-reset':
+                    toast.success("Password reset email sent! Check your inbox.", {
+                        duration: 5000,
+                        position: "top-center"
+                    });
+                    break;
+                case 'registration-complete':
+                    toast.success("Registration completed! Please sign in.", {
+                        duration: 5000,
+                        position: "top-center"
+                    });
+                    break;
+                case 'verification-sent':
+                    toast.success("Verification email sent! Check your inbox.", {
+                        duration: 5000,
+                        position: "top-center"
+                    });
+                    break;
+                default:
+                    break;
+            }
+            
+            // Clear the message parameter
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }, []);
+
+    // Clean redirect logic - authenticated users always go to dashboard
     useEffect(() => {
         if (currentUser && !loading) {
+            // User is authenticated - clear any stale registration data and go to dashboard
+            localStorage.removeItem("registrationData");
+            localStorage.removeItem("needsOnboarding");
+            localStorage.removeItem("awaitingEmailVerification");
+            
             router.push("/dashboard");
         }
     }, [currentUser, loading, router]);
@@ -54,23 +109,98 @@ const Login = () => {
         return isValid;
     };
 
+    const handleResendVerification = async () => {
+        if (!unverifiedUser) return;
+
+        setLoadingResendVerification(true);
+        try {
+            await sendEmailVerification(unverifiedUser);
+            
+            toast.success("Verification email sent! Please check your inbox and spam folder.", {
+                duration: 6000,
+                position: "top-center"
+            });
+            
+            // Hide the verification helper after successful send
+            setShowVerificationHelper(false);
+            setUnverifiedUser(null);
+            
+        } catch (error) {
+            console.error("Error sending verification email:", error);
+            let errorMessage = "Failed to send verification email. ";
+            
+            switch (error.code) {
+                case 'auth/too-many-requests':
+                    errorMessage += "Too many requests. Please wait a few minutes before trying again.";
+                    break;
+                case 'auth/user-token-expired':
+                    errorMessage += "Your session has expired. Please try logging in again.";
+                    break;
+                default:
+                    errorMessage += "Please try again or contact support if the problem persists.";
+            }
+            
+            toast.error(errorMessage, {
+                duration: 6000,
+                position: "top-center"
+            });
+        } finally {
+            setLoadingResendVerification(false);
+        }
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
-        e.stopPropagation(); // Prevent event bubbling
+        e.stopPropagation();
         
         if (!validateForm()) {
             return;
         }
         
         setLoadingEmailLogin(true);
+        setShowVerificationHelper(false); // Hide any existing helper
+        
         try {
             const result = await signIn(email, password);
             if (result.success) {
+                // Check if email is verified
+                if (result.user && !result.user.emailVerified) {
+                    toast.error("Please verify your email before signing in. Check your inbox for the verification link.", {
+                        duration: 6000,
+                        position: "top-center"
+                    });
+                    
+                    // Store the unverified user for resend functionality
+                    setUnverifiedUser(result.user);
+                    setShowVerificationHelper(true);
+                    
+                    // Sign out the user since email is not verified
+                    await result.user.auth.signOut();
+                    return;
+                }
+                
                 toast.success("Login successful!");
-                // Manual redirect as backup if useEffect doesn't trigger
+                
+                // Login successful - clear any stale registration data and go to dashboard
+                localStorage.removeItem("registrationData");
+                localStorage.removeItem("needsOnboarding");
+                localStorage.removeItem("awaitingEmailVerification");
+                
                 router.push("/dashboard");
+                
             } else {
-                const friendlyError = getFirebaseErrorMessage(result.error || result);
+                // Handle specific Firebase auth errors
+                const error = result.error || result;
+                let friendlyError = getFirebaseErrorMessage(error);
+                
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    friendlyError = "Invalid email or password. Please check your credentials and try again.";
+                } else if (error.code === 'auth/too-many-requests') {
+                    friendlyError = "Too many failed login attempts. Please wait a few minutes before trying again.";
+                } else if (error.code === 'auth/user-disabled') {
+                    friendlyError = "This account has been disabled. Please contact support.";
+                }
+                
                 toast.error(friendlyError);
             }
         } catch (error) {
@@ -84,22 +214,28 @@ const Login = () => {
 
     const handleGoogleLogin = async (e) => {
         e.preventDefault();
-        e.stopPropagation(); // Prevent event bubbling
+        e.stopPropagation();
         
         setLoadingGoogleLogin(true);
         try {
             const result = await signInWithGoogle();
             if (result.success) {
-                // If the user doesn't exist, redirect to register
+                // If this is a completely new user (first time using Google), send to register
                 if (result.isNewUser) {
                     toast.info("Please complete your registration first.");
                     router.push("/register");
                     return;
                 }
                 
-                // Otherwise, show success and redirect to dashboard
                 toast.success("Login successful!");
+                
+                // Existing user logging in - clear stale data and go to dashboard
+                localStorage.removeItem("registrationData");
+                localStorage.removeItem("needsOnboarding");
+                localStorage.removeItem("awaitingEmailVerification");
+                
                 router.push("/dashboard");
+                
             } else {
                 const friendlyError = getFirebaseErrorMessage(result.error || result);
                 toast.error(friendlyError);
@@ -115,9 +251,57 @@ const Login = () => {
     
     const handleForgotPassword = (e) => {
         e.preventDefault();
-        e.stopPropagation(); // Prevent event bubbling
+        e.stopPropagation();
         router.push("/forgot-password");
     };
+
+    // Email Verification Helper Component
+    const VerificationHelper = () => (
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                    <Mail className="w-5 h-5 text-amber-600 mt-0.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-amber-800 mb-1">
+                        Email Verification Required
+                    </h3>
+                    <p className="text-sm text-amber-700 mb-3">
+                        Your account exists but your email address hasn&apos;t been verified yet. 
+                        Please check your inbox for the verification link, or we can send you a new one.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                            onClick={handleResendVerification}
+                            disabled={loadingResendVerification}
+                            className="flex items-center justify-center gap-2 bg-amber-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {loadingResendVerification ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Sending...
+                                </>
+                            ) : (
+                                <>
+                                    <Mail className="w-4 h-4" />
+                                    Resend Verification
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowVerificationHelper(false);
+                                setUnverifiedUser(null);
+                            }}
+                            className="text-amber-600 text-sm px-4 py-2 rounded-lg border border-amber-600 hover:bg-amber-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 
     // Show loading spinner during auth check
     if (loading) {
@@ -135,6 +319,19 @@ const Login = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
+            <Toaster
+                richColors
+                position="top-center"
+                toastOptions={{
+                    style: {
+                        background: 'rgba(255, 255, 255, 0.95)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(148, 163, 184, 0.2)',
+                        borderRadius: '12px'
+                    }
+                }}
+            />
+            
             <BackgroundDecorations />
 
             {/* Main Content */}
@@ -243,6 +440,9 @@ const Login = () => {
                             </button>
                         </form>
 
+                        {/* Email Verification Helper */}
+                        {showVerificationHelper && <VerificationHelper />}
+
                         {/* Divider */}
                         <div className="flex items-center my-8">
                             <div className="flex-grow border-t border-slate-300"></div>
@@ -269,6 +469,15 @@ const Login = () => {
                                 Sign Up
                             </Link>
                         </p>
+
+                        {/* Email Verification Notice */}
+                        <div className="mt-6 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                            <p className="text-xs text-teal-700 text-center">
+                                <span className="font-medium">New user?</span> Please verify your email before signing in.
+                                <br />
+                                Check your inbox for the verification link.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

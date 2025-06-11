@@ -29,11 +29,22 @@ const OnboardingRouter = () => {
                     return;
                 }
 
-                // Check if email is verified
-                if (!currentUser.emailVerified) {
+                // Check if email is verified with a more robust approach
+                // Sometimes the emailVerified status takes time to update after verification
+                const isEmailVerified = currentUser.emailVerified || 
+                    (typeof window !== 'undefined' && 
+                     localStorage.getItem('emailVerificationComplete') === 'true');
+
+                if (!isEmailVerified) {
                     console.log('Email not verified, redirecting to verify-email');
                     router.push('/verify-email');
                     return;
+                }
+
+                // If we just verified the email, reload the user to get updated status
+                if (!currentUser.emailVerified && localStorage.getItem('emailVerificationComplete') === 'true') {
+                    console.log('Reloading user to get updated email verification status');
+                    await currentUser.reload();
                 }
 
                 // Get fresh user profile data
@@ -120,21 +131,61 @@ const OnboardingRouter = () => {
             }
         };
 
-        // Add a small delay to ensure auth context is fully loaded
+        // Add a delay to ensure auth context is fully loaded and Firebase auth state is updated
         const timer = setTimeout(() => {
             determineOnboardingStep();
-        }, 100);
+        }, 500); // Increased delay to give more time for auth state to update
 
         return () => clearTimeout(timer);
     }, [currentUser, userProfile, router, getUserProfile, updateUserProfile]);
 
     const handleStepComplete = async (nextStep = null) => {
         try {
-            if (nextStep) {
+            const { accountType } = userProfile;
+
+            if (currentStep === 'organization-info') {
+                // Mark organization info as complete and move to team invites
+                await updateUserProfile(currentUser.uid, {
+                    'onboardingStatus.organizationInfoComplete': true
+                });
+                console.log('Organization info completed, moving to team invites');
+                setCurrentStep('team-invites');
+                
+            } else if (currentStep === 'team-invites') {
+                // Mark team invites as complete and move to project creation
+                await updateUserProfile(currentUser.uid, {
+                    'onboardingStatus.teamInvitesComplete': true
+                });
+                console.log('Team invites completed, moving to project creation');
+                setCurrentStep('project-creation');
+                
+            } else if (currentStep === 'project-creation') {
+                // Mark project creation as complete
+                await updateUserProfile(currentUser.uid, {
+                    'onboardingStatus.projectCreated': true
+                });
+                
+                if (accountType === 'individual') {
+                    // For individual accounts, project creation completes onboarding
+                    console.log('Individual project creation completed, marking onboarding as done');
+                    await updateUserProfile(currentUser.uid, {
+                        'onboardingStatus.onboardingComplete': true
+                    });
+                    router.push('/dashboard');
+                } else if (accountType === 'organization') {
+                    // For organization accounts, check if all steps are complete
+                    console.log('Organization project creation completed, marking onboarding as done');
+                    await updateUserProfile(currentUser.uid, {
+                        'onboardingStatus.onboardingComplete': true
+                    });
+                    router.push('/dashboard');
+                }
+            } else if (nextStep) {
+                // Handle any custom next step logic
                 console.log('Moving to next step:', nextStep);
                 setCurrentStep(nextStep);
             } else {
-                // Onboarding complete, mark as done and redirect to dashboard
+                // Fallback - mark onboarding as complete and redirect
                 console.log('Onboarding complete, redirecting to dashboard');
                 await updateUserProfile(currentUser.uid, {
                     'onboardingStatus.onboardingComplete': true
@@ -143,6 +194,27 @@ const OnboardingRouter = () => {
             }
         } catch (error) {
             console.error('Error completing onboarding step:', error);
+            setError('An error occurred. Please try again.');
+        }
+    };
+
+    // Handle team invite specific completion
+    const handleTeamInviteComplete = async (invitedEmails = []) => {
+        try {
+            // Mark team invites as complete and store invited emails if any
+            const updateData = {
+                'onboardingStatus.teamInvitesComplete': true
+            };
+            
+            if (invitedEmails.length > 0) {
+                updateData['onboardingStatus.invitedEmails'] = invitedEmails;
+            }
+            
+            await updateUserProfile(currentUser.uid, updateData);
+            console.log('Team invites completed, moving to project creation');
+            setCurrentStep('project-creation');
+        } catch (error) {
+            console.error('Error completing team invite step:', error);
             setError('An error occurred. Please try again.');
         }
     };
@@ -183,7 +255,14 @@ const OnboardingRouter = () => {
             return <OrganizationInfoForm onComplete={handleStepComplete} />;
 
         case 'team-invites':
-            return <TeamInviteForm onComplete={handleStepComplete} />;
+            return (
+                <TeamInviteForm 
+                    onSendInvites={handleTeamInviteComplete}
+                    onSkip={() => handleTeamInviteComplete([])}
+                    userEmail={currentUser?.email}
+                    isLoading={false}
+                />
+            );
 
         case 'project-creation':
             return <ProjectCreationForm onComplete={handleStepComplete} />;

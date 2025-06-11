@@ -56,11 +56,31 @@ export const AuthProvider = ({ children }) => {
         }
 
         try {
+            // Set current user immediately for UI feedback
+            setCurrentUser(user);
+
             let authSource = 'auth';
             if (user.providerData?.length > 0) {
                 const provider = user.providerData[0].providerId;
                 if (provider === 'google.com') authSource = 'google';
                 else if (provider === 'password') authSource = 'email';
+            }
+
+            // Check if we're in an email verification flow
+            const justVerified = localStorage.getItem('emailVerificationComplete') === 'true';
+            
+            if (typeof window !== 'undefined') {
+                const currentPath = window.location.pathname;
+                const searchParams = new URLSearchParams(window.location.search);
+                const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
+                
+                // If this is a verification callback, let the verify-email page handle it
+                if (isVerificationCallback) {
+                    if (currentPath !== "/verify-email") {
+                        router.push(`/verify-email${window.location.search}`);
+                    }
+                    return;
+                }
             }
 
             const result = await createUserIfNotExists(user, {}, authSource);
@@ -77,7 +97,6 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
 
-            setCurrentUser(user);
             setUserPermissions(result.userData.permissions || {
                 isAdmin: false,
                 roles: ["user"],
@@ -89,33 +108,49 @@ export const AuthProvider = ({ children }) => {
                 const currentPath = window.location.pathname;
 
                 // 1️⃣ EMAIL VERIFICATION GATE
-                if (!user.emailVerified) {
-                    // If user is not on verify-email page, redirect there
+                if (!user.emailVerified && !justVerified) {
+                    // Skip verification check if user is already on verify-email page
                     if (currentPath !== "/verify-email") {
+                        localStorage.setItem('awaitingEmailVerification', 'true');
                         router.push("/verify-email");
                     }
                     return; // stop further routing
+                } else {
+                    // Email is verified, clear any verification flags
+                    localStorage.removeItem('awaitingEmailVerification');
+                    if (justVerified) {
+                        localStorage.removeItem('emailVerificationComplete');
+                    }
                 }
 
                 // 2️⃣ ONBOARDING GATE
-                // Define onboarding need - either new user or incomplete setup flag from your API
-                const needsOnboarding = result.isNewUser || result.needsSetup;
+                const needsOnboarding = result.isNewUser || result.needsSetup || 
+                    !result.userData.onboardingStatus?.onboardingComplete;
+
+                console.log('Onboarding check:', {
+                    needsOnboarding,
+                    isNewUser: result.isNewUser,
+                    needsSetup: result.needsSetup,
+                    onboardingComplete: result.userData.onboardingStatus?.onboardingComplete,
+                    currentPath
+                });
 
                 if (needsOnboarding) {
                     localStorage.setItem("needsOnboarding", "true");
 
-                    // Route to onboarding only if user is on login/register/verify-email pages or at root
+                    // Route to onboarding only if user is on auth pages or at root
                     if (
                         currentPath === "/login" ||
                         currentPath === "/register" ||
                         currentPath === "/verify-email" ||
-                        currentPath === "/"
+                        currentPath === "/" ||
+                        currentPath === "/dashboard" ||
+                        currentPath.startsWith("/handle-email-verification")
                     ) {
-                        // You mentioned onboarding depends on account type in userData:
-                        // e.g. userData.accountType = 'individual' or 'organization'
                         const accountType = result.userData.accountType || "individual";
 
-                        // Route onboarding dynamically based on account type
+                        console.log('Routing to onboarding:', { accountType, currentPath });
+
                         if (accountType === "organization") {
                             router.push("/onboarding/organization");
                         } else {
@@ -126,13 +161,15 @@ export const AuthProvider = ({ children }) => {
                 } else {
                     localStorage.removeItem("needsOnboarding");
 
-                    // If user is already on login/register/verify-email/onboarding, redirect to dashboard
+                    // If user is on auth pages, redirect to dashboard
                     if (
                         currentPath === "/login" ||
                         currentPath === "/register" ||
                         currentPath === "/verify-email" ||
-                        currentPath.startsWith("/onboarding")
+                        currentPath.startsWith("/onboarding") ||
+                        currentPath.startsWith("/handle-email-verification")
                     ) {
+                        console.log('Routing to dashboard from:', currentPath);
                         router.push("/dashboard");
                     }
                 }
@@ -142,7 +179,6 @@ export const AuthProvider = ({ children }) => {
             console.error("Error processing authentication:", error);
 
             // Set basic user info even if profile fetch fails
-            setCurrentUser(user);
             setUserPermissions({
                 isAdmin: false,
                 roles: ["user"],
@@ -152,8 +188,6 @@ export const AuthProvider = ({ children }) => {
             setAuthError(error.message);
         }
     }, [router]);
-
-
 
     // Handle redirect result
     useEffect(() => {
@@ -227,9 +261,13 @@ export const AuthProvider = ({ children }) => {
     const registerWithEmail = async (email, password) => {
         setAuthError(null);
         try {
+            // Set flag that we expect email verification
+            localStorage.setItem('awaitingEmailVerification', 'true');
+            
             const result = await authRegisterWithEmail(email, password);
             return { success: true, user: result.user };
         } catch (error) {
+            localStorage.removeItem('awaitingEmailVerification');
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
@@ -238,9 +276,11 @@ export const AuthProvider = ({ children }) => {
     const registerWithEmailLink = async (email, name) => {
         setAuthError(null);
         try {
+            localStorage.setItem('awaitingEmailVerification', 'true');
             await authRegisterWithEmailLink(email, name);
             return { success: true };
         } catch (error) {
+            localStorage.removeItem('awaitingEmailVerification');
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
@@ -273,6 +313,9 @@ export const AuthProvider = ({ children }) => {
             await authLogout();
             if (typeof window !== 'undefined') {
                 localStorage.removeItem("needsAccountSetup");
+                localStorage.removeItem("awaitingEmailVerification");
+                localStorage.removeItem("emailVerificationComplete");
+                localStorage.removeItem("needsOnboarding");
             }
             router.push("/login");
             return { success: true };

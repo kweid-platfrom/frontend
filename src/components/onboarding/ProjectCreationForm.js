@@ -1,10 +1,10 @@
-// components/onboarding/CreateProjectOnboarding.js
+// components/onboarding/ProjectCreationForm.js
 'use client'
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useProject } from '../../context/ProjectContext';
+import { useAuth } from '../../context/AuthProvider'; // Changed from useProject
 import { db } from '../../config/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { toast } from 'sonner'; // Add success notification
 import {
     RocketLaunchIcon,
     DocumentTextIcon,
@@ -13,9 +13,8 @@ import {
     BeakerIcon
 } from '@heroicons/react/24/outline';
 
-const ProjectCreationForm = () => {
-    const router = useRouter();
-    const { user, userProfile, refetchProjects, setNeedsOnboarding } = useProject();
+const ProjectCreationForm = ({ onComplete }) => { // Accept onComplete prop
+    const { currentUser, userProfile } = useAuth(); // Use AuthProvider instead
     const [projectName, setProjectName] = useState('');
     const [description, setDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -58,12 +57,12 @@ const ProjectCreationForm = () => {
             const projectData = {
                 name: projectName.trim(),
                 description: description.trim(),
-                createdBy: user.uid,
+                createdBy: currentUser.uid,
                 organizationId: userProfile?.organizationId || null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 settings: {
-                    defaultAssignee: user.uid,
+                    defaultAssignee: currentUser.uid,
                     testCasePrefix: 'TC',
                     bugReportPrefix: 'BUG',
                     enableAIGeneration: true,
@@ -79,15 +78,18 @@ const ProjectCreationForm = () => {
 
             await addDoc(collection(db, 'projects'), projectData);
             
-            // Refresh projects list and clear onboarding flag
-            await refetchProjects();
-            setNeedsOnboarding(false);
+            // Show success message
+            toast.success('Project created successfully! Welcome to QA Suite!');
             
-            // Redirect to dashboard
-            router.push('/dashboard');
+            // For all account types, redirect to dashboard after project creation
+            if (typeof onComplete === 'function') {
+                onComplete(); // This will mark onboarding as complete and redirect to dashboard
+            }
+            
         } catch (error) {
             console.error('Error creating project:', error);
             setError('Failed to create project. Please try again.');
+            toast.error('Failed to create project. Please try again.');
         } finally {
             setIsLoading(false);
         }

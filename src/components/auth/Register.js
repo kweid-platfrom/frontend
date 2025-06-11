@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../../config/firebase";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
 import { toast, Toaster } from "sonner";
@@ -27,6 +27,9 @@ const Register = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [registrationSuccess, setRegistrationSuccess] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [lastResendTime, setLastResendTime] = useState(0);
+    const [resendCountdown, setResendCountdown] = useState(0);
 
     // Google account type selection states
     const [showGoogleAccountType, setShowGoogleAccountType] = useState(false);
@@ -75,6 +78,106 @@ const Register = () => {
         }
     };
 
+    // Resend verification email function
+    const handleResendVerification = async () => {
+        const now = Date.now();
+        const timeSinceLastResend = now - lastResendTime;
+        const cooldownTime = 60000; // 60 seconds cooldown
+
+        if (timeSinceLastResend < cooldownTime) {
+            const remainingTime = Math.ceil((cooldownTime - timeSinceLastResend) / 1000);
+            toast.error(`Please wait ${remainingTime} seconds before resending.`, {
+                duration: 3000,
+                position: "top-center"
+            });
+            return;
+        }
+
+        setResendLoading(true);
+
+        try {
+            const email = localStorage.getItem("emailForVerification") || formData.email;
+            const registrationData = JSON.parse(localStorage.getItem("registrationData") || "{}");
+            
+            if (!email || !registrationData.password) {
+                toast.error("Unable to resend verification. Please try registering again.", {
+                    duration: 5000,
+                    position: "top-center"
+                });
+                return;
+            }
+
+            // Sign in temporarily to resend verification
+            const userCredential = await signInWithEmailAndPassword(auth, email, registrationData.password);
+            const user = userCredential.user;
+
+            if (user.emailVerified) {
+                toast.success("Your email is already verified! You can now sign in.", {
+                    duration: 5000,
+                    position: "top-center"
+                });
+                await auth.signOut();
+                return;
+            }
+
+            await sendEmailVerification(user);
+            await auth.signOut();
+
+            setLastResendTime(now);
+            
+            // Start countdown timer
+            let countdown = 60;
+            setResendCountdown(countdown);
+            const timer = setInterval(() => {
+                countdown--;
+                setResendCountdown(countdown);
+                if (countdown <= 0) {
+                    clearInterval(timer);
+                    setResendCountdown(0);
+                }
+            }, 1000);
+
+            toast.success("Verification email sent successfully! Check your inbox.", {
+                duration: 5000,
+                position: "top-center"
+            });
+
+        } catch (error) {
+            console.error("Resend verification error:", error);
+            
+            let errorMessage;
+            switch (error.code) {
+                case 'auth/user-not-found':
+                    errorMessage = "Account not found. Please register again.";
+                    // Clear stored data and reset form
+                    localStorage.removeItem("registrationData");
+                    localStorage.removeItem("emailForVerification");
+                    localStorage.removeItem("awaitingEmailVerification");
+                    setRegistrationSuccess(false);
+                    break;
+                case 'auth/wrong-password':
+                case 'auth/invalid-credential':
+                    errorMessage = "Unable to verify account credentials. Please register again.";
+                    break;
+                case 'auth/too-many-requests':
+                    errorMessage = "Too many requests. Please wait a few minutes before trying again.";
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage = "Network error. Please check your connection and try again.";
+                    break;
+                default:
+                    errorMessage = getFirebaseErrorMessage(error) || "Failed to resend verification email. Please try again.";
+            }
+
+            toast.error(errorMessage, {
+                duration: 6000,
+                position: "top-center"
+            });
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
     const handleRegister = async (e) => {
         e.preventDefault();
 
@@ -100,14 +203,10 @@ const Register = () => {
             const user = userCredential.user;
             console.log('Firebase Auth user created:', user.uid);
 
-            // Step 2: Send email verification IMMEDIATELY after user creation
+            // Step 2: Send email verification WITHOUT specifying a URL
+            // This will use Firebase's default email verification flow
             try {
-                await sendEmailVerification(user, {
-                    url: process.env.NEXT_PUBLIC_APP_URL
-                        ? `${process.env.NEXT_PUBLIC_APP_URL}/verify-email`
-                        : "https://your-domain.com/verify-email",
-                    handleCodeInApp: true
-                });
+                await sendEmailVerification(user);
                 console.log('Verification email sent successfully');
             } catch (emailError) {
                 console.error('Email verification failed:', emailError);
@@ -146,12 +245,23 @@ const Register = () => {
                 throw new Error(`Database error: ${firestoreError.message}`);
             }
 
-            // Step 5: Store registration data for onboarding
-            storeRegistrationData({
+            // Step 5: Store registration data for onboarding (including password for resend functionality)
+            const registrationData = {
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
-                email: formData.email
-            }, 'email', formData.userType);
+                email: formData.email,
+                password: formData.password, // Store temporarily for resend functionality
+                userType: formData.userType,
+                accountType: formData.userType === "organization" ? "business" : "personal",
+                registrationMethod: 'email',
+                needsOnboarding: true,
+                needsEmailVerification: true,
+                registrationTimestamp: Date.now()
+            };
+
+            localStorage.setItem("registrationData", JSON.stringify(registrationData));
+            localStorage.setItem("emailForVerification", formData.email);
+            localStorage.setItem("awaitingEmailVerification", "true");
 
             // Step 6: Sign out user until they verify email
             await auth.signOut();
@@ -167,11 +277,12 @@ const Register = () => {
                 }
             );
 
-            // Clear form
+            // Clear form but keep email for resend functionality
+            const currentEmail = formData.email;
             setFormData({
                 firstName: "",
                 lastName: "",
-                email: "",
+                email: currentEmail, // Keep email for resend
                 userType: "individual",
                 password: "",
                 confirmPassword: "",
@@ -187,8 +298,17 @@ const Register = () => {
             } else {
                 switch (error.code) {
                     case 'auth/email-already-in-use':
-                        errorMessage = "An account with this email already exists. Please try signing in instead.";
-                        break;
+                        errorMessage = "An account with this email already exists. Try signing in instead, or check your email for a verification link.";
+                        // Show additional help for existing accounts
+                        toast.error(errorMessage, {
+                            duration: 8000,
+                            position: "top-center",
+                            action: {
+                                label: "Go to Sign In",
+                                onClick: () => window.location.href = '/login'
+                            }
+                        });
+                        return; // Exit early to avoid the generic error toast
                     case 'auth/weak-password':
                         errorMessage = "Password is too weak. Please choose a stronger password.";
                         break;
@@ -353,7 +473,7 @@ const Register = () => {
             <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
                 <p className="text-gray-600 mb-4">
-                    We&apos;ve sent a verification link to <strong>{formData.email || "your email"}</strong>
+                    We&apos;ve sent a verification link to <strong>{formData.email || localStorage.getItem("emailForVerification") || "your email"}</strong>
                 </p>
                 <p className="text-sm text-gray-500 mb-6">
                     Click the link in the email to verify your account and complete registration.
@@ -361,6 +481,27 @@ const Register = () => {
             </div>
 
             <div className="space-y-4">
+                {/* Resend Verification Button */}
+                <button
+                    onClick={handleResendVerification}
+                    disabled={resendLoading || resendCountdown > 0}
+                    className="w-full bg-teal-100 text-teal-700 py-2 px-4 rounded-lg hover:bg-teal-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-teal-200"
+                >
+                    {resendLoading ? (
+                        <span className="flex items-center justify-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-teal-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Sending...
+                        </span>
+                    ) : resendCountdown > 0 ? (
+                        `Resend in ${resendCountdown}s`
+                    ) : (
+                        "Resend Verification Email"
+                    )}
+                </button>
+
                 <button
                     onClick={() => window.location.href = '/login'}
                     className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
@@ -373,6 +514,17 @@ const Register = () => {
                         setRegistrationSuccess(false);
                         // Clear stored data to allow re-registration if needed
                         localStorage.removeItem("awaitingEmailVerification");
+                        localStorage.removeItem("registrationData");
+                        localStorage.removeItem("emailForVerification");
+                        setFormData({
+                            firstName: "",
+                            lastName: "",
+                            email: "",
+                            userType: "individual",
+                            password: "",
+                            confirmPassword: "",
+                            termsAccepted: false
+                        });
                     }}
                     className="w-full border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors"
                 >
@@ -380,9 +532,10 @@ const Register = () => {
                 </button>
             </div>
             
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 space-y-1">
                 <p>Didn&apos;t receive the email?</p>
-                <p>Check your spam folder or contact support</p>
+                <p>Check your spam folder or use the resend button above</p>
+                <p className="text-teal-600">Having trouble? Contact support</p>
             </div>
         </div>
     );
