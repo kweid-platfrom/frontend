@@ -207,12 +207,12 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white">
                     <div className="flex items-center min-w-0 flex-1">
                         <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
-                            <BeakerIcon className="h-8 w-8 text-blue-600" />
+                            <BeakerIcon className="h-8 w-8 text-[#36590B]" />
                         </div>
                         <div className={`ml-3 overflow-hidden transition-all duration-300 ease-out ${
                             isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'
                         }`}>
-                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-teal-400 to-accent-500 bg-clip-text text-transparent">
                                 QA Suite
                             </span>
                         </div>
@@ -257,7 +257,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                             title={isCollapsed ? activeProject?.name || 'Select Project' : ''}
                         >
                             <div className="min-w-0 flex-1 flex items-center">
-                                <FolderIcon className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                                <FolderIcon className="h-5 w-5 text-teal-500 flex-shrink-0" />
                                 <div className={`ml-3 min-w-0 transition-all duration-300 ease-out ${
                                     isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'
                                 }`}>
@@ -305,7 +305,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                                     key={project.id}
                                                     onClick={() => handleProjectSwitch(project)}
                                                     className={`w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 transition-all duration-200 hover:scale-[1.01] ${
-                                                        activeProject?.id === project.id ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'text-gray-900'
+                                                        activeProject?.id === project.id ? 'bg-blue-50 text-teal-700 ring-1 ring-blue-200' : 'text-gray-900'
                                                     }`}
                                                 >
                                                     <FolderIcon className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -316,7 +316,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                                         )}
                                                     </div>
                                                     {activeProject?.id === project.id && (
-                                                        <CheckCircleIcon className="h-4 w-4 ml-2 text-blue-600 flex-shrink-0" />
+                                                        <CheckCircleIcon className="h-4 w-4 ml-2 text-teal-700 flex-shrink-0" />
                                                     )}
                                                 </button>
                                             ))}
@@ -342,7 +342,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                     <>
                                         {/* Free/Individual User - Upgrade Prompt */}
                                         <div className="text-center py-4">
-                                            <div className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-3">
+                                            <div className="mx-auto w-12 h-12 bg-gradient-to-r from-teal-400 to-accent-500 rounded-full flex items-center justify-center mb-3">
                                                 <StarIcon className="h-6 w-6 text-white" />
                                             </div>
                                             <h3 className="text-sm font-semibold text-gray-900 mb-1">Multiple Projects</h3>
@@ -363,7 +363,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                             
                                             <button
                                                 onClick={handleUpgrade}
-                                                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200 hover:scale-[1.02] shadow-sm"
+                                                className="w-full bg-gradient-to-r from-teal-400 to-accent-500 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:from-teal-400 hover:to-accent-500 transition-all duration-200 hover:scale-[1.02] shadow-sm"
                                             >
                                                 Upgrade Now
                                             </button>
@@ -406,10 +406,10 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                             <div key={item.name} className="relative group">
                                 <button
                                     onClick={() => handlePageChange(item)}
-                                    className={`group/btn flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 hover:scale-[1.02] ${
+                                    className={`group/btn flex items-center w-full px-3 py-2.5 text-sm font-normal rounded transition-all duration-200 hover:scale-[1.02] ${
                                         isActive
-                                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25'
-                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                            ? 'border-r-4 border-r-teal-500 text-teal-700 shadow-md shadow-teal-500/25'
+                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                                     } ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
                                 >
                                     <item.icon
@@ -444,7 +444,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                             isCollapsed ? 'lg:justify-center' : ''
                         }`}>
                             <div className="flex-shrink-0">
-                                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
+                                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-teal-400 to-accent-500 flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
                                     <span className="text-sm font-bold text-white">
                                         {userProfile.name?.charAt(0) || 'U'}
                                     </span>
