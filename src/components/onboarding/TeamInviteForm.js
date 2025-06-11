@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import "../../app/globals.css";
 
-const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
+const TeamInviteForm = ({ onSendInvites, onSkip, onComplete, isLoading, userEmail }) => {
     const [emails, setEmails] = useState([""]);
     const [orgDomain, setOrgDomain] = useState("");
     const [externalEmails, setExternalEmails] = useState([]);
@@ -45,11 +45,23 @@ const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
         return emailList.every((email) => !email.trim() || emailRegex.test(email));
     };
 
-    const handleSkipClick = (e) => {
+    const handleSkipClick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (isLoading || inviteLoading) return;
-        onSkip();
+        
+        try {
+            if (onSkip) {
+                await onSkip();
+            }
+            // Move to next step after skipping
+            if (onComplete) {
+                onComplete('create-project'); // or whatever the next step is
+            }
+        } catch (error) {
+            console.error('Error during skip:', error);
+            toast.error('Something went wrong. Please try again.');
+        }
     };
 
     const handleSendInvitesClick = (e) => {
@@ -83,7 +95,13 @@ const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
         setInviteLoading(true);
         try {
             await sendInviteEmails(inviteEmails);
-            onSendInvites(inviteEmails);
+            if (onSendInvites) {
+                await onSendInvites(inviteEmails);
+            }
+            // Move to next step after sending invites
+            if (onComplete) {
+                onComplete('create-project'); // or whatever the next step is
+            }
         } catch (error) {
             console.error("Error sending invites:", error);
             toast.error("Failed to send some invites. Please try again.");
@@ -139,6 +157,17 @@ const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
                 <p className="text-sm sm:text-base text-slate-600 max-w-md mx-auto">
                     Collaborate seamlessly with your teammates. You can always invite more people later.
                 </p>
+            </div>
+
+            {/* Progress indicator */}
+            <div className="mb-6 sm:mb-8">
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                    <span>Step 2 of 3</span>
+                    <span>Team Invites</span>
+                </div>
+                <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-teal-600 h-2 rounded-full w-2/3"></div>
+                </div>
             </div>
 
             {/* Add Button - Mobile Optimized */}
@@ -231,7 +260,7 @@ const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
                     ) : (
                         <>
                             <Mail className="w-4 h-4 sm:w-5 sm:h-5" />
-                            <span>Send</span>
+                            <span>Send Invites</span>
                         </>
                     )}
                 </button>
@@ -285,4 +314,4 @@ const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
     );
 };
 
-export default TeamInviteForm
+export default TeamInviteForm;

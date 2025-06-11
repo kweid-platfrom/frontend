@@ -1,12 +1,13 @@
-// components/onboarding/ProjectCreationForm.js
 'use client'
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthProvider';
-import { useProject } from '../../context/ProjectContext'; // Add ProjectContext back
-import { useRouter } from 'next/navigation'; // Add router for navigation
+import { useProject } from '../../context/ProjectContext';
+import { useRouter } from 'next/navigation';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
+import { createProject } from '../../services/projectService';
+import { validateProjectName } from '../../utils/onboardingUtils';
 import {
     RocketLaunchIcon,
     DocumentTextIcon,
@@ -16,13 +17,13 @@ import {
 } from '@heroicons/react/24/outline';
 
 const ProjectCreationForm = ({ onComplete }) => {
-    const { currentUser, userProfile } = useAuth();
-    const { refetchProjects } = useProject(); // Get refetch function
-    const router = useRouter(); // Add router
+    const { currentUser, userProfile, refreshUserData } = useAuth();
+    const { refetchProjects } = useProject();
+    const router = useRouter();
     const [projectName, setProjectName] = useState('');
     const [description, setDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [errors, setErrors] = useState({});
 
     const features = [
         {
@@ -47,52 +48,70 @@ const ProjectCreationForm = ({ onComplete }) => {
         }
     ];
 
+    const completeOnboarding = async () => {
+        try {
+            const userRef = doc(db, 'users', currentUser.uid);
+            await updateDoc(userRef, {
+                'onboardingStatus.onboardingComplete': true,
+                'onboardingStatus.projectCreated': true,
+                'onboardingStatus.completedAt': serverTimestamp(),
+                setupCompleted: true,
+                setupStep: 'completed',
+                updatedAt: serverTimestamp()
+            });
+
+            console.log('Onboarding status updated in Firestore');
+            await refreshUserData();
+            return true;
+        } catch (error) {
+            console.error('Error updating onboarding status:', error);
+            return false;
+        }
+    };
+
     const handleCreateProject = async (e) => {
         e.preventDefault();
-        if (!projectName.trim()) {
-            setError('Project name is required');
+        
+        // Clear previous errors
+        setErrors({});
+
+        // Validate project name
+        const validation = validateProjectName(projectName);
+        if (!validation.isValid) {
+            setErrors({ projectName: validation.errors[0] });
             return;
         }
 
         setIsLoading(true);
-        setError('');
 
         try {
-            const projectData = {
-                name: projectName.trim(),
-                description: description.trim(),
-                createdBy: currentUser.uid,
-                organizationId: userProfile?.organizationId || null,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                settings: {
-                    defaultAssignee: currentUser.uid,
-                    testCasePrefix: 'TC',
-                    bugReportPrefix: 'BUG',
-                    enableAIGeneration: true,
-                    enableScreenRecording: true
-                },
-                stats: {
-                    totalTestCases: 0,
-                    totalBugReports: 0,
-                    automatedTests: 0,
-                    lastActivity: serverTimestamp()
-                }
-            };
+            // Create the project using the service
+            const result = await createProject(
+                { name: projectName, description },
+                currentUser.uid,
+                userProfile?.organizationId
+            );
 
-            // Create the project
-            const docRef = await addDoc(collection(db, 'projects'), projectData);
-            const newProjectId = docRef.id;
+            if (!result.success) {
+                setErrors({ projectName: result.error });
+                return;
+            }
+
+            console.log('Project created successfully with ID:', result.projectId);
             
-            // Show success message
-            toast.success('Project created successfully! Welcome to QA Suite!');
+            // Store the new project ID for the dashboard
+            localStorage.setItem('activeProjectId', result.projectId);
             
-            // Store the new project ID for the dashboard to pick up
-            localStorage.setItem('activeProjectId', newProjectId);
+            // Complete onboarding in Firestore
+            const onboardingCompleted = await completeOnboarding();
             
-            // Mark onboarding as complete first
+            if (!onboardingCompleted) {
+                throw new Error('Failed to complete onboarding setup');
+            }
+            
+            // Call the onComplete callback if provided
             if (typeof onComplete === 'function') {
-                await onComplete(); // Wait for onboarding completion
+                await onComplete();
             }
             
             // Refresh projects to include the new one
@@ -100,14 +119,19 @@ const ProjectCreationForm = ({ onComplete }) => {
                 await refetchProjects();
             }
             
-            // Small delay to ensure state updates, then navigate to dashboard
-            setTimeout(() => {
-                router.push('/dashboard');
-            }, 500);
+            // Show success message
+            toast.success('Project created successfully! Welcome to QA Suite!');
+            
+            // Navigate to dashboard
+            router.push('/dashboard');
             
         } catch (error) {
             console.error('Error creating project:', error);
-            setError('Failed to create project. Please try again.');
+            if (error.message.includes('Failed to complete onboarding')) {
+                setErrors({ general: 'Project created but failed to complete setup. Please try refreshing the page.' });
+            } else {
+                setErrors({ general: 'Failed to create project. Please try again.' });
+            }
             toast.error('Failed to create project. Please try again.');
         } finally {
             setIsLoading(false);
@@ -171,9 +195,14 @@ const ProjectCreationForm = ({ onComplete }) => {
                                     value={projectName}
                                     onChange={(e) => setProjectName(e.target.value)}
                                     placeholder="e.g., E-commerce App QA"
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                        errors.projectName ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                    }`}
                                     disabled={isLoading}
                                 />
+                                {errors.projectName && (
+                                    <p className="mt-1 text-sm text-red-600">{errors.projectName}</p>
+                                )}
                             </div>
 
                             <div>
@@ -191,9 +220,9 @@ const ProjectCreationForm = ({ onComplete }) => {
                                 />
                             </div>
 
-                            {error && (
+                            {errors.general && (
                                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                                    <p className="text-sm text-red-600">{error}</p>
+                                    <p className="text-sm text-red-600">{errors.general}</p>
                                 </div>
                             )}
 

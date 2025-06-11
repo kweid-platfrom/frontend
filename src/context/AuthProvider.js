@@ -9,8 +9,9 @@ import {
     createUserIfNotExists,
     fetchUserData,
     completeUserSetup,
-    updateUserProfile as updateUserProfileService
+    updateOnboardingStep,
 } from "../services/userService";
+import { updateUserProfile as updateUserProfileService } from "../services/userService";
 
 import {
     signInWithGoogle as authSignInWithGoogle,
@@ -39,120 +40,8 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [authError, setAuthError] = useState(null);
     const [initialized, setInitialized] = useState(false);
+    const [skipEmailVerificationRedirect, setSkipEmailVerificationRedirect] = useState(false);
     const router = useRouter();
-
-    // Get user profile from Firestore
-    const getUserProfile = async (uid) => {
-        try {
-            if (!uid) {
-                console.error('getUserProfile: No UID provided');
-                return null;
-            }
-            
-            const profile = await fetchUserData(uid);
-            
-            if (profile) {
-                setUserProfile(profile);
-                setUserPermissions(profile.permissions || {
-                    isAdmin: false,
-                    roles: ["user"],
-                    capabilities: ["read_tests"]
-                });
-                return profile;
-            }
-            
-            return null;
-        } catch (error) {
-            console.error('Error fetching user profile:', error);
-            return null;
-        }
-    };
-
-    // Update user profile in Firestore
-    const updateUserProfile = async (uid, updateData) => {
-        try {
-            if (!uid) {
-                throw new Error('No UID provided for profile update');
-            }
-
-            // Use the current user's UID for security
-            const currentUserUid = currentUser?.uid;
-            if (!currentUserUid) {
-                throw new Error('No authenticated user');
-            }
-
-            const updatedProfile = await updateUserProfileService(uid, updateData, currentUserUid);
-            
-            if (updatedProfile) {
-                setUserProfile(updatedProfile);
-                setUserPermissions(updatedProfile.permissions || {
-                    isAdmin: false,
-                    roles: ["user"],
-                    capabilities: ["read_tests"]
-                });
-                return updatedProfile;
-            }
-            
-            return null;
-        } catch (error) {
-            console.error('Error updating user profile:', error);
-            throw error;
-        }
-    };
-
-    // Create or get existing user profile
-    const createOrGetUserProfile = async (firebaseUser, additionalData = {}, source = 'auth') => {
-        try {
-            const result = await createUserIfNotExists(firebaseUser, additionalData, source);
-            
-            if (result.userData) {
-                setUserProfile(result.userData);
-                setUserPermissions(result.userData.permissions || {
-                    isAdmin: false,
-                    roles: ["user"],
-                    capabilities: ["read_tests"]
-                });
-            }
-            
-            return result;
-        } catch (error) {
-            console.error('Error creating/getting user profile:', error);
-            throw error;
-        }
-    };
-
-    // Complete user setup
-    const completeSetup = async (setupData) => {
-        try {
-            if (!currentUser?.uid) {
-                throw new Error('No authenticated user');
-            }
-
-            const updatedProfile = await completeUserSetup(currentUser.uid, setupData);
-            
-            if (updatedProfile) {
-                setUserProfile(updatedProfile);
-                setUserPermissions(updatedProfile.permissions || {
-                    isAdmin: false,
-                    roles: ["user"],
-                    capabilities: ["read_tests"]
-                });
-                return updatedProfile;
-            }
-            
-            return null;
-        } catch (error) {
-            console.error('Error completing user setup:', error);
-            throw error;
-        }
-    };
-
-    // Refresh user profile
-    const refreshUserProfile = async () => {
-        if (currentUser?.uid) {
-            await getUserProfile(currentUser.uid);
-        }
-    };
 
     const processUserAuthentication = useCallback(async (user) => {
         console.log('Processing user authentication:', {
@@ -173,30 +62,26 @@ export const AuthProvider = ({ children }) => {
             // Set current user immediately for UI feedback
             setCurrentUser(user);
 
-            let authSource = 'auth';
+            // Determine auth source
+            let authSource = 'email';
             if (user.providerData?.length > 0) {
                 const provider = user.providerData[0].providerId;
                 if (provider === 'google.com') authSource = 'google';
-                else if (provider === 'password') authSource = 'email';
             }
 
-            // Check if we're in an email verification flow
-            const justVerified = localStorage.getItem('emailVerificationComplete') === 'true';
-
+            // Handle email verification callback early
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 const searchParams = new URLSearchParams(window.location.search);
                 const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
 
-                // If this is a verification callback, let the verify-email page handle it
-                if (isVerificationCallback) {
-                    if (currentPath !== "/verify-email") {
-                        router.push(`/verify-email${window.location.search}`);
-                    }
+                if (isVerificationCallback && currentPath !== "/verify-email") {
+                    router.push(`/verify-email${window.location.search}`);
                     return;
                 }
             }
 
+            // Create/fetch user data
             const result = await createUserIfNotExists(user, {}, authSource);
 
             if (result.error) {
@@ -211,92 +96,103 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
 
-            setUserPermissions(result.userData.permissions || {
-                isAdmin: false,
-                roles: ["user"],
-                capabilities: ["read_tests"]
+            // Set permissions based on user role
+            const userRole = result.userData.role || ['member'];
+            const isAdmin = userRole.includes('admin');
+
+            setUserPermissions({
+                isAdmin: isAdmin,
+                roles: userRole,
+                capabilities: isAdmin ? ["read_tests", "write_tests", "admin"] : ["read_tests"],
+                ...result.userData.permissions
             });
             setUserProfile(result.userData);
 
+            // Handle routing based on user state
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
 
-                // 1️⃣ EMAIL VERIFICATION GATE
-                if (!user.emailVerified && !justVerified) {
-                    // Skip verification check if user is already on verify-email page
-                    if (currentPath !== "/verify-email") {
-                        localStorage.setItem('awaitingEmailVerification', 'true');
-                        router.push("/verify-email");
-                    }
-                    return; // stop further routing
-                } else {
-                    // Email is verified, clear any verification flags
-                    localStorage.removeItem('awaitingEmailVerification');
-                    if (justVerified) {
-                        localStorage.removeItem('emailVerificationComplete');
-                    }
+                // Skip routing if user is already on appropriate page OR if we should skip email verification redirect
+                if (currentPath === "/verify-email" ||
+                    currentPath.startsWith("/onboarding") ||
+                    currentPath.startsWith("/handle-email-verification") ||
+                    skipEmailVerificationRedirect) {
+                    return;
+                }
+
+                // 1️⃣ EMAIL VERIFICATION GATE - BUT NOT FOR NEW REGISTRATIONS
+                const needsEmailVerification = authSource === 'email' && !user.emailVerified;
+
+                // Only redirect to email verification if user is trying to access protected areas
+                // NOT if they just registered or are on register/login pages
+                const isOnAuthPage = ["/login", "/register"].includes(currentPath);
+                const isNewUser = result.isNewUser;
+
+                if (needsEmailVerification && !isOnAuthPage && !isNewUser) {
+                    console.log('User needs email verification, redirecting...');
+                    router.push("/verify-email");
+                    return;
                 }
 
                 // 2️⃣ ONBOARDING GATE
-                const needsOnboarding = result.isNewUser || result.needsSetup ||
-                    !result.userData.onboardingStatus?.onboardingComplete;
+                // Check if user needs onboarding (but not for brand new users on register page)
+                const needsOnboarding = !isNewUser && (
+                    result.needsSetup ||
+                    !result.userData.setupCompleted ||
+                    result.userData.setupStep !== 'completed' ||  // Add this check
+                    !result.userData.onboardingStatus?.onboardingComplete ||
+                    !result.userData.onboardingStatus?.projectCreated  // Add this check
+                );
 
                 console.log('Onboarding check:', {
                     needsOnboarding,
                     isNewUser: result.isNewUser,
                     needsSetup: result.needsSetup,
+                    setupCompleted: result.userData.setupCompleted,
+                    setupStep: result.userData.setupStep,  // Add this to logging
                     onboardingComplete: result.userData.onboardingStatus?.onboardingComplete,
+                    projectCreated: result.userData.onboardingStatus?.projectCreated,  // Add this to logging
                     currentPath
                 });
 
                 if (needsOnboarding) {
-                    localStorage.setItem("needsOnboarding", "true");
+                    console.log('User needs onboarding, redirecting...');
 
-                    // Route to onboarding only if user is on auth pages or at root
-                    if (
-                        currentPath === "/login" ||
-                        currentPath === "/register" ||
-                        currentPath === "/verify-email" ||
-                        currentPath === "/" ||
-                        currentPath === "/dashboard" ||
-                        currentPath.startsWith("/handle-email-verification")
-                    ) {
-                        console.log('Routing to onboarding from:', currentPath);
+                    // Only redirect from auth/landing pages
+                    const shouldRedirectToOnboarding = [
+                        "/login", "/", "/dashboard"
+                    ].includes(currentPath);
 
-                        // Just route to /onboarding - let OnboardingRouter handle the account type logic
+                    if (shouldRedirectToOnboarding) {
                         router.push("/onboarding");
                     }
                     return;
-                } else {
-                    localStorage.removeItem("needsOnboarding");
+                }
 
-                    // If user is on auth pages, redirect to dashboard
-                    if (
-                        currentPath === "/login" ||
-                        currentPath === "/register" ||
-                        currentPath === "/verify-email" ||
-                        currentPath.startsWith("/onboarding") ||
-                        currentPath.startsWith("/handle-email-verification")
-                    ) {
-                        console.log('Routing to dashboard from:', currentPath);
-                        router.push("/dashboard");
-                    }
+                // 3️⃣ SUCCESS - Route to dashboard (but not if user just registered)
+                const shouldRedirectToDashboard = [
+                    "/login", "/", "/verify-email"
+                ].includes(currentPath);
+
+                if (shouldRedirectToDashboard && !isNewUser) {
+                    console.log('User setup complete, redirecting to dashboard');
+                    router.push("/dashboard");
                 }
             }
 
         } catch (error) {
             console.error("Error processing authentication:", error);
 
-            // Set basic user info even if profile fetch fails
+            // Set basic fallback permissions
             setUserPermissions({
                 isAdmin: false,
-                roles: ["user"],
+                roles: ["member"],
                 capabilities: ["read_tests"]
             });
             setUserProfile({});
             setAuthError(error.message);
         }
-    }, [router]);
+    }, [router, skipEmailVerificationRedirect]);
 
     // Handle redirect result
     useEffect(() => {
@@ -370,13 +266,19 @@ export const AuthProvider = ({ children }) => {
     const registerWithEmail = async (email, password) => {
         setAuthError(null);
         try {
-            // Set flag that we expect email verification
-            localStorage.setItem('awaitingEmailVerification', 'true');
+            // Set flag to prevent immediate email verification redirect
+            setSkipEmailVerificationRedirect(true);
 
             const result = await authRegisterWithEmail(email, password);
+
+            // Reset the flag after a short delay to allow the register page to handle the success
+            setTimeout(() => {
+                setSkipEmailVerificationRedirect(false);
+            }, 1000);
+
             return { success: true, user: result.user };
         } catch (error) {
-            localStorage.removeItem('awaitingEmailVerification');
+            setSkipEmailVerificationRedirect(false);
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
@@ -385,11 +287,9 @@ export const AuthProvider = ({ children }) => {
     const registerWithEmailLink = async (email, name) => {
         setAuthError(null);
         try {
-            localStorage.setItem('awaitingEmailVerification', 'true');
             await authRegisterWithEmailLink(email, name);
             return { success: true };
         } catch (error) {
-            localStorage.removeItem('awaitingEmailVerification');
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
@@ -420,12 +320,17 @@ export const AuthProvider = ({ children }) => {
     const signOut = async () => {
         try {
             await authLogout();
+
+            // Clear all localStorage flags
             if (typeof window !== 'undefined') {
                 localStorage.removeItem("needsAccountSetup");
                 localStorage.removeItem("awaitingEmailVerification");
                 localStorage.removeItem("emailVerificationComplete");
                 localStorage.removeItem("needsOnboarding");
+                localStorage.removeItem("registrationData");
+                localStorage.removeItem("emailForVerification");
             }
+
             router.push("/login");
             return { success: true };
         } catch (error) {
@@ -454,10 +359,14 @@ export const AuthProvider = ({ children }) => {
             const userData = await fetchUserData(currentUser.uid);
 
             if (userData) {
-                setUserPermissions(userData.permissions || {
-                    isAdmin: false,
-                    roles: ["user"],
-                    capabilities: ["read_tests"]
+                const userRole = userData.role || ['member'];
+                const isAdmin = userRole.includes('admin');
+
+                setUserPermissions({
+                    isAdmin: isAdmin,
+                    roles: userRole,
+                    capabilities: isAdmin ? ["read_tests", "write_tests", "admin"] : ["read_tests"],
+                    ...userData.permissions
                 });
                 setUserProfile(userData);
                 return true;
@@ -475,6 +384,54 @@ export const AuthProvider = ({ children }) => {
         setAuthError(null);
     };
 
+    const updateUserProfile = useCallback(async (userId, updates) => {
+        try {
+            setLoading(true);
+            const result = await updateUserProfileService(userId, updates, currentUser?.uid);
+
+            if (result) {
+                await refreshUserData();
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error("Error updating user profile:", error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [currentUser, refreshUserData]);
+
+    // Helper method to mark email as verified and update onboarding
+    const markEmailVerified = useCallback(async () => {
+        if (!currentUser?.uid) return false;
+
+        try {
+            // Update Firestore to mark email as verified
+            await updateOnboardingStep(currentUser.uid, 'emailVerified', true, {
+                setupStep: userProfile?.accountType === 'organization'
+                    ? 'organization_info'
+                    : 'profile_setup'
+            });
+
+            // Refresh user data
+            await refreshUserData();
+            return true;
+        } catch (error) {
+            console.error("Error marking email as verified:", error);
+            return false;
+        }
+    }, [currentUser, userProfile, refreshUserData]);
+
+    // Helper to manually trigger email verification redirect (for use by register page after showing success)
+    const redirectToEmailVerification = useCallback(() => {
+        if (currentUser && !currentUser.emailVerified) {
+            setSkipEmailVerificationRedirect(false);
+            router.push("/verify-email");
+        }
+    }, [currentUser, router]);
+
     const value = {
         currentUser,
         userPermissions,
@@ -483,7 +440,7 @@ export const AuthProvider = ({ children }) => {
         authError,
         environment,
         initialized,
-        // Auth methods
+        updateUserProfile,
         signIn,
         signInWithGoogle,
         registerWithEmail,
@@ -491,20 +448,14 @@ export const AuthProvider = ({ children }) => {
         completeEmailLinkSignIn,
         setUserPassword,
         signOut,
-        // Permission methods
         hasPermission,
         hasRole,
         clearAuthError,
         refreshUserData,
-        // Profile methods - these were missing!
-        getUserProfile,
-        updateUserProfile,
-        createOrGetUserProfile,
-        completeSetup,
-        refreshUserProfile,
-        // Legacy methods for backward compatibility
         createUserIfNotExists,
-        completeUserSetup
+        completeUserSetup,
+        markEmailVerified,
+        redirectToEmailVerification // Add this for manual redirect control
     };
 
     return (

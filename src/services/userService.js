@@ -1,5 +1,17 @@
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, environment } from "../config/firebase";
+
+// Import utility functions for consistent onboarding handling
+import {
+    normalizeOnboardingProgress,
+    initializeOnboardingStatus,
+    initializeOnboardingProgress,
+    isOnboardingComplete,
+    getNextOnboardingStep,
+    createStepUpdateData,
+    logStepCompletion
+} from "../utils/onboardingUtils";
 
 // Extract name from email as fallback
 const extractNameFromEmail = (email) => {
@@ -50,6 +62,25 @@ export const createUserDocument = async (firebaseUser, additionalData = {}, sour
         const userType = ['individual', 'organization'].includes(userTypeRaw) ? userTypeRaw : 'individual';
         const accountType = userType;
 
+        // Determine initial setup step based on account type and source
+        let initialSetupStep = 'email_verification';
+        if (source === 'google') {
+            // Google users skip email verification
+            initialSetupStep = accountType === 'organization' ? 'organization_info' : 'profile_setup';
+        }
+
+        // Set role - first organization user becomes admin, individuals are members
+        const initialRole = accountType === 'organization' ? ['admin'] : ['member'];
+
+        // Initialize consistent onboarding structures
+        const onboardingProgress = initializeOnboardingProgress(accountType);
+        const onboardingStatus = initializeOnboardingStatus(accountType);
+
+        // Update progress based on source and email verification
+        if (firebaseUser.emailVerified) {
+            onboardingProgress.emailVerified = true;
+        }
+
         // Build user data aligned with your security rules & register flow
         const userData = {
             uid: firebaseUser.uid,
@@ -66,25 +97,35 @@ export const createUserDocument = async (firebaseUser, additionalData = {}, sour
             accountType,
             userType,
             organizationId: additionalData.organizationId || null,
+
+            // Don't set setupCompleted to true by default - must be explicitly completed
             setupCompleted: Boolean(additionalData.setupCompleted) || false,
 
             bio: additionalData.bio?.trim() || "",
             location: additionalData.location?.trim() || "",
             phone: additionalData.phone?.trim() || "",
-            role: additionalData.role || ['member'],
+
+            // Set appropriate initial role
+            role: initialRole,
 
             registrationMethod: source === 'google' ? 'google' : 'email',
             lastLogin: serverTimestamp(),
             lastPasswordChange: source === 'email' ? serverTimestamp() : null,
             deviceHistory: [],
 
-            setupStep: additionalData.setupStep || 'pending',
+            // Set appropriate setup step
+            setupStep: initialSetupStep,
+
+            // Use consistent onboarding progress structure
             onboardingProgress: {
-                emailVerified: firebaseUser.emailVerified || false,
-                organizationInfo: accountType === 'organization',
-                teamInvites: accountType === 'organization',
-                projectCreation: false,
+                ...onboardingProgress,
                 ...(additionalData.onboardingProgress || {})
+            },
+
+            // Use consistent onboarding status structure
+            onboardingStatus: {
+                ...onboardingStatus,
+                ...(additionalData.onboardingStatus || {})
             },
 
             preferences: {
@@ -128,7 +169,6 @@ export const createUserDocument = async (firebaseUser, additionalData = {}, sour
         return userData;
 
     } catch (error) {
-        // More explicit error handling here if needed
         throw new Error(`Failed to create user profile: ${error.message}`);
     }
 };
@@ -152,16 +192,49 @@ export const createUserIfNotExists = async (firebaseUser, additionalData = {}, s
 
         if (userSnap.exists()) {
             const existingData = userSnap.data();
-            // Update last login timestamp but don't fail if error
-            setDoc(userRef, {
+
+            // Update last login and email verification status
+            const updateData = {
                 lastLogin: serverTimestamp(),
                 updatedAt: serverTimestamp()
-            }, { merge: true }).catch(() => {});
+            };
+
+            // Update email verification status if it changed
+            if (existingData.emailVerified !== firebaseUser.emailVerified) {
+                updateData.emailVerified = firebaseUser.emailVerified;
+
+                // If email just got verified, update onboarding progress consistently
+                if (firebaseUser.emailVerified && !existingData.emailVerified) {
+                    updateData['onboardingProgress.emailVerified'] = true;
+
+                    // Update setup step if still on email verification
+                    if (existingData.setupStep === 'email_verification') {
+                        const nextStep = getNextOnboardingStep(existingData.accountType, existingData.onboardingProgress);
+                        if (nextStep) {
+                            updateData.setupStep = nextStep.replace('-', '_');
+                        }
+                    }
+                }
+            }
+
+            // Update without failing if error
+            setDoc(userRef, updateData, { merge: true }).catch(() => { });
+
+            // Normalize onboarding progress for consistent access
+            const normalizedData = {
+                ...existingData,
+                ...updateData,
+                onboardingProgress: normalizeOnboardingProgress(existingData.onboardingProgress)
+            };
 
             return {
                 isNewUser: false,
-                userData: existingData,
-                needsSetup: !existingData.setupCompleted,
+                userData: normalizedData,
+                needsSetup: !isOnboardingComplete(
+                    existingData.accountType, 
+                    existingData.onboardingProgress, 
+                    existingData.onboardingStatus
+                ),
                 error: null
             };
         }
@@ -171,7 +244,11 @@ export const createUserIfNotExists = async (firebaseUser, additionalData = {}, s
         return {
             isNewUser: true,
             userData,
-            needsSetup: !userData.setupCompleted,
+            needsSetup: !isOnboardingComplete(
+                userData.accountType, 
+                userData.onboardingProgress, 
+                userData.onboardingStatus
+            ),
             error: null
         };
 
@@ -185,11 +262,19 @@ export const createUserIfNotExists = async (firebaseUser, additionalData = {}, s
     }
 };
 
+// Complete user setup - only mark as complete when actually complete
 export const completeUserSetup = async (userId, setupData) => {
     if (!userId) throw new Error('User ID is required');
 
     try {
         const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+            throw new Error('User not found');
+        }
+
+        const currentData = userSnap.data();
 
         const updateData = {
             ...(setupData.displayName && { displayName: setupData.displayName.trim() }),
@@ -198,22 +283,48 @@ export const completeUserSetup = async (userId, setupData) => {
             ...(setupData.email && { email: setupData.email.toLowerCase().trim() }),
             ...(typeof setupData.emailVerified === 'boolean' && { emailVerified: setupData.emailVerified }),
             ...(setupData.avatarURL !== undefined && { avatarURL: setupData.avatarURL }),
-            ...(setupData.accountType && { 
+            ...(setupData.accountType && {
                 accountType: setupData.accountType,
                 userType: setupData.accountType
             }),
             ...(setupData.organizationId !== undefined && { organizationId: setupData.organizationId }),
-            ...(typeof setupData.setupCompleted === 'boolean' && { setupCompleted: setupData.setupCompleted }),
-
             ...(setupData.phone && { phone: setupData.phone.trim() }),
             ...(setupData.bio && { bio: setupData.bio.trim() }),
             ...(setupData.location && { location: setupData.location.trim() }),
-
-            setupCompleted: true,
-            setupStep: 'completed',
             updatedAt: serverTimestamp(),
             lastLogin: serverTimestamp()
         };
+
+        // Handle onboarding progress updates with consistent field naming
+        if (setupData.onboardingProgress) {
+            Object.keys(setupData.onboardingProgress).forEach(key => {
+                updateData[`onboardingProgress.${key}`] = setupData.onboardingProgress[key];
+            });
+        }
+
+        // Handle onboarding status updates
+        if (setupData.onboardingStatus) {
+            Object.keys(setupData.onboardingStatus).forEach(key => {
+                updateData[`onboardingStatus.${key}`] = setupData.onboardingStatus[key];
+            });
+        }
+
+        // Handle direct field updates (for backward compatibility)
+        Object.keys(setupData).forEach(key => {
+            if (key.startsWith('onboardingProgress.') || key.startsWith('onboardingStatus.')) {
+                updateData[key] = setupData[key];
+            }
+        });
+
+        // Only set setupCompleted if explicitly provided and true
+        if (setupData.setupCompleted === true) {
+            updateData.setupCompleted = true;
+            updateData.setupStep = 'completed';
+            updateData['onboardingStatus.onboardingComplete'] = true;
+            updateData['onboardingStatus.completedAt'] = serverTimestamp();
+        } else if (setupData.setupStep) {
+            updateData.setupStep = setupData.setupStep;
+        }
 
         await setDoc(userRef, updateData, { merge: true });
 
@@ -225,6 +336,59 @@ export const completeUserSetup = async (userId, setupData) => {
             throw new Error('You do not have permission to update this user profile.');
         }
         throw new Error(`Failed to complete user setup: ${error.message}`);
+    }
+};
+
+// Update specific onboarding step with consistent field naming
+export const updateOnboardingStep = async (userId, stepName, _completed = true, stepData = {}) => {
+    if (!userId) throw new Error('User ID is required');
+
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+            throw new Error('User not found');
+        }
+
+        const currentData = userSnap.data();
+        const accountType = currentData.accountType;
+
+        // Use utility function to create consistent update data
+        const updateData = createStepUpdateData(stepName, stepData, accountType);
+
+        // Log the step completion for debugging
+        logStepCompletion(stepName, stepData, accountType, userId);
+
+        await setDoc(userRef, updateData, { merge: true });
+
+        const updatedDoc = await getDoc(userRef);
+        return updatedDoc.data();
+
+    } catch (error) {
+        throw new Error(`Failed to update onboarding step: ${error.message}`);
+    }
+};
+
+// Complete onboarding with consistent field updates
+export const completeOnboarding = async (userId, completionData = {}) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const updateData = {
+            'onboardingStatus.onboardingComplete': true,
+            'onboardingStatus.completedAt': serverTimestamp(),
+            'onboardingProgress.projectCreation': true, // Use consistent field name
+            setupCompleted: true,
+            setupStep: 'completed',
+            updatedAt: serverTimestamp(),
+            ...completionData
+        };
+
+        await updateDoc(userRef, updateData);
+        return true;
+    } catch (error) {
+        console.error('Error completing onboarding:', error);
+        throw error;
     }
 };
 
@@ -254,7 +418,14 @@ export const updateUserProfile = async (userId, updateData, currentUserUid) => {
                 userType: updateData.accountType
             }),
             ...(updateData.organizationId !== undefined && { organizationId: updateData.organizationId }),
-            ...(typeof updateData.setupCompleted === 'boolean' && { setupCompleted: updateData.setupCompleted }),
+
+            // Don't allow arbitrary setupCompleted updates - use completeOnboarding instead
+            ...(typeof updateData.setupCompleted === 'boolean' && 
+                updateData.setupCompleted === true && 
+                isOnboardingComplete(existingData.accountType, existingData.onboardingProgress, existingData.onboardingStatus) && {
+                setupCompleted: updateData.setupCompleted,
+                setupStep: 'completed'
+            }),
 
             updatedAt: serverTimestamp()
         };
@@ -280,7 +451,12 @@ export const fetchUserData = async (userId) => {
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
-            return userSnap.data();
+            const userData = userSnap.data();
+            // Return data with normalized onboarding progress for consistent access
+            return {
+                ...userData,
+                onboardingProgress: normalizeOnboardingProgress(userData.onboardingProgress)
+            };
         }
 
         return null;
@@ -288,6 +464,29 @@ export const fetchUserData = async (userId) => {
         if (error.code === 'permission-denied') {
             console.error('Permission denied: User may not have access to this profile');
         }
+        return null;
+    }
+};
+
+// Get user onboarding status with consistent field access
+export const getUserOnboardingStatus = async (userId) => {
+    if (!userId) return null;
+
+    try {
+        const userData = await fetchUserData(userId);
+        if (!userData) return null;
+
+        const { accountType, onboardingProgress, onboardingStatus } = userData;
+        
+        return {
+            accountType,
+            isComplete: isOnboardingComplete(accountType, onboardingProgress, onboardingStatus),
+            nextStep: getNextOnboardingStep(accountType, onboardingProgress),
+            progress: normalizeOnboardingProgress(onboardingProgress),
+            status: onboardingStatus || {}
+        };
+    } catch (error) {
+        console.error('Error getting onboarding status:', error);
         return null;
     }
 };

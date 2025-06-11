@@ -10,41 +10,37 @@ const poppins = Poppins({ subsets: ["latin"], weight: ["400", "700"] });
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"] });
 const sansHebrew = Noto_Sans_Hebrew({ subsets: ["hebrew"], weight: ["400", "700"] });
 
-const SimpleOrganizationProvider = ({ children }) => <>{children}</>;
-
 export default function RootLayout({ children }) {
     return (
         <html lang="en">
             <body className={`${poppins.className} ${montserrat.className} ${sansHebrew.className}`}>
                 <AuthProvider>
                     <ProjectProvider>
-                        <SimpleOrganizationProvider>
-                            {children}
-                            <div id="modal-root"></div>
-                            <Toaster
-                                richColors
-                                closeButton={false}
-                                position="top-center"
-                                expand={true}
-                                visibleToasts={4}
-                                toastOptions={{
-                                    style: {
-                                        background: "rgba(255, 255, 255, 0.95)",
-                                        backdropFilter: "blur(12px)",
-                                        border: "1px solid rgba(148, 163, 184, 0.2)",
-                                        borderRadius: "5px",
-                                        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-                                        fontFamily: "inherit",
-                                    },
-                                    className: "font-medium",
-                                    duration: 4000,
-                                    error: {
-                                        icon: null,
-                                    },
-                                }}
-                                theme="light"
-                            />
-                        </SimpleOrganizationProvider>
+                        {children}
+                        <div id="modal-root"></div>
+                        <Toaster
+                            richColors
+                            closeButton={false}
+                            position="top-center"
+                            expand={true}
+                            visibleToasts={4}
+                            toastOptions={{
+                                style: {
+                                    background: "rgba(255, 255, 255, 0.95)",
+                                    backdropFilter: "blur(12px)",
+                                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                                    borderRadius: "5px",
+                                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                                    fontFamily: "inherit",
+                                },
+                                className: "font-medium",
+                                duration: 4000,
+                                error: {
+                                    icon: null,
+                                },
+                            }}
+                            theme="light"
+                        />
                     </ProjectProvider>
                 </AuthProvider>
             </body>

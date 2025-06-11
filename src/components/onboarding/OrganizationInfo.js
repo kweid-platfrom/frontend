@@ -1,9 +1,13 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+'use client'
 // components/onboarding/OrganizationInfoForm.js
 import React, { useState } from 'react';
 import { Building2, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthProvider';
+import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
-const OrganizationInfoForm = ({ onComplete }) => {
+const OrganizationInfoForm = ({ onComplete, isLoading: parentLoading }) => {
     const [formData, setFormData] = useState({
         companyName: '',
         industry: '',
@@ -13,7 +17,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
     });
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
-    const { currentUser, updateUserProfile } = useAuth();
+    const { currentUser, userProfile } = useAuth();
 
     const industryOptions = [
         'Technology',
@@ -71,7 +75,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
 
         // Optional website validation
         if (formData.website && !formData.website.match(/^https?:\/\/.+/)) {
-            newErrors.website = 'Please enter a valid URL (including http://localhost:3000 or https://qaid-phi.vercel.app/)';
+            newErrors.website = 'Please enter a valid URL (including http:// or https://)';
         }
 
         setErrors(newErrors);
@@ -85,30 +89,73 @@ const OrganizationInfoForm = ({ onComplete }) => {
 
         setLoading(true);
         try {
-            const organizationInfo = {
-                ...formData,
-                createdAt: new Date()
+            console.log('=== ORGANIZATION FORM SUBMISSION ===');
+            
+            // Create organization in Firestore
+            const organizationData = {
+                companyName: formData.companyName,
+                industry: formData.industry,
+                companySize: formData.companySize,
+                website: formData.website,
+                description: formData.description,
+                createdBy: currentUser.uid,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                members: [currentUser.uid],
+                memberCount: 1,
+                ownerId: currentUser.uid,
+                status: 'active'
             };
 
-            const updates = {
-                organizationInfo,
-                'onboardingStatus.organizationInfoComplete': true
+            console.log('Creating organization in Firestore...');
+            const orgRef = await addDoc(collection(db, 'organizations'), organizationData);
+            console.log('Organization created with ID:', orgRef.id);
+
+            // Update user profile with organization ID
+            console.log('Updating user profile with organization ID...');
+            await setDoc(doc(db, 'users', currentUser.uid), {
+                organizationId: orgRef.id,
+                organizationName: formData.companyName,
+                organizationRole: 'owner',
+                updatedAt: new Date()
+            }, { merge: true });
+
+            console.log('User profile updated successfully');
+
+            // Prepare data for onComplete callback - THIS IS THE KEY FIX
+            const stepCompletionData = {
+                organizationId: orgRef.id,
+                organizationName: formData.companyName,
+                companyName: formData.companyName,
+                industry: formData.industry,
+                companySize: formData.companySize,
+                website: formData.website,
+                description: formData.description,
+                createdAt: new Date().toISOString()
             };
 
-            const success = await updateUserProfile(currentUser.uid, updates);
+            console.log('Calling onComplete with data:', stepCompletionData);
 
-            if (success) {
-                onComplete('team-invites');
+            // Call onComplete - this should trigger the step progression
+            if (onComplete && typeof onComplete === 'function') {
+                await onComplete(stepCompletionData);
+                console.log('onComplete called successfully');
             } else {
-                throw new Error('Failed to save organization information');
+                console.error('onComplete is not a function:', onComplete);
+                throw new Error('Completion handler not available');
             }
+
         } catch (error) {
             console.error('Error saving organization info:', error);
-            alert('Failed to save organization information. Please try again.');
+            setErrors({
+                submit: `Failed to save organization information: ${error.message}`
+            });
         } finally {
             setLoading(false);
         }
     };
+
+    const isFormLoading = loading || parentLoading;
 
     return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -117,7 +164,7 @@ const OrganizationInfoForm = ({ onComplete }) => {
                     {/* Header */}
                     <div className="text-center mb-8">
                         <div className="mx-auto mb-4 w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                            <Building2 className="w-8 h-8 text-[#00695C]   " />
+                            <Building2 className="w-8 h-8 text-[#00695C]" />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900 mb-2">
                             Tell us about your organization
@@ -138,6 +185,13 @@ const OrganizationInfoForm = ({ onComplete }) => {
                         </div>
                     </div>
 
+                    {/* Error message */}
+                    {errors.submit && (
+                        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                            {errors.submit}
+                        </div>
+                    )}
+
                     {/* Form */}
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Company Name */}
@@ -151,8 +205,8 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="companyName"
                                 value={formData.companyName}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.companyName ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                disabled={isFormLoading}
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.companyName ? 'border-red-500' : 'border-gray-300'}`}
                                 placeholder="Enter your company name"
                             />
                             {errors.companyName && (
@@ -170,8 +224,8 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="industry"
                                 value={formData.industry}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.industry ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                disabled={isFormLoading}
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.industry ? 'border-red-500' : 'border-gray-300'}`}
                             >
                                 <option value="">Select your industry</option>
                                 {industryOptions.map(option => (
@@ -193,8 +247,8 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="companySize"
                                 value={formData.companySize}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.companySize ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                disabled={isFormLoading}
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.companySize ? 'border-red-500' : 'border-gray-300'}`}
                             >
                                 <option value="">Select company size</option>
                                 {companySizeOptions.map(option => (
@@ -217,8 +271,8 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="website"
                                 value={formData.website}
                                 onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 ${errors.website ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                disabled={isFormLoading}
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.website ? 'border-red-500' : 'border-gray-300'}`}
                                 placeholder="https://www.yourcompany.com"
                             />
                             {errors.website && (
@@ -236,8 +290,9 @@ const OrganizationInfoForm = ({ onComplete }) => {
                                 name="description"
                                 value={formData.description}
                                 onChange={handleInputChange}
+                                disabled={isFormLoading}
                                 rows={3}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-600"
+                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                 placeholder="Tell us a bit about what your company does..."
                             />
                         </div>
@@ -246,13 +301,13 @@ const OrganizationInfoForm = ({ onComplete }) => {
                         <div className="pt-4">
                             <button
                                 type="submit"
-                                disabled={loading}
-                                className="w-full  bg-teal-600 hover:bg-teal-700 text-white py-3 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                                disabled={isFormLoading}
+                                className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                             >
-                                {loading ? (
+                                {isFormLoading ? (
                                     <>
                                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                        Saving...
+                                        {loading ? 'Saving...' : 'Processing...'}
                                     </>
                                 ) : (
                                     <>
