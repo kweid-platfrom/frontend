@@ -7,12 +7,18 @@ import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
 import { toast, Toaster } from "sonner";
 import { createUserDocument } from "../../services/userService";
 import { validateRegistration } from "../../utils/validation";
+
+// Component imports
 import RegistrationForm from "./reg/RegistrationForm";
 import GoogleSignUp from "./reg/GoogleSignUp";
 import BackgroundDecorations from "../BackgroundDecorations";
+
+
 import '../../app/globals.css';
+import RegistrationSuccess from "./RegistrationSuccess";
 
 const Register = () => {
+    // Form state
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
@@ -22,19 +28,41 @@ const Register = () => {
         confirmPassword: "",
         termsAccepted: false
     });
-
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
-    const [googleLoading, setGoogleLoading] = useState(false);
+
+    // Email verification state
     const [registrationSuccess, setRegistrationSuccess] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
     const [lastResendTime, setLastResendTime] = useState(0);
     const [resendCountdown, setResendCountdown] = useState(0);
 
-    // Google account type selection states
-    const [showGoogleAccountType, setShowGoogleAccountType] = useState(false);
-    const [googleUserData, setGoogleUserData] = useState(null);
-    const [googleAccountType, setGoogleAccountType] = useState("individual");
+    // Google registration state
+    const [googleLoading, setGoogleLoading] = useState(false);
+
+    // Helper function to determine account type based on email domain
+    const determineAccountTypeFromEmail = (email) => {
+        if (!email) return "individual";
+        
+        const domain = email.split('@')[1]?.toLowerCase();
+        if (!domain) return "individual";
+        
+        // List of common public email domains
+        const publicDomains = [
+            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com',
+            'aol.com', 'icloud.com', 'me.com', 'mac.com', 'protonmail.com',
+            'yandex.com', 'mail.com', 'zoho.com', 'fastmail.com', 'tutanota.com',
+            'gmx.com', 'msn.com', 'comcast.net', 'verizon.net', 'att.net'
+        ];
+        
+        // If it's a public domain, it's an individual account
+        if (publicDomains.includes(domain)) {
+            return "individual";
+        }
+        
+        // Custom domain = organization account
+        return "organization";
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -61,7 +89,7 @@ const Register = () => {
             accountType: accountType === "organization" ? "business" : "personal",
             registrationMethod: method,
             needsOnboarding: true,
-            needsEmailVerification: method === 'email', // Track if email verification is needed
+            needsEmailVerification: method === 'email',
             registrationTimestamp: Date.now(),
             ...(method === 'google' && {
                 photoURL: userData.photoURL,
@@ -72,13 +100,11 @@ const Register = () => {
         localStorage.setItem("registrationData", JSON.stringify(registrationData));
         localStorage.setItem("emailForVerification", userData.email);
         
-        // Set flag to prevent automatic routing to setup
         if (method === 'email') {
             localStorage.setItem("awaitingEmailVerification", "true");
         }
     };
 
-    // Resend verification email function
     const handleResendVerification = async () => {
         const now = Date.now();
         const timeSinceLastResend = now - lastResendTime;
@@ -181,7 +207,6 @@ const Register = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
 
-        // Use your validation function
         const validationErrors = validateRegistration(formData);
         if (Object.keys(validationErrors).length > 0) {
             setErrors(validationErrors);
@@ -203,49 +228,44 @@ const Register = () => {
             const user = userCredential.user;
             console.log('Firebase Auth user created:', user.uid);
 
-            // Step 2: Send email verification WITHOUT specifying a URL
-            // This will use Firebase's default email verification flow
+            // Step 2: Send email verification
             try {
                 await sendEmailVerification(user);
                 console.log('Verification email sent successfully');
             } catch (emailError) {
                 console.error('Email verification failed:', emailError);
-                // Don't fail registration if email fails, but show warning
                 toast.error("Account created but verification email failed to send. You can resend it later.", {
                     duration: 6000,
                     position: "top-center"
                 });
             }
 
-            // Step 3: Prepare user data that matches security rules
+            // Step 3: Prepare user data
             const userData = {
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
                 email: formData.email.toLowerCase().trim(),
                 userType: formData.userType,
                 setupCompleted: false,
-                setupStep: "email_verification" // Set to email verification step
+                setupStep: "email_verification"
             };
 
-            // Step 4: Create user document using userService
+            // Step 4: Create user document
             try {
                 await createUserDocument(user, userData, 'email');
                 console.log('User document created successfully');
             } catch (firestoreError) {
                 console.error('Firestore document creation failed:', firestoreError);
-
-                // Clean up auth user if Firestore fails
                 try {
                     await user.delete();
                     console.log('Auth user deleted due to Firestore failure');
                 } catch (deleteError) {
                     console.error('Failed to delete auth user:', deleteError);
                 }
-
                 throw new Error(`Database error: ${firestoreError.message}`);
             }
 
-            // Step 5: Store registration data for onboarding (including password for resend functionality)
+            // Step 5: Store registration data
             const registrationData = {
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
@@ -267,10 +287,10 @@ const Register = () => {
             await auth.signOut();
             console.log('User signed out - email verification required');
 
-            // Step 7: Show success message and hide form
+            // Step 7: Show success state
             setRegistrationSuccess(true);
             toast.success(
-                "Account created successfully! Please check your email and click the verification link to complete your registration.",
+                "Account created successfully!",
                 {
                     duration: 10000,
                     position: "top-center"
@@ -282,7 +302,7 @@ const Register = () => {
             setFormData({
                 firstName: "",
                 lastName: "",
-                email: currentEmail, // Keep email for resend
+                email: currentEmail,
                 userType: "individual",
                 password: "",
                 confirmPassword: "",
@@ -299,7 +319,6 @@ const Register = () => {
                 switch (error.code) {
                     case 'auth/email-already-in-use':
                         errorMessage = "An account with this email already exists. Try signing in instead, or check your email for a verification link.";
-                        // Show additional help for existing accounts
                         toast.error(errorMessage, {
                             duration: 8000,
                             position: "top-center",
@@ -308,7 +327,7 @@ const Register = () => {
                                 onClick: () => window.location.href = '/login'
                             }
                         });
-                        return; // Exit early to avoid the generic error toast
+                        return;
                     case 'auth/weak-password':
                         errorMessage = "Password is too weak. Please choose a stronger password.";
                         break;
@@ -364,7 +383,7 @@ const Register = () => {
                 return;
             }
 
-            // New user - need account type selection
+            // New user - automatically determine account type from email domain
             const userData = {
                 firstName: user.displayName?.split(' ')[0] || "",
                 lastName: user.displayName?.split(' ').slice(1).join(' ') || "",
@@ -372,8 +391,52 @@ const Register = () => {
                 photoURL: user.photoURL || ""
             };
 
-            setGoogleUserData({ user, userData });
-            setShowGoogleAccountType(true);
+            // Determine account type based on email domain
+            const accountType = determineAccountTypeFromEmail(user.email);
+            
+            console.log('Google registration - Auto-detected account type:', {
+                email: user.email,
+                domain: user.email?.split('@')[1],
+                accountType
+            });
+
+            // Show user what account type was detected
+            const domainType = accountType === 'organization' ? 'custom domain' : 'public email provider';
+            toast.info(`Detected ${domainType} - setting up ${accountType} account`, {
+                duration: 4000,
+                position: "top-center"
+            });
+
+            // Prepare user data
+            const userDocData = {
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                email: userData.email,
+                avatarURL: userData.photoURL,
+                userType: accountType,
+                setupCompleted: false,
+                setupStep: accountType === "organization" ? "organization_info" : "project_creation"
+            };
+
+            // Create user document
+            await createUserDocument(user, userDocData, 'google');
+            console.log('Google user document created successfully');
+
+            // Store registration data for onboarding
+            storeRegistrationData(userData, 'google', accountType);
+            localStorage.setItem("needsOnboarding", "true");
+            localStorage.removeItem("awaitingEmailVerification");
+
+            const accountTypeText = accountType === 'organization' ? 'organization' : 'individual';
+            toast.success(`Google registration successful! Setting up your ${accountTypeText} account...`, {
+                duration: 3000,
+                position: "top-center"
+            });
+
+            // Redirect to onboarding
+            setTimeout(() => {
+                window.location.href = '/onboarding';
+            }, 1500);
 
         } catch (error) {
             console.error("Google registration error:", error);
@@ -405,209 +468,9 @@ const Register = () => {
         }
     };
 
-    const handleGoogleAccountTypeSelection = async () => {
-        if (!googleUserData) return;
-
-        setGoogleLoading(true);
-
-        try {
-            console.log('Completing Google account setup...');
-            const { user, userData } = googleUserData;
-
-            // Prepare user data that matches security rules
-            const userDocData = {
-                firstName: userData.firstName,
-                lastName: userData.lastName,
-                email: userData.email,
-                avatarURL: userData.photoURL,
-                userType: googleAccountType,
-                setupCompleted: false,
-                setupStep: googleAccountType === "organization" ? "organization_info" : "project_creation"
-            };
-
-            // Create user document using userService
-            await createUserDocument(user, userDocData, 'google');
-            console.log('Google user document created successfully');
-
-            // Store registration data for onboarding (Google users don't need email verification)
-            storeRegistrationData(userData, 'google', googleAccountType);
-            localStorage.setItem("needsOnboarding", "true");
-            // Clear email verification flag for Google users
-            localStorage.removeItem("awaitingEmailVerification");
-
-            toast.success("Google registration successful! Redirecting to setup...", {
-                duration: 3000,
-                position: "top-center"
-            });
-
-            // Reset states
-            setShowGoogleAccountType(false);
-            setGoogleUserData(null);
-            setGoogleAccountType("individual");
-
-            // Redirect to setup after short delay
-            setTimeout(() => {
-                window.location.href = '/setup';
-            }, 1500);
-
-        } catch (error) {
-            console.error("Google account setup error:", error);
-            toast.error(`Failed to complete Google registration: ${error.message}`, {
-                duration: 5000,
-                position: "top-center"
-            });
-        } finally {
-            setGoogleLoading(false);
-        }
+    const handleGoToLogin = () => {
+        window.location.href = '/login';
     };
-
-    // Email Verification Success Component
-    const EmailVerificationSuccess = () => (
-        <div className="text-center space-y-6">
-            <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-            </div>
-            
-            <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
-                <p className="text-gray-600 mb-4">
-                    We&apos;ve sent a verification link to <strong>{formData.email || localStorage.getItem("emailForVerification") || "your email"}</strong>
-                </p>
-                <p className="text-sm text-gray-500 mb-6">
-                    Click the link in the email to verify your account and complete registration.
-                </p>
-            </div>
-
-            <div className="space-y-4">
-                {/* Resend Verification Button */}
-                <button
-                    onClick={handleResendVerification}
-                    disabled={resendLoading || resendCountdown > 0}
-                    className="w-full bg-teal-100 text-teal-700 py-2 px-4 rounded-lg hover:bg-teal-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-teal-200"
-                >
-                    {resendLoading ? (
-                        <span className="flex items-center justify-center">
-                            <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-teal-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Sending...
-                        </span>
-                    ) : resendCountdown > 0 ? (
-                        `Resend in ${resendCountdown}s`
-                    ) : (
-                        "Resend Verification Email"
-                    )}
-                </button>
-
-                <button
-                    onClick={() => window.location.href = '/login'}
-                    className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
-                >
-                    Go to Sign In
-                </button>
-                
-                <button
-                    onClick={() => {
-                        setRegistrationSuccess(false);
-                        // Clear stored data to allow re-registration if needed
-                        localStorage.removeItem("awaitingEmailVerification");
-                        localStorage.removeItem("registrationData");
-                        localStorage.removeItem("emailForVerification");
-                        setFormData({
-                            firstName: "",
-                            lastName: "",
-                            email: "",
-                            userType: "individual",
-                            password: "",
-                            confirmPassword: "",
-                            termsAccepted: false
-                        });
-                    }}
-                    className="w-full border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                    Register Another Account
-                </button>
-            </div>
-            
-            <div className="text-xs text-gray-500 space-y-1">
-                <p>Didn&apos;t receive the email?</p>
-                <p>Check your spam folder or use the resend button above</p>
-                <p className="text-teal-600">Having trouble? Contact support</p>
-            </div>
-        </div>
-    );
-
-    // Google Account Type Selection Modal
-    const GoogleAccountTypeModal = () => (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                    Complete Your Google Registration
-                </h3>
-                <p className="text-gray-600 mb-6">
-                    Please select your account type to continue:
-                </p>
-
-                <div className="space-y-3 mb-6">
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input
-                            type="radio"
-                            name="googleAccountType"
-                            value="individual"
-                            checked={googleAccountType === "individual"}
-                            onChange={(e) => setGoogleAccountType(e.target.value)}
-                            className="mr-3"
-                        />
-                        <div>
-                            <div className="font-medium text-gray-900">Individual</div>
-                            <div className="text-sm text-gray-500">Personal QA testing and projects</div>
-                        </div>
-                    </label>
-
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input
-                            type="radio"
-                            name="googleAccountType"
-                            value="organization"
-                            checked={googleAccountType === "organization"}
-                            onChange={(e) => setGoogleAccountType(e.target.value)}
-                            className="mr-3"
-                        />
-                        <div>
-                            <div className="font-medium text-gray-900">Organization</div>
-                            <div className="text-sm text-gray-500">Team collaboration and management</div>
-                        </div>
-                    </label>
-                </div>
-
-                <div className="flex space-x-3">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setShowGoogleAccountType(false);
-                            setGoogleUserData(null);
-                            auth.signOut();
-                        }}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                        disabled={googleLoading}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleGoogleAccountTypeSelection}
-                        className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
-                        disabled={googleLoading}
-                    >
-                        {googleLoading ? "Setting up..." : "Continue"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
@@ -626,8 +489,6 @@ const Register = () => {
 
             <BackgroundDecorations />
 
-            {showGoogleAccountType && <GoogleAccountTypeModal />}
-
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
                     {/* Logo */}
@@ -644,7 +505,13 @@ const Register = () => {
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
 
                         {registrationSuccess ? (
-                            <EmailVerificationSuccess />
+                            <RegistrationSuccess
+                                email={formData.email || localStorage.getItem("emailForVerification")}
+                                onResendVerification={handleResendVerification}
+                                onGoToLogin={handleGoToLogin}
+                                resendLoading={resendLoading}
+                                resendCountdown={resendCountdown}
+                            />
                         ) : (
                             <>
                                 <div className="text-center mb-8">

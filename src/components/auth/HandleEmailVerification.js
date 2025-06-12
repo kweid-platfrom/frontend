@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthProvider';
 const HandleEmailVerification = () => {
     const searchParams = useSearchParams();
     const router = useRouter();
-    useAuth();
+    const { currentUser, refreshUserData } = useAuth();
     const [status, setStatus] = useState('processing'); // processing | success | error
 
     useEffect(() => {
@@ -38,8 +38,13 @@ const HandleEmailVerification = () => {
                     localStorage.removeItem('awaitingEmailVerification');
                 }
                 
-                // Redirect directly to onboarding after successful verification
-                // The OnboardingRouter will handle determining the correct step
+                // Refresh user data to get updated profile and verification status
+                if (currentUser) {
+                    await currentUser.reload();
+                    await refreshUserData();
+                }
+                
+                // Redirect to onboarding - let OnboardingRouter handle the internal flow
                 setTimeout(() => {
                     router.push('/onboarding');
                 }, 2000);
@@ -47,6 +52,12 @@ const HandleEmailVerification = () => {
             } catch (error) {
                 console.error('Email verification failed:', error);
                 setStatus('error');
+                
+                // Clear any verification flags
+                if (typeof window !== 'undefined') {
+                    localStorage.removeItem('emailVerificationComplete');
+                    localStorage.removeItem('awaitingEmailVerification');
+                }
                 
                 // Redirect to login with error after showing error message
                 setTimeout(() => {
@@ -56,7 +67,7 @@ const HandleEmailVerification = () => {
         };
 
         handleVerification();
-    }, [searchParams, router]);
+    }, [searchParams, router, currentUser, refreshUserData]);
 
     const renderContent = () => {
         switch (status) {
@@ -77,7 +88,7 @@ const HandleEmailVerification = () => {
                             </svg>
                         </div>
                         <h2 className="text-xl font-semibold mb-2 text-green-700">Email Verified Successfully!</h2>
-                        <p className="text-gray-600">Redirecting you to continue setup...</p>
+                        <p className="text-gray-600">Redirecting you to continue your account setup...</p>
                     </div>
                 );
             case 'error':

@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import FormInput from "./FormInput";
-import UserTypeSelector from "./UserTypeSelector";
+import AccountTypeSelector from './AccountTypeSelector'
 import TermsCheckbox from "./TermsCheckbox";
 
 const RegistrationForm = ({ 
@@ -34,7 +34,7 @@ const RegistrationForm = ({
             </div>
 
             {/* User Type Selector */}
-            <UserTypeSelector
+            <AccountTypeSelector
                 value={formData.userType}
                 onChange={(value) => onInputChange('userType', value)}
             />

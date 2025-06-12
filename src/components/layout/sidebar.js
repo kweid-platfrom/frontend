@@ -328,7 +328,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                                 className="w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 text-gray-600 border-t border-gray-100 mt-3 pt-3 transition-all duration-200 hover:scale-[1.01]"
                                             >
                                                 <PlusIcon className="h-4 w-4 mr-3 flex-shrink-0" />
-                                                <span className="text-sm font-medium">Create New Project</span>
+                                                <span className="text-sm font-medium">New Project</span>
                                             </button>
                                         )}
                                         

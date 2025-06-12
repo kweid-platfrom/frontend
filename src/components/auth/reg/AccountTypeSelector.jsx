@@ -1,6 +1,6 @@
 import { Users, Building2 } from "lucide-react";
 
-const UserTypeSelector = ({ value, onChange }) => {
+const AccountTypeSelector = ({ value, onChange }) => {
     const userTypes = [
         {
             id: "individual",
@@ -17,11 +17,13 @@ const UserTypeSelector = ({ value, onChange }) => {
     ];
 
     return (
-        <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 block">
-                Account Type
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-4">
+            <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Account Type</h3>
+                <p className="text-sm text-slate-600 mb-4">Choose the type that best describes your use case</p>
+            </div>
+            
+            <div className="space-y-3">
                 {userTypes.map((type) => {
                     const Icon = type.icon;
                     return (
@@ -29,27 +31,30 @@ const UserTypeSelector = ({ value, onChange }) => {
                             key={type.id}
                             type="button"
                             onClick={() => onChange(type.id)}
-                            className={`p-4 rounded-lg border-2 transition-all duration-200 text-left ${
+                            className={`w-full p-4 rounded-lg border-2 transition-all duration-200 text-left ${
                                 value === type.id
                                     ? "border-teal-500 bg-teal-50/50 text-teal-700"
                                     : "border-slate-200 hover:border-slate-300 text-slate-600"
                             }`}
                         >
-                            <div className="flex items-start gap-3">
-                                <Icon className={`h-5 w-5 mt-0.5 ${
-                                    value === type.id ? "text-teal-600" : "text-slate-400"
-                                }`} />
+                            <div className="flex items-start space-x-3">
+                                <Icon className="w-5 h-5 mt-0.5 shrink-0" />
                                 <div className="flex-1">
-                                    <div className={`font-medium text-sm ${
-                                        value === type.id ? "text-teal-700" : "text-slate-700"
-                                    }`}>
+                                    <div className="font-medium text-slate-900">
                                         {type.label}
                                     </div>
-                                    <div className={`text-xs mt-1 ${
-                                        value === type.id ? "text-teal-600" : "text-slate-500"
-                                    }`}>
+                                    <div className="text-sm text-slate-600 mt-1">
                                         {type.description}
                                     </div>
+                                </div>
+                                <div className={`w-4 h-4 rounded-full border-2 mt-1 ${
+                                    value === type.id
+                                        ? "border-teal-500 bg-teal-500"
+                                        : "border-slate-300"
+                                }`}>
+                                    {value === type.id && (
+                                        <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                                    )}
                                 </div>
                             </div>
                         </button>
@@ -60,4 +65,4 @@ const UserTypeSelector = ({ value, onChange }) => {
     );
 };
 
-export default UserTypeSelector;
+export default AccountTypeSelector;

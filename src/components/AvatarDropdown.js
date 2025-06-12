@@ -1,19 +1,17 @@
-"use client";
-import React, { useState, useRef, useEffect } from "react";
-import Link from "next/link";
-import SignOutButton from "@/components/auth/SignOutButton";
-import { User, Settings, HelpCircle, ChevronDown } from "lucide-react";
-import { useAuth } from "../context/AuthProvider";
-import UserAvatar from "@/components/UserAvatar";
-import UserInfoDisplay from "@/components/UserInfoDisplay";
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { User, Settings, HelpCircle, ChevronDown } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthProvider'; // ✅ Update to actual path
+import UserAvatar from '@/components/UserAvatar';
 
 const UserAvatarDropdown = () => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
     const buttonRef = useRef(null);
-    const { user, userProfile } = useAuth(); 
+    const { userProfile, signOut } = useAuth(); // ✅ destructure signOut
 
-    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (
@@ -27,18 +25,23 @@ const UserAvatarDropdown = () => {
         };
 
         const handleKeyDown = (event) => {
-            if (event.key === "Escape") {
+            if (event.key === 'Escape') {
                 setIsOpen(false);
             }
         };
 
-        document.addEventListener("mousedown", handleClickOutside);
-        document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
         return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
         };
     }, []);
+
+    if (!userProfile) return null; // ✅ Prevents crash on first render
+
+    const fullName = userProfile.displayName || 'User'; // ✅ Trust displayName from Firestore
+    const email = userProfile.email || 'No email';
 
     return (
         <div className="relative">
@@ -49,52 +52,57 @@ const UserAvatarDropdown = () => {
                 aria-expanded={isOpen}
                 aria-haspopup="true"
             >
-                <UserAvatar 
-                    user={userProfile || {
-                        photoURL: user?.photoURL,
-                        displayName: user?.displayName
-                    }} 
-                    size="sm" 
+                <UserAvatar size="sm" />
+                <ChevronDown
+                    size={16}
+                    className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
                 />
-                <ChevronDown size={16} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
+
             {isOpen && (
                 <div
                     ref={dropdownRef}
-                    className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200 min-w-[200px]"
+                    className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200"
                 >
-                    <div className="px-4 py-3 border-b border-gray-100">
-                        <UserInfoDisplay 
-                            user={userProfile || {
-                                displayName: user?.displayName,
-                                email: user?.email
-                            }} 
-                            variant="compact" 
-                        />
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center space-x-3">
+                        <UserAvatar size="md" />
+                        <div className="flex flex-col truncate">
+                            <span className="font-semibold text-sm truncate">{fullName}</span>
+                            <span className="text-xs text-gray-500 truncate">{email}</span>
+                        </div>
                     </div>
 
                     <div className="py-1">
-                        <Link href="/profile" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <Link
+                            href="/profile"
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
                             <User size={16} className="mr-3 text-gray-500" />
                             Profile
                         </Link>
-                        <Link href="/settings" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <Link
+                            href="/settings"
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
                             <Settings size={16} className="mr-3 text-gray-500" />
                             Settings
                         </Link>
-                        <Link href="/help" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <Link
+                            href="/help"
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
                             <HelpCircle size={16} className="mr-3 text-gray-500" />
                             Help Center
                         </Link>
                     </div>
 
                     <div className="py-1 border-t border-gray-100">
-                        <div
+                        <button
+                            onClick={signOut}
                             className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                         >
-                            <SignOutButton variant="text" />
                             <span className="ml-2">Sign out</span>
-                        </div>
+                        </button>
                     </div>
                 </div>
             )}

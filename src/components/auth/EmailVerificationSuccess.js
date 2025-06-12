@@ -2,15 +2,15 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { sendEmailVerification, applyActionCode } from "firebase/auth";
-import { auth } from '../../config/firebase'; // Add this import
+import { auth } from '../../config/firebase';
 import { useAuth } from '../../context/AuthProvider'; 
 import BubbleBackground from '../BackgroundDecorations';
 import '../../app/globals.css'
 
-export default function VerifyEmailPage() {
+export default function EmailVerificationSuccess() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { currentUser } = useAuth();
+    const { currentUser, refreshUserData } = useAuth();
     const [status, setStatus] = useState("waiting"); // waiting | resending | sent | error | verifying | success
     const [countdown, setCountdown] = useState(0);
     const [message, setMessage] = useState("");
@@ -26,7 +26,7 @@ export default function VerifyEmailPage() {
                 setMessage("Verifying your email...");
                 
                 try {
-                    await applyActionCode(auth, oobCode); // Now auth is properly imported
+                    await applyActionCode(auth, oobCode);
                     
                     // Mark verification as complete
                     localStorage.setItem('emailVerificationComplete', 'true');
@@ -35,14 +35,15 @@ export default function VerifyEmailPage() {
                     setStatus("success");
                     setMessage("Email verified successfully!");
                     
-                    // Wait 2 seconds then redirect to continue onboarding
-                    setTimeout(() => {
+                    // Wait 2 seconds then redirect to onboarding
+                    setTimeout(async () => {
                         if (currentUser) {
                             // Reload the user to get updated emailVerified status
-                            currentUser.reload().then(() => {
-                                // The AuthProvider will handle routing to onboarding
-                                router.push('/dashboard'); // This will be intercepted by AuthProvider routing logic
-                            });
+                            await currentUser.reload();
+                            // Refresh user data in context
+                            await refreshUserData();
+                            // Redirect to onboarding - let OnboardingRouter handle the flow
+                            router.push('/onboarding');
                         } else {
                             router.push('/login?verified=true');
                         }
@@ -85,8 +86,12 @@ export default function VerifyEmailPage() {
                 localStorage.removeItem('emailVerificationComplete');
                 setStatus("success");
                 setMessage("Email verified successfully! Redirecting...");
-                setTimeout(() => {
-                    router.push('/dashboard'); // AuthProvider will handle proper routing
+                setTimeout(async () => {
+                    // Refresh user data and redirect to onboarding
+                    if (currentUser) {
+                        await refreshUserData();
+                    }
+                    router.push('/onboarding');
                 }, 1500);
                 return;
             }
@@ -97,12 +102,13 @@ export default function VerifyEmailPage() {
                 return;
             }
 
-            // If user is already verified, proceed to next step
+            // If user is already verified, proceed to onboarding
             if (currentUser.emailVerified) {
                 setStatus("success");
                 setMessage("Email already verified! Redirecting...");
-                setTimeout(() => {
-                    router.push('/dashboard'); // AuthProvider will handle proper routing
+                setTimeout(async () => {
+                    await refreshUserData();
+                    router.push('/onboarding');
                 }, 1500);
                 return;
             }
@@ -115,7 +121,7 @@ export default function VerifyEmailPage() {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
         }
-    }, [currentUser, router, countdown, searchParams]);
+    }, [currentUser, router, countdown, searchParams, refreshUserData]);
 
     const handleResendVerification = async () => {
         if (!currentUser || countdown > 0) return;
@@ -132,8 +138,9 @@ export default function VerifyEmailPage() {
                 setStatus("success");
                 setMessage("Email is already verified! Redirecting...");
                 localStorage.setItem('emailVerificationComplete', 'true');
-                setTimeout(() => {
-                    router.push('/dashboard');
+                setTimeout(async () => {
+                    await refreshUserData();    
+                    router.push('/onboarding');
                 }, 1500);
                 return;
             }

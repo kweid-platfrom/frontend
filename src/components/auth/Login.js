@@ -10,7 +10,7 @@ import { FcGoogle } from "react-icons/fc";
 import { toast, Toaster } from "sonner";
 import { sendEmailVerification } from "firebase/auth";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
-import { isOnboardingComplete, getNextOnboardingStep } from "../../utils/onboardingUtils";
+import { isOnboardingComplete } from "../../utils/onboardingUtils";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import BackgroundDecorations from "../BackgroundDecorations";
@@ -75,7 +75,7 @@ const Login = () => {
         }
     }, []);
 
-    // Helper function to check user's onboarding status and route appropriately
+    // Simplified function to check user's onboarding status and route appropriately
     const checkOnboardingAndRoute = async (user) => {
         try {
             // Get user document from Firestore
@@ -84,58 +84,35 @@ const Login = () => {
             
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                const { accountType, onboardingStatus } = userData;
+                const { accountType, onboardingProgress, onboardingStatus, setupCompleted } = userData;
                 
-                // Check if onboarding is complete
-                if (isOnboardingComplete(accountType, onboardingStatus)) {
+                // Check if onboarding is complete using the utility function correctly
+                if (isOnboardingComplete(accountType, onboardingProgress, onboardingStatus) || setupCompleted) {
                     // Onboarding complete - go to dashboard
                     router.push("/dashboard");
                 } else {
-                    // Onboarding incomplete - determine next step
-                    const nextStep = getNextOnboardingStep(accountType, onboardingStatus);
+                    // Onboarding incomplete - go to main onboarding page
+                    // The onboarding page will handle the specific steps based on account type and progress
+                    router.push("/onboarding");
                     
-                    if (nextStep) {
-                        // Route to appropriate onboarding step
-                        switch (nextStep) {
-                            case 'organization-info':
-                                router.push("/onboarding/organization-info");
-                                break;
-                            case 'team-invites':
-                                router.push("/onboarding/team-invites");
-                                break;
-                            case 'project-creation':
-                                if (accountType === 'individual') {
-                                    router.push("/onboarding/individual/project-creation");
-                                } else {
-                                    router.push("/onboarding/organization/project-creation");
-                                }
-                                break;
-                            default:
-                                // Fallback to general onboarding
-                                router.push("/onboarding");
-                        }
-                        
-                        toast.info("Please complete your setup to continue.", {
-                            duration: 4000,
-                            position: "top-center"
-                        });
-                    } else {
-                        // No specific step found, go to general onboarding
-                        router.push("/onboarding");
-                    }
+                    toast.info("Please complete your setup to continue.", {
+                        duration: 4000,
+                        position: "top-center"
+                    });
                 }
             } else {
-                // User document doesn't exist - this shouldn't happen, but handle gracefully
+                // User document doesn't exist - this shouldn't happen for existing users
                 console.error("User document not found for authenticated user");
-                toast.error("Account setup incomplete. Please contact support.");
-                // Optionally sign out the user
-                await user.auth.signOut();
+                toast.error("Account setup incomplete. Please complete registration.");
+                
+                // Route to onboarding to handle missing user data
+                router.push("/onboarding");
             }
         } catch (error) {
             console.error("Error checking onboarding status:", error);
             toast.error("Failed to load account information. Please try again.");
-            // Fallback to dashboard
-            router.push("/dashboard");
+            // Fallback to onboarding instead of dashboard
+            router.push("/onboarding");
         }
     };
 

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import "../../app/globals.css";
 
-const TeamInviteForm = ({ onSendInvites, onSkip, onComplete, isLoading, userEmail }) => {
+const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
     const [emails, setEmails] = useState([""]);
     const [orgDomain, setOrgDomain] = useState("");
     const [externalEmails, setExternalEmails] = useState([]);
@@ -51,15 +51,12 @@ const TeamInviteForm = ({ onSendInvites, onSkip, onComplete, isLoading, userEmai
         if (isLoading || inviteLoading) return;
         
         try {
+            console.log('TeamInviteForm - Skip button clicked');
             if (onSkip) {
                 await onSkip();
             }
-            // Move to next step after skipping
-            if (onComplete) {
-                onComplete('create-project'); // or whatever the next step is
-            }
         } catch (error) {
-            console.error('Error during skip:', error);
+            console.error('TeamInviteForm - Error during skip:', error);
             toast.error('Something went wrong. Please try again.');
         }
     };
@@ -94,16 +91,13 @@ const TeamInviteForm = ({ onSendInvites, onSkip, onComplete, isLoading, userEmai
     const sendInvites = async (inviteEmails) => {
         setInviteLoading(true);
         try {
+            console.log('TeamInviteForm - Sending invites to:', inviteEmails);
             await sendInviteEmails(inviteEmails);
             if (onSendInvites) {
                 await onSendInvites(inviteEmails);
             }
-            // Move to next step after sending invites
-            if (onComplete) {
-                onComplete('create-project'); // or whatever the next step is
-            }
         } catch (error) {
-            console.error("Error sending invites:", error);
+            console.error("TeamInviteForm - Error sending invites:", error);
             toast.error("Failed to send some invites. Please try again.");
         } finally {
             setInviteLoading(false);
@@ -137,7 +131,7 @@ const TeamInviteForm = ({ onSendInvites, onSkip, onComplete, isLoading, userEmai
             const result = await response.json();
             toast.success(`Invites sent successfully to ${result.sentCount} recipients`);
         } catch (error) {
-            console.error('Error sending invite emails:', error);
+            console.error('TeamInviteForm - Error sending invite emails:', error);
             throw error;
         }
     };

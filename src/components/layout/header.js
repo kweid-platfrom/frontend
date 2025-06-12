@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProject } from '../../context/ProjectContext';
-import { getAuth, signOut } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import '../../app/globals.css';
 import {
     Bars3Icon,
@@ -30,14 +30,14 @@ import NotificationsDropdown from "../NotificationsDropdown";
 const Header = ({ onMenuClick, setShowBugForm }) => {
     const router = useRouter();
     const { user, userProfile, activeProject, projects, setActiveProject } = useProject();
-    
+
     // State management for all dropdowns
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showProjectMenu, setShowProjectMenu] = useState(false);
     const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
-    
+
     // Refs for dropdown positioning
     const userMenuRef = useRef(null);
     const projectMenuRef = useRef(null);
@@ -46,7 +46,7 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
     const testCaseDropdownRef = useRef(null);
     const reportButtonRef = useRef(null);
     const testCaseButtonRef = useRef(null);
-    
+
     // Dropdown positions
     const [reportDropdownPosition, setReportDropdownPosition] = useState({ top: 0, left: 0, right: 'auto' });
     const [testCaseDropdownPosition, setTestCaseDropdownPosition] = useState({ top: 0, left: 0, right: 'auto' });
@@ -85,7 +85,7 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
             const dropdownWidth = 160; // minimum width
             const windowWidth = window.innerWidth;
             const spaceOnRight = windowWidth - rect.left;
-            
+
             setReportDropdownPosition({
                 top: rect.bottom + window.scrollY,
                 left: spaceOnRight >= dropdownWidth ? rect.left : 'auto',
@@ -100,7 +100,7 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
             const dropdownWidth = 160; // minimum width
             const windowWidth = window.innerWidth;
             const spaceOnRight = windowWidth - rect.left;
-            
+
             setTestCaseDropdownPosition({
                 top: rect.bottom + window.scrollY,
                 left: spaceOnRight >= dropdownWidth ? rect.left : 'auto',
@@ -111,11 +111,9 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
 
     const handleSignOut = async () => {
         try {
-            const auth = getAuth();
-            await signOut(auth);
-            router.push('/auth/login');
+            await signOut(); 
         } catch (error) {
-            console.error('Error signing out:', error);
+            console.error("Sign-out failed:", error);
         }
     };
 
@@ -373,7 +371,7 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
 
             {/* Add User Dropdown - Responsive positioning */}
             {showAddUserDropdown && (
-                <div 
+                <div
                     ref={addUserDropdownRef}
                     className="absolute top-16 right-4 sm:right-16 bg-white border border-gray-200 shadow-lg rounded-lg z-50 w-64 max-w-[calc(100vw-2rem)]"
                 >
