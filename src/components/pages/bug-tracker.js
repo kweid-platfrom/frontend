@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import '../app/globals.css'
-import { db } from "../config/firebase";
+import { db } from "../../config/firebase";
 import {
     collection,
     query,
@@ -13,7 +13,7 @@ import {
     getDocs
 } from "firebase/firestore";
 import { Bug, AlertCircle, Clock, Filter, ChevronDown } from "lucide-react";
-import BugGroup from '../components/bug-report/BugGroup';
+import BugGroup from '../bug-report/BugGroup';
 
 const BugTracker = () => {
     const [bugs, setBugs] = useState([]);

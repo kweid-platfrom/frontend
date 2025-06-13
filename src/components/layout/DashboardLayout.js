@@ -9,15 +9,15 @@ import '../../app/globals.css';
 const CreateProjectOnboarding = lazy(() => import('../onboarding/ProjectCreationForm'));
 
 // Lazy load page components
-const Dashboard = lazy(() => import('../../pages/Dashboard'));
-const BugTracker = lazy(() => import('../../pages/BugTrackerPage'));
-const TestScripts = lazy(() => import('../../pages/TestScriptsPage'));
-const AutoScripts = lazy(() => import('../../pages/AutoScriptsPage'));
-const Reports = lazy(() => import('../../pages/ReportsPage'));
-const Recordings = lazy(() => import('../../pages/ReportsPage'));
-const Settings = lazy(() => import('../../pages/SettingsPage.js'));
+const Dashboard = lazy(() => import('../pages/Dashboard'));
+const BugTracker = lazy(() => import('../pages/BugTrackerPage'));
+const TestScripts = lazy(() => import('../pages/TestScriptsPage'));
+const AutoScripts = lazy(() => import('../pages/AutoScriptsPage'));
+const Reports = lazy(() => import('../pages/ReportsPage'));
+const Recordings = lazy(() => import('../pages/ReportsPage'));
+const Settings = lazy(() => import('../pages/SettingsPage.js'));
 // const CreateProject = lazy(() => import('../../pages/CreateProjectPage'));
-const Upgrade = lazy(() => import('../../pages/UpgradePage.js'));
+const Upgrade = lazy(() => import('../pages/UpgradePage.js'));
 
 // Optimized loading skeleton component
 const LoadingSkeleton = memo(() => (

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../context/AuthProvider'; // Update path if needed
+import { useAuth } from '../../context/AuthProvider'; // Update path if needed
 
 export default function Dashboard() {
     const { currentUser, userProfile, loading, initialized } = useAuth();

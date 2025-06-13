@@ -3,24 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, doc, getDoc, where, query } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { db } from '../config/firebase';
+import { db } from '../../config/firebase';
 import { LoaderCircle, Search, Download } from 'lucide-react';
-import { useAlert } from '../components/CustomAlert';
-import TestCaseCard from '../components/testCase/TestCaseCard';
-import TestCaseForm from '../components/testCase/TestCaseForm';
-import AIGenerationForm from '../components/testCase/AIGenerationForm';
-import RequirementImportForm from '../components/testCase/RequirementImport';
-import TraceabilityMatrix from '../components/testCase/TraceabilityMatrix';
+import { useAlert } from '../CustomAlert';
+import TestCaseCard from '../testCase/TestCaseCard';
+import TestCaseForm from '../testCase/TestCaseForm';
+import AIGenerationForm from '../testCase/AIGenerationForm';
+import RequirementImportForm from '../testCase/RequirementImport';
+import TraceabilityMatrix from '../testCase/TraceabilityMatrix';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TEST_CASE_STATUSES, INITIAL_TEST_CASE } from '../components/constants';
+import { TEST_CASE_STATUSES, INITIAL_TEST_CASE } from '../constants';
 import {
     addTestCase,
     getTestCases,
     updateTestCase,
     deleteTestCase
-} from '../services/testCaseService';
+} from '../../services/testCaseService';
 import '../app/globals.css';
 
 const TestCaseManagement = () => {
