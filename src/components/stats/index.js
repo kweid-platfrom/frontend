@@ -1,24 +1,34 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Make sure these paths point to the correct files
-const { KeyMetrics } = require("./KeyMetrics");
 const { MetricCard } = require("./MetricCard");
-const { ChartCard } = require("./ChartCard");
-const { BugStatusChart } = require("./BugStatusChart");
-const { DefectTrendsChart } = require("./DefectTrendsChart");
+const { StatusBadge } = require("./StatusBadge");
+const { ChartContainer } = require("./ChartContainer");
+const { TestExecutionChart } = require("./TestExecutionChart");
 const { TestCoverageChart } = require("./TestCoverageChart");
-const { TestResultChart } = require("./TestResultsChart");
-const { ActivityFeed } = require("./ActivityFeed");
-const { ViewToggle } = require("./ViewToggle");
+const { BugTrendsChart } = require("./BugTrendsChart");
+const { AutomationProgressChart } = require("./AutomationProgressChart");
+const { QuickActionButton } = require("./QuickActionButtons");
+const { RealTimeIndicator } = require("./RealTimeIndicator");
+const { ProgressBar } = require("./ProgressBar");
+const { AlertCard } = require("./AlertCard");
+const { TestExecutionSummary } = require("./TestExecutionSummary");
+const { PerformanceMetrics } = require("./PerformanceMetrics");
+const { TeamProductivity } = require("./TeamProductivity");
 
-// Export as default exports to match your original pattern
-module.exports = {
-    KeyMetrics: KeyMetrics,
-    MetricCard: MetricCard,
-    ChartCard: ChartCard,
-    BugStatusChart: BugStatusChart,
-    DefectTrendsChart: DefectTrendsChart,
-    TestCoverageChart: TestCoverageChart,
-    TestResultChart: TestResultChart,
-    ActivityFeed: ActivityFeed,
-    ViewToggle: ViewToggle
+// components/stats/index.js - Main export file
+export {
+    MetricCard,
+    StatusBadge,
+    ChartContainer,
+    TestExecutionChart,
+    TestCoverageChart,
+    BugTrendsChart,
+    AutomationProgressChart,
+    QuickActionButton,
+    RealTimeIndicator,
+    ProgressBar,
+    AlertCard,
+    TestExecutionSummary,
+    PerformanceMetrics,
+    TeamProductivity
 };
