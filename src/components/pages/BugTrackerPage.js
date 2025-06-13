@@ -1,296 +1,355 @@
-"use client";
-
-import React, { useState, useEffect, useCallback } from "react";
-import '../../app/globals.css'
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// Main BugTracker Component - Fixed
+import React, { useState, useEffect } from "react";
+import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import {
-    collection,
-    query,
-    orderBy,
-    doc,
-    updateDoc,
-    onSnapshot,
-    getDocs
-} from "firebase/firestore";
-import { Bug, AlertCircle, Clock, Filter, ChevronDown } from "lucide-react";
-import BugGroup from '../../components/bug-report/BugGroup';
+import { toast } from "sonner";
+import { useProject } from "../../context/ProjectContext";
+import BugList from "../bug-report/BugList";
+import BugFilters from "../bug-report/BugFilters";
+import BugDetailsPanel from "../bug-report/BugDetailsPanel";
+import { Filter, X } from "lucide-react";
 
 const BugTracker = () => {
+    const { activeProject, user, userProfile } = useProject();
     const [bugs, setBugs] = useState([]);
-    const [groupedBugs, setGroupedBugs] = useState({});
-    const [isLoading, setIsLoading] = useState(true);
-    const [activeFilters, setActiveFilters] = useState({
+    const [filteredBugs, setFilteredBugs] = useState([]);
+    const [selectedBug, setSelectedBug] = useState(null);
+    const [teamMembers, setTeamMembers] = useState([]);
+    const [sprints, setSprints] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showFilters, setShowFilters] = useState(false);
+    const [showDetailsPanel, setShowDetailsPanel] = useState(false);
+
+    // Filter states
+    const [filters, setFilters] = useState({
         status: "all",
         severity: "all",
+        assignedTo: "all",
         category: "all",
+        sprint: "all",
+        dueDate: "all",
+        searchTerm: ""
     });
-    const [expandedBug, setExpandedBug] = useState(null);
-    const [collapsedGroups, setCollapsedGroups] = useState({});
-    const [sortBy, setSortBy] = useState("createdAt");
-    const [sortDirection, setSortDirection] = useState("desc");
 
+    // Real-time listeners setup
     useEffect(() => {
-        setIsLoading(true);
-        
-        // Fallback fetch function
-        const fetchBugs = async () => {
-            try {
-                const bugsRef = collection(db, "bugs");
-                const q = query(bugsRef, orderBy("createdAt", "desc"));
-                const querySnapshot = await getDocs(q);
-                
-                const initialBugs = [];
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    initialBugs.push({
-                        id: doc.id,
-                        ...data,
-                        createdAt: data.createdAt?.toDate() || new Date(),
-                        timestamp: data.createdAt?.toDate() || new Date(),
-                    });
-                });
+        if (!user || !activeProject) return;
 
-                setBugs(initialBugs);
-            } catch (error) {
-                console.error("Error fetching initial bugs:", error);
-            }
-        };
+        const unsubscribers = [];
+        setLoading(true);
 
-        // Fetch initial bugs before setting up listener
-        fetchBugs();
-
-        // Set up real-time listener for bugs collection
         const bugsRef = collection(db, "bugs");
-        const q = query(bugsRef, orderBy("createdAt", "desc"));
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const fetchedBugs = [];
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                fetchedBugs.push({
-                    id: doc.id,
-                    ...data,
-                    createdAt: data.createdAt?.toDate() || new Date(),
-                    timestamp: data.createdAt?.toDate() || new Date(),
-                });
-            });
+        const isOrgUser = !!activeProject.organizationId;
 
-            setBugs(fetchedBugs);
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Error fetching bugs:", error);
-            setIsLoading(false);
-        });
-
-        // Cleanup listener on component unmount
-        return () => unsubscribe();
-    }, []);
-
-    const groupBugsByMonth = useCallback(() => {
-        // Apply filters
-        const filteredBugs = bugs.filter((bug) => {
-            return (
-                (activeFilters.status === "all" || bug.status === activeFilters.status) &&
-                (activeFilters.severity === "all" || bug.severity === activeFilters.severity) &&
-                (activeFilters.category === "all" || bug.category === activeFilters.category)
+        // Query bugs depending on account type
+        const bugsQuery = isOrgUser
+            ? query(
+                bugsRef,
+                where("organizationId", "==", activeProject.organizationId),
+                where("projectId", "==", activeProject.id),
+                orderBy("createdAt", "desc")
+            )
+            : query(
+                bugsRef,
+                where("createdBy", "==", user.uid),
+                where("projectId", "==", activeProject.id),
+                orderBy("createdAt", "desc")
             );
-        });
 
-        // Apply sorting
-        const sortedBugs = [...filteredBugs].sort((a, b) => {
-            let comparison = 0;
-
-            if (sortBy === "timestamp" || sortBy === "createdAt") {
-                // Handle both timestamp field names
-                const aDate = a.createdAt || a.timestamp;
-                const bDate = b.createdAt || b.timestamp;
-                comparison = aDate - bDate;
-            } else if (sortBy === "severity") {
-                const severityRank = { "High": 3, "Medium": 2, "Low": 1 };
-                comparison = severityRank[a.severity] - severityRank[b.severity];
-            } else if (sortBy === "title") {
-                comparison = a.title.localeCompare(b.title);
+        const unsubscribeBugs = onSnapshot(
+            bugsQuery,
+            (snapshot) => {
+                const bugsData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setBugs(bugsData);
+                setLoading(false);
+            },
+            (error) => {
+                console.error("Error fetching bugs:", error);
+                toast.error("Error loading bugs: " + error.message);
+                setLoading(false);
             }
+        );
 
-            return sortDirection === "asc" ? comparison : -comparison;
+        unsubscribers.push(unsubscribeBugs);
+
+        // Other listeners (unchanged)
+        const unsubscribeTeam = onSnapshot(collection(db, "teamMembers"), (snapshot) => {
+            const teamData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTeamMembers(teamData);
+        }, (error) => {
+            console.error("Error fetching team members:", error);
+            toast.error("Error loading team members");
         });
+        unsubscribers.push(unsubscribeTeam);
 
-        // Group by month
-        const grouped = {};
-        sortedBugs.forEach((bug) => {
-            const date = new Date(bug.createdAt || bug.timestamp);
-            const monthYear = `Defects ${date.getFullYear()} - ${date.toLocaleString("default", { month: "long" })}`;
-
-            if (!grouped[monthYear]) grouped[monthYear] = [];
-            grouped[monthYear].push(bug);
+        const unsubscribeSprints = onSnapshot(collection(db, "sprints"), (snapshot) => {
+            const sprintsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setSprints(sprintsData);
+        }, (error) => {
+            console.error("Error fetching sprints:", error);
+            toast.error("Error loading sprints");
         });
+        unsubscribers.push(unsubscribeSprints);
 
-        setGroupedBugs(grouped);
-    }, [bugs, activeFilters, sortBy, sortDirection]);
+        return () => unsubscribers.forEach(unsub => unsub());
+    }, [activeProject, user]);
 
+
+    // Apply filters whenever bugs or filters change
     useEffect(() => {
-        if (bugs.length > 0) {
-            groupBugsByMonth();
-        }
-    }, [bugs, groupBugsByMonth]);
+        let filtered = [...bugs];
 
-    const updateBugStatus = async (bugId, newStatus) => {
-        try {
-            const bugRef = doc(db, "bugs", bugId);
-            await updateDoc(bugRef, { status: newStatus });
-        } catch (error) {
-            console.error("Error updating bug status:", error);
-        }
-    };
-
-    const toggleGroupCollapse = (groupName) => {
-        setCollapsedGroups(prev => ({
-            ...prev,
-            [groupName]: !prev[groupName]
-        }));
-    };
-
-    const toggleSort = (field) => {
-        if (sortBy === field) {
-            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-        } else {
-            setSortBy(field);
-            setSortDirection("desc");
-        }
-    };
-
-    const getGroupColor = (groupName) => {
-        const colors = [
-            "bg-blue-500", "bg-green-500", "bg-purple-500",
-            "bg-red-500", "bg-yellow-500", "bg-pink-500",
-            "bg-indigo-500", "bg-teal-500", "bg-orange-500"
-        ];
-
-        let hash = 0;
-        for (let i = 0; i < groupName.length; i++) {
-            hash = groupName.charCodeAt(i) + ((hash << 5) - hash);
+        // Search filter
+        if (filters.searchTerm) {
+            const searchLower = filters.searchTerm.toLowerCase();
+            filtered = filtered.filter(bug =>
+                bug.title?.toLowerCase().includes(searchLower) ||
+                bug.description?.toLowerCase().includes(searchLower) ||
+                bug.id?.toLowerCase().includes(searchLower)
+            );
         }
 
-        return colors[Math.abs(hash) % colors.length];
+        // Status filter
+        if (filters.status !== "all") {
+            filtered = filtered.filter(bug => bug.status === filters.status);
+        }
+
+        // Severity filter
+        if (filters.severity !== "all") {
+            filtered = filtered.filter(bug => bug.severity === filters.severity);
+        }
+
+        // Assigned to filter
+        if (filters.assignedTo !== "all") {
+            if (filters.assignedTo === "unassigned") {
+                filtered = filtered.filter(bug => !bug.assignedTo);
+            } else {
+                filtered = filtered.filter(bug => bug.assignedTo === filters.assignedTo);
+            }
+        }
+
+        // Category filter
+        if (filters.category !== "all") {
+            filtered = filtered.filter(bug => bug.category === filters.category);
+        }
+
+        // Sprint filter
+        if (filters.sprint !== "all") {
+            filtered = filtered.filter(bug => bug.sprintId === filters.sprint);
+        }
+
+        // Due date filter
+        if (filters.dueDate !== "all") {
+            const now = new Date();
+            filtered = filtered.filter(bug => {
+                if (!bug.dueDate) return filters.dueDate === "no-due-date";
+
+                const dueDate = bug.dueDate.seconds ?
+                    new Date(bug.dueDate.seconds * 1000) :
+                    new Date(bug.dueDate);
+
+                switch (filters.dueDate) {
+                    case "overdue":
+                        return dueDate < now;
+                    case "today":
+                        return dueDate.toDateString() === now.toDateString();
+                    case "this-week":
+                        const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                        return dueDate >= now && dueDate <= weekFromNow;
+                    case "no-due-date":
+                        return false;
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        setFilteredBugs(filtered);
+    }, [bugs, filters]);
+
+    const handleBugSelect = (bug) => {
+        setSelectedBug(bug);
+        setShowDetailsPanel(true);
     };
 
-    const openDetailsOverlay = (bug) => {
-        setDetailsOverlay(bug);
+    const handleBugUpdate = (updatedBug) => {
+        setBugs(prevBugs =>
+            prevBugs.map(bug =>
+                bug.id === updatedBug.id ? { ...bug, ...updatedBug } : bug
+            )
+        );
+        toast.success("Bug updated successfully");
     };
 
-    if (isLoading) {
+    const clearFilters = () => {
+        setFilters({
+            status: "all",
+            severity: "all",
+            assignedTo: "all",
+            category: "all",
+            sprint: "all",
+            dueDate: "all",
+            searchTerm: ""
+        });
+        toast.success("Filters cleared");
+    };
+
+    const getActiveFilterCount = () => {
+        return Object.values(filters).filter(value => value !== "all" && value !== "").length;
+    };
+
+    // Helper functions for styling
+    const getSeverityColor = (severity) => {
+        switch (severity?.toLowerCase()) {
+            case "critical": return "bg-red-100 text-red-800";
+            case "high": return "bg-orange-100 text-orange-800";
+            case "medium": return "bg-yellow-100 text-yellow-800";
+            case "low": return "bg-green-100 text-green-800";
+            default: return "bg-gray-100 text-gray-800";
+        }
+    };
+
+    const getStatusColor = (status) => {
+        switch (status?.toLowerCase()) {
+            case "new": return "bg-blue-100 text-blue-800";
+            case "in progress": return "bg-purple-100 text-purple-800";
+            case "blocked": return "bg-red-100 text-red-800";
+            case "resolved": return "bg-green-100 text-green-800";
+            case "closed": return "bg-gray-100 text-gray-800";
+            default: return "bg-gray-100 text-gray-800";
+        }
+    };
+
+    const getPriorityFromSeverity = (severity) => {
+        switch (severity?.toLowerCase()) {
+            case "critical": return { level: "P1", color: "bg-red-100 text-red-800" };
+            case "high": return { level: "P2", color: "bg-orange-100 text-orange-800" };
+            case "medium": return { level: "P3", color: "bg-yellow-100 text-yellow-800" };
+            case "low": return { level: "P4", color: "bg-green-100 text-green-800" };
+            default: return { level: "P4", color: "bg-gray-100 text-gray-800" };
+        }
+    };
+
+    const formatDate = (date) => {
+        if (!date) return "N/A";
+        const dateObj = date.seconds ? new Date(date.seconds * 1000) : new Date(date);
+        return dateObj.toLocaleDateString();
+    };
+
+    // Show loading or no project message
+    if (!activeProject) {
         return (
-            <div className="p-8 flex justify-center">
-                <div className="animate-pulse flex flex-col w-full max-w-4xl">
-                    <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="mb-6">
-                            <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                            <div className="space-y-3">
-                                {[1, 2].map((j) => (
-                                    <div key={j} className="h-20 bg-gray-100 rounded-md"></div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <p className="text-gray-600">No active project selected</p>
+                    <p className="text-sm text-gray-500">Please select or create a project to view bugs</p>
                 </div>
             </div>
         );
     }
 
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00897B]"></div>
+                <span className="ml-2 text-gray-600">Loading bugs...</span>
+            </div>
+        );
+    }
+
     return (
-        <div className="p-4 md:p-8 relative">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 mt-[-1rem]">
-                <h1 className="text-3xl font-semibold mb-4 md:mb-0 flex items-center">
-                    <Bug className="h-6 w-6 mr-2" />
-                    Bug Tracker
-                    <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
-                        {bugs.length} {bugs.length === 1 ? "bug" : "bugs"}
-                    </span>
-                </h1>
-
-                <div className="flex flex-wrap gap-2">
-                    <div className="relative group">
-                        <button className="flex items-center px-3 py-1.5 text-sm rounded border hover:bg-gray-50">
-                            <Filter className="h-4 w-4 mr-1" />
-                            Status: {activeFilters.status === "all" ? "All" : activeFilters.status}
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                        </button>
-                        <div className="absolute right-0 mt-1 w-40 bg-white border rounded-md shadow-lg z-10 hidden group-hover:block">
-                            {["all", "New", "In Progress", "Resolved", "Closed"].map((status) => (
-                                <button
-                                    key={status}
-                                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                                    onClick={() => setActiveFilters({ ...activeFilters, status })}
-                                >
-                                    {status === "all" ? "All" : status}
-                                </button>
-                            ))}
-                        </div>
+        <div className="h-full flex">
+            {/* Main Content */}
+            <div className={`flex-1 flex flex-col ${showDetailsPanel ? 'mr-96' : ''} transition-all duration-300`}>
+                {/* Header with Filter Toggle */}
+                <div className="flex items-center justify-between p-4 border-b bg-white">
+                    <div className="flex items-center space-x-4">
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            Bug Tracker ({filteredBugs.length})
+                        </h1>
+                        {getActiveFilterCount() > 0 && (
+                            <span className="px-2 py-1 bg-[#00897B] text-white text-xs rounded-full">
+                                {getActiveFilterCount()} filter{getActiveFilterCount() > 1 ? 's' : ''} active
+                            </span>
+                        )}
                     </div>
 
-                    <div className="relative group">
-                        <button className="flex items-center px-3 py-1.5 text-sm rounded border hover:bg-gray-50">
-                            <AlertCircle className="h-4 w-4 mr-1" />
-                            Severity: {activeFilters.severity === "all" ? "All" : activeFilters.severity}
-                            <ChevronDown className="h-3 w-3 ml-1" />
+                    <div className="flex items-center space-x-2">
+                        {getActiveFilterCount() > 0 && (
+                            <button
+                                onClick={clearFilters}
+                                className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                            >
+                                Clear filters
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setShowFilters(!showFilters)}
+                            className={`flex items-center px-3 py-2 rounded-lg border transition-colors ${showFilters
+                                    ? 'bg-[#00897B] text-white border-[#00897B]'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                }`}
+                        >
+                            <Filter className="h-4 w-4 mr-2" />
+                            Filters
                         </button>
-                        <div className="absolute right-0 mt-1 w-40 bg-white border rounded-md shadow-lg z-10 hidden group-hover:block">
-                            {["all", "High", "Medium", "Low"].map((severity) => (
-                                <button
-                                    key={severity}
-                                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                                    onClick={() => setActiveFilters({ ...activeFilters, severity })}
-                                >
-                                    {severity === "all" ? "All" : severity}
-                                </button>
-                            ))}
-                        </div>
                     </div>
+                </div>
 
-                    <button
-                        className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 flex items-center"
-                        onClick={() => toggleSort("createdAt")}
-                    >
-                        <Clock className="h-4 w-4 mr-1" />
-                        Date {(sortBy === "timestamp" || sortBy === "createdAt") && (sortDirection === "asc" ? "↑" : "↓")}
-                    </button>
+                {/* Filters Panel */}
+                {showFilters && (
+                    <BugFilters
+                        filters={filters}
+                        setFilters={setFilters}
+                        teamMembers={teamMembers}
+                        sprints={sprints}
+                        onClose={() => setShowFilters(false)}
+                    />
+                )}
 
-                    <button
-                        className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 flex items-center"
-                        onClick={() => toggleSort("severity")}
-                    >
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        Severity {sortBy === "severity" && (sortDirection === "asc" ? "↑" : "↓")}
-                    </button>
+                {/* Bug List */}
+                <div className="flex-1 overflow-auto">
+                    <BugList
+                        bugs={filteredBugs}
+                        onBugSelect={handleBugSelect}
+                        selectedBug={selectedBug}
+                        getSeverityColor={getSeverityColor}
+                        getStatusColor={getStatusColor}
+                        formatDate={formatDate}
+                        teamMembers={teamMembers}
+                        sprints={sprints}
+                    />
                 </div>
             </div>
 
-            {Object.keys(groupedBugs).length === 0 ? (
-                <div className="text-center p-12 bg-gray-50 rounded-lg border border-dashed">
-                    <Bug className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-                    <p className="text-gray-500 mb-2">No bugs found</p>
-                    <p className="text-gray-400 text-sm">
-                        {activeFilters.status !== "all" || activeFilters.severity !== "all" || activeFilters.category !== "all"
-                            ? "Try adjusting your filters"
-                            : "All clear! No bugs have been reported yet."}
-                    </p>
-                </div>
-            ) : (
-                Object.keys(groupedBugs).map((monthYear) => (
-                    <BugGroup
-                        key={monthYear}
-                        groupName={monthYear}
-                        bugs={groupedBugs[monthYear]}
-                        color={getGroupColor(monthYear)}
-                        isCollapsed={collapsedGroups[monthYear] || false}
-                        toggleCollapse={() => toggleGroupCollapse(monthYear)}
-                        expandedBug={expandedBug}
-                        setExpandedBug={setExpandedBug}
-                        updateBugStatus={updateBugStatus}
-                        openDetailsOverlay={openDetailsOverlay}
+            {/* Right Panel for Bug Details */}
+            {showDetailsPanel && selectedBug && (
+                <div className="fixed right-0 top-0 h-full w-96 bg-white border-l shadow-lg z-50 overflow-auto">
+                    <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                        <h2 className="text-lg font-semibold text-gray-900">Bug Details</h2>
+                        <button
+                            onClick={() => setShowDetailsPanel(false)}
+                            className="p-2 hover:bg-gray-200 rounded-full"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
+                    <BugDetailsPanel
+                        bug={selectedBug}
+                        teamMembers={teamMembers}
+                        sprints={sprints}
+                        onBugUpdate={handleBugUpdate}
+                        getSeverityColor={getSeverityColor}
+                        getStatusColor={getStatusColor}
+                        getPriorityFromSeverity={getPriorityFromSeverity}
+                        formatDate={formatDate}
                     />
-                ))
+                </div>
             )}
         </div>
     );

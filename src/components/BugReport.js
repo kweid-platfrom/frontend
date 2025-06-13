@@ -23,7 +23,7 @@ const BugReportButton = ({ className = "" }) => {
     
     const [showBugForm, setShowBugForm] = useState(false);
     const [title, setTitle] = useState("");
-    const [category, setCategory] = useState("UI Issue");
+    const [category, setCategory] = useState("");
     const [description, setDescription] = useState("");
     const [stepsToReproduce, setStepsToReproduce] = useState("");
     const [attachments, setAttachments] = useState([]);
@@ -204,7 +204,7 @@ const BugReportButton = ({ className = "" }) => {
                 assignedTo: assignedTo || null,
                 
                 // User identification
-                reportedBy: currentUser.displayName || currentUser.email || currentUser.uid,
+                reportedBy: currentUser.displayName || currentUser.uid,
                 reportedByEmail: currentUser.email || "",
                 
                 // Organization context (if available)
@@ -327,8 +327,7 @@ const BugReportButton = ({ className = "" }) => {
 
                                     <form onSubmit={handleSubmit} className="overflow-y-auto flex-grow">
                                         <div className="mb-4">
-                                            <label className="block text-sm font-medium">Bug Title *</label>
-                                            <small className="text-gray-600 text-xs">A clear title for your bug report.</small>
+                                            <small className="text-gray-600 text-xs">A clear title for your bug report *</small>
                                             <input
                                                 type="text"
                                                 className="w-full border rounded p-2 mt-1 focus:outline-none focus:ring-2 focus:ring-[#00897B]"
@@ -340,8 +339,7 @@ const BugReportButton = ({ className = "" }) => {
                                         </div>
 
                                         <div className="mb-4">
-                                            <label className="block text-sm font-medium">Bug Category</label>
-                                            <small className="text-gray-600 text-xs">Select the category that best describes the bug.</small>
+                                            <small className="text-gray-600 text-xs">Select the category that best describes the bug. *</small>
                                             <select
                                                 className="w-full border rounded p-2 mt-1 focus:outline-none focus:ring-2 focus:ring-[#00897B]"
                                                 value={category}

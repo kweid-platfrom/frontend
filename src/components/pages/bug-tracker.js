@@ -12,7 +12,7 @@ import {
     onSnapshot,
     getDocs
 } from "firebase/firestore";
-import { Bug, AlertCircle, Clock, Filter, ChevronDown } from "lucide-react";
+import { BugAntIcon, AlertCircle, Clock, Filter, ChevronDown } from "lucide-react";
 import BugGroup from '../bug-report/BugGroup';
 
 const BugTracker = () => {
@@ -31,14 +31,14 @@ const BugTracker = () => {
 
     useEffect(() => {
         setIsLoading(true);
-        
+
         // Fallback fetch function
         const fetchBugs = async () => {
             try {
                 const bugsRef = collection(db, "bugs");
                 const q = query(bugsRef, orderBy("createdAt", "desc"));
                 const querySnapshot = await getDocs(q);
-                
+
                 const initialBugs = [];
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
@@ -199,15 +199,18 @@ const BugTracker = () => {
     }
 
     return (
-        <div className="p-4 md:p-8 relative">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 mt-[-1rem]">
-                <h1 className="text-3xl font-semibold mb-4 md:mb-0 flex items-center">
-                    <Bug className="h-6 w-6 mr-2" />
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">
+                    <BugAntIcon className="h-6 w-6 mr-2" />
                     Bug Tracker
                     <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
                         {bugs.length} {bugs.length === 1 ? "bug" : "bugs"}
                     </span>
-                </h1>
+                    </h1>
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                     <div className="relative group">
@@ -268,7 +271,7 @@ const BugTracker = () => {
 
             {Object.keys(groupedBugs).length === 0 ? (
                 <div className="text-center p-12 bg-gray-50 rounded-lg border border-dashed">
-                    <Bug className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+                    <BugAntIcon className="h-12 w-12 mx-auto text-gray-400 mb-3" />
                     <p className="text-gray-500 mb-2">No bugs found</p>
                     <p className="text-gray-400 text-sm">
                         {activeFilters.status !== "all" || activeFilters.severity !== "all" || activeFilters.category !== "all"
