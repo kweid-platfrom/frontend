@@ -31,7 +31,7 @@ const UserAvatar = ({ size = 'md', className }) => {
     return (
         <div
             className={cn(
-                'rounded-full bg-[#00897b] flex items-center justify-center text-white font-medium',
+                'rounded-full bg-gradient-to-r from-accent-600 to-teal-700 flex items-center justify-center text-white font-medium',
                 sizeClasses[size],
                 className
             )}
@@ -40,8 +40,8 @@ const UserAvatar = ({ size = 'md', className }) => {
                 <Image
                     src={userProfile.avatarURL}
                     alt={`${fullName}'s avatar`}
-                    width={48}
-                    height={48}
+                    width={45}
+                    height={45}
                     className="rounded-full object-cover"
                     priority
                 />

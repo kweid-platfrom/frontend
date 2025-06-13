@@ -10,8 +10,11 @@ import {
     getDocs,
     doc,
     getDoc,
+    updateDoc,
+    setDoc,
     orderBy,
-    limit
+    limit,
+    serverTimestamp
 } from 'firebase/firestore';
 
 const ProjectContext = createContext();
@@ -32,6 +35,7 @@ export const ProjectProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isUserLoading, setIsUserLoading] = useState(true);
     const [isProjectsLoading, setIsProjectsLoading] = useState(true);
+    const [isProfileUpdating, setIsProfileUpdating] = useState(false);
 
     // Cache for reducing Firebase calls
     const [cache, setCache] = useState({
@@ -87,10 +91,10 @@ export const ProjectProvider = ({ children }) => {
     }, [cache.timestamp]);
 
     // Fetch user profile with caching
-    const fetchUserProfile = useCallback(async (uid) => {
+    const fetchUserProfile = useCallback(async (uid, forceRefresh = false) => {
         try {
-            // Return cached data if valid
-            if (isCacheValid() && cache.userProfile) {
+            // Return cached data if valid and not forcing refresh
+            if (!forceRefresh && isCacheValid() && cache.userProfile) {
                 return cache.userProfile;
             }
 
@@ -111,6 +115,146 @@ export const ProjectProvider = ({ children }) => {
             return cache.userProfile || null;
         }
     }, [cache.userProfile, isCacheValid]);
+
+    // Update user profile method
+    const updateUserProfile = useCallback(async (profileData) => {
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
+
+        try {
+            setIsProfileUpdating(true);
+            
+            const userDocRef = doc(db, 'users', user.uid);
+            
+            // Prepare update data with timestamp
+            const updateData = {
+                ...profileData,
+                updatedAt: serverTimestamp()
+            };
+
+            // Update document in Firestore
+            await updateDoc(userDocRef, updateData);
+
+            // Fetch fresh profile data to ensure consistency
+            const updatedProfile = await fetchUserProfile(user.uid, true);
+            
+            // Update local state
+            setUserProfile(updatedProfile);
+            
+            // Clear cache to force fresh data on next fetch
+            setCache(prev => ({
+                ...prev,
+                userProfile: null,
+                timestamp: null
+            }));
+
+            return updatedProfile;
+        } catch (error) {
+            console.error('Error updating user profile:', error);
+            throw error;
+        } finally {
+            setIsProfileUpdating(false);
+        }
+    }, [user, fetchUserProfile]);
+
+    // Create or update user profile (useful for first time users)
+    const createOrUpdateUserProfile = useCallback(async (profileData) => {
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
+
+        try {
+            setIsProfileUpdating(true);
+            
+            const userDocRef = doc(db, 'users', user.uid);
+            
+            // Prepare profile data with timestamps
+            const profileWithTimestamps = {
+                ...profileData,
+                uid: user.uid,
+                email: user.email,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            };
+
+            // Use setDoc with merge option to create or update
+            await setDoc(userDocRef, profileWithTimestamps, { merge: true });
+
+            // Fetch fresh profile data
+            const updatedProfile = await fetchUserProfile(user.uid, true);
+            
+            // Update local state
+            setUserProfile(updatedProfile);
+            
+            // Clear cache
+            setCache(prev => ({
+                ...prev,
+                userProfile: null,
+                timestamp: null
+            }));
+
+            return updatedProfile;
+        } catch (error) {
+            console.error('Error creating/updating user profile:', error);
+            throw error;
+        } finally {
+            setIsProfileUpdating(false);
+        }
+    }, [user, fetchUserProfile]);
+
+    // Refresh user profile method
+    const refreshUserProfile = useCallback(async () => {
+        if (!user) return null;
+
+        try {
+            setIsUserLoading(true);
+            const freshProfile = await fetchUserProfile(user.uid, true);
+            setUserProfile(freshProfile);
+            return freshProfile;
+        } catch (error) {
+            console.error('Error refreshing user profile:', error);
+            throw error;
+        } finally {
+            setIsUserLoading(false);
+        }
+    }, [user, fetchUserProfile]);
+
+    // Update specific profile fields
+    const updateProfileField = useCallback(async (fieldName, fieldValue) => {
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
+
+        try {
+            const userDocRef = doc(db, 'users', user.uid);
+            
+            const updateData = {
+                [fieldName]: fieldValue,
+                updatedAt: serverTimestamp()
+            };
+
+            await updateDoc(userDocRef, updateData);
+
+            // Update local state optimistically
+            setUserProfile(prev => ({
+                ...prev,
+                [fieldName]: fieldValue
+            }));
+
+            // Clear cache
+            setCache(prev => ({
+                ...prev,
+                userProfile: null,
+                timestamp: null
+            }));
+
+            return true;
+        } catch (error) {
+            console.error(`Error updating profile field ${fieldName}:`, error);
+            throw error;
+        }
+    }, [user]);
 
     // Optimized project fetching with pagination and caching
     const fetchUserProjects = useCallback(async (uid, organizationId = null) => {
@@ -295,17 +439,34 @@ export const ProjectProvider = ({ children }) => {
     }, [user, userProfile, fetchUserProjects, setActiveProjectWithStorage]);
 
     const value = useMemo(() => ({
+        // User and profile data
         user,
         userProfile,
+        
+        // Projects data
         projects,
         activeProject,
-        setActiveProject: setActiveProjectWithStorage, // Use the version that syncs with localStorage
-        isLoading: isLoading || isUserLoading, // Dashboard can show once user is loaded
+        setActiveProject: setActiveProjectWithStorage,
+        
+        // Loading states
+        isLoading: isLoading || isUserLoading,
+        isUserLoading,
         isProjectsLoading,
+        isProfileUpdating,
+        
+        // Profile methods
+        updateUserProfile,
+        createOrUpdateUserProfile,
+        refreshUserProfile,
+        updateProfileField,
+        
+        // Project methods
+        refetchProjects,
+        
+        // Computed values
         needsOnboarding,
         canCreateProject,
         checkSubscriptionStatus: () => subscriptionStatus,
-        refetchProjects
     }), [
         user,
         userProfile,
@@ -315,10 +476,15 @@ export const ProjectProvider = ({ children }) => {
         isLoading,
         isUserLoading,
         isProjectsLoading,
+        isProfileUpdating,
+        updateUserProfile,
+        createOrUpdateUserProfile,
+        refreshUserProfile,
+        updateProfileField,
+        refetchProjects,
         needsOnboarding,
         canCreateProject,
-        subscriptionStatus,
-        refetchProjects
+        subscriptionStatus
     ]);
 
     return (

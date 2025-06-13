@@ -2,7 +2,7 @@
 'use client'
 // components/onboarding/UnifiedOrganizationOnboarding.js
 import React, { useState } from 'react';
-import { Building2, ArrowRight, Loader2, Users, Mail, Plus, X } from 'lucide-react';
+import { Building2, ArrowRight, Loader2, Users, Mail, Plus, X, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthProvider';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -20,7 +20,7 @@ import {
 
 const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading }) => {
     // Current step state
-    const [currentStep, setCurrentStep] = useState(1); // 1: Org Info, 2: Team Invites
+    const [currentStep, setCurrentStep] = useState(1); // 1: Org Info, 2: Team Invites, 3: Complete
 
     // Organization form state
     const [orgFormData, setOrgFormData] = useState({
@@ -176,8 +176,8 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
         const filtered = emails.filter((email) => email.trim());
 
         if (filtered.length === 0) {
-            // Skip team invites
-            await completeOnboarding([]);
+            // Skip team invites and complete onboarding
+            await completeOnboarding([], true);
             return;
         }
 
@@ -196,14 +196,13 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
     };
 
     const handleSkipTeamInvites = async () => {
-        setLoading(true); // Add loading state
+        setLoading(true);
         try {
-            console.log('Skipping team invites...'); // Add logging
+            console.log('Skipping team invites and completing onboarding...');
             await completeOnboarding([], true);
         } catch (error) {
             console.error('Error skipping team invites:', error);
             toast.error('Failed to skip team invites. Please try again.');
-            // Don't change step on error
         } finally {
             setLoading(false);
         }
@@ -235,8 +234,8 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
             const result = await response.json();
             toast.success(`Invites sent successfully to ${result.sentCount} recipients`);
 
-            // Complete onboarding
-            await completeOnboarding(inviteEmails);
+            // Complete onboarding with invited emails
+            await completeOnboarding(inviteEmails, false);
 
         } catch (error) {
             console.error("Error sending invites:", error);
@@ -254,6 +253,11 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
     // Complete the entire onboarding process
     const completeOnboarding = async (invitedEmails = [], skipped = false) => {
         try {
+            console.log('=== COMPLETING ORGANIZATION ONBOARDING ===');
+            
+            // Show completion step
+            setCurrentStep(3);
+            
             const completionData = {
                 // Organization step data
                 organizationId: organizationId,
@@ -270,10 +274,12 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
 
             console.log('Completing onboarding with data:', completionData);
 
+            // Wait a moment to show the completion message
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
             if (onComplete && typeof onComplete === 'function') {
-                // Make sure onComplete is awaited properly
-                const result = await onComplete(completionData);
-                console.log('onComplete result:', result);
+                console.log('Calling onComplete callback...');
+                await onComplete(completionData);
             } else {
                 console.warn('onComplete callback is not provided or not a function');
             }
@@ -281,7 +287,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
         } catch (error) {
             console.error('Error completing onboarding:', error);
             toast.error('Failed to complete onboarding. Please try again.');
-            throw error; // Re-throw to let the caller handle it
+            throw error;
         }
     };
 
@@ -292,19 +298,21 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
         <div className="min-h-screen bg-gray-50 py-12 px-4">
             <div className="max-w-2xl mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-8">
-                    {/* Progress indicator */}
-                    <div className="mb-8">
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                            <span>Step {currentStep} of 2</span>
-                            <span>{currentStep === 1 ? 'Organization Info' : 'Team Invites'}</span>
+                    {/* Progress indicator - Only show for steps 1 and 2 */}
+                    {currentStep <= 2 && (
+                        <div className="mb-8">
+                            <div className="flex items-center justify-between text-sm text-gray-600">
+                                <span>Step {currentStep} of 2</span>
+                                <span>{currentStep === 1 ? 'Organization Info' : 'Team Invites'}</span>
+                            </div>
+                            <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                    className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${(currentStep / 2) * 100}%` }}
+                                ></div>
+                            </div>
                         </div>
-                        <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                            <div
-                                className="bg-teal-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${(currentStep / 2) * 100}%` }}
-                            ></div>
-                        </div>
-                    </div>
+                    )}
 
                     {/* Step 1: Organization Information */}
                     {currentStep === 1 && (
@@ -341,6 +349,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                                         disabled={isFormLoading}
                                         className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.companyName ? 'border-red-500' : 'border-gray-300'}`}
                                         placeholder="Enter your company name"
+                                        required
                                     />
                                     {errors.companyName && (
                                         <p className="mt-1 text-sm text-red-600">{errors.companyName}</p>
@@ -358,6 +367,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                                         onChange={handleOrgInputChange}
                                         disabled={isFormLoading}
                                         className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.industry ? 'border-red-500' : 'border-gray-300'}`}
+                                        required
                                     >
                                         <option value="">Select your industry</option>
                                         {industryOptions.map(option => (
@@ -380,6 +390,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                                         onChange={handleOrgInputChange}
                                         disabled={isFormLoading}
                                         className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.companySize ? 'border-red-500' : 'border-gray-300'}`}
+                                        required
                                     >
                                         <option value="">Select company size</option>
                                         {companySizeOptions.map(option => (
@@ -393,7 +404,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
 
                                 <div>
                                     <label htmlFor="website" className="block text-sm font-medium text-gray-700 mb-1">
-                                        Company Website
+                                        Website
                                     </label>
                                     <input
                                         type="url"
@@ -403,7 +414,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                                         onChange={handleOrgInputChange}
                                         disabled={isFormLoading}
                                         className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed ${errors.website ? 'border-red-500' : 'border-gray-300'}`}
-                                        placeholder="https://www.yourcompany.com"
+                                        placeholder="https://example.com"
                                     />
                                     {errors.website && (
                                         <p className="mt-1 text-sm text-red-600">{errors.website}</p>
@@ -412,7 +423,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
 
                                 <div>
                                     <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                                        Brief Description
+                                        Description
                                     </label>
                                     <textarea
                                         id="description"
@@ -421,26 +432,26 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                                         onChange={handleOrgInputChange}
                                         disabled={isFormLoading}
                                         rows={3}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                        placeholder="Tell us a bit about what your company does..."
+                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        placeholder="Tell us a bit about your organization..."
                                     />
                                 </div>
 
-                                <div className="pt-4">
+                                <div className="flex justify-end">
                                     <button
                                         type="submit"
                                         disabled={isFormLoading}
-                                        className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                                        className="px-6 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
                                         {isFormLoading ? (
                                             <>
-                                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                <Loader2 className="w-4 h-4 animate-spin" />
                                                 Saving...
                                             </>
                                         ) : (
                                             <>
                                                 Continue
-                                                <ArrowRight className="w-4 h-4 ml-2" />
+                                                <ArrowRight className="w-4 h-4" />
                                             </>
                                         )}
                                     </button>
@@ -453,154 +464,136 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                     {currentStep === 2 && (
                         <>
                             <div className="text-center mb-8">
-                                <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-100 rounded-full mb-4">
-                                    <Users className="w-8 h-8 text-teal-600" />
+                                <div className="mx-auto mb-4 w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <Users className="w-8 h-8 text-blue-600" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-slate-900 mb-2">
-                                    Invite Your Team
-                                </h3>
-                                <p className="text-base text-slate-600 max-w-md mx-auto">
-                                    Collaborate seamlessly with your teammates. You can always invite more people later.
+                                <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                                    Invite your team
+                                </h1>
+                                <p className="text-gray-600">
+                                    Add team members to your organization (you can do this later from the dashboard)
                                 </p>
                             </div>
 
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="text-sm text-slate-500">
-                                    {filledEmailsCount > 0 && (
-                                        <span className="inline-flex items-center gap-1">
-                                            <Mail className="w-4 h-4" />
-                                            {filledEmailsCount} email{filledEmailsCount !== 1 ? 's' : ''} added
-                                        </span>
-                                    )}
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleAddEmailField}
-                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded hover:bg-teal-100 hover:border-teal-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Add Email
-                                </button>
-                            </div>
-
-                            <div className="space-y-4 mb-8">
-                                {emails.map((email, index) => (
-                                    <div key={index} className="group relative">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex-1 relative">
-                                                <input
-                                                    type="email"
-                                                    placeholder="teammate@company.com"
-                                                    value={email}
-                                                    onChange={(e) => handleEmailChange(index, e.target.value)}
-                                                    className="w-full px-4 py-3 text-base border border-slate-200 rounded text-slate-900 placeholder-slate-400 bg-white transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 hover:border-slate-300"
-                                                />
-                                                {email && email.includes("@") && (
-                                                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                                                        <div className={`w-2 h-2 rounded-full ${email.endsWith(`@${orgDomain}`)
-                                                            ? 'bg-green-400'
-                                                            : 'bg-yellow-400'
-                                                            }`} title={
-                                                                email.endsWith(`@${orgDomain}`)
-                                                                    ? 'Internal email'
-                                                                    : 'External email'
-                                                            } />
-                                                    </div>
-                                                )}
-                                            </div>
-
+                            <form onSubmit={handleTeamInvitesSubmit} className="space-y-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                                        Team Member Email Addresses
+                                    </label>
+                                    
+                                    {emails.map((email, index) => (
+                                        <div key={index} className="flex items-center gap-2 mb-2">
+                                            <Mail className="w-4 h-4 text-gray-400" />
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => handleEmailChange(index, e.target.value)}
+                                                disabled={isFormLoading}
+                                                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring focus:ring-teal-600 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                                placeholder="colleague@company.com"
+                                            />
                                             {emails.length > 1 && (
                                                 <button
                                                     type="button"
                                                     onClick={() => handleRemoveEmailField(index)}
-                                                    className="flex-shrink-0 p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                                                    aria-label="Remove email"
+                                                    disabled={isFormLoading}
+                                                    className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"
                                                 >
-                                                    <X className="w-5 h-5" />
+                                                    <X className="w-4 h-4" />
                                                 </button>
                                             )}
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
 
-                            <div className="flex gap-4">
-                                <button
-                                    type="button"
-                                    onClick={handleSkipTeamInvites}
-                                    className="flex-1 px-6 py-3.5 text-base font-medium text-slate-700 bg-white border-2 border-slate-200 rounded hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={isFormLoading}
-                                >
-                                    Skip
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={handleTeamInvitesSubmit}
-                                    className="flex-1 px-6 py-3.5 text-base font-medium text-white bg-teal-600 rounded hover:bg-teal-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg flex items-center justify-center gap-2"
-                                    disabled={isFormLoading}
-                                >
-                                    {isFormLoading ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            <span>Sending...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Mail className="w-5 h-5" />
-                                            <span>Send Invites</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
-                            {emails.some(email => email.includes("@")) && orgDomain && (
-                                <div className="mt-4 pt-4 border-t border-slate-100">
-                                    <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                                            <span>Internal ({orgDomain})</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                                            <span>External domain</span>
-                                        </div>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddEmailField}
+                                        disabled={isFormLoading}
+                                        className="mt-2 flex items-center gap-2 text-teal-600 hover:text-teal-700 disabled:opacity-50"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add another email
+                                    </button>
                                 </div>
-                            )}
+
+                                <div className="flex justify-between items-center pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={handleSkipTeamInvites}
+                                        disabled={isFormLoading}
+                                        className="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                                    >
+                                        Skip for now
+                                    </button>
+                                    
+                                    <button
+                                        type="submit"
+                                        disabled={isFormLoading}
+                                        className="px-6 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                        {isFormLoading ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                {filledEmailsCount > 0 ? 'Sending Invites...' : 'Completing Setup...'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {filledEmailsCount > 0 ? 'Send Invites' : 'Complete Setup'}
+                                                <ArrowRight className="w-4 h-4" />
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
                         </>
                     )}
 
-                    {/* Confirmation Dialog */}
-                    <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-                        <AlertDialogContent className="mx-4 max-w-lg">
-                            <AlertDialogHeader>
-                                <AlertDialogTitle className="text-xl">
-                                    Invite External Members?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription className="text-base">
-                                    {externalEmails.length} email{externalEmails.length !== 1 ? 's are' : ' is'} outside your organization ({orgDomain}).
-                                    External members will have the same access as internal team members.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
-                                <AlertDialogCancel
-                                    onClick={() => setShowConfirmDialog(false)}
-                                    className="w-full sm:w-auto"
-                                >
-                                    Cancel
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={confirmExternalInvite}
-                                    className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700"
-                                >
-                                    Yes, Send Invites
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+                    {/* Step 3: Completion */}
+                    {currentStep === 3 && (
+                        <div className="text-center py-8">
+                            <div className="mx-auto mb-6 w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
+                                <CheckCircle className="w-10 h-10 text-green-600" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                                Organization setup complete!
+                            </h1>
+                            <p className="text-gray-600 mb-4">
+                                Your organization <strong>{orgFormData.companyName}</strong> has been successfully created.
+                            </p>
+                            <p className="text-sm text-gray-500">
+                                Redirecting you to your dashboard where you can create your first project...
+                            </p>
+                            <div className="mt-6">
+                                <Loader2 className="w-6 h-6 text-teal-600 animate-spin mx-auto" />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {/* Confirmation Dialog for External Emails */}
+            <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>External Email Addresses Detected</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Some email addresses don&apos;t match your organization domain ({orgDomain}). 
+                            Are you sure you want to invite these external users?
+                            <div className="mt-2 text-sm">
+                                {externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).map(email => (
+                                    <div key={email} className="text-gray-700">• {email}</div>
+                                ))}
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmExternalInvite}>
+                            Send Invites
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };

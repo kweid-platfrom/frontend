@@ -9,8 +9,6 @@ import '../../app/globals.css';
 import {
     Bars3Icon,
     UserCircleIcon,
-    CogIcon,
-    FolderIcon,
     MagnifyingGlassIcon,
     PlayIcon,
     UserPlusIcon,
@@ -29,18 +27,16 @@ import NotificationsDropdown from "../NotificationsDropdown";
 
 const Header = ({ onMenuClick, setShowBugForm }) => {
     const router = useRouter();
-    const { user, userProfile, activeProject, projects, setActiveProject } = useProject();
+    const { user, userProfile } = useProject();
 
     // State management for all dropdowns
     const [showUserMenu, setShowUserMenu] = useState(false);
-    const [showProjectMenu, setShowProjectMenu] = useState(false);
     const [showAddUserDropdown, setShowAddUserDropdown] = useState(false);
     const [showReportOptions, setShowReportOptions] = useState(false);
     const [showTestCaseOptions, setShowTestCaseOptions] = useState(false);
 
     // Refs for dropdown positioning
     const userMenuRef = useRef(null);
-    const projectMenuRef = useRef(null);
     const addUserDropdownRef = useRef(null);
     const reportDropdownRef = useRef(null);
     const testCaseDropdownRef = useRef(null);
@@ -51,14 +47,33 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
     const [reportDropdownPosition, setReportDropdownPosition] = useState({ top: 0, left: 0, right: 'auto' });
     const [testCaseDropdownPosition, setTestCaseDropdownPosition] = useState({ top: 0, left: 0, right: 'auto' });
 
+    // Get user display name with fallback logic
+    const getUserDisplayName = () => {
+        // Priority: firstName + lastName > displayName > userProfile.name > user.displayName > extract from email > 'User'
+        if (userProfile?.firstName && userProfile?.lastName) {
+            return `${userProfile.firstName} ${userProfile.lastName}`;
+        }
+        if (userProfile?.displayName) return userProfile.displayName;
+        if (userProfile?.name) return userProfile.name;
+        if (user?.displayName) return user.displayName;
+        if (user?.email) {
+            // Extract name from email (part before @)
+            const emailName = user.email.split('@')[0];
+            // Convert to title case and replace dots/underscores with spaces
+            return emailName
+                .replace(/[._]/g, ' ')
+                .split(' ')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+        }
+        return 'User';
+    };
+
     // Close menus when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
                 setShowUserMenu(false);
-            }
-            if (projectMenuRef.current && !projectMenuRef.current.contains(event.target)) {
-                setShowProjectMenu(false);
             }
             if (reportDropdownRef.current && !reportDropdownRef.current.contains(event.target) &&
                 reportButtonRef.current && !reportButtonRef.current.contains(event.target)) {
@@ -111,16 +126,10 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
 
     const handleSignOut = async () => {
         try {
-            await signOut(); 
+            await signOut();
         } catch (error) {
             console.error("Sign-out failed:", error);
         }
-    };
-
-    const handleProjectSwitch = (project) => {
-        setActiveProject(project);
-        setShowProjectMenu(false);
-        router.push('/dashboard');
     };
 
     const handleRecordingComplete = (recordingData) => {
@@ -173,51 +182,8 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
                             <Bars3Icon className="h-6 w-6" />
                         </button>
 
-                        {/* Project Context */}
-                        <div className="hidden lg:flex items-center ml-4">
-                            <div className="relative" ref={projectMenuRef}>
-                                <button
-                                    onClick={() => setShowProjectMenu(!showProjectMenu)}
-                                    className="flex items-center px-3 py-2 text-sm bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                                >
-                                    <FolderIcon className="h-4 w-4 text-gray-500 mr-2" />
-                                    <span className="font-medium text-gray-900">{activeProject?.name}</span>
-                                    <svg className="ml-2 h-4 w-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                    </svg>
-                                </button>
-
-                                {/* Project Dropdown */}
-                                {showProjectMenu && (
-                                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                                        <div className="p-2">
-                                            <div className="px-2 py-1 text-xs font-medium text-gray-500 mb-1">
-                                                Switch Project
-                                            </div>
-                                            {projects.map((project) => (
-                                                <button
-                                                    key={project.id}
-                                                    onClick={() => handleProjectSwitch(project)}
-                                                    className={`w-full flex items-center p-2 text-left rounded-md hover:bg-gray-50 ${activeProject?.id === project.id ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
-                                                        }`}
-                                                >
-                                                    <FolderIcon className="h-4 w-4 mr-2" />
-                                                    <div className="min-w-0 flex-1">
-                                                        <span className="text-sm font-medium truncate block">{project.name}</span>
-                                                        {project.description && (
-                                                            <span className="text-xs text-gray-500 truncate block">{project.description}</span>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Search Bar */}
-                        <div className="relative flex-1 max-w-xs md:max-w-sm ml-4">
+                        {/* Search Bar - now with more space since project selector is removed */}
+                        <div className="relative flex-1 max-w-md ml-4">
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
                             </div>
@@ -306,19 +272,18 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
                                 <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
                                     <div className="p-2">
                                         <div className="px-3 py-2 text-sm border-b border-gray-200 mb-2">
-                                            <p className="font-medium text-gray-900">{userProfile?.name || user?.displayName || 'User'}</p>
+                                            <p className="font-medium text-gray-900">{getUserDisplayName()}</p>
                                             <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                                         </div>
-                                        <button className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">
+                                        <button
+                                            onClick={() => {
+                                                setShowUserMenu(false);
+                                                router.push('/profile');
+                                            }}
+                                            className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                                        >
                                             <UserIcon className="h-4 w-4 mr-2 text-gray-500" />
                                             Profile
-                                        </button>
-                                        <button
-                                            onClick={() => router.push('/settings')}
-                                            className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-                                        >
-                                            <CogIcon className="h-4 w-4 mr-2 text-gray-500" />
-                                            Settings
                                         </button>
                                         <div onClick={handleSignOut} className="w-full flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md cursor-pointer">
                                             <SignOutButton variant="text" />

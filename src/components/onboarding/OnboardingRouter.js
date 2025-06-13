@@ -1,4 +1,3 @@
-
 'use client'
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthProvider';
@@ -27,12 +26,14 @@ const OnboardingRouter = () => {
     const router = useRouter();
     const processingRef = useRef(false);
     const stepCompletionRef = useRef(null);
+    // Add a ref to track if we're completing unified onboarding
+    const unifiedCompletionRef = useRef(false);
 
     useEffect(() => {
         const determineOnboardingStep = async () => {
             // Prevent multiple simultaneous executions
-            if (processingRef.current) {
-                console.log('OnboardingRouter - Already processing, skipping...');
+            if (processingRef.current || unifiedCompletionRef.current) {
+                console.log('OnboardingRouter - Already processing or completing unified onboarding, skipping...');
                 return;
             }
 
@@ -122,18 +123,23 @@ const OnboardingRouter = () => {
                         currentStepFromStatus: onboardingStatus.currentStep
                     });
 
-                    if (onboardingStatus.currentStep === 'project-creation') {
-                        console.log('OnboardingRouter - Current step is project-creation, proceeding there');
-                        setCurrentStep('project-creation');
-                    } else if (!normalizedProgress.organizationInfo) {
+                    // Check if organization setup is complete (both org info and team invites)
+                    const orgSetupComplete = normalizedProgress.organizationInfo && 
+                        (normalizedProgress.teamInvites || normalizedProgress.teamInvitesSkipped);
+
+                    if (orgSetupComplete) {
+                        console.log('OnboardingRouter - Organization setup complete, redirecting to dashboard');
+                        router.replace('/dashboard');
+                        return;
+                    }
+
+                    // If not complete, show unified organization onboarding
+                    if (!normalizedProgress.organizationInfo) {
                         console.log('OnboardingRouter - Organization info not complete, using unified organization onboarding flow');
                         setCurrentStep('unified-organization');
                     } else if (!normalizedProgress.teamInvites && !normalizedProgress.teamInvitesSkipped) {
                         console.log('OnboardingRouter - Organization info complete but team invites pending, using unified organization onboarding flow');
                         setCurrentStep('unified-organization');
-                    } else {
-                        console.log('OnboardingRouter - Organization setup complete, moving to project creation');
-                        setCurrentStep('project-creation');
                     }
                 } else if (accountType === 'individual') {
                     console.log('OnboardingRouter - Individual account, going to project creation');
@@ -162,6 +168,9 @@ const OnboardingRouter = () => {
     const handleUnifiedOnboardingComplete = async (completionData) => {
         console.log('OnboardingRouter - Unified onboarding completed with:', completionData);
 
+        // Set the completion flag to prevent useEffect from interfering
+        unifiedCompletionRef.current = true;
+
         try {
             setIsTransitioning(true);
             setLoading(true);
@@ -178,16 +187,22 @@ const OnboardingRouter = () => {
                 completed: true
             }, userProfile?.accountType);
 
-            // Combine both step updates
+            // Combine both step updates - mark onboarding as complete for organization accounts
             const combinedUpdateData = {
                 ...orgStepData,
                 ...teamStepData,
-                'onboardingStatus.currentStep': 'project-creation'
+                // Mark onboarding as complete since we're skipping project creation step
+                'onboardingStatus.onboardingComplete': true,
+                'onboardingStatus.completedAt': new Date().toISOString(),
+                'onboardingStatus.currentStep': 'complete',
+                'setupCompleted': true,
+                'setupStep': 'completed'
             };
 
             // If team invites were skipped, mark that explicitly
             if (completionData.teamInvitesSkipped) {
                 combinedUpdateData['onboardingProgress.teamInvitesSkipped'] = true;
+                combinedUpdateData['onboardingStatus.teamInvitesSkipped'] = true;
             }
 
             combinedUpdateData.updatedAt = new Date().toISOString();
@@ -197,10 +212,6 @@ const OnboardingRouter = () => {
             // Update user profile in Firestore
             await completeUserSetup(currentUser.uid, combinedUpdateData);
 
-            // IMPORTANT: Set the current step BEFORE refreshing user data
-            // This prevents the useEffect from reverting to the wrong step
-            setCurrentStep('project-creation');
-
             // Refresh user data to get updated profile
             console.log('OnboardingRouter - Refreshing user data after unified completion...');
             const refreshSuccess = await refreshUserData();
@@ -209,20 +220,22 @@ const OnboardingRouter = () => {
                 throw new Error('Failed to refresh user data after unified completion');
             }
 
-            // Wait for state to settle
-            await new Promise(resolve => setTimeout(resolve, 300));
-
-            console.log('OnboardingRouter - Unified steps completed, moving to project creation');
-
-            // Reset transition states AFTER everything is complete
-            setIsTransitioning(false);
-            setLoading(false);
+            console.log('OnboardingRouter - Organization onboarding completed, redirecting to dashboard');
+            
+            // Redirect to dashboard
+            router.replace('/dashboard');
 
         } catch (error) {
             console.error('OnboardingRouter - Error completing unified onboarding:', error);
             setError(`An error occurred while completing the organization setup: ${error.message}`);
+        } finally {
+            // Reset all states
             setIsTransitioning(false);
             setLoading(false);
+            // Clear the completion flag after a brief delay to ensure state has settled
+            setTimeout(() => {
+                unifiedCompletionRef.current = false;
+            }, 1000);
         }
     };
 
@@ -271,6 +284,13 @@ const OnboardingRouter = () => {
 
             if (!refreshSuccess) {
                 throw new Error('Failed to refresh user data after step completion');
+            }
+
+            // For individual accounts, redirect to dashboard after project creation
+            if (currentStep === 'project-creation') {
+                console.log('OnboardingRouter - Project creation completed, redirecting to dashboard');
+                router.replace('/dashboard');
+                return;
             }
 
             // Wait a moment for the refresh to complete
@@ -338,6 +358,7 @@ const OnboardingRouter = () => {
                             setLoading(true);
                             processingRef.current = false;
                             stepCompletionRef.current = null;
+                            unifiedCompletionRef.current = false;
                             window.location.reload();
                         }}
                         className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition-colors mr-2"
@@ -371,6 +392,7 @@ const OnboardingRouter = () => {
                 );
 
             case 'project-creation':
+                // Only show for individual accounts now
                 return (
                     <ProjectCreationForm
                         onComplete={handleStepComplete}
@@ -397,6 +419,7 @@ const OnboardingRouter = () => {
                                     setIsTransitioning(false);
                                     processingRef.current = false;
                                     stepCompletionRef.current = null;
+                                    unifiedCompletionRef.current = false;
                                     window.location.reload();
                                 }}
                                 className="mt-4 bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition-colors"

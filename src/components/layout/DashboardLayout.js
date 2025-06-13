@@ -1,5 +1,5 @@
 'use client'
-import { useState, Suspense, lazy, memo, useCallback } from 'react';
+import { useState, Suspense, lazy, memo, useCallback, useEffect } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import Header from './header';
 import Sidebar from './sidebar';
@@ -7,6 +7,17 @@ import '../../app/globals.css';
 
 // Lazy load onboarding
 const CreateProjectOnboarding = lazy(() => import('../onboarding/ProjectCreationForm'));
+
+// Lazy load page components
+const Dashboard = lazy(() => import('../../pages/Dashboard'));
+const BugTracker = lazy(() => import('../../pages/BugTrackerPage'));
+const TestScripts = lazy(() => import('../../pages/TestScriptsPage'));
+const AutoScripts = lazy(() => import('../../pages/AutoScriptsPage'));
+const Reports = lazy(() => import('../../pages/ReportsPage'));
+const Recordings = lazy(() => import('../../pages/ReportsPage'));
+const Settings = lazy(() => import('../../pages/SettingsPage.js'));
+// const CreateProject = lazy(() => import('../../pages/CreateProjectPage'));
+const Upgrade = lazy(() => import('../../pages/UpgradePage.js'));
 
 // Optimized loading skeleton component
 const LoadingSkeleton = memo(() => (
@@ -34,11 +45,48 @@ PageLoadingFallback.displayName = 'PageLoadingFallback';
 
 const DashboardLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [activePage, setActivePage] = useState('dashboard');
     const { needsOnboarding, isLoading } = useProject();
+    
+    // Load saved active page from localStorage on mount
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const savedPage = localStorage.getItem('activePage');
+            if (savedPage) {
+                setActivePage(savedPage);
+            }
+        }
+    }, []);
     
     // Memoize callbacks to prevent unnecessary re-renders
     const handleMenuClick = useCallback(() => setSidebarOpen(true), []);
     const handleSidebarClose = useCallback(() => setSidebarOpen(false), []);
+    
+    // Render the appropriate page component based on activePage
+    const renderPageContent = () => {
+        switch (activePage) {
+            case 'dashboard':
+                return <Dashboard />;
+            case 'bug-tracker':
+                return <BugTracker />;
+            case 'test-scripts':
+                return <TestScripts />;
+            case 'auto-scripts':
+                return <AutoScripts />;
+            case 'reports':
+                return <Reports />;
+            case 'recordings':
+                return <Recordings />;
+            case 'settings':
+                return <Settings />;
+            // case 'create-project':
+            //     return <CreateProject />;
+            case 'upgrade':
+                return <Upgrade />;
+            default:
+                return children || <Dashboard />;
+        }
+    };
     
     // Show loading state immediately
     if (isLoading) {
@@ -60,6 +108,8 @@ const DashboardLayout = ({ children }) => {
             <Sidebar 
                 isOpen={sidebarOpen} 
                 onClose={handleSidebarClose}
+                setActivePage={setActivePage}
+                activePage={activePage}
             />
 
             {/* Main Content - Load immediately */}
@@ -68,9 +118,9 @@ const DashboardLayout = ({ children }) => {
                 <Header onMenuClick={handleMenuClick} />
 
                 {/* Main Content Area with optimized rendering */}
-                <main className="flex-1 overflow-y-auto">
+                <main className="flex-1 overflow-y-auto p-8">
                     <Suspense fallback={<PageLoadingFallback />}>
-                        {children}
+                        {renderPageContent()}
                     </Suspense>
                 </main>
             </div>

@@ -2,7 +2,7 @@
 'use client'
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../context/ProjectContext';
 import {
     CheckIcon,
     XMarkIcon,
