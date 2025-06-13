@@ -174,10 +174,10 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">
-                        Welcome back, {userProfile?.firstName || 'User'} 👋
+                        Welcome, {userProfile?.firstName || 'User'} 👋
                     </h1>
                     <div className="flex items-center space-x-4 mt-2">
-                        <p className="text-gray-600">QAID Real-time Analytics Dashboard</p>
+                        {/* <p className="text-gray-600">Dashboard</p> */}
                         <RealTimeIndicator
                             lastUpdate={currentTime.toLocaleTimeString()}
                             isConnected={isConnected}

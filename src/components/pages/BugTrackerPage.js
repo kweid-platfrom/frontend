@@ -1,14 +1,16 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// Main BugTracker Component - Fixed
+// Main BugTracker Component - Enhanced with comprehensive grouping support
 import React, { useState, useEffect } from "react";
-import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, where, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { toast } from "sonner";
 import { useProject } from "../../context/ProjectContext";
 import BugList from "../bug-report/BugList";
 import BugFilters from "../bug-report/BugFilters";
 import BugDetailsPanel from "../bug-report/BugDetailsPanel";
-import { Filter, X } from "lucide-react";
+import { Filter, X, List, Table, Grid, Calendar, User, Flag, AlertTriangle, Clock, Users } from "lucide-react";
+import { BugAntIcon } from "@heroicons/react/24/outline";
 
 const BugTracker = () => {
     const { activeProject, user, userProfile } = useProject();
@@ -18,8 +20,14 @@ const BugTracker = () => {
     const [teamMembers, setTeamMembers] = useState([]);
     const [sprints, setSprints] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
     const [showDetailsPanel, setShowDetailsPanel] = useState(false);
+    const [viewMode, setViewMode] = useState('list');
+    
+    // Grouping states
+    const [groupBy, setGroupBy] = useState('none');
+    const [subGroupBy, setSubGroupBy] = useState('none');
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -32,73 +40,342 @@ const BugTracker = () => {
         searchTerm: ""
     });
 
-    // Real-time listeners setup
-    useEffect(() => {
-        if (!user || !activeProject) return;
+    // Debug function to log query details
+    const debugQuery = (queryType, conditions) => {
+        console.log(`[DEBUG] ${queryType} Query Conditions:`, conditions);
+    };
 
-        const unsubscribers = [];
-        setLoading(true);
+    // Fallback query function with better error handling
+    const fallbackFetchBugs = async () => {
+        try {
+            console.log("[DEBUG] Attempting fallback fetch for bugs...");
 
-        const bugsRef = collection(db, "bugs");
+            // Try simpler query first
+            const bugsRef = collection(db, "bugs");
+            let bugsQuery;
 
-        const isOrgUser = !!activeProject.organizationId;
+            if (activeProject.organizationId) {
+                // For organization users
+                bugsQuery = query(
+                    bugsRef,
+                    where("organizationId", "==", activeProject.organizationId),
+                    where("projectId", "==", activeProject.id)
+                );
+                debugQuery("Organization Bugs", {
+                    organizationId: activeProject.organizationId,
+                    projectId: activeProject.id
+                });
+            } else {
+                // For individual users
+                bugsQuery = query(
+                    bugsRef,
+                    where("createdBy", "==", user.uid),
+                    where("projectId", "==", activeProject.id)
+                );
+                debugQuery("Individual Bugs", {
+                    createdBy: user.uid,
+                    projectId: activeProject.id
+                });
+            }
 
-        // Query bugs depending on account type
-        const bugsQuery = isOrgUser
-            ? query(
-                bugsRef,
-                where("organizationId", "==", activeProject.organizationId),
-                where("projectId", "==", activeProject.id),
-                orderBy("createdAt", "desc")
-            )
-            : query(
-                bugsRef,
-                where("createdBy", "==", user.uid),
-                where("projectId", "==", activeProject.id),
-                orderBy("createdAt", "desc")
-            );
+            const snapshot = await getDocs(bugsQuery);
+            const bugsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
 
-        const unsubscribeBugs = onSnapshot(
-            bugsQuery,
-            (snapshot) => {
+            console.log("[DEBUG] Fallback fetch successful. Bugs found:", bugsData.length);
+            setBugs(bugsData);
+            setError(null);
+            return bugsData;
+        } catch (error) {
+            console.error("[DEBUG] Fallback fetch failed:", error);
+
+            // Try even simpler query - just by projectId
+            try {
+                const bugsRef = collection(db, "bugs");
+                const simpleQuery = query(bugsRef, where("projectId", "==", activeProject.id));
+                const snapshot = await getDocs(simpleQuery);
                 const bugsData = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 }));
+
+                console.log("[DEBUG] Simple query successful. Bugs found:", bugsData.length);
                 setBugs(bugsData);
-                setLoading(false);
-            },
-            (error) => {
-                console.error("Error fetching bugs:", error);
-                toast.error("Error loading bugs: " + error.message);
+                setError(null);
+                return bugsData;
+            } catch (simpleError) {
+                console.error("[DEBUG] Simple query also failed:", simpleError);
+                throw simpleError;
+            }
+        }
+    };
+
+    // Function to update bug status
+    const updateBugStatus = async (bugId, newStatus) => {
+        try {
+            const bugRef = doc(db, "bugs", bugId);
+            await updateDoc(bugRef, {
+                status: newStatus,
+                updatedAt: new Date()
+            });
+            
+            // Update local state
+            setBugs(prevBugs =>
+                prevBugs.map(bug =>
+                    bug.id === bugId ? { ...bug, status: newStatus, updatedAt: new Date() } : bug
+                )
+            );
+            
+            toast.success(`Bug status updated to ${newStatus}`);
+        } catch (error) {
+            console.error("Error updating bug status:", error);
+            toast.error("Failed to update bug status");
+        }
+    };
+
+    // Function to update bug (for drag and drop and other updates)
+    const updateBug = async (updatedBug) => {
+        try {
+            const bugRef = doc(db, "bugs", updatedBug.id);
+            const updateData = {
+                ...updatedBug,
+                updatedAt: new Date()
+            };
+            
+            await updateDoc(bugRef, updateData);
+            
+            // Update local state
+            setBugs(prevBugs =>
+                prevBugs.map(bug =>
+                    bug.id === updatedBug.id ? { ...bug, ...updateData } : bug
+                )
+            );
+            
+            toast.success("Bug updated successfully");
+        } catch (error) {
+            console.error("Error updating bug:", error);
+            toast.error("Failed to update bug");
+        }
+    };
+
+    // Function to create sprint
+    const createSprint = async (sprintData) => {
+        try {
+            const sprintRef = collection(db, "sprints");
+            const newSprint = {
+                ...sprintData,
+                projectId: activeProject.id,
+                organizationId: activeProject.organizationId || null,
+                createdBy: user.uid,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+
+            const docRef = await addDoc(sprintRef, newSprint);
+            toast.success("Sprint created successfully");
+            return docRef.id;
+        } catch (error) {
+            console.error("Error creating sprint:", error);
+            toast.error("Failed to create sprint");
+            throw error;
+        }
+    };
+
+    // Real-time listeners setup with enhanced error handling
+    useEffect(() => {
+        if (!user || !activeProject) {
+            console.log("[DEBUG] Missing user or activeProject:", { user: !!user, activeProject: !!activeProject });
+            return;
+        }
+
+        console.log("[DEBUG] Setting up real-time listeners for project:", activeProject.id);
+
+        const unsubscribers = [];
+        setLoading(true);
+        setError(null);
+
+        const isOrgUser = !!activeProject.organizationId;
+        console.log("[DEBUG] User type:", isOrgUser ? "Organization" : "Individual");
+
+        // Query bugs with enhanced error handling
+        const setupBugsListener = () => {
+            try {
+                const bugsRef = collection(db, "bugs");
+                let bugsQuery;
+
+                if (isOrgUser) {
+                    bugsQuery = query(
+                        bugsRef,
+                        where("organizationId", "==", activeProject.organizationId),
+                        where("projectId", "==", activeProject.id),
+                        orderBy("createdAt", "desc")
+                    );
+                    debugQuery("Organization Bugs with Order", {
+                        organizationId: activeProject.organizationId,
+                        projectId: activeProject.id,
+                        orderBy: "createdAt desc"
+                    });
+                } else {
+                    bugsQuery = query(
+                        bugsRef,
+                        where("createdBy", "==", user.uid),
+                        where("projectId", "==", activeProject.id),
+                        orderBy("createdAt", "desc")
+                    );
+                    debugQuery("Individual Bugs with Order", {
+                        createdBy: user.uid,
+                        projectId: activeProject.id,
+                        orderBy: "createdAt desc"
+                    });
+                }
+
+                const unsubscribeBugs = onSnapshot(
+                    bugsQuery,
+                    (snapshot) => {
+                        console.log("[DEBUG] Bugs snapshot received. Docs count:", snapshot.docs.length);
+                        const bugsData = snapshot.docs.map(doc => {
+                            const data = doc.data();
+                            console.log("[DEBUG] Bug data:", { id: doc.id, title: data.title });
+                            return {
+                                id: doc.id,
+                                ...data
+                            };
+                        });
+                        setBugs(bugsData);
+                        setError(null);
+                        setLoading(false);
+                        console.log("[DEBUG] Bugs state updated with", bugsData.length, "bugs");
+                    },
+                    (error) => {
+                        console.error("[DEBUG] Bugs listener error:", error);
+                        console.error("[DEBUG] Error code:", error.code);
+                        console.error("[DEBUG] Error message:", error.message);
+
+                        // If it's a missing index error, try fallback
+                        if (error.code === 'failed-precondition' || error.message.includes('index')) {
+                            console.log("[DEBUG] Attempting fallback due to index error...");
+                            fallbackFetchBugs().catch(fallbackError => {
+                                console.error("[DEBUG] Fallback also failed:", fallbackError);
+                                setError(`Error loading bugs: ${fallbackError.message}`);
+                                toast.error("Error loading bugs. Please check console for details.");
+                            }).finally(() => {
+                                setLoading(false);
+                            });
+                        } else {
+                            setError(`Error loading bugs: ${error.message}`);
+                            toast.error("Error loading bugs: " + error.message);
+                            setLoading(false);
+                        }
+                    }
+                );
+                unsubscribers.push(unsubscribeBugs);
+            } catch (error) {
+                console.error("[DEBUG] Error setting up bugs listener:", error);
+                setError(`Error setting up bugs listener: ${error.message}`);
                 setLoading(false);
             }
-        );
+        };
 
-        unsubscribers.push(unsubscribeBugs);
+        // Query team members with proper error handling
+        const setupTeamMembersListener = () => {
+            try {
+                const teamMembersRef = collection(db, "teamMembers");
+                let teamMembersQuery;
 
-        // Other listeners (unchanged)
-        const unsubscribeTeam = onSnapshot(collection(db, "teamMembers"), (snapshot) => {
-            const teamData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setTeamMembers(teamData);
-        }, (error) => {
-            console.error("Error fetching team members:", error);
-            toast.error("Error loading team members");
-        });
-        unsubscribers.push(unsubscribeTeam);
+                if (isOrgUser) {
+                    teamMembersQuery = query(
+                        teamMembersRef,
+                        where("organizationId", "==", activeProject.organizationId),
+                        where("projectId", "==", activeProject.id)
+                    );
+                } else {
+                    teamMembersQuery = query(
+                        teamMembersRef,
+                        where("createdBy", "==", user.uid),
+                        where("projectId", "==", activeProject.id)
+                    );
+                }
 
-        const unsubscribeSprints = onSnapshot(collection(db, "sprints"), (snapshot) => {
-            const sprintsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setSprints(sprintsData);
-        }, (error) => {
-            console.error("Error fetching sprints:", error);
-            toast.error("Error loading sprints");
-        });
-        unsubscribers.push(unsubscribeSprints);
+                const unsubscribeTeam = onSnapshot(
+                    teamMembersQuery,
+                    (snapshot) => {
+                        const teamData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setTeamMembers(teamData);
+                        console.log("[DEBUG] Team members loaded:", teamData.length);
+                    },
+                    (error) => {
+                        console.error("[DEBUG] Team members error:", error);
+                        setTeamMembers([]);
+                        // Don't show error toast for team members as it's not critical
+                    }
+                );
+                unsubscribers.push(unsubscribeTeam);
+            } catch (error) {
+                console.error("[DEBUG] Error setting up team members listener:", error);
+                setTeamMembers([]);
+            }
+        };
 
-        return () => unsubscribers.forEach(unsub => unsub());
+        // Query sprints with proper error handling
+        const setupSprintsListener = () => {
+            try {
+                const sprintsRef = collection(db, "sprints");
+                let sprintsQuery;
+
+                if (isOrgUser) {
+                    sprintsQuery = query(
+                        sprintsRef,
+                        where("organizationId", "==", activeProject.organizationId),
+                        where("projectId", "==", activeProject.id),
+                        orderBy("createdAt", "desc")
+                    );
+                } else {
+                    sprintsQuery = query(
+                        sprintsRef,
+                        where("createdBy", "==", user.uid),
+                        where("projectId", "==", activeProject.id),
+                        orderBy("createdAt", "desc")
+                    );
+                }
+
+                const unsubscribeSprints = onSnapshot(
+                    sprintsQuery,
+                    (snapshot) => {
+                        const sprintsData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setSprints(sprintsData);
+                        console.log("[DEBUG] Sprints loaded:", sprintsData.length);
+                    },
+                    (error) => {
+                        console.error("[DEBUG] Sprints error:", error);
+                        setSprints([]);
+                        // Don't show error toast for sprints as it's not critical
+                    }
+                );
+                unsubscribers.push(unsubscribeSprints);
+            } catch (error) {
+                console.error("[DEBUG] Error setting up sprints listener:", error);
+                setSprints([]);
+            }
+        };
+
+        // Set up all listeners
+        setupBugsListener();
+        setupTeamMembersListener();
+        setupSprintsListener();
+
+        return () => {
+            console.log("[DEBUG] Cleaning up listeners...");
+            unsubscribers.forEach(unsub => unsub());
+        };
     }, [activeProject, user]);
-
 
     // Apply filters whenever bugs or filters change
     useEffect(() => {
@@ -241,6 +518,33 @@ const BugTracker = () => {
         return dateObj.toLocaleDateString();
     };
 
+    // Retry function for manual retry
+    const handleRetry = () => {
+        setLoading(true);
+        setError(null);
+        fallbackFetchBugs().catch(error => {
+            setError(`Retry failed: ${error.message}`);
+        }).finally(() => {
+            setLoading(false);
+        });
+    };
+
+    // Grouping options
+    const groupingOptions = [
+        { value: 'none', label: 'No Grouping', icon: List },
+        { value: 'status', label: 'Status', icon: Clock },
+        { value: 'severity', label: 'Severity', icon: AlertTriangle },
+        { value: 'assignee', label: 'Assignee', icon: User },
+        { value: 'sprint', label: 'Sprint', icon: Flag },
+        { value: 'month', label: 'Month', icon: Calendar }
+    ];
+
+    const subGroupingOptions = [
+        { value: 'none', label: 'No Sub-grouping' },
+        { value: 'week', label: 'Week' },
+        { value: 'month', label: 'Month' }
+    ];
+
     // Show loading or no project message
     if (!activeProject) {
         return (
@@ -262,24 +566,96 @@ const BugTracker = () => {
         );
     }
 
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <p className="text-red-600 mb-2">Error loading bugs</p>
+                    <p className="text-sm text-gray-500 mb-4">{error}</p>
+                    <button
+                        onClick={handleRetry}
+                        className="px-4 py-2 bg-[#00897B] text-white rounded-md hover:bg-[#00695C] transition-colors"
+                    >
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="h-full flex">
             {/* Main Content */}
             <div className={`flex-1 flex flex-col ${showDetailsPanel ? 'mr-96' : ''} transition-all duration-300`}>
-                {/* Header with Filter Toggle */}
+                {/* Header with Controls */}
                 <div className="flex items-center justify-between p-4 border-b bg-white">
-                    <div className="flex items-center space-x-4">
-                        <h1 className="text-2xl font-bold text-gray-900">
-                            Bug Tracker ({filteredBugs.length})
-                        </h1>
-                        {getActiveFilterCount() > 0 && (
-                            <span className="px-2 py-1 bg-[#00897B] text-white text-xs rounded-full">
-                                {getActiveFilterCount()} filter{getActiveFilterCount() > 1 ? 's' : ''} active
+                    <div>
+                        <h1 className="flex items-center text-3xl font-bold text-gray-900">
+                            <BugAntIcon className="h-6 w-6 mr-2" />
+                            Bug Tracker
+                            <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                                {bugs.length} {bugs.length === 1 ? "bug" : "bugs"}
                             </span>
-                        )}
+                        </h1>
                     </div>
 
                     <div className="flex items-center space-x-2">
+                        {/* Grouping Controls */}
+                        <div className="flex items-center space-x-2">
+                            <select
+                                value={groupBy}
+                                onChange={(e) => setGroupBy(e.target.value)}
+                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#00897B] focus:border-transparent"
+                            >
+                                {groupingOptions.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+
+                            {(groupBy === 'sprint' || groupBy === 'month') && (
+                                <select
+                                    value={subGroupBy}
+                                    onChange={(e) => setSubGroupBy(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#00897B] focus:border-transparent"
+                                >
+                                    {subGroupingOptions.map(option => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
+                        {/* View Mode Toggle */}
+                        <div className="flex items-center border rounded-lg overflow-hidden">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`flex items-center px-3 py-2 text-sm transition-colors ${
+                                    viewMode === 'list'
+                                        ? 'bg-[#00897B] text-white'
+                                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                <List className="h-4 w-4 mr-1" />
+                                List
+                            </button>
+                            <button
+                                onClick={() => setViewMode('table')}
+                                className={`flex items-center px-3 py-2 text-sm transition-colors border-l ${
+                                    viewMode === 'table'
+                                        ? 'bg-[#00897B] text-white'
+                                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                <Table className="h-4 w-4 mr-1" />
+                                Table
+                            </button>
+                        </div>
+
+                        {/* Filter Controls */}
                         {getActiveFilterCount() > 0 && (
                             <button
                                 onClick={clearFilters}
@@ -291,12 +667,17 @@ const BugTracker = () => {
                         <button
                             onClick={() => setShowFilters(!showFilters)}
                             className={`flex items-center px-3 py-2 rounded-lg border transition-colors ${showFilters
-                                    ? 'bg-[#00897B] text-white border-[#00897B]'
-                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                ? 'bg-[#00897B] text-white border-[#00897B]'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                                 }`}
                         >
                             <Filter className="h-4 w-4 mr-2" />
                             Filters
+                            {getActiveFilterCount() > 0 && (
+                                <span className="ml-1 px-1.5 py-0.5 bg-white text-[#00897B] rounded-full text-xs font-medium">
+                                    {getActiveFilterCount()}
+                                </span>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -312,19 +693,24 @@ const BugTracker = () => {
                     />
                 )}
 
-                {/* Bug List */}
-                <div className="flex-1 overflow-auto">
-                    <BugList
-                        bugs={filteredBugs}
-                        onBugSelect={handleBugSelect}
-                        selectedBug={selectedBug}
-                        getSeverityColor={getSeverityColor}
-                        getStatusColor={getStatusColor}
-                        formatDate={formatDate}
-                        teamMembers={teamMembers}
-                        sprints={sprints}
-                    />
-                </div>
+                {/* Bug List with Grouping Support */}
+                <BugList
+                    bugs={filteredBugs}
+                    viewMode={viewMode}
+                    groupBy={groupBy}
+                    subGroupBy={subGroupBy}
+                    onBugSelect={handleBugSelect}
+                    selectedBug={selectedBug}
+                    getSeverityColor={getSeverityColor}
+                    getStatusColor={getStatusColor}
+                    getPriorityFromSeverity={getPriorityFromSeverity}
+                    formatDate={formatDate}
+                    teamMembers={teamMembers}
+                    sprints={sprints}
+                    updateBugStatus={updateBugStatus}
+                    onUpdateBug={updateBug}
+                    onCreateSprint={createSprint}
+                />
             </div>
 
             {/* Right Panel for Bug Details */}
