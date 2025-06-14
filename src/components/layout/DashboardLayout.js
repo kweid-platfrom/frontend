@@ -15,7 +15,7 @@ const TestScripts = lazy(() => import('../pages/TestScriptsPage'));
 const AutoScripts = lazy(() => import('../pages/AutoScriptsPage'));
 const Reports = lazy(() => import('../pages/ReportsPage'));
 const Recordings = lazy(() => import('../pages/ReportsPage'));
-const Settings = lazy(() => import('../pages/SettingsPage.js'));
+const UserProfile = lazy(() => import('../../components/UserProfile'));
 // const CreateProject = lazy(() => import('../../pages/CreateProjectPage'));
 const Upgrade = lazy(() => import('../pages/UpgradePage.js'));
 
@@ -78,7 +78,7 @@ const DashboardLayout = ({ children }) => {
             case 'recordings':
                 return <Recordings />;
             case 'settings':
-                return <Settings />;
+                return <UserProfile />;
             // case 'create-project':
             //     return <CreateProject />;
             case 'upgrade':
