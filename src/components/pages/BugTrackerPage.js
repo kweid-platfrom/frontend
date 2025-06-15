@@ -9,20 +9,22 @@ import { useProject } from "../../context/ProjectContext";
 import BugList from "../bug-report/BugList";
 import BugFilters from "../bug-report/BugFilters";
 import BugDetailsPanel from "../bug-report/BugDetailsPanel";
-import { Filter, X, List, Table, Grid, Calendar, User, Flag, AlertTriangle, Clock, Users } from "lucide-react";
-import { BugAntIcon } from "@heroicons/react/24/outline";
+import BugTrackerHeader from "../bug-report/BugTrackerHeader";
+import BugTable from "../bug-report/BugTable";
+import { X } from "lucide-react";
 
 const BugTracker = () => {
     const { activeProject, user, userProfile } = useProject();
     const [bugs, setBugs] = useState([]);
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [selectedBug, setSelectedBug] = useState(null);
+    const [selectedBugs, setSelectedBugs] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
     const [sprints, setSprints] = useState([]);
     const [error, setError] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
     const [showDetailsPanel, setShowDetailsPanel] = useState(false);
-    const [viewMode, setViewMode] = useState('list');
+    const [viewMode, setViewMode] = useState('table'); // Default to table view
     
     // Grouping states
     const [groupBy, setGroupBy] = useState('none');
@@ -134,6 +136,62 @@ const BugTracker = () => {
         }
     };
 
+    // Function to update bug severity
+    const updateBugSeverity = async (bugId, newSeverity, newPriority) => {
+        try {
+            const bugRef = doc(db, "bugs", bugId);
+            await updateDoc(bugRef, {
+                severity: newSeverity,
+                priority: newPriority,
+                updatedAt: new Date()
+            });
+            
+            // Update local state
+            setBugs(prevBugs =>
+                prevBugs.map(bug =>
+                    bug.id === bugId ? { 
+                        ...bug, 
+                        severity: newSeverity, 
+                        priority: newPriority,
+                        updatedAt: new Date() 
+                    } : bug
+                )
+            );
+            
+            toast.success(`Bug severity updated to ${newSeverity}`);
+        } catch (error) {
+            console.error("Error updating bug severity:", error);
+            toast.error("Failed to update bug severity");
+        }
+    };
+
+    // Function to update bug assignment
+    const updateBugAssignment = async (bugId, assignedTo) => {
+        try {
+            const bugRef = doc(db, "bugs", bugId);
+            await updateDoc(bugRef, {
+                assignedTo: assignedTo,
+                updatedAt: new Date()
+            });
+            
+            // Update local state
+            setBugs(prevBugs =>
+                prevBugs.map(bug =>
+                    bug.id === bugId ? { 
+                        ...bug, 
+                        assignedTo: assignedTo,
+                        updatedAt: new Date() 
+                    } : bug
+                )
+            );
+            
+            toast.success("Bug assignment updated");
+        } catch (error) {
+            console.error("Error updating bug assignment:", error);
+            toast.error("Failed to update bug assignment");
+        }
+    };
+
     // Function to update bug (for drag and drop and other updates)
     const updateBug = async (updatedBug) => {
         try {
@@ -180,6 +238,38 @@ const BugTracker = () => {
             toast.error("Failed to create sprint");
             throw error;
         }
+    };
+
+    // Bug selection functions for table view
+    const toggleBugSelection = (bugId) => {
+        setSelectedBugs(prev => 
+            prev.includes(bugId) 
+                ? prev.filter(id => id !== bugId)
+                : [...prev, bugId]
+        );
+    };
+
+    const toggleGroupSelection = () => {
+        if (selectedBugs.length === filteredBugs.length) {
+            setSelectedBugs([]);
+        } else {
+            setSelectedBugs(filteredBugs.map(bug => bug.id));
+        }
+    };
+
+    const allGroupSelected = selectedBugs.length === filteredBugs.length && filteredBugs.length > 0;
+    const isGroupSelected = selectedBugs.length > 0;
+
+    // Drag and drop functions
+    const handleDragStart = (e, bug) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify(bug));
+    };
+
+    // Get team member name
+    const getTeamMemberName = (email) => {
+        if (!email) return 'Unassigned';
+        const member = teamMembers.find(m => m.email === email);
+        return member ? member.name : email.split('@')[0];
     };
 
     // Real-time listeners setup with enhanced error handling
@@ -495,6 +585,15 @@ const BugTracker = () => {
         }
     };
 
+    const getPriorityColor = (priority) => {
+        switch (priority?.toLowerCase()) {
+            case "high": return "bg-red-100 text-red-800";
+            case "medium": return "bg-yellow-100 text-yellow-800";
+            case "low": return "bg-green-100 text-green-800";
+            default: return "bg-gray-100 text-gray-800";
+        }
+    };
+
     const getPriorityFromSeverity = (severity) => {
         switch (severity?.toLowerCase()) {
             case "critical": return { level: "P1", color: "bg-red-100 text-red-800" };
@@ -519,26 +618,10 @@ const BugTracker = () => {
         });
     };
 
-    // Grouping options
-    const groupingOptions = [
-        { value: 'none', label: 'No Grouping', icon: List },
-        { value: 'status', label: 'Status', icon: Clock },
-        { value: 'severity', label: 'Severity', icon: AlertTriangle },
-        { value: 'assignee', label: 'Assignee', icon: User },
-        { value: 'sprint', label: 'Sprint', icon: Flag },
-        { value: 'month', label: 'Month', icon: Calendar }
-    ];
-
-    const subGroupingOptions = [
-        { value: 'none', label: 'No Sub-grouping' },
-        { value: 'week', label: 'Week' },
-        { value: 'month', label: 'Month' }
-    ];
-
     // Show no project message
     if (!activeProject) {
         return (
-            <div className="flex items-center justify-center h-64">
+            <div className="h-screen flex items-center justify-center">
                 <div className="text-center">
                     <p className="text-gray-600">No active project selected</p>
                     <p className="text-sm text-gray-500">Please select or create a project to view bugs</p>
@@ -550,7 +633,7 @@ const BugTracker = () => {
     // Show error with retry option
     if (error) {
         return (
-            <div className="flex items-center justify-center h-64">
+            <div className="h-screen flex items-center justify-center">
                 <div className="text-center">
                     <p className="text-red-600 mb-2">Error loading bugs</p>
                     <p className="text-sm text-gray-500 mb-4">{error}</p>
@@ -566,106 +649,25 @@ const BugTracker = () => {
     }
 
     return (
-        <div className=" flex">
-            {/* Main Content */}
-            <div className={`flex-1 flex flex-col ${showDetailsPanel ? 'mr-96' : ''} transition-all duration-300`}>
-                {/* Header with Controls */}
-                <div className="flex items-center justify-between p-4 border-b bg-white">
-                    <div>
-                        <h1 className="flex items-center text-3xl font-bold text-gray-900">
-                            <BugAntIcon className="h-6 w-6 mr-2" />
-                            Bug Tracker
-                            <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
-                                {bugs.length} {bugs.length === 1 ? "bug" : "bugs"}
-                            </span>
-                        </h1>
-                    </div>
+        <div className="h-screen flex flex-col bg-gray-50">
+            {/* Header - Fixed */}
+            <BugTrackerHeader
+                bugs={bugs}
+                showFilters={showFilters}
+                setShowFilters={setShowFilters}
+                getActiveFilterCount={getActiveFilterCount}
+                clearFilters={clearFilters}
+                groupBy={groupBy}
+                setGroupBy={setGroupBy}
+                subGroupBy={subGroupBy}
+                setSubGroupBy={setSubGroupBy}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+            />
 
-                    <div className="flex items-center space-x-2">
-                        {/* Grouping Controls */}
-                        <div className="flex items-center space-x-2">
-                            <select
-                                value={groupBy}
-                                onChange={(e) => setGroupBy(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#00897B] focus:border-transparent"
-                            >
-                                {groupingOptions.map(option => (
-                                    <option key={option.value} value={option.value}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
-
-                            {(groupBy === 'sprint' || groupBy === 'month') && (
-                                <select
-                                    value={subGroupBy}
-                                    onChange={(e) => setSubGroupBy(e.target.value)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#00897B] focus:border-transparent"
-                                >
-                                    {subGroupingOptions.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                        </div>
-
-                        {/* View Mode Toggle */}
-                        <div className="flex items-center border rounded-lg overflow-hidden">
-                            <button
-                                onClick={() => setViewMode('list')}
-                                className={`flex items-center px-3 py-2 text-sm transition-colors ${
-                                    viewMode === 'list'
-                                        ? 'bg-[#00897B] text-white'
-                                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                                }`}
-                            >
-                                <List className="h-4 w-4 mr-1" />
-                                List
-                            </button>
-                            <button
-                                onClick={() => setViewMode('table')}
-                                className={`flex items-center px-3 py-2 text-sm transition-colors border-l ${
-                                    viewMode === 'table'
-                                        ? 'bg-[#00897B] text-white'
-                                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                                }`}
-                            >
-                                <Table className="h-4 w-4 mr-1" />
-                                Table
-                            </button>
-                        </div>
-
-                        {/* Filter Controls */}
-                        {getActiveFilterCount() > 0 && (
-                            <button
-                                onClick={clearFilters}
-                                className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
-                            >
-                                Clear filters
-                            </button>
-                        )}
-                        <button
-                            onClick={() => setShowFilters(!showFilters)}
-                            className={`flex items-center px-3 py-2 rounded-lg border transition-colors ${showFilters
-                                ? 'bg-[#00897B] text-white border-[#00897B]'
-                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                }`}
-                        >
-                            <Filter className="h-4 w-4 mr-2" />
-                            Filters
-                            {getActiveFilterCount() > 0 && (
-                                <span className="ml-1 px-1.5 py-0.5 bg-white text-[#00897B] rounded-full text-xs font-medium">
-                                    {getActiveFilterCount()}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Filters Panel */}
-                {showFilters && (
+            {/* Filters Panel - Fixed when shown */}
+            {showFilters && (
+                <div className="flex-shrink-0">
                     <BugFilters
                         filters={filters}
                         setFilters={setFilters}
@@ -673,36 +675,63 @@ const BugTracker = () => {
                         sprints={sprints}
                         onClose={() => setShowFilters(false)}
                     />
-                )}
+                </div>
+            )}
 
-                {/* Bug List with Grouping Support - Let BugList handle its own loading */}
-                <BugList
-                    bugs={filteredBugs}
-                    viewMode={viewMode}
-                    groupBy={groupBy}
-                    subGroupBy={subGroupBy}
-                    onBugSelect={handleBugSelect}
-                    selectedBug={selectedBug}
-                    getSeverityColor={getSeverityColor}
-                    getStatusColor={getStatusColor}
-                    getPriorityFromSeverity={getPriorityFromSeverity}
-                    formatDate={formatDate}
-                    teamMembers={teamMembers}
-                    sprints={sprints}
-                    updateBugStatus={updateBugStatus}
-                    onUpdateBug={updateBug}
-                    onCreateSprint={createSprint}
-                />
+            {/* Main Content Area - Scrollable */}
+            <div className={`flex-1 flex overflow-hidden ${showDetailsPanel ? 'pr-96' : ''} transition-all duration-300`}>
+                <div className="flex-1 overflow-auto w-full">
+                    {viewMode === 'table' ? (
+                        <BugTable
+                            bugs={filteredBugs}
+                            selectedBugs={selectedBugs}
+                            onBugSelect={handleBugSelect}
+                            onToggleSelection={toggleBugSelection}
+                            onToggleGroupSelection={toggleGroupSelection}
+                            allGroupSelected={allGroupSelected}
+                            isGroupSelected={isGroupSelected}
+                            onUpdateBugStatus={updateBugStatus}
+                            onUpdateBugSeverity={updateBugSeverity}
+                            onUpdateBugAssignment={updateBugAssignment}
+                            teamMembers={teamMembers}
+                            sprints={sprints}
+                            getSeverityColor={getSeverityColor}
+                            getStatusColor={getStatusColor}
+                            getPriorityColor={getPriorityColor}
+                            getTeamMemberName={getTeamMemberName}
+                            formatDate={formatDate}
+                            onDragStart={handleDragStart}
+                        />
+                    ) : (
+                        <BugList
+                            bugs={filteredBugs}
+                            viewMode={viewMode}
+                            groupBy={groupBy}
+                            subGroupBy={subGroupBy}
+                            onBugSelect={handleBugSelect}
+                            selectedBug={selectedBug}
+                            getSeverityColor={getSeverityColor}
+                            getStatusColor={getStatusColor}
+                            getPriorityFromSeverity={getPriorityFromSeverity}
+                            formatDate={formatDate}
+                            teamMembers={teamMembers}
+                            sprints={sprints}
+                            updateBugStatus={updateBugStatus}
+                            onUpdateBug={updateBug}
+                            onCreateSprint={createSprint}
+                        />
+                    )}
+                </div>
             </div>
 
-            {/* Right Panel for Bug Details */}
+            {/* Right Panel for Bug Details - Fixed */}
             {showDetailsPanel && selectedBug && (
-                <div className="fixed right-0 top-0 h-full w-96 bg-white border-l shadow-lg z-50 overflow-auto">
+                <div className="fixed top-0 right-0 h-full w-1/2 lg:w-2/5 xl:w-1/3 z-50 shadow-2xl">
                     <div className="flex items-center justify-between p-4 border-b bg-gray-50">
                         <h2 className="text-lg font-semibold text-gray-900">Bug Details</h2>
                         <button
                             onClick={() => setShowDetailsPanel(false)}
-                            className="p-2 hover:bg-gray-200 rounded-full"
+                            className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                         >
                             <X className="h-5 w-5" />
                         </button>

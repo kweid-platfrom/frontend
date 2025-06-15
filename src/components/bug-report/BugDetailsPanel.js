@@ -4,7 +4,13 @@ import { doc, updateDoc, arrayUnion, Timestamp, onSnapshot } from "firebase/fire
 import { db, auth } from "../../config/firebase";
 import { toast } from "sonner";
 import BugComments from "../bug-report/BugComments";
-import { Edit, Save, X, Calendar, User, Flag, AlertCircle } from "lucide-react";
+import EditableField from "../bugview/EditableField";
+import AttachmentsList from "../bugview/AttachmentsList";
+import ActivityLog from "../bugview/ActivityLog";
+import { 
+    Calendar, User, Flag, AlertCircle, 
+    Paperclip
+} from "lucide-react";
 
 const BugItemDetails = ({ 
     bug, 
@@ -86,14 +92,16 @@ const BugItemDetails = ({
         setTempValues({});
     };
 
-    const handleAddComment = async (commentText) => {
-        if (!commentText.trim()) return;
+    const handleAddComment = async (commentText, attachments = []) => {
+        if (!commentText.trim() && attachments.length === 0) return;
 
         setLoading(true);
         const newMessage = {
             text: commentText,
             user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-            createdAt: Timestamp.now()
+            createdAt: Timestamp.now(),
+            attachments: attachments,
+            id: Date.now().toString()
         };
 
         try {
@@ -118,80 +126,6 @@ const BugItemDetails = ({
         } finally {
             setLoading(false);
         }
-    };
-
-    const EditableField = ({ field, value, type = "text", options = null, icon: Icon }) => {
-        const isEditing = editingField === field;
-        
-        return (
-            <div className="group relative">
-                <div className="flex items-center space-x-2">
-                    {Icon && <Icon className="h-4 w-4 text-gray-400" />}
-                    <div className="flex-1">
-                        {isEditing ? (
-                            <div className="flex items-center space-x-2">
-                                {type === "select" ? (
-                                    <select
-                                        value={tempValues[field] || value}
-                                        onChange={(e) => setTempValues({...tempValues, [field]: e.target.value})}
-                                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        disabled={loading}
-                                    >
-                                        {options?.map(option => (
-                                            <option key={option.value} value={option.value}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                ) : type === "textarea" ? (
-                                    <textarea
-                                        value={tempValues[field] || value}
-                                        onChange={(e) => setTempValues({...tempValues, [field]: e.target.value})}
-                                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                                        rows={3}
-                                        disabled={loading}
-                                    />
-                                ) : (
-                                    <input
-                                        type={type}
-                                        value={tempValues[field] || value}
-                                        onChange={(e) => setTempValues({...tempValues, [field]: e.target.value})}
-                                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        disabled={loading}
-                                    />
-                                )}
-                                <button
-                                    onClick={() => handleFieldSave(field)}
-                                    disabled={loading}
-                                    className="p-1 text-green-600 hover:text-green-800 disabled:opacity-50"
-                                >
-                                    <Save className="h-4 w-4" />
-                                </button>
-                                <button
-                                    onClick={handleFieldCancel}
-                                    disabled={loading}
-                                    className="p-1 text-gray-600 hover:text-gray-800 disabled:opacity-50"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center justify-between">
-                                <span className={`text-sm ${value ? 'text-gray-900' : 'text-gray-500 italic'}`}>
-                                    {value || 'Not set'}
-                                </span>
-                                <button
-                                    onClick={() => handleFieldEdit(field, value)}
-                                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity"
-                                >
-                                    <Edit className="h-3 w-3" />
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
     };
 
     const statusOptions = [
@@ -219,146 +153,209 @@ const BugItemDetails = ({
         label: sprint.name
     })) || [];
 
+    const editableFieldProps = {
+        editingField,
+        tempValues,
+        loading,
+        onEdit: handleFieldEdit,
+        onSave: handleFieldSave,
+        onCancel: handleFieldCancel,
+        setTempValues
+    };
+
     return (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col bg-white shadow-xl">
             {/* Header */}
-            <div className="flex-shrink-0 p-4 border-b bg-white">
-                <div className="mb-4">
+            <div className="flex-shrink-0 px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="space-y-2">
                     <EditableField
                         field="title"
                         value={editedBug.title}
                         type="text"
+                        {...editableFieldProps}
                     />
-                    <p className="text-sm text-gray-500 mt-1">
-                        Bug #{editedBug.id?.slice(-6)}
-                    </p>
+                    <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-500 font-medium">
+                            Bug #{editedBug.id?.slice(-6)}
+                        </p>
+                        <div className="flex items-center space-x-4 text-xs text-gray-500">
+                            <span>Created: {formatDate(editedBug.createdAt)}</span>
+                            <span>•</span>
+                            <span>Reporter: {editedBug.reporter}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-auto p-4 space-y-6">
-                {/* Description */}
-                <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
-                    <EditableField
-                        field="description"
-                        value={editedBug.description}
-                        type="textarea"
-                    />
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto">
+                <div className="px-6 py-6 space-y-8">
+                    {/* Description */}
+                    <div className="space-y-3">
+                        <h3 className="text-base font-semibold text-gray-900 flex items-center">
+                            Description
+                        </h3>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                            <EditableField
+                                field="description"
+                                value={editedBug.description}
+                                type="textarea"
+                                {...editableFieldProps}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Bug Details Grid */}
+                    <div className="space-y-6">
+                        <h3 className="text-base font-semibold text-gray-900">Details</h3>
+                        <div className="grid grid-cols-1 gap-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700">Status</h4>
+                                    <EditableField
+                                        field="status"
+                                        value={editedBug.status}
+                                        type="select"
+                                        options={statusOptions}
+                                        icon={Flag}
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700">Severity</h4>
+                                    <EditableField
+                                        field="severity"
+                                        value={editedBug.severity}
+                                        type="select"
+                                        options={severityOptions}
+                                        icon={AlertCircle}
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700">Assignee</h4>
+                                    <EditableField
+                                        field="assignedTo"
+                                        value={editedBug.assignedTo}
+                                        type="select"
+                                        options={assigneeOptions}
+                                        icon={User}
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700">Sprint</h4>
+                                    <EditableField
+                                        field="sprint"
+                                        value={editedBug.sprint}
+                                        type="select"
+                                        options={sprintOptions}
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700">Due Date</h4>
+                                    <EditableField
+                                        field="dueDate"
+                                        value={editedBug.dueDate ? (editedBug.dueDate.toDate ? editedBug.dueDate.toDate().toISOString().split('T')[0] : editedBug.dueDate) : ''}
+                                        type="date"
+                                        icon={Calendar}
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700">Environment</h4>
+                                    <EditableField
+                                        field="environment"
+                                        value={editedBug.environment}
+                                        type="text"
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Steps to Reproduce */}
+                    <div className="space-y-3">
+                        <h3 className="text-base font-semibold text-gray-900">Steps to Reproduce</h3>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                            <EditableField
+                                field="stepsToReproduce"
+                                value={editedBug.stepsToReproduce}
+                                type="textarea"
+                                {...editableFieldProps}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Expected vs Actual Results */}
+                    <div className="space-y-6">
+                        <h3 className="text-base font-semibold text-gray-900">Results</h3>
+                        <div className="grid grid-cols-1 gap-6">
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-medium text-gray-700">Expected Result</h4>
+                                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                                    <EditableField
+                                        field="expectedResult"
+                                        value={editedBug.expectedResult}
+                                        type="textarea"
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-medium text-gray-700">Actual Result</h4>
+                                <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                                    <EditableField
+                                        field="actualResult"
+                                        value={editedBug.actualResult}
+                                        type="textarea"
+                                        {...editableFieldProps}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Attachments */}
+                    {editedBug.attachments && editedBug.attachments.length > 0 && (
+                        <div className="space-y-3">
+                            <h3 className="text-base font-semibold text-gray-900 flex items-center">
+                                <Paperclip className="h-4 w-4 mr-2" />
+                                Attachments ({editedBug.attachments.length})
+                            </h3>
+                            <AttachmentsList attachments={editedBug.attachments} />
+                        </div>
+                    )}
+
+                    {/* Activity Log */}
+                    {editedBug.activityLog && editedBug.activityLog.length > 0 && (
+                        <ActivityLog activities={editedBug.activityLog} formatDate={formatDate} />
+                    )}
+
+                    {/* Comments Section */}
+                    <div className="space-y-3">
+                        <h3 className="text-base font-semibold text-gray-900">Comments</h3>
+                        <BugComments
+                            comments={comments}
+                            onAddComment={handleAddComment}
+                            loading={loading}
+                            formatDate={formatDate}
+                            teamMembers={teamMembers}
+                        />
+                    </div>
                 </div>
-
-                {/* Bug Details Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Status</h4>
-                        <EditableField
-                            field="status"
-                            value={editedBug.status}
-                            type="select"
-                            options={statusOptions}
-                            icon={Flag}
-                        />
-                    </div>
-
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Severity</h4>
-                        <EditableField
-                            field="severity"
-                            value={editedBug.severity}
-                            type="select"
-                            options={severityOptions}
-                            icon={AlertCircle}
-                        />
-                    </div>
-
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Assignee</h4>
-                        <EditableField
-                            field="assignedTo"
-                            value={editedBug.assignedTo}
-                            type="select"
-                            options={assigneeOptions}
-                            icon={User}
-                        />
-                    </div>
-
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Sprint</h4>
-                        <EditableField
-                            field="sprint"
-                            value={editedBug.sprint}
-                            type="select"
-                            options={sprintOptions}
-                        />
-                    </div>
-
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Due Date</h4>
-                        <EditableField
-                            field="dueDate"
-                            value={editedBug.dueDate ? (editedBug.dueDate.toDate ? editedBug.dueDate.toDate().toISOString().split('T')[0] : editedBug.dueDate) : ''}
-                            type="date"
-                            icon={Calendar}
-                        />
-                    </div>
-
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Environment</h4>
-                        <EditableField
-                            field="environment"
-                            value={editedBug.environment}
-                            type="text"
-                        />
-                    </div>
-                </div>
-
-                {/* Steps to Reproduce */}
-                <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Steps to Reproduce</h4>
-                    <EditableField
-                        field="stepsToReproduce"
-                        value={editedBug.stepsToReproduce}
-                        type="textarea"
-                    />
-                </div>
-
-                {/* Expected vs Actual Results */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Expected Result</h4>
-                        <EditableField
-                            field="expectedResult"
-                            value={editedBug.expectedResult}
-                            type="textarea"
-                        />
-                    </div>
-
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Actual Result</h4>
-                        <EditableField
-                            field="actualResult"
-                            value={editedBug.actualResult}
-                            type="textarea"
-                        />
-                    </div>
-                </div>
-
-                {/* Metadata */}
-                <div className="text-xs text-gray-500 space-y-1">
-                    <p>Created: {formatDate(editedBug.createdAt)}</p>
-                    <p>Last Updated: {formatDate(editedBug.lastUpdated)}</p>
-                    <p>Reporter: {editedBug.reporter}</p>
-                </div>
-            </div>
-
-            {/* Comments Section */}
-            <div className="flex-shrink-0 border-t bg-white">
-                <BugComments
-                    comments={comments}
-                    onAddComment={handleAddComment}
-                    loading={loading}
-                    formatDate={formatDate}
-                />
             </div>
         </div>
     );

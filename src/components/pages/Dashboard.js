@@ -44,9 +44,9 @@ const Dashboard = () => {
     const FilterButton = ({ active, onClick, children }) => (
         <button
             onClick={onClick}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
                 active 
-                    ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                    ? 'bg-teal-100 text-teal-700 border border-teal-200' 
                     : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
             }`}
         >
@@ -104,7 +104,7 @@ const Dashboard = () => {
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                        QAID Quality Dashboard
+                        QA Dashboard
                     </h1>
                     <div className="flex items-center space-x-4 text-sm text-gray-600">
                         <div className="flex items-center space-x-2">
@@ -132,15 +132,15 @@ const Dashboard = () => {
             </div>
 
             {/* Navigation Tabs */}
-            <div className="bg-white rounded-lg shadow-sm border p-1 mb-6">
+            <div className="bg-white rounded shadow-sm border p-1 mb-6">
                 <div className="flex space-x-1">
                     {tabOptions.map(tab => (
                         <button
                             key={tab.value}
                             onClick={() => setActiveTab(tab.value)}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                            className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
                                 activeTab === tab.value
-                                    ? 'bg-blue-100 text-teal-700'
+                                    ? 'bg-teal-100 text-teal-700'
                                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                             }`}
                         >
@@ -172,7 +172,7 @@ const Dashboard = () => {
                         <select
                             value={filters.team}
                             onChange={(e) => setFilters(prev => ({ ...prev, team: e.target.value }))}
-                            className="px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
                         >
                             <option value="all">All Teams</option>
                             <option value="frontend">Frontend</option>
