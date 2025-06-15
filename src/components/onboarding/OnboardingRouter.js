@@ -124,7 +124,7 @@ const OnboardingRouter = () => {
                     });
 
                     // Check if organization setup is complete (both org info and team invites)
-                    const orgSetupComplete = normalizedProgress.organizationInfo && 
+                    const orgSetupComplete = normalizedProgress.organizationInfo &&
                         (normalizedProgress.teamInvites || normalizedProgress.teamInvitesSkipped);
 
                     if (orgSetupComplete) {
@@ -162,7 +162,7 @@ const OnboardingRouter = () => {
 
         determineOnboardingStep();
     }, [currentUser, userProfile, router, refreshUserData, completeUserSetup, initialized, isTransitioning]);
-    
+
 
     // Handle unified onboarding completion
     const handleUnifiedOnboardingComplete = async (completionData) => {
@@ -221,7 +221,7 @@ const OnboardingRouter = () => {
             }
 
             console.log('OnboardingRouter - Organization onboarding completed, redirecting to dashboard');
-            
+
             // Redirect to dashboard
             router.replace('/dashboard');
 
@@ -395,6 +395,7 @@ const OnboardingRouter = () => {
                 // Only show for individual accounts now
                 return (
                     <ProjectCreationForm
+                        isOnboarding={true}
                         onComplete={handleStepComplete}
                         accountType={accountType}
                         isLoading={isTransitioning}

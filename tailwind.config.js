@@ -27,7 +27,6 @@ export const theme = {
       background: "var(--color-background)",
       foreground: "var(--color-foreground)",
       border: "var(--color-border)",
-      ring: "var(--color-ring)",
     },
     fontFamily: {
       sans: ["var(--font-sans)", ...fontFamily.sans],

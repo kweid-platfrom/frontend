@@ -2,7 +2,6 @@
 // components/layout/Header.js
 'use client'
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useProject } from '../../context/ProjectContext';
 import { signOut } from 'firebase/auth';
 import '../../app/globals.css';
@@ -25,8 +24,7 @@ import UserAvatar from '../UserAvatar';
 import AddUserDropdown from "../modals/AddUserDropdown";
 import NotificationsDropdown from "../NotificationsDropdown";
 
-const Header = ({ onMenuClick, setShowBugForm }) => {
-    const router = useRouter();
+const Header = ({ onMenuClick, setShowBugForm, setActivePage }) => {
     const { user, userProfile } = useProject();
 
     // State management for all dropdowns
@@ -278,7 +276,7 @@ const Header = ({ onMenuClick, setShowBugForm }) => {
                                         <button
                                             onClick={() => {
                                                 setShowUserMenu(false);
-                                                router.push('/profile');
+                                                setActivePage('settings');
                                             }}
                                             className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                                         >

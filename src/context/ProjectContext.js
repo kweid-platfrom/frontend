@@ -16,6 +16,7 @@ import {
     limit,
     serverTimestamp
 } from 'firebase/firestore';
+import { accountService } from '../services/accountService';
 
 const ProjectContext = createContext();
 
@@ -44,44 +45,124 @@ export const ProjectProvider = ({ children }) => {
         timestamp: null
     });
 
-    // Memoized values for better performance
+    // Memoized subscription status with trial logic
+    const subscriptionStatus = useMemo(() => {
+        if (!userProfile) return { isValid: false, isExpired: true, isTrial: false };
+
+        // Check and update trial status
+        const updatedProfile = accountService.checkAndUpdateTrialStatus(userProfile);
+        const capabilities = accountService.getUserCapabilities(updatedProfile);
+
+        return {
+            isValid: capabilities.isTrialActive || updatedProfile.subscriptionType !== 'free',
+            isExpired: !capabilities.isTrialActive && updatedProfile.subscriptionType === 'free',
+            isTrial: capabilities.isTrialActive,
+            trialDaysRemaining: capabilities.trialDaysRemaining,
+            subscriptionType: capabilities.subscriptionType,
+            subscriptionStatus: capabilities.subscriptionStatus,
+            capabilities: capabilities,
+            // Helper methods
+            showTrialBanner: capabilities.isTrialActive && capabilities.trialDaysRemaining <= 7,
+            showUpgradePrompt: !capabilities.isTrialActive && updatedProfile.subscriptionType === 'free'
+        };
+    }, [userProfile]);
+
+    // Memoized values for better performance with trial logic
     const needsOnboarding = useMemo(() => {
         return !isUserLoading && !isProjectsLoading && projects.length === 0;
     }, [isUserLoading, isProjectsLoading, projects.length]);
 
+    // Updated canCreateProject with trial logic and proper error handling
     const canCreateProject = useMemo(() => {
         if (!userProfile) return false;
-        const { subscriptionType } = userProfile;
-        const projectCount = projects.length;
-
-        switch (subscriptionType) {
-            case 'free':
-            case 'individual':
-                return projectCount < 1;
-            case 'team':
-                return projectCount < 5;
-            case 'enterprise':
-                return true;
-            default:
+        
+        try {
+            const capabilities = accountService.getUserCapabilities(userProfile);
+            
+            // Check if capabilities and limits exist
+            if (!capabilities || !capabilities.limits || typeof capabilities.limits.projects === 'undefined') {
+                console.warn('AccountService capabilities or limits not properly configured');
                 return false;
+            }
+            
+            const projectCount = projects.length;
+            
+            // During trial or if user has premium subscription
+            if (capabilities.isTrialActive || capabilities.subscriptionType !== 'free') {
+                return projectCount < capabilities.limits.projects;
+            }
+            
+            // Free tier - only 1 project
+            return projectCount < 1;
+        } catch (error) {
+            console.error('Error checking canCreateProject:', error);
+            // Fallback to basic logic if accountService fails
+            return projects.length < 1;
         }
     }, [userProfile, projects.length]);
 
-    const subscriptionStatus = useMemo(() => {
-        if (!userProfile) return { isValid: false, isExpired: true };
+    // New function to check specific feature access
+    const hasFeatureAccess = useCallback((featureName) => {
+        if (!userProfile) return false;
+        
+        try {
+            const capabilities = accountService.getUserCapabilities(userProfile);
+            
+            // Check if capabilities exist
+            if (!capabilities) {
+                console.warn('AccountService capabilities not available');
+                return false;
+            }
+            
+            switch (featureName) {
+                case 'multipleProjects':
+                    return capabilities.canCreateMultipleProjects;
+                case 'advancedReports':
+                    return capabilities.canAccessAdvancedReports;
+                case 'teamCollaboration':
+                    return capabilities.canInviteTeamMembers;
+                case 'apiAccess':
+                    return capabilities.canUseAPI;
+                case 'automation':
+                    return capabilities.canUseAutomation;
+                default:
+                    return false;
+            }
+        } catch (error) {
+            console.error(`Error checking feature access for ${featureName}:`, error);
+            return false;
+        }
+    }, [userProfile]);
 
-        const now = new Date();
-        const expiry = userProfile.subscriptionExpiry?.toDate();
-
-        if (userProfile.subscriptionType === 'free' || userProfile.subscriptionType === 'individual') {
+    // Get feature limits
+    const getFeatureLimits = useCallback(() => {
+        if (!userProfile) return null;
+        
+        try {
+            const capabilities = accountService.getUserCapabilities(userProfile);
+            
+            if (!capabilities || !capabilities.limits) {
+                console.warn('AccountService limits not available');
+                // Return default limits as fallback
+                return {
+                    projects: 1,
+                    testScripts: 10,
+                    recordings: 3,
+                    teamMembers: 1
+                };
+            }
+            
+            return capabilities.limits;
+        } catch (error) {
+            console.error('Error getting feature limits:', error);
+            // Return default limits as fallback
             return {
-                isValid: expiry && expiry > now,
-                isExpired: expiry && expiry <= now,
-                daysLeft: expiry ? Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)) : 0
+                projects: 1,
+                testScripts: 10,
+                recordings: 3,
+                teamMembers: 1
             };
         }
-
-        return { isValid: true, isExpired: false };
     }, [userProfile]);
 
     // Optimized cache check (5 minutes cache)
@@ -90,7 +171,7 @@ export const ProjectProvider = ({ children }) => {
         return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
     }, [cache.timestamp]);
 
-    // Fetch user profile with caching
+    // Fetch user profile with caching and trial status update
     const fetchUserProfile = useCallback(async (uid, forceRefresh = false) => {
         try {
             // Return cached data if valid and not forcing refresh
@@ -101,12 +182,34 @@ export const ProjectProvider = ({ children }) => {
             const userDoc = await getDoc(doc(db, 'users', uid));
             if (userDoc.exists()) {
                 const profileData = userDoc.data();
+                
+                // Check if trial status needs to be updated in database
+                const updatedProfile = accountService.checkAndUpdateTrialStatus(profileData);
+                
+                // If trial has expired, update the database
+                if (profileData.isTrialActive && !updatedProfile.isTrialActive) {
+                    try {
+                        await updateDoc(doc(db, 'users', uid), {
+                            subscriptionType: updatedProfile.subscriptionType,
+                            subscriptionStatus: updatedProfile.subscriptionStatus,
+                            isTrialActive: false,
+                            trialExpiredAt: new Date(),
+                            features: updatedProfile.features,
+                            limits: updatedProfile.limits,
+                            updatedAt: serverTimestamp()
+                        });
+                        console.log('Trial status updated in database');
+                    } catch (error) {
+                        console.error('Error updating trial status:', error);
+                    }
+                }
+                
                 setCache(prev => ({
                     ...prev,
-                    userProfile: profileData,
+                    userProfile: updatedProfile,
                     timestamp: Date.now()
                 }));
-                return profileData;
+                return updatedProfile;
             }
             return null;
         } catch (error) {
@@ -467,6 +570,11 @@ export const ProjectProvider = ({ children }) => {
         needsOnboarding,
         canCreateProject,
         checkSubscriptionStatus: () => subscriptionStatus,
+        
+        // New freemium trial methods
+        hasFeatureAccess,
+        getFeatureLimits,
+        subscriptionStatus,
     }), [
         user,
         userProfile,
@@ -484,7 +592,9 @@ export const ProjectProvider = ({ children }) => {
         refetchProjects,
         needsOnboarding,
         canCreateProject,
-        subscriptionStatus
+        subscriptionStatus,
+        hasFeatureAccess,
+        getFeatureLimits
     ]);
 
     return (

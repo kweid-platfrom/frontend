@@ -23,7 +23,7 @@ const Upgrade = lazy(() => import('../pages/UpgradePage.js'));
 const LoadingSkeleton = memo(() => (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading your workspace...</p>
         </div>
     </div>
@@ -47,7 +47,7 @@ const DashboardLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activePage, setActivePage] = useState('dashboard');
     const { needsOnboarding, isLoading } = useProject();
-    
+
     // Load saved active page from localStorage on mount
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -57,11 +57,11 @@ const DashboardLayout = ({ children }) => {
             }
         }
     }, []);
-    
+
     // Memoize callbacks to prevent unnecessary re-renders
     const handleMenuClick = useCallback(() => setSidebarOpen(true), []);
     const handleSidebarClose = useCallback(() => setSidebarOpen(false), []);
-    
+
     // Render the appropriate page component based on activePage
     const renderPageContent = () => {
         switch (activePage) {
@@ -87,7 +87,7 @@ const DashboardLayout = ({ children }) => {
                 return children || <Dashboard />;
         }
     };
-    
+
     // Show loading state immediately
     if (isLoading) {
         return <LoadingSkeleton />;
@@ -105,8 +105,8 @@ const DashboardLayout = ({ children }) => {
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Sidebar - Load immediately, no lazy loading */}
-            <Sidebar 
-                isOpen={sidebarOpen} 
+            <Sidebar
+                isOpen={sidebarOpen}
                 onClose={handleSidebarClose}
                 setActivePage={setActivePage}
                 activePage={activePage}
@@ -115,10 +115,13 @@ const DashboardLayout = ({ children }) => {
             {/* Main Content - Load immediately */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header - Keep immediate loading for critical UI */}
-                <Header onMenuClick={handleMenuClick} />
+                <Header
+                    onMenuClick={handleMenuClick}
+                    setActivePage={setActivePage}
+                />
 
                 {/* Main Content Area with optimized rendering */}
-                <main className="flex-1 overflow-y-auto p-8">
+                <main className="flex-1 overflow-y-auto p-6">
                     <Suspense fallback={<PageLoadingFallback />}>
                         {renderPageContent()}
                     </Suspense>

@@ -19,7 +19,6 @@ const BugTracker = () => {
     const [selectedBug, setSelectedBug] = useState(null);
     const [teamMembers, setTeamMembers] = useState([]);
     const [sprints, setSprints] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
     const [showDetailsPanel, setShowDetailsPanel] = useState(false);
@@ -193,7 +192,6 @@ const BugTracker = () => {
         console.log("[DEBUG] Setting up real-time listeners for project:", activeProject.id);
 
         const unsubscribers = [];
-        setLoading(true);
         setError(null);
 
         const isOrgUser = !!activeProject.organizationId;
@@ -245,7 +243,6 @@ const BugTracker = () => {
                         });
                         setBugs(bugsData);
                         setError(null);
-                        setLoading(false);
                         console.log("[DEBUG] Bugs state updated with", bugsData.length, "bugs");
                     },
                     (error) => {
@@ -260,13 +257,10 @@ const BugTracker = () => {
                                 console.error("[DEBUG] Fallback also failed:", fallbackError);
                                 setError(`Error loading bugs: ${fallbackError.message}`);
                                 toast.error("Error loading bugs. Please check console for details.");
-                            }).finally(() => {
-                                setLoading(false);
                             });
                         } else {
                             setError(`Error loading bugs: ${error.message}`);
                             toast.error("Error loading bugs: " + error.message);
-                            setLoading(false);
                         }
                     }
                 );
@@ -274,7 +268,6 @@ const BugTracker = () => {
             } catch (error) {
                 console.error("[DEBUG] Error setting up bugs listener:", error);
                 setError(`Error setting up bugs listener: ${error.message}`);
-                setLoading(false);
             }
         };
 
@@ -520,12 +513,9 @@ const BugTracker = () => {
 
     // Retry function for manual retry
     const handleRetry = () => {
-        setLoading(true);
         setError(null);
         fallbackFetchBugs().catch(error => {
             setError(`Retry failed: ${error.message}`);
-        }).finally(() => {
-            setLoading(false);
         });
     };
 
@@ -545,7 +535,7 @@ const BugTracker = () => {
         { value: 'month', label: 'Month' }
     ];
 
-    // Show loading or no project message
+    // Show no project message
     if (!activeProject) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -557,15 +547,7 @@ const BugTracker = () => {
         );
     }
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00897B]"></div>
-                <span className="ml-2 text-gray-600">Loading bugs...</span>
-            </div>
-        );
-    }
-
+    // Show error with retry option
     if (error) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -584,7 +566,7 @@ const BugTracker = () => {
     }
 
     return (
-        <div className="h-full flex">
+        <div className=" flex">
             {/* Main Content */}
             <div className={`flex-1 flex flex-col ${showDetailsPanel ? 'mr-96' : ''} transition-all duration-300`}>
                 {/* Header with Controls */}
@@ -693,7 +675,7 @@ const BugTracker = () => {
                     />
                 )}
 
-                {/* Bug List with Grouping Support */}
+                {/* Bug List with Grouping Support - Let BugList handle its own loading */}
                 <BugList
                     bugs={filteredBugs}
                     viewMode={viewMode}
