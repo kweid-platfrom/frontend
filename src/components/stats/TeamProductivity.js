@@ -1,7 +1,10 @@
 import React from 'react';
 import { Users, TrendingUp, Award, Clock, Target, Activity } from 'lucide-react';
 
-const TeamProductivity = ({ metrics = {} }) => {
+const TeamProductivity = ({ metrics }) => {
+    // Handle null/undefined metrics prop safely
+    const safeMetrics = metrics || {};
+    
     // Default values for metrics
     const {
         activeTeamMembers = 0,
@@ -16,7 +19,7 @@ const TeamProductivity = ({ metrics = {} }) => {
         knowledgeSharing = 0,
         qualityTrendScore = 0,
         testCoverageGrowth = 0
-    } = metrics;
+    } = safeMetrics;
 
     // Team performance indicators
     const teamPerformanceData = [

@@ -9,6 +9,13 @@ import { useAuth } from "../context/AuthProvider";
 import { useProject } from "../context/ProjectContext";
 import BugReportForm from "../components/create-bug/BugReportForm";
 import BugReportSuccess from "../components/create-bug/BugReportSuccess";
+import {
+    getBrowserInfo,
+    getDeviceInfo,
+    getPriorityFromSeverity,
+    validateBugForm,
+    DEFAULT_BUG_FORM_DATA
+} from "../utils/bugUtils";
 
 const BugReportButton = ({ className = "" }) => {
     const { currentUser } = useAuth();
@@ -20,28 +27,8 @@ const BugReportButton = ({ className = "" }) => {
     const [recordings, setRecordings] = useState([]);
     const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
 
-    // Form state
-    const [formData, setFormData] = useState({
-        title: "",
-        category: "UI Issue",
-        description: "",
-        stepsToReproduce: "",
-        severity: "Low",
-        assignedTo: "",
-        source: "manual",
-        hasVideoEvidence: false,
-        hasConsoleLogs: false,
-        hasNetworkLogs: false,
-        environment: "production",
-        browserInfo: "",
-        deviceInfo: "",
-        userAgent: "",
-        expectedBehavior: "",
-        actualBehavior: "",
-        workaround: "",
-        frequency: "once"
-    });
-
+    // Form state - using utility default
+    const [formData, setFormData] = useState(DEFAULT_BUG_FORM_DATA);
     const [attachments, setAttachments] = useState([]);
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,7 +77,7 @@ const BugReportButton = ({ className = "" }) => {
             fetchTeamMembers();
             fetchRecordings();
             
-            // Auto-populate browser and device info
+            // Auto-populate browser and device info using utilities
             setFormData(prev => ({
                 ...prev,
                 userAgent: navigator.userAgent,
@@ -100,52 +87,14 @@ const BugReportButton = ({ className = "" }) => {
         }
     }, [showBugForm, currentUser, userProfile]);
 
-    const getBrowserInfo = () => {
-        const ua = navigator.userAgent;
-        let browser = "Unknown";
-        let version = "Unknown";
-
-        if (ua.includes("Chrome")) {
-            browser = "Chrome";
-            version = ua.match(/Chrome\/(\d+)/)?.[1] || "Unknown";
-        } else if (ua.includes("Firefox")) {
-            browser = "Firefox";
-            version = ua.match(/Firefox\/(\d+)/)?.[1] || "Unknown";
-        } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
-            browser = "Safari";
-            version = ua.match(/Version\/(\d+)/)?.[1] || "Unknown";
-        } else if (ua.includes("Edge")) {
-            browser = "Edge";
-            version = ua.match(/Edge\/(\d+)/)?.[1] || "Unknown";
-        }
-
-        return `${browser} ${version}`;
-    };
-
-    const getDeviceInfo = () => {
-        const platform = navigator.platform || "Unknown";
-        const screenResolution = `${screen.width}x${screen.height}`;
-        const colorDepth = screen.colorDepth;
-        const language = navigator.language || "Unknown";
-        
-        return `${platform}, ${screenResolution}, ${colorDepth}-bit, ${language}`;
-    };
-
     const updateFormData = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
     const validateForm = () => {
-        if (!formData.title.trim()) {
-            setError("Title is required");
-            return false;
-        }
-        if (!formData.description.trim()) {
-            setError("Description is required");
-            return false;
-        }
-        if (!formData.actualBehavior.trim()) {
-            setError("Actual behavior description is required");
+        const validation = validateBugForm(formData);
+        if (!validation.isValid) {
+            setError(validation.errors[0]); // Show first error
             return false;
         }
         setError("");
@@ -153,26 +102,7 @@ const BugReportButton = ({ className = "" }) => {
     };
 
     const closeForm = () => {
-        setFormData({
-            title: "",
-            category: "UI Issue",
-            description: "",
-            stepsToReproduce: "",
-            severity: "Low",
-            assignedTo: "",
-            source: "manual",
-            hasVideoEvidence: false,
-            hasConsoleLogs: false,
-            hasNetworkLogs: false,
-            environment: "production",
-            browserInfo: "",
-            deviceInfo: "",
-            userAgent: "",
-            expectedBehavior: "",
-            actualBehavior: "",
-            workaround: "",
-            frequency: "once"
-        });
+        setFormData(DEFAULT_BUG_FORM_DATA);
         setAttachments([]);
         setError("");
         setSuccess(false);
@@ -195,12 +125,8 @@ const BugReportButton = ({ className = "" }) => {
             );
             const hasAttachments = attachments.length > 0;
 
-            // Determine priority based on severity
-            const priorityMap = {
-                'High': 'Critical',
-                'Medium': 'High',
-                'Low': 'Low'
-            };
+            // Use utility function to determine priority based on severity
+            const priority = getPriorityFromSeverity(formData.severity);
 
             const bugData = {
                 title: formData.title.trim(),
@@ -222,7 +148,7 @@ const BugReportButton = ({ className = "" }) => {
                 
                 // Classification
                 status: "New",
-                priority: priorityMap[formData.severity] || "Low",
+                priority: priority,
                 severity: formData.severity,
                 category: formData.category,
                 tags: [formData.category.toLowerCase().replace(/\s+/g, '_')],
@@ -265,27 +191,8 @@ const BugReportButton = ({ className = "" }) => {
             await addDoc(collection(db, "bugs"), bugData);
             setSuccess(true);
             
-            // Reset form
-            setFormData({
-                title: "",
-                category: "UI Issue",
-                description: "",
-                stepsToReproduce: "",
-                severity: "Low",
-                assignedTo: "",
-                source: "manual",
-                hasVideoEvidence: false,
-                hasConsoleLogs: false,
-                hasNetworkLogs: false,
-                environment: "production",
-                browserInfo: "",
-                deviceInfo: "",
-                userAgent: "",
-                expectedBehavior: "",
-                actualBehavior: "",
-                workaround: "",
-                frequency: "once"
-            });
+            // Reset form using utility default
+            setFormData(DEFAULT_BUG_FORM_DATA);
             setAttachments([]);
             setError("");
 

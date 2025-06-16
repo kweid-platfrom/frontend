@@ -1,7 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bug, AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown } from 'lucide-react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { calculateBugMetrics } from '../../utils/calculateBugMetrics';
 
-const BugTrackingMetrics = ({ metrics = {} }) => {
+const BugTrackingMetrics = () => {
+    const [metrics, setMetrics] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchBugMetrics = async () => {
+            try {
+                setLoading(true);
+                const bugsCollection = collection(db, 'bugs');
+                const bugsSnapshot = await getDocs(bugsCollection);
+                const bugsData = bugsSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                const calculatedMetrics = calculateBugMetrics(bugsData);
+                setMetrics(calculatedMetrics);
+                setError(null);
+            } catch (err) {
+                console.error('Error fetching bug metrics:', err);
+                setError('Failed to load bug metrics');
+                // Set default metrics on error
+                setMetrics(calculateBugMetrics([]));
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchBugMetrics();
+    }, []);
+
     const {
         totalBugs = 0,
         bugsFromScreenRecording = 0,
@@ -85,6 +119,30 @@ const BugTrackingMetrics = ({ metrics = {} }) => {
             </div>
         );
     };
+
+    if (loading) {
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-center p-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-600">Loading bug metrics...</span>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="space-y-6">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                    <div className="flex items-center">
+                        <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+                        <span className="text-red-800">{error}</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

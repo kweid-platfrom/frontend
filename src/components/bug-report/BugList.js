@@ -29,10 +29,10 @@ const BugList = ({
     updateBugStatus,
     viewMode = 'list',
     groupBy = 'none',
-    subGroupBy = 'none', // New prop for sub-grouping
-    sprints = [], // New prop for sprint data
-    onCreateSprint, // New prop for creating sprints
-    onUpdateBug, // New prop for updating bugs
+    subGroupBy = 'none',
+    sprints = [],
+    onCreateSprint,
+    onUpdateBug,
     onDragStart,
     onDragOver,
     onDrop
@@ -42,6 +42,13 @@ const BugList = ({
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [draggedBug, setDraggedBug] = useState(null);
     const [dragOverGroup, setDragOverGroup] = useState(null);
+
+    // Helper function to get team member name
+    const getTeamMemberName = (memberId) => {
+        if (!memberId) return 'Unassigned';
+        const member = teamMembers.find(m => m.id === memberId || m.userId === memberId);
+        return member ? (member.name || member.displayName || member.email) : 'Unassigned';
+    };
 
     // Enhanced grouping logic with sub-grouping support
     const groupedBugs = useMemo(() => {
@@ -66,7 +73,7 @@ const BugList = ({
                     const date = bug.createdAt?.seconds ? 
                         new Date(bug.createdAt.seconds * 1000) : 
                         new Date(bug.createdAt);
-                    groupKey = `${date.getFullYear()}-${date.getMonth()}`;
+                    groupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
                     groupLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
                     groupType = 'month';
                     break;
@@ -80,7 +87,7 @@ const BugList = ({
                     
                 case 'assignee':
                     groupKey = bug.assignedTo || 'unassigned';
-                    groupLabel = getTeamMemberName(bug.assignedTo) || 'Unassigned';
+                    groupLabel = getTeamMemberName(bug.assignedTo);
                     groupType = 'assignee';
                     break;
                     
@@ -117,16 +124,30 @@ const BugList = ({
             groups[groupKey].count++;
         });
 
-        // Apply sub-grouping for sprints
-        if (groupBy === 'sprint' && subGroupBy !== 'none') {
+        // Apply sub-grouping if enabled
+        if (subGroupBy !== 'none') {
             Object.values(groups).forEach(group => {
-                if (group.type === 'sprint' && group.bugs.length > 0) {
+                if (group.bugs.length > 0) {
                     group.subGroups = createSubGroups(group.bugs, subGroupBy);
                 }
             });
         }
         
-        return Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
+        return Object.values(groups).sort((a, b) => {
+            // Sort groups logically
+            if (groupBy === 'month') {
+                return b.id.localeCompare(a.id); // Most recent first
+            }
+            if (groupBy === 'severity') {
+                const severityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
+                return (severityOrder[a.id] || 4) - (severityOrder[b.id] || 4);
+            }
+            if (groupBy === 'status') {
+                const statusOrder = { 'open': 0, 'in-progress': 1, 'testing': 2, 'resolved': 3, 'closed': 4 };
+                return (statusOrder[a.id] || 5) - (statusOrder[b.id] || 5);
+            }
+            return a.label.localeCompare(b.label);
+        });
     }, [bugs, sprints, groupBy, subGroupBy, teamMembers]);
 
     const createSubGroups = (bugs, subGroupType) => {
@@ -143,8 +164,16 @@ const BugList = ({
                     break;
                 case 'month':
                     const date = new Date(bug.createdAt?.seconds ? bug.createdAt.seconds * 1000 : bug.createdAt);
-                    subGroupKey = `${date.getFullYear()}-${date.getMonth()}`;
+                    subGroupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
                     subGroupLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                    break;
+                case 'status':
+                    subGroupKey = bug.status || 'new';
+                    subGroupLabel = (bug.status || 'new').charAt(0).toUpperCase() + (bug.status || 'new').slice(1);
+                    break;
+                case 'severity':
+                    subGroupKey = bug.severity || 'low';
+                    subGroupLabel = (bug.severity || 'low').charAt(0).toUpperCase() + (bug.severity || 'low').slice(1);
                     break;
                 default:
                     return [];
@@ -161,7 +190,7 @@ const BugList = ({
             subGroups[subGroupKey].bugs.push(bug);
         });
         
-        return Object.values(subGroups);
+        return Object.values(subGroups).sort((a, b) => a.label.localeCompare(b.label));
     };
 
     const getWeekNumber = (date) => {
@@ -174,12 +203,6 @@ const BugList = ({
         if (!dueDate) return false;
         const date = dueDate.seconds ? new Date(dueDate.seconds * 1000) : new Date(dueDate);
         return date < new Date();
-    };
-
-    const getTeamMemberName = (memberId) => {
-        if (!memberId) return 'Unassigned';
-        const member = teamMembers.find(m => m.id === memberId || m.userId === memberId);
-        return member ? (member.name || member.displayName || member.email) : 'Unassigned';
     };
 
     const toggleGroupCollapse = (groupId) => {
@@ -330,23 +353,23 @@ const BugList = ({
     }
 
     return (
-        <div className="space-y-4">
-            {/* Group Creation Controls */}
-            {(groupBy === 'month' || groupBy === 'sprint') && (
+        <div className="space-y-4 p-4">
+            {/* Group Creation Controls - Only show for sprint grouping */}
+            {groupBy === 'sprint' && onCreateSprint && (
                 <div className="flex justify-end">
                     <button
                         onClick={() => setShowCreateGroup(true)}
-                        className="flex items-center gap-2 px-3 py-1 bg-brand-300 text-white rounded hover:bg-brand-400 text-sm"
+                        className="flex items-center gap-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition-colors"
                     >
                         <Plus className="h-4 w-4" />
-                        Create {groupBy === 'month' ? 'Month' : 'Sprint'}
+                        Create Sprint
                     </button>
                 </div>
             )}
 
             {/* Selected Items Actions */}
             {selectedBugs.length > 0 && (
-                <div className="bg-blue-50 p-3 rounded-lg">
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-blue-900">
                             {selectedBugs.length} bug{selectedBugs.length !== 1 ? 's' : ''} selected
@@ -354,7 +377,7 @@ const BugList = ({
                         <div className="flex gap-2">
                             <select 
                                 onChange={(e) => e.target.value && moveSelectedBugs(e.target.value)}
-                                className="px-2 py-1 text-xs border border-blue-300 rounded"
+                                className="px-2 py-1 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 defaultValue=""
                             >
                                 <option value="">Move to...</option>
@@ -366,7 +389,7 @@ const BugList = ({
                             </select>
                             <button
                                 onClick={() => setSelectedBugs([])}
-                                className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
+                                className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 transition-colors"
                             >
                                 Clear
                             </button>
@@ -375,15 +398,16 @@ const BugList = ({
                 </div>
             )}
 
-            {/* Global selection controls when grouped */}
-            {groupBy !== 'none' && (
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            {/* Global selection controls when grouped - Only show when actually grouped */}
+            {groupBy !== 'none' && groupedBugs.length > 1 && (
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
                     <div className="flex items-center space-x-2">
                         <input 
                             type="checkbox" 
-                            className="rounded border-gray-300 text-[#00897B] focus:ring-[#00897B]"
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             onChange={toggleSelectAll}
                             checked={selectedBugs.length === bugs.length && bugs.length > 0}
+                            indeterminate={selectedBugs.length > 0 && selectedBugs.length < bugs.length}
                         />
                         <span className="text-sm font-medium text-gray-700">
                             Select All ({bugs.length} bugs)
@@ -408,18 +432,29 @@ const BugList = ({
                     <div 
                         key={group.id} 
                         className={`border rounded-lg overflow-hidden shadow-sm transition-all ${
-                            isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
                         }`}
                         onDragOver={(e) => handleDragOver(e, group.id)}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, group.id)}
                     >
-                        {/* Group Header - only show if grouped */}
+                        {/* Group Header - only show if actually grouped */}
                         {groupBy !== 'none' && (
                             <div className="flex items-center bg-gray-50 border-b">
                                 <div className={`${getGroupColor(group.type)} w-1 self-stretch`}></div>
+                                
+                                {/* Group Selection Checkbox */}
+                                <div className="px-3 py-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={allGroupSelected}
+                                        onChange={() => toggleGroupSelection(group)}
+                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                </div>
+
                                 <button 
-                                    className="p-4 flex items-center flex-grow hover:bg-gray-100 transition-colors"
+                                    className="flex-1 p-4 flex items-center hover:bg-gray-100 transition-colors text-left"
                                     onClick={() => toggleGroupCollapse(group.id)}
                                 >
                                     {isCollapsed ? 
@@ -429,7 +464,7 @@ const BugList = ({
                                     <div className="flex items-center mr-3">
                                         {getGroupIcon(group.type)}
                                     </div>
-                                    <div className="flex-grow text-left">
+                                    <div className="flex-grow">
                                         <h3 className="font-semibold text-gray-900">{group.label}</h3>
                                     </div>
                                     <div className="flex items-center space-x-2">
@@ -550,12 +585,14 @@ const BugList = ({
             })}
 
             {/* Group Creation Modal */}
-            <GroupCreationModal 
-                show={showCreateGroup}
-                onClose={() => setShowCreateGroup(false)}
-                groupBy={groupBy}
-                onCreateSprint={onCreateSprint}
-            />
+            {showCreateGroup && (
+                <GroupCreationModal 
+                    show={showCreateGroup}
+                    onClose={() => setShowCreateGroup(false)}
+                    groupBy={groupBy}
+                    onCreateSprint={onCreateSprint}
+                />
+            )}
         </div>
     );
 };
@@ -578,7 +615,7 @@ const BugCard = ({
         <div
             className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
                 selectedBug?.id === bug.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-            } ${selectedBugs.includes(bug.id) ? 'bg-blue-50' : ''}`}
+            } ${selectedBugs.includes(bug.id) ? 'bg-blue-25' : ''}`}
             onClick={() => onBugSelect(bug)}
             draggable
             onDragStart={(e) => handleDragStart(e, bug)}
@@ -591,12 +628,12 @@ const BugCard = ({
                         e.stopPropagation();
                         toggleBugSelection(bug.id);
                     }}
-                    className="mt-1 rounded border-gray-300 text-[#00897B] focus:ring-[#00897B]"
+                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 
                 <div className="flex-grow min-w-0">
                     <div className="flex items-start justify-between">
-                        <div className="flex-grow">
+                        <div className="flex-grow pr-4">
                             <h4 className="font-medium text-gray-900 truncate">
                                 {bug.title}
                             </h4>
@@ -605,12 +642,12 @@ const BugCard = ({
                             </p>
                         </div>
                         
-                        <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
+                        <div className="flex items-center space-x-2 flex-shrink-0">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(bug.severity)}`}>
-                                {bug.severity}
+                                {bug.severity || 'Low'}
                             </span>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(bug.status)}`}>
-                                {bug.status}
+                                {bug.status || 'New'}
                             </span>
                         </div>
                     </div>
@@ -636,7 +673,7 @@ const BugCard = ({
                     </div>
                 </div>
                 
-                <GripVertical className="h-4 w-4 text-gray-400 mt-1" />
+                <GripVertical className="h-4 w-4 text-gray-400 mt-1 cursor-move" />
             </div>
         </div>
     );

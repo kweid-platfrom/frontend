@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { useState, useEffect, useRef } from "react";
 import { 
     AlertCircle, 
     Users, 
@@ -17,8 +18,12 @@ const BugReportBasicInfo = ({
     teamMembers = []
 }) => {
     const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+    const techInfoDetected = useRef(false); // Prevent multiple detections
 
     useEffect(() => {
+        // Only run once and only if tech info hasn't been detected yet
+        if (techInfoDetected.current) return;
+
         // Auto-detect and populate technical information in the background
         const detectTechnicalInfo = () => {
             const userAgent = navigator.userAgent;
@@ -62,20 +67,31 @@ const BugReportBasicInfo = ({
                 language: language
             };
 
-            // Auto-populate technical fields
-            updateFormData("browserInfo", techInfo.browser);
-            updateFormData("deviceInfo", `${techInfo.operatingSystem}, ${techInfo.screenResolution}`);
-            updateFormData("userAgent", techInfo.userAgent);
-            updateFormData("pageUrl", techInfo.pageUrl);
+            // Only update if the fields are empty to avoid overwriting user input
+            if (!formData.browserInfo) {
+                updateFormData("browserInfo", techInfo.browser);
+            }
+            if (!formData.deviceInfo) {
+                updateFormData("deviceInfo", `${techInfo.operatingSystem}, ${techInfo.screenResolution}`);
+            }
+            if (!formData.userAgent) {
+                updateFormData("userAgent", techInfo.userAgent);
+            }
+            if (!formData.pageUrl) {
+                updateFormData("pageUrl", techInfo.pageUrl);
+            }
+
+            techInfoDetected.current = true;
         };
 
         detectTechnicalInfo();
-    }, [updateFormData]);
+    }, []); // Empty dependency array - run only once
 
-    const priorities = [
-        { value: "Low", label: "Low Priority", color: "text-green-600", bg: "bg-green-100", icon: Clock },
-        { value: "Medium", label: "Medium Priority", color: "text-orange-600", bg: "bg-orange-100", icon: Flag },
-        { value: "High", label: "High Priority", color: "text-red-600", bg: "bg-red-100", icon: AlertTriangle }
+    const severities = [
+        { value: "Low", label: "Low", color: "text-green-600", bg: "bg-green-100", icon: Clock },
+        { value: "Medium", label: "Medium", color: "text-yellow-600", bg: "bg-yellow-100", icon: Flag },
+        { value: "High", label: "High", color: "text-orange-600", bg: "bg-orange-100", icon: AlertTriangle },
+        { value: "Critical", label: "Critical", color: "text-red-600", bg: "bg-red-100", icon: AlertTriangle }
     ];
 
     const categories = [
@@ -101,6 +117,21 @@ const BugReportBasicInfo = ({
 
     const handleChange = (field, value) => {
         updateFormData(field, value);
+        
+        // Auto-set priority based on severity
+        if (field === 'severity') {
+            updateFormData("priority", value);
+        }
+    };
+
+    const getSeverityDescription = (severity) => {
+        const descriptions = {
+            'Critical': 'System unusable, blocking critical functionality',
+            'High': 'Major feature broken, significant impact',
+            'Medium': 'Feature partially broken, moderate impact',
+            'Low': 'Minor issue, cosmetic or low impact'
+        };
+        return descriptions[severity] || '';
     };
 
     return (
@@ -122,7 +153,7 @@ const BugReportBasicInfo = ({
                     />
                 </div>
 
-                {/* Category and Priority */}
+                {/* Category and Severity */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <label className="block text-sm font-medium text-gray-900">
@@ -145,24 +176,26 @@ const BugReportBasicInfo = ({
                     <div className="space-y-2">
                         <label className="block text-sm font-medium text-gray-900">
                             <Flag className="inline h-4 w-4 mr-2" />
-                            Priority
+                            Severity <span className="text-red-500">*</span>
                         </label>
                         <select
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00897B] focus:border-transparent transition-all duration-200"
                             value={formData.severity || "Low"}
                             onChange={(e) => handleChange("severity", e.target.value)}
+                            required
                         >
-                            {priorities.map(priority => (
-                                <option key={priority.value} value={priority.value}>
-                                    {priority.label}
+                            {severities.map(severity => (
+                                <option key={severity.value} value={severity.value}>
+                                    {severity.label}
                                 </option>
                             ))}
                         </select>
                         <div className={`text-xs font-medium ${
-                            formData.severity === 'High' ? 'text-red-600' :
-                            formData.severity === 'Medium' ? 'text-orange-600' : 'text-green-600'
+                            formData.severity === 'Critical' ? 'text-red-600' :
+                            formData.severity === 'High' ? 'text-orange-600' : 
+                            formData.severity === 'Medium' ? 'text-yellow-600' : 'text-green-600'
                         }`}>
-                            Impact: {formData.severity === 'High' ? 'Critical' : formData.severity === 'Medium' ? 'High' : 'Low'}
+                            {getSeverityDescription(formData.severity)}
                         </div>
                     </div>
                 </div>
@@ -352,6 +385,7 @@ const BugReportBasicInfo = ({
                             <li>• Use a clear, descriptive title</li>
                             <li>• Include what you expected vs. what actually happened</li>
                             <li>• Provide step-by-step reproduction instructions</li>
+                            <li>• Severity determines priority automatically</li>
                             <li>• Technical details are captured automatically</li>
                         </ul>
                     </div>

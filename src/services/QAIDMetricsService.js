@@ -1,508 +1,446 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+    collection,
+    getDocs,
+    query,
+    where,
+    Timestamp,
+    orderBy,
+    limit
+} from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from '../context/AuthProvider';
 
-// QAID-Specific QA Metrics Service
-class QAIDMetricsService {
-    constructor() {
-        this.baseURL = process.env.REACT_APP_QAID_API_URL;
-        this.apiKey = process.env.REACT_APP_QAID_API_KEY;
-    }
+// Utility function to get date range filter
+const getDateRange = (timeRange) => {
+    const now = new Date();
+    const ranges = {
+        '1d': new Date(now.getTime() - 24 * 60 * 60 * 1000),
+        '7d': new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        '30d': new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+        '90d': new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    };
+    return ranges[timeRange] || ranges['7d'];
+};
 
+// Apply filters with proper user permissions based on your auth structure
+const applyFilters = (baseQuery, filters, dateField = 'createdAt', userContext = null) => {
+    let filteredQuery = baseQuery;
 
-    // 1. TEST CASE MANAGEMENT METRICS
-    async getTestCaseMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/test-cases/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    timeRange: filters.timeRange || '30d',
-                    team: filters.team || 'all',
-                    feature: filters.feature || 'all',
-                    sprint: filters.sprint || 'all'
-                })
-            });
+    // Security: Add user-based filtering based on your auth structure
+    if (userContext) {
+        // Filter by organization if user belongs to one
+        if (userContext.userProfile?.organizationId) {
+            filteredQuery = query(filteredQuery, where('organizationId', '==', userContext.userProfile.organizationId));
+        }
+        // If no organization, filter by user ID for individual accounts
+        else if (userContext.currentUser?.uid) {
+            filteredQuery = query(filteredQuery, where('createdBy', '==', userContext.currentUser.uid));
+        }
 
-            const data = await response.json();
-
-            return {
-                // Core Test Case Metrics
-                totalTestCases: data.totalTestCases,
-                manualTestCases: data.manualTestCases,
-                automatedTestCases: data.automatedTestCases,
-                aiGeneratedTestCases: data.aiGeneratedTestCases,
-
-                // Test Case Quality
-                testCasesWithTags: data.testCasesWithTags,
-                testCasesLinkedToBugs: data.testCasesLinkedToBugs,
-                testCasesWithRecordings: data.testCasesWithRecordings,
-
-                // Coverage Metrics
-                functionalCoverage: data.functionalTestCases / data.totalTestCases * 100,
-                edgeCaseCoverage: data.edgeTestCases / data.totalTestCases * 100,
-                negativeCaseCoverage: data.negativeTestCases / data.totalTestCases * 100,
-
-                // AI Generation Efficiency
-                aiGenerationSuccessRate: data.successfulAIGenerations / data.totalAIAttempts * 100,
-                avgTestCasesPerAIGeneration: data.avgTestCasesPerGeneration,
-
-                // Test Case Maintenance
-                outdatedTestCases: data.outdatedTestCases,
-                recentlyUpdatedTestCases: data.recentlyUpdatedTestCases,
-                testCaseUpdateFrequency: data.testCaseUpdatesPerWeek
-            };
-        } catch (error) {
-            console.error('Error fetching test case metrics:', error);
-            return this.getFallbackTestCaseMetrics();
+        // Additional team-based filtering if your data model supports it
+        if (userContext.userProfile?.accessibleTeams && userContext.userProfile.accessibleTeams.length > 0) {
+            // Note: This assumes your documents have a 'team' field
+            // Firestore 'in' queries are limited to 10 values
+            const teams = userContext.userProfile.accessibleTeams.slice(0, 10);
+            filteredQuery = query(filteredQuery, where('team', 'in', teams));
         }
     }
 
+    // Time range filter
+    if (filters.timeRange && filters.timeRange !== 'all') {
+        const fromDate = getDateRange(filters.timeRange);
+        filteredQuery = query(filteredQuery, where(dateField, '>=', Timestamp.fromDate(fromDate)));
+    }
 
-    // 2. BUG REPORTING & TRACKING METRICS
-    async getBugMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/bugs/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(filters)
-            });
-
-            const data = await response.json();
-
-            return {
-                // Bug Discovery & Reporting
-                totalBugs: data.totalBugs,
-                bugsFromScreenRecording: data.bugsFromRecording,
-                bugsFromManualTesting: data.bugsFromManual,
-                bugsWithVideoEvidence: data.bugsWithVideo,
-                bugsWithNetworkLogs: data.bugsWithNetworkData,
-                bugsWithConsoleLogs: data.bugsWithConsoleLogs,
-
-                // Bug Severity Distribution
-                criticalBugs: data.bugsBySeverity.critical,
-                highPriorityBugs: data.bugsBySeverity.high,
-                mediumPriorityBugs: data.bugsBySeverity.medium,
-                lowPriorityBugs: data.bugsBySeverity.low,
-
-                // Bug Resolution
-                resolvedBugs: data.resolvedBugs,
-                avgResolutionTime: data.avgResolutionTimeHours,
-                bugResolutionRate: data.resolvedBugs / data.totalBugs * 100,
-
-                // Bug Report Quality
-                avgBugReportCompleteness: data.avgCompleteness,
-                bugReportsWithAttachments: data.reportsWithAttachments,
-                bugReproductionRate: data.reproducibleBugs / data.totalBugs * 100,
-
-                // Weekly/Monthly Reports
-                weeklyReportsGenerated: data.weeklyReports,
-                monthlyReportsGenerated: data.monthlyReports,
-                avgBugsPerReport: data.avgBugsPerReport
-            };
-        } catch (error) {
-            console.error('Error fetching bug metrics:', error);
-            return this.getFallbackBugMetrics();
+    // Apply other filters
+    const filterFields = ['team', 'component', 'severity', 'priority', 'status', 'feature', 'sprint'];
+    filterFields.forEach(field => {
+        if (filters[field] && filters[field] !== 'all') {
+            filteredQuery = query(filteredQuery, where(field, '==', filters[field]));
         }
-    }
+    });
 
+    return filteredQuery;
+};
 
-    // 3. SCREEN RECORDING & EVIDENCE METRICS
-    async getRecordingMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/recordings/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(filters)
-            });
-
-            const data = await response.json();
-
-            return {
-                // Recording Usage
-                totalRecordings: data.totalRecordings,
-                avgRecordingDuration: data.avgDurationMinutes,
-                totalRecordingHours: data.totalDurationHours,
-
-                // Recording Quality & Context
-                recordingsWithNetworkData: data.recordingsWithNetwork,
-                recordingsWithConsoleData: data.recordingsWithConsole,
-                recordingsLinkedToBugs: data.recordingsLinkedToBugs,
-                recordingsLinkedToTestCases: data.recordingsLinkedToTestCases,
-
-                // Recording Efficiency
-                bugsFoundPerRecording: data.avgBugsPerRecording,
-                recordingToReportConversionRate: data.recordingsConvertedToReports / data.totalRecordings * 100,
-
-                // Storage & Performance
-                totalStorageUsedGB: data.totalStorageGB,
-                avgUploadTime: data.avgUploadTimeSeconds,
-                recordingProcessingFailures: data.processingFailures,
-
-                // User Adoption
-                activeRecordingUsers: data.activeUsers,
-                recordingsPerUser: data.avgRecordingsPerUser,
-                recordingUsageGrowth: data.usageGrowthPercentage
-            };
-        } catch (error) {
-            console.error('Error fetching recording metrics:', error);
-            return {};
-        }
-    }
-
-
-    // 4. AI TEST GENERATION METRICS
-    async getAIMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/ai/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(filters)
-            });
-
-            const data = await response.json();
-
-            return {
-                // AI Generation Volume
-                totalAIGenerations: data.totalGenerations,
-                successfulGenerations: data.successfulGenerations,
-                failedGenerations: data.failedGenerations,
-
-                // AI Generation Quality
-                aiSuccessRate: data.successfulGenerations / data.totalGenerations * 100,
-                avgTestCasesPerGeneration: data.avgTestCasesGenerated,
-                testCasesRequiringRevision: data.revisedTestCases,
-
-                // AI Input Sources
-                generationsFromUserStories: data.fromUserStories,
-                generationsFromDocuments: data.fromDocuments,
-                generationsFromRequirements: data.fromRequirements,
-
-                // AI Performance
-                avgGenerationTimeSeconds: data.avgGenerationTime,
-                openAIAPICallsCount: data.apiCalls,
-                openAITokensUsed: data.tokensConsumed,
-                aiCostPerTestCase: data.costPerTestCase,
-
-                // Test Case Type Distribution
-                functionalTestsGenerated: data.functionalTests,
-                edgeTestsGenerated: data.edgeTests,
-                negativeTestsGenerated: data.negativeTests,
-
-                // Prompt Effectiveness
-                customPromptUsage: data.customPrompts,
-                defaultPromptUsage: data.defaultPrompts,
-                promptFineTuningCount: data.promptAdjustments
-            };
-        } catch (error) {
-            console.error('Error fetching AI metrics:', error);
-            return {};
-        }
-    }
-
-
-    // 5. AUTOMATION SUPPORT METRICS
-    async getAutomationMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/automation/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(filters)
-            });
-
-            const data = await response.json();
-
-            return {
-                // Automation Coverage
-                automationRatio: data.automatedTests / data.totalTests * 100,
-                manualToAutomatedConversions: data.conversions,
-
-                // Cypress Integration
-                cypressScriptsGenerated: data.cypressScripts,
-                cypressGenerationSuccessRate: data.successfulCypressGenerations / data.totalCypressAttempts * 100,
-
-                // GitHub Integration
-                githubSyncsCompleted: data.githubSyncs,
-                cicdIntegrationsActive: data.activeCICD,
-                automationExecutionRate: data.automationExecutions,
-
-                // Automation Quality
-                automatedTestPassRate: data.automatedPassRate,
-                automatedTestStability: data.automationStability,
-                automationMaintenanceEffort: data.maintenanceHours,
-
-                // ROI Metrics
-                timesSavedByAutomation: data.timeSavedHours,
-                automationROI: data.automationROI,
-                manualTestingReduction: data.manualReductionPercentage
-            };
-        } catch (error) {
-            console.error('Error fetching automation metrics:', error);
-            return {};
-        }
-    }
-
-
-    // 6. TEAM & PROJECT METRICS
-    async getTeamMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/team/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(filters)
-            });
-
-            const data = await response.json();
-
-            return {
-                // Team Productivity
-                activeTeamMembers: data.activeMembers,
-                testCasesCreatedPerMember: data.avgTestCasesPerMember,
-                bugsFoundPerMember: data.avgBugsPerMember,
-                recordingsPerMember: data.avgRecordingsPerMember,
-
-                // Feature & Sprint Tracking
-                featuresUnderTest: data.featuresInProgress,
-                sprintTestingProgress: data.sprintProgress,
-                releaseReadiness: data.releaseReadinessScore,
-
-                // Collaboration Metrics
-                crossTeamCollaboration: data.collaborationScore,
-                testCaseReviewCycle: data.avgReviewTimeHours,
-                knowledgeSharing: data.knowledgeSharingScore,
-
-                // Quality Trends
-                qualityTrendScore: data.qualityTrend,
-                defectDensityTrend: data.defectTrend,
-                testCoverageGrowth: data.coverageGrowth
-            };
-        } catch (error) {
-            console.error('Error fetching team metrics:', error);
-            return {};
-        }
-    }
-
-
-    // 7. DASHBOARD & REPORTING METRICS
-    async getDashboardMetrics(filters = {}) {
-        try {
-            const response = await fetch(`${this.baseURL}/api/dashboard/metrics`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(filters)
-            });
-
-            const data = await response.json();
-
-            return {
-                // Dashboard Usage
-                dashboardViews: data.dashboardViews,
-                uniqueDashboardUsers: data.uniqueUsers,
-                avgSessionDuration: data.avgSessionMinutes,
-
-                // Report Generation
-                pdfReportsGenerated: data.pdfReports,
-                weeklyReports: data.weeklyReports,
-                monthlyReports: data.monthlyReports,
-                customReports: data.customReports,
-
-                // Filter Usage
-                mostUsedFilters: data.popularFilters,
-                advancedFilterUsage: data.advancedFilters,
-
-                // Export Activity
-                dataExports: data.totalExports,
-                csvExports: data.csvExports,
-                pdfExports: data.pdfExports
-            };
-        } catch (error) {
-            console.error('Error fetching dashboard metrics:', error);
-            return {};
-        }
-    }
-
-
-    // 8. COMPREHENSIVE METRICS AGGREGATOR
-    async getAllQAIDMetrics(filters = {}) {
-        try {
-            const [
-                testCaseMetrics,
-                bugMetrics,
-                recordingMetrics,
-                aiMetrics,
-                automationMetrics,
-                teamMetrics,
-                dashboardMetrics
-            ] = await Promise.all([
-                this.getTestCaseMetrics(filters),
-                this.getBugMetrics(filters),
-                this.getRecordingMetrics(filters),
-                this.getAIMetrics(filters),
-                this.getAutomationMetrics(filters),
-                this.getTeamMetrics(filters),
-                this.getDashboardMetrics(filters)
-            ]);
-
-
-            return {
-                testCases: testCaseMetrics,
-                bugs: bugMetrics,
-                recordings: recordingMetrics,
-                ai: aiMetrics,
-                automation: automationMetrics,
-                team: teamMetrics,
-                dashboard: dashboardMetrics,
-
-                // QAID-Specific KPIs
-                overallQAEfficiency: this.calculateQAEfficiency({
-                    testCaseMetrics,
-                    bugMetrics,
-                    automationMetrics,
-                    aiMetrics
-                }),
-
-                evidenceQualityScore: this.calculateEvidenceQuality({
-                    recordingMetrics,
-                    bugMetrics
-                }),
-
-                aiProductivityGain: this.calculateAIProductivity({
-                    aiMetrics,
-                    testCaseMetrics
-                })
-            };
-        } catch (error) {
-            console.error('Error fetching comprehensive QAID metrics:', error);
-            return {};
-        }
-    }
-
-
-    // 9. QAID-SPECIFIC CALCULATIONS
-    calculateQAEfficiency(metrics) {
-        const {
-            testCaseMetrics: { automationRatio = 0 },
-            bugMetrics: { bugReproductionRate = 0, bugResolutionRate = 0 },
-            aiMetrics: { aiSuccessRate = 0 }
-        } = metrics;
-
-        return Math.round(
-            (automationRatio * 0.3 +
-                bugReproductionRate * 0.3 +
-                bugResolutionRate * 0.2 +
-                aiSuccessRate * 0.2)
-        );
-    }
-
-
-    calculateEvidenceQuality(metrics) {
-        const {
-            recordingMetrics: { recordingsWithNetworkData = 0, recordingsWithConsoleData = 0, totalRecordings = 1 },
-            bugMetrics: { bugsWithVideoEvidence = 0, totalBugs = 1 }
-        } = metrics;
-
-        const networkCoverage = recordingsWithNetworkData / totalRecordings * 100;
-        const consoleCoverage = recordingsWithConsoleData / totalRecordings * 100;
-        const videoBugCoverage = bugsWithVideoEvidence / totalBugs * 100;
-
-        return Math.round((networkCoverage + consoleCoverage + videoBugCoverage) / 3);
-    }
-
-
-    calculateAIProductivity(metrics) {
-        const {
-            aiMetrics: { avgTestCasesPerGeneration = 0, aiSuccessRate = 0 },
-            testCaseMetrics: { aiGeneratedTestCases = 0, totalTestCases = 1 }
-        } = metrics;
-
-        const aiContribution = aiGeneratedTestCases / totalTestCases * 100;
-        const aiEfficiency = avgTestCasesPerGeneration * (aiSuccessRate / 100);
-
-        return Math.round((aiContribution + aiEfficiency) / 2);
-    }
-
-
-    // Fallback methods
-    getFallbackTestCaseMetrics() {
-        return {
-            totalTestCases: 0,
-            manualTestCases: 0,
-            automatedTestCases: 0,
-            aiGeneratedTestCases: 0,
-            functionalCoverage: 0,
-            edgeCaseCoverage: 0,
-            negativeCaseCoverage: 0
-        };
-    }
-
-
-    getFallbackBugMetrics() {
+// Consolidated bug metrics calculator
+const calculateBugMetrics = (bugs = []) => {
+    if (!Array.isArray(bugs) || bugs.length === 0) {
         return {
             totalBugs: 0,
-            criticalBugs: 0,
             resolvedBugs: 0,
+            activeBugs: 0,
+            criticalBugs: 0,
             avgResolutionTime: 0,
             bugResolutionRate: 0,
-            bugsFromScreenRecording: 0
+            avgReportCompleteness: 0,
+            bugsWithEvidence: 0,
+            statusDistribution: {},
+            priorityDistribution: {},
+            severityDistribution: {}
         };
     }
-}
 
+    const totalBugs = bugs.length;
+    
+    // Status distribution
+    const statusCounts = bugs.reduce((acc, bug) => {
+        const status = bug.status || 'New';
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
 
-// React Hook for QAID Metrics
-export const useQAIDMetrics = (filters = {}) => {
-    const [metrics, setMetrics] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    // Priority distribution  
+    const priorityCounts = bugs.reduce((acc, bug) => {
+        const priority = bug.priority || 'Medium';
+        acc[priority] = (acc[priority] || 0) + 1;
+        return acc;
+    }, {});
 
-    const qaidService = new QAIDMetricsService();
+    // Severity distribution
+    const severityCounts = bugs.reduce((acc, bug) => {
+        const severity = bug.severity || 'Medium';
+        acc[severity] = (acc[severity] || 0) + 1;
+        return acc;
+    }, {});
 
-    const fetchMetrics = async () => {
-        try {
-            setLoading(true);
-            const data = await qaidService.getAllQAIDMetrics(filters);
-            setMetrics(data);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
+    // Resolution metrics
+    const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Done'];
+    const resolvedBugs = bugs.filter(bug => resolvedStatuses.includes(bug.status));
+    const activeBugs = totalBugs - resolvedBugs.length;
+    
+    // Critical bugs
+    const criticalBugs = bugs.filter(bug => 
+        bug.severity === 'Critical' || bug.priority === 'Critical'
+    ).length;
+
+    // Calculate average resolution time
+    const resolvedBugsWithTimes = resolvedBugs.filter(bug => bug.resolvedAt && bug.createdAt);
+    let avgResolutionTime = 0;
+    
+    if (resolvedBugsWithTimes.length > 0) {
+        const totalTime = resolvedBugsWithTimes.reduce((sum, bug) => {
+            const created = bug.createdAt.toDate ? bug.createdAt.toDate() : new Date(bug.createdAt);
+            const resolved = bug.resolvedAt.toDate ? bug.resolvedAt.toDate() : new Date(bug.resolvedAt);
+            return sum + (resolved - created);
+        }, 0);
+        avgResolutionTime = Math.round(totalTime / resolvedBugsWithTimes.length / (1000 * 60 * 60)); // hours
+    }
+
+    // Bug resolution rate
+    const bugResolutionRate = totalBugs > 0 ? Math.round((resolvedBugs.length / totalBugs) * 100) : 0;
+
+    // Report completeness
+    const calculateCompleteness = (bug) => {
+        let score = 0;
+        const fields = ['title', 'stepsToReproduce', 'expectedBehavior', 'actualBehavior', 'environment'];
+        fields.forEach(field => {
+            if (bug[field] && bug[field].toString().trim().length > 5) score++;
+        });
+        if (bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)) score++;
+        return Math.round((score / 6) * 100);
     };
 
+    const avgReportCompleteness = totalBugs > 0 
+        ? Math.round(bugs.reduce((sum, bug) => sum + calculateCompleteness(bug), 0) / totalBugs)
+        : 0;
 
-    useEffect(() => {
-        fetchMetrics();
-    }, [JSON.stringify(filters)]);
-
+    // Evidence metrics
+    const bugsWithEvidence = bugs.filter(bug => 
+        bug.hasVideoEvidence || bug.hasConsoleLogs || bug.hasNetworkLogs || 
+        (bug.attachments && bug.attachments.length > 0)
+    ).length;
 
     return {
-        metrics,
-        loading,
-        error,
-        refetch: fetchMetrics,
-        service: qaidService
+        totalBugs,
+        resolvedBugs: resolvedBugs.length,
+        activeBugs,
+        criticalBugs,
+        avgResolutionTime,
+        bugResolutionRate,
+        avgReportCompleteness,
+        bugsWithEvidence,
+        statusDistribution: statusCounts,
+        priorityDistribution: priorityCounts,
+        severityDistribution: severityCounts
     };
 };
 
+// Secure fetch function with error handling using your auth structure
+const fetchSecureData = async (collectionName, filters, dateField, userContext) => {
+    try {
+        // Check authentication using your auth structure
+        if (!userContext?.currentUser) {
+            throw new Error('Authentication required');
+        }
 
-export default QAIDMetricsService;
+        // Check if user has required permissions using your hasPermission method
+        if (!userContext.hasPermission('read_tests')) {
+            throw new Error('Insufficient permissions to read QA data');
+        }
+
+        const collectionRef = collection(db, collectionName);
+        const filteredQuery = applyFilters(collectionRef, filters, dateField, userContext);
+        
+        // Add ordering and limit for performance
+        const finalQuery = query(
+            filteredQuery,
+            orderBy(dateField, 'desc'),
+            limit(1000) // Reasonable limit
+        );
+
+        const snapshot = await getDocs(finalQuery);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error(`Error fetching ${collectionName}:`, error);
+        
+        // Handle specific permission errors
+        if (error.code === 'permission-denied') {
+            throw new Error(`Access denied to ${collectionName}. Please check your permissions.`);
+        }
+        
+        throw error;
+    }
+};
+
+// TODO: Implement test case metrics when test cases feature is ready
+// const calculateTestCaseMetrics = (testCases = []) => {
+//     if (!Array.isArray(testCases) || testCases.length === 0) {
+//         return {
+//             total: 0,
+//             passed: 0,
+//             failed: 0,
+//             pending: 0,
+//             skipped: 0,
+//             passRate: 0,
+//             statusDistribution: {}
+//         };
+//     }
+
+//     const total = testCases.length;
+//     const statusCounts = testCases.reduce((acc, testCase) => {
+//         const status = testCase.status || 'pending';
+//         acc[status] = (acc[status] || 0) + 1;
+//         return acc;
+//     }, {});
+
+//     const passed = statusCounts.passed || 0;
+//     const failed = statusCounts.failed || 0;
+//     const pending = statusCounts.pending || 0;
+//     const skipped = statusCounts.skipped || 0;
+
+//     const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+//     return {
+//         total,
+//         passed,
+//         failed,
+//         pending,
+//         skipped,
+//         passRate,
+//         statusDistribution: statusCounts
+//     };
+// };
+
+// TODO: Implement recording metrics when recordings feature is ready
+// const calculateRecordingMetrics = (recordings = []) => {
+//     if (!Array.isArray(recordings) || recordings.length === 0) {
+//         return {
+//             total: 0,
+//             completed: 0,
+//             processing: 0,
+//             failed: 0,
+//             avgDuration: 0,
+//             statusDistribution: {}
+//         };
+//     }
+
+//     const total = recordings.length;
+//     const statusCounts = recordings.reduce((acc, recording) => {
+//         const status = recording.status || 'processing';
+//         acc[status] = (acc[status] || 0) + 1;
+//         return acc;
+//     }, {});
+
+//     const completed = statusCounts.completed || 0;
+//     const processing = statusCounts.processing || 0;
+//     const failed = statusCounts.failed || 0;
+
+//     // Calculate average duration for completed recordings
+//     const completedWithDuration = recordings.filter(r => 
+//         r.status === 'completed' && r.duration && r.duration > 0
+//     );
+    
+//     const avgDuration = completedWithDuration.length > 0
+//         ? Math.round(completedWithDuration.reduce((sum, r) => sum + r.duration, 0) / completedWithDuration.length)
+//         : 0;
+
+//     return {
+//         total,
+//         completed,
+//         processing,
+//         failed,
+//         avgDuration,
+//         statusDistribution: statusCounts
+//     };
+// };
+
+// Main hook for bug metrics only (other features commented out until implemented)
+export const useBugMetrics = (filters = {}) => {
+    const [metrics, setMetrics] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    
+    // Use your actual auth context
+    const {
+        currentUser,
+        userProfile,
+        hasPermission,
+        hasRole,
+        loading: authLoading
+    } = useAuth();
+
+    const fetchBugMetrics = useCallback(async () => {
+        // Wait for auth to be ready
+        if (authLoading) {
+            return;
+        }
+
+        if (!currentUser) {
+            setError('Authentication required');
+            setLoading(false);
+            return;
+        }
+
+        // Check permissions using your auth structure
+        if (!hasPermission('read_tests')) {
+            setError('Insufficient permissions to view bug metrics');
+            setLoading(false);
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setError(null);
+
+            // Create user context object from your auth structure
+            const userContext = {
+                currentUser,
+                userProfile,
+                hasPermission,
+                hasRole
+            };
+
+            // Fetch only bug data for now
+            const bugs = await fetchSecureData('bugs', filters, 'createdAt', userContext);
+
+            // Calculate bug metrics
+            const bugMetrics = calculateBugMetrics(bugs);
+
+            setMetrics({
+                ...bugMetrics,
+                summary: {
+                    totalItems: bugs.length,
+                    criticalIssues: bugMetrics.criticalBugs,
+                    bugResolutionRate: bugMetrics.bugResolutionRate
+                },
+                lastUpdated: new Date()
+            });
+
+        } catch (err) {
+            setError(err.message);
+            console.error('Error fetching bug metrics:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [filters, currentUser, userProfile, hasPermission, hasRole, authLoading]);
+
+    useEffect(() => {
+        fetchBugMetrics();
+    }, [fetchBugMetrics]);
+
+    const refetch = useCallback(() => {
+        fetchBugMetrics();
+    }, [fetchBugMetrics]);
+
+    return {
+        metrics,
+        loading: loading || authLoading,
+        error,
+        refetch,
+        // Additional helper methods
+        hasAccess: currentUser && hasPermission('read_tests'),
+        canModify: currentUser && hasPermission('write_tests'),
+        isAdmin: currentUser && hasRole('admin')
+    };
+};
+
+// TODO: Uncomment and implement when consolidated metrics are needed
+// export const useQAIDMetrics = (filters = {}) => {
+//     const [metrics, setMetrics] = useState(null);
+//     const [loading, setLoading] = useState(true);
+//     const [error, setError] = useState(null);
+    
+//     // Use your actual auth context
+//     const {
+//         currentUser,
+//         userProfile,
+//         hasPermission,
+//         hasRole,
+//         loading: authLoading
+//     } = useAuth();
+
+//     const fetchAllMetrics = useCallback(async () => {
+//         // Implementation for when all features are ready
+//         // This will include bugs, testCases, and recordings
+//     }, [filters, currentUser, userProfile, hasPermission, hasRole, authLoading]);
+
+//     useEffect(() => {
+//         fetchAllMetrics();
+//     }, [fetchAllMetrics]);
+
+//     const refetch = useCallback(() => {
+//         fetchAllMetrics();
+//     }, [fetchAllMetrics]);
+
+//     return {
+//         metrics,
+//         loading: loading || authLoading,
+//         error,
+//         refetch,
+//         hasAccess: currentUser && hasPermission('read_tests'),
+//         canModify: currentUser && hasPermission('write_tests'),
+//         isAdmin: currentUser && hasRole('admin')
+//     };
+// };
+
+// TODO: Uncomment when test cases feature is implemented
+// export const useTestCaseMetrics = (filters = {}) => {
+//     const { metrics, loading, error, refetch, hasAccess, canModify, isAdmin } = useQAMetrics(filters);
+    
+//     return {
+//         metrics: metrics?.testCases || null,
+//         loading,
+//         error,
+//         refetch,
+//         hasAccess,
+//         canModify,
+//         isAdmin
+//     };
+// };
+
+// TODO: Uncomment when recordings feature is implemented
+// export const useRecordingMetrics = (filters = {}) => {
+//     const { metrics, loading, error, refetch, hasAccess, canModify, isAdmin } = useQAMetrics(filters);
+    
+//     return {
+//         metrics: metrics?.recordings || null,
+//         loading,
+//         error,
+//         refetch,
+//         hasAccess,
+//         canModify,
+//         isAdmin
+//     };
+// };

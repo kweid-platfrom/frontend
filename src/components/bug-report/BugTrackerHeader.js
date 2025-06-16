@@ -6,7 +6,6 @@ const BugTrackerHeader = ({
     bugs,
     showFilters,
     setShowFilters,
-    getActiveFilterCount,
     clearFilters,
     groupBy,
     setGroupBy,
@@ -99,15 +98,13 @@ const BugTrackerHeader = ({
                     </button>
                 </div>
 
-                {/* Filter Controls */}
-                {getActiveFilterCount() > 0 && (
-                    <button
-                        onClick={clearFilters}
-                        className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
-                    >
-                        Clear filters
-                    </button>
-                )}
+                {/* Filter Controls - Simplified without filter count */}
+                <button
+                    onClick={clearFilters}
+                    className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+                >
+                    Clear filters
+                </button>
                 <button
                     onClick={() => setShowFilters(!showFilters)}
                     className={`flex items-center px-3 py-2 rounded-lg border transition-colors ${showFilters
@@ -117,11 +114,6 @@ const BugTrackerHeader = ({
                 >
                     <Filter className="h-4 w-4 mr-2" />
                     Filters
-                    {getActiveFilterCount() > 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 bg-white text-[#00897B] rounded-full text-xs font-medium">
-                            {getActiveFilterCount()}
-                        </span>
-                    )}
                 </button>
             </div>
         </div>
