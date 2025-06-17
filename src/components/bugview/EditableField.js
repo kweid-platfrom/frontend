@@ -1,6 +1,6 @@
 // components/EditableField.js
 import React from "react";
-import { Edit, Save, X } from "lucide-react";
+import { Edit, Check, X } from "lucide-react";
 
 const EditableField = ({ 
     field, 
@@ -61,7 +61,7 @@ const EditableField = ({
                                     disabled={loading}
                                     className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded disabled:opacity-50 transition-colors"
                                 >
-                                    <Save className="h-4 w-4" />
+                                    <Check className="h-4 w-4" />
                                 </button>
                                 <button
                                     onClick={onCancel}

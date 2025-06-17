@@ -404,7 +404,7 @@ const BugList = ({
                     <div className="flex items-center space-x-2">
                         <input 
                             type="checkbox" 
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                             onChange={toggleSelectAll}
                             checked={selectedBugs.length === bugs.length && bugs.length > 0}
                             indeterminate={selectedBugs.length > 0 && selectedBugs.length < bugs.length}
@@ -414,7 +414,7 @@ const BugList = ({
                         </span>
                     </div>
                     {selectedBugs.length > 0 && (
-                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                        <span className="px-3 py-1 bg-blue-100 text-teal-700 rounded-full text-sm font-medium">
                             {selectedBugs.length} selected
                         </span>
                     )}
@@ -432,7 +432,7 @@ const BugList = ({
                     <div 
                         key={group.id} 
                         className={`border rounded-lg overflow-hidden shadow-sm transition-all ${
-                            isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
+                            isDragOver ? 'border-teal-500 bg-teal-50' : 'border-gray-200 bg-white'
                         }`}
                         onDragOver={(e) => handleDragOver(e, group.id)}
                         onDragLeave={handleDragLeave}
@@ -449,7 +449,7 @@ const BugList = ({
                                         type="checkbox"
                                         checked={allGroupSelected}
                                         onChange={() => toggleGroupSelection(group)}
-                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                                     />
                                 </div>
 
@@ -472,7 +472,7 @@ const BugList = ({
                                             {group.count} {group.count === 1 ? 'bug' : 'bugs'}
                                         </span>
                                         {isGroupSelected && (
-                                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                                            <span className="px-2 py-1 bg-blue-100 text-teal-700 rounded-full text-xs font-medium">
                                                 {selectedBugs.filter(id => group.bugs.find(bug => bug.id === id)).length} selected
                                             </span>
                                         )}
@@ -614,7 +614,7 @@ const BugCard = ({
     return (
         <div
             className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                selectedBug?.id === bug.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                selectedBug?.id === bug.id ? 'bg-blue-50 border-l-4 border-teal-500' : ''
             } ${selectedBugs.includes(bug.id) ? 'bg-blue-25' : ''}`}
             onClick={() => onBugSelect(bug)}
             draggable
@@ -628,7 +628,7 @@ const BugCard = ({
                         e.stopPropagation();
                         toggleBugSelection(bug.id);
                     }}
-                    className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="mt-1 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                 />
                 
                 <div className="flex-grow min-w-0">

@@ -74,6 +74,31 @@ const BugTracker = () => {
         searchTerm: ""
     });
 
+    const formatDate = (timestamp) => {
+        if (!timestamp) return 'N/A';
+
+        try {
+            let date;
+            if (timestamp?.toDate) {
+                date = timestamp.toDate();
+            } else if (timestamp instanceof Date) {
+                date = timestamp;
+            } else {
+                date = new Date(timestamp);
+            }
+
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (error) {
+            return 'Invalid Date';
+        }
+    };
+
     // Use ref to track if metrics are being calculated to prevent loops
     const calculatingMetrics = useRef(false);
 
@@ -834,51 +859,56 @@ const BugTracker = () => {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <BugTrackerHeader
-                bugs={bugs}
-                filteredBugs={filteredBugs}
-                selectedBugs={selectedBugs}
-                showFilters={showFilters}
-                setShowFilters={setShowFilters}
-                showMetrics={showMetrics}
-                setShowMetrics={setShowMetrics}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
-                onBulkStatusUpdate={handleBulkStatusUpdate}
-                onBulkAssignment={handleBulkAssignment}
-                teamMembers={teamMembers}
-            />
-
-            {/* Metrics Panel */}
-            {showMetrics && (
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <BugTrackingMetrics
-                        metrics={currentMetrics}
-                        metricsWithTrends={metricsWithTrends}
-                        bugs={bugs}
-                        filteredBugs={filteredBugs}
-                    />
-                </div>
-            )}
-
-            {/* Filters */}
-            {showFilters && (
-                <BugFilters
-                    filters={filters}
-                    setFilters={setFilters}
-                    teamMembers={teamMembers}
-                    sprints={sprints}
-                    environments={environments}
+        <div className="h-screen flex flex-col overflow-hidden">
+            {/* Sticky Header */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 flex-shrink-0">
+                <BugTrackerHeader
                     bugs={bugs}
+                    filteredBugs={filteredBugs}
+                    selectedBugs={selectedBugs}
+                    showFilters={showFilters}
+                    setShowFilters={setShowFilters}
+                    showMetrics={showMetrics}
+                    setShowMetrics={setShowMetrics}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    onBulkStatusUpdate={handleBulkStatusUpdate}
+                    onBulkAssignment={handleBulkAssignment}
+                    teamMembers={teamMembers}
                 />
-            )}
 
-            {/* Main Content */}
-            <div className="flex gap-6">
-                {/* Bug List/Table */}
-                <div className={showDetailsPanel ? "flex-1" : "w-full"}>
+
+                {/* Metrics Panel - part of sticky header */}
+                {showMetrics && (
+                    <div className="bg-white border-b border-gray-200 p-6 flex-shrink-0">
+                        <BugTrackingMetrics
+                            metrics={currentMetrics}
+                            metricsWithTrends={metricsWithTrends}
+                            bugs={bugs}
+                            filteredBugs={filteredBugs}
+                        />
+                    </div>
+                )}
+
+                {/* Filters - part of sticky header */}
+                {showFilters && (
+                    <div className="bg-white border-b border-gray-200 flex-shrink-0">
+                        <BugFilters
+                            filters={filters}
+                            setFilters={setFilters}
+                            teamMembers={teamMembers}
+                            sprints={sprints}
+                            environments={environments}
+                            bugs={bugs}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* Main Content Area - scrollable */}
+            <div className="flex-1 flex gap-6 overflow-hidden pt-6">
+                {/* Bug List/Table - scrollable container */}
+                <div className={`${showDetailsPanel ? "flex-1" : "w-auto"} overflow-auto bg-white rounded-lg border border-gray-200`}>
                     {viewMode === 'table' ? (
                         <BugTable
                             bugs={filteredBugs}
@@ -888,10 +918,11 @@ const BugTracker = () => {
                             onToggleGroupSelection={toggleGroupSelection}
                             allGroupSelected={allGroupSelected}
                             isGroupSelected={isGroupSelected}
-                            onUpdateStatus={updateBugStatus}
-                            onUpdateSeverity={updateBugSeverity}
-                            onUpdateAssignment={updateBugAssignment}
-                            onUpdateEnvironment={updateBugEnvironment}
+                            // Fix: Update these prop names to match what BugTable expects
+                            onUpdateBugStatus={updateBugStatus}       
+                            onUpdateBugSeverity={updateBugSeverity}
+                            onUpdateBugAssignment={updateBugAssignment}
+                            onUpdateBugEnvironment={updateBugEnvironment} 
                             onDragStart={handleDragStart}
                             teamMembers={teamMembers}
                             environments={environments}
@@ -903,6 +934,7 @@ const BugTracker = () => {
                             selectedBug={selectedBug}
                             onBugSelect={handleBugSelect}
                             onUpdateBug={updateBug}
+                            // Keep these as they are for BugList (assuming they work)
                             onUpdateStatus={updateBugStatus}
                             onUpdateSeverity={updateBugSeverity}
                             onUpdateAssignment={updateBugAssignment}
@@ -915,9 +947,9 @@ const BugTracker = () => {
                     )}
                 </div>
 
-                {/* Details Panel */}
+                {/* Details Panel - overlay on right side */}
                 {showDetailsPanel && selectedBug && (
-                    <div className="w-96 flex-shrink-0">
+                    <div className="absolute top-0 right-0 w-auto h-full bg-white rounded border border-gray-200 shadow-xl z-50 overflow-x-auto">
                         <BugDetailsPanel
                             bug={selectedBug}
                             onClose={() => setShowDetailsPanel(false)}
@@ -929,6 +961,7 @@ const BugTracker = () => {
                             environments={environments}
                             sprints={sprints}
                             onCreateSprint={createSprint}
+                            formatDate={formatDate}
                         />
                     </div>
                 )}

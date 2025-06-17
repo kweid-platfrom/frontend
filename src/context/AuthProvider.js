@@ -1,3 +1,4 @@
+// Fixed AuthProvider with improved permission handling
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
@@ -31,6 +32,80 @@ export const useAuth = () => {
         throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
+};
+
+// Helper function to determine user permissions based on role and user data
+const determineUserPermissions = (userData, isAdmin) => {
+    const basePermissions = {
+        isAdmin: isAdmin,
+        roles: userData.role || ['member'],
+        capabilities: []
+    };
+
+    // Set capabilities based on role
+    if (isAdmin) {
+        basePermissions.capabilities = [
+            "read_tests", 
+            "write_tests", 
+            "admin", 
+            "manage_projects", 
+            "manage_users",
+            "manage_organizations",
+            "view_analytics",
+            "manage_bugs",
+            "assign_bugs"
+        ];
+    } else {
+        // Base capabilities for all users
+        basePermissions.capabilities = ["read_tests"];
+        
+        // Add capabilities based on specific roles
+        const userRoles = userData.role || ['member'];
+        
+        if (userRoles.includes('developer') || userRoles.includes('tester')) {
+            basePermissions.capabilities.push("write_tests", "manage_bugs");
+        }
+        
+        if (userRoles.includes('project_manager') || userRoles.includes('lead')) {
+            basePermissions.capabilities.push(
+                "write_tests", 
+                "manage_bugs", 
+                "assign_bugs", 
+                "manage_projects",
+                "view_analytics"
+            );
+        }
+        
+        if (userRoles.includes('organization_admin')) {
+            basePermissions.capabilities.push(
+                "write_tests", 
+                "manage_bugs", 
+                "assign_bugs", 
+                "manage_projects",
+                "manage_users",
+                "view_analytics"
+            );
+        }
+    }
+
+    // Merge with any custom permissions from user data
+    if (userData.permissions) {
+        basePermissions.capabilities = [
+            ...new Set([...basePermissions.capabilities, ...(userData.permissions.capabilities || [])])
+        ];
+        
+        // Override admin status if explicitly set
+        if (userData.permissions.isAdmin !== undefined) {
+            basePermissions.isAdmin = userData.permissions.isAdmin;
+        }
+    }
+
+    // Ensure user always has basic read permissions
+    if (!basePermissions.capabilities.includes("read_tests")) {
+        basePermissions.capabilities.unshift("read_tests");
+    }
+
+    return basePermissions;
 };
 
 export const AuthProvider = ({ children }) => {
@@ -87,25 +162,48 @@ export const AuthProvider = ({ children }) => {
             if (result.error) {
                 console.error('User creation/fetch failed:', result.error);
                 setAuthError(result.error);
+                
+                // Set minimal fallback permissions even on error
+                setUserPermissions({
+                    isAdmin: false,
+                    roles: ["member"],
+                    capabilities: ["read_tests"]
+                });
+                setUserProfile({});
                 return;
             }
 
             if (!result.userData) {
                 console.error('No user data available');
                 setAuthError('Failed to load user data');
+                
+                // Set minimal fallback permissions
+                setUserPermissions({
+                    isAdmin: false,
+                    roles: ["member"],
+                    capabilities: ["read_tests"]
+                });
+                setUserProfile({});
                 return;
             }
 
-            // Set permissions based on user role
+            // Determine if user is admin
             const userRole = result.userData.role || ['member'];
-            const isAdmin = userRole.includes('admin');
+            const isAdmin = userRole.includes('admin') || 
+                           userRole.includes('super_admin') || 
+                           result.userData.isAdmin === true;
 
-            setUserPermissions({
-                isAdmin: isAdmin,
-                roles: userRole,
-                capabilities: isAdmin ? ["read_tests", "write_tests", "admin"] : ["read_tests"],
-                ...result.userData.permissions
+            // Set comprehensive permissions
+            const permissions = determineUserPermissions(result.userData, isAdmin);
+            
+            console.log('Setting user permissions:', {
+                userData: result.userData,
+                calculatedPermissions: permissions,
+                userRoles: userRole,
+                isAdmin
             });
+
+            setUserPermissions(permissions);
             setUserProfile(result.userData);
 
             // Handle routing based on user state
@@ -139,9 +237,9 @@ export const AuthProvider = ({ children }) => {
                 const needsOnboarding = !isNewUser && (
                     result.needsSetup ||
                     !result.userData.setupCompleted ||
-                    result.userData.setupStep !== 'completed' ||  // Add this check
+                    result.userData.setupStep !== 'completed' ||
                     !result.userData.onboardingStatus?.onboardingComplete ||
-                    !result.userData.onboardingStatus?.projectCreated  // Add this check
+                    !result.userData.onboardingStatus?.projectCreated
                 );
 
                 console.log('Onboarding check:', {
@@ -149,9 +247,9 @@ export const AuthProvider = ({ children }) => {
                     isNewUser: result.isNewUser,
                     needsSetup: result.needsSetup,
                     setupCompleted: result.userData.setupCompleted,
-                    setupStep: result.userData.setupStep,  // Add this to logging
+                    setupStep: result.userData.setupStep,
                     onboardingComplete: result.userData.onboardingStatus?.onboardingComplete,
-                    projectCreated: result.userData.onboardingStatus?.projectCreated,  // Add this to logging
+                    projectCreated: result.userData.onboardingStatus?.projectCreated,
                     currentPath
                 });
 
@@ -183,11 +281,11 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
             console.error("Error processing authentication:", error);
 
-            // Set basic fallback permissions
+            // Set fallback permissions with more capabilities for error recovery
             setUserPermissions({
                 isAdmin: false,
                 roles: ["member"],
-                capabilities: ["read_tests"]
+                capabilities: ["read_tests", "manage_bugs"] // Give basic bug management on error
             });
             setUserProfile({});
             setAuthError(error.message);
@@ -340,15 +438,47 @@ export const AuthProvider = ({ children }) => {
     };
 
     const hasPermission = useCallback((capability) => {
-        if (!userPermissions) return false;
-        if (userPermissions.isAdmin) return true;
-        return userPermissions.capabilities?.includes(capability) || false;
+        if (!userPermissions) {
+            console.log('No user permissions available for capability check:', capability);
+            return false;
+        }
+        
+        if (userPermissions.isAdmin) {
+            console.log('User is admin, granting permission for:', capability);
+            return true;
+        }
+        
+        const hasCapability = userPermissions.capabilities?.includes(capability) || false;
+        console.log('Permission check result:', {
+            capability,
+            hasCapability,
+            userCapabilities: userPermissions.capabilities,
+            isAdmin: userPermissions.isAdmin
+        });
+        
+        return hasCapability;
     }, [userPermissions]);
 
     const hasRole = useCallback((role) => {
-        if (!userPermissions) return false;
-        if (userPermissions.isAdmin) return true;
-        return userPermissions.roles?.includes(role) || false;
+        if (!userPermissions) {
+            console.log('No user permissions available for role check:', role);
+            return false;
+        }
+        
+        if (userPermissions.isAdmin) {
+            console.log('User is admin, granting role:', role);
+            return true;
+        }
+        
+        const hasUserRole = userPermissions.roles?.includes(role) || false;
+        console.log('Role check result:', {
+            role,
+            hasUserRole,
+            userRoles: userPermissions.roles,
+            isAdmin: userPermissions.isAdmin
+        });
+        
+        return hasUserRole;
     }, [userPermissions]);
 
     const refreshUserData = useCallback(async () => {
@@ -360,14 +490,13 @@ export const AuthProvider = ({ children }) => {
 
             if (userData) {
                 const userRole = userData.role || ['member'];
-                const isAdmin = userRole.includes('admin');
+                const isAdmin = userRole.includes('admin') || 
+                               userRole.includes('super_admin') || 
+                               userData.isAdmin === true;
 
-                setUserPermissions({
-                    isAdmin: isAdmin,
-                    roles: userRole,
-                    capabilities: isAdmin ? ["read_tests", "write_tests", "admin"] : ["read_tests"],
-                    ...userData.permissions
-                });
+                const permissions = determineUserPermissions(userData, isAdmin);
+                
+                setUserPermissions(permissions);
                 setUserProfile(userData);
                 return true;
             }
@@ -455,7 +584,7 @@ export const AuthProvider = ({ children }) => {
         createUserIfNotExists,
         completeUserSetup,
         markEmailVerified,
-        redirectToEmailVerification // Add this for manual redirect control
+        redirectToEmailVerification
     };
 
     return (

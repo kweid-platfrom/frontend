@@ -25,6 +25,39 @@ const BugItemDetails = ({
     const [editingField, setEditingField] = useState(null);
     const [tempValues, setTempValues] = useState({});
 
+    // Default formatDate function if not provided
+    const defaultFormatDate = (timestamp) => {
+        if (!timestamp) return 'N/A';
+        
+        try {
+            let date;
+            if (timestamp?.toDate) {
+                // Firestore Timestamp
+                date = timestamp.toDate();
+            } else if (timestamp instanceof Date) {
+                date = timestamp;
+            } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+                date = new Date(timestamp);
+            } else {
+                return 'Invalid Date';
+            }
+            
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'Invalid Date';
+        }
+    };
+
+    // Use provided formatDate or fallback to default
+    const safeFormatDate = formatDate && typeof formatDate === 'function' ? formatDate : defaultFormatDate;
+
     // Listen for real-time updates to this specific bug
     useEffect(() => {
         const bugRef = doc(db, "bugs", bug.id);
@@ -179,7 +212,7 @@ const BugItemDetails = ({
                             Bug #{editedBug.id?.slice(-6)}
                         </p>
                         <div className="flex items-center space-x-4 text-xs text-gray-500">
-                            <span>Created: {formatDate(editedBug.createdAt)}</span>
+                            <span>Created: {safeFormatDate(editedBug.createdAt)}</span>
                             <span>•</span>
                             <span>Reporter: {editedBug.reporter}</span>
                         </div>
@@ -341,7 +374,7 @@ const BugItemDetails = ({
 
                     {/* Activity Log */}
                     {editedBug.activityLog && editedBug.activityLog.length > 0 && (
-                        <ActivityLog activities={editedBug.activityLog} formatDate={formatDate} />
+                        <ActivityLog activities={editedBug.activityLog} formatDate={safeFormatDate} />
                     )}
 
                     {/* Comments Section */}
@@ -351,7 +384,7 @@ const BugItemDetails = ({
                             comments={comments}
                             onAddComment={handleAddComment}
                             loading={loading}
-                            formatDate={formatDate}
+                            formatDate={safeFormatDate}
                             teamMembers={teamMembers}
                         />
                     </div>

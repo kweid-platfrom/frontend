@@ -1,37 +1,8 @@
-import React from 'react';
-import {
-    GripVertical,
-    Paperclip,
-    Video,
-    Terminal,
-    Network,
-    User,
-    Calendar,
-    AlertTriangle,
-    Clock,
-    Tag,
-    MessageSquare,
-    Monitor,
-    Globe
-} from 'lucide-react';
+import React, { useState } from 'react';
+import BugTableRow from './BugTableRow'; // Adjust import path as needed
 
 // Import utility functions
 import {
-    getStatusColor,
-    getSeverityColor,
-    getPriorityColor,
-    getEnvironmentColor,
-    getFrequencyColor,
-    getSourceColor,
-    getPriorityFromSeverity,
-    isPastDue,
-    formatDate,
-    getTeamMemberName,
-    getAssignedUser,
-    getEvidenceCount,
-    getShortBugId,
-    VALID_BUG_STATUSES,
-    VALID_BUG_SEVERITIES,
     VALID_ENVIRONMENTS // Add this to your utils if not already there
 } from '../../utils/bugUtils';
 
@@ -43,473 +14,442 @@ const BugTable = ({
     selectedBugs,
     onBugSelect,
     selectedBug,
-    onToggleSelection, // Fixed prop name
-    onToggleGroupSelection, // Fixed prop name
+    onToggleSelection,
+    onToggleGroupSelection,
     allGroupSelected,
     isGroupSelected,
-    onDragStart, // Fixed prop name
-    onUpdateBugStatus, // Fixed prop name
-    onUpdateBugSeverity, // Fixed prop name
-    onUpdateBugAssignment, // Fixed prop name
-    onUpdateBugEnvironment, // New prop for environment updates
+    onDragStart,
+    onUpdateBugStatus,
+    onUpdateBugSeverity,
+    onUpdateBugAssignment,
+    onUpdateBugEnvironment,
+    onUpdateBugTitle,
+    onShowBugDetails,
+    onAddNewBug,
     teamMembers = [],
-    environments = VALID_ENVIRONMENTS || DEFAULT_ENVIRONMENTS, // New prop for environment options
-    isUpdating = new Set() // Track updating bugs
+    environments = VALID_ENVIRONMENTS || DEFAULT_ENVIRONMENTS,
+    isUpdating = new Set()
 }) => {
+    const [editingTitle, setEditingTitle] = useState(null);
+    const [titleValue, setTitleValue] = useState('');
+    const [showNewRow, setShowNewRow] = useState(false);
+    const [newBugData, setNewBugData] = useState({
+        title: '',
+        status: 'New',
+        severity: 'Low',
+        assignedTo: '',
+        environment: 'Unknown'
+    });
+    const [isCreatingBug, setIsCreatingBug] = useState(false);
 
-    const getSourceIcon = (source) => {
-        switch (source) {
-            case 'manual':
-                return <User className="h-3 w-3" />;
-            case 'automated':
-                return <Terminal className="h-3 w-3" />;
-            default:
-                return <Globe className="h-3 w-3" />;
+    const handleTitleEdit = (bugId, currentTitle) => {
+        setEditingTitle(bugId);
+        setTitleValue(currentTitle);
+    };
+
+    const handleTitleSave = async (bugId) => {
+        if (onUpdateBugTitle && titleValue.trim()) {
+            try {
+                await onUpdateBugTitle(bugId, titleValue.trim());
+            } catch (error) {
+                console.error('Failed to update title:', error);
+            }
+        }
+        setEditingTitle(null);
+        setTitleValue('');
+    };
+
+    const handleTitleCancel = () => {
+        setEditingTitle(null);
+        setTitleValue('');
+    };
+
+    const handleTitleKeyDown = (e, bugId) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleTitleSave(bugId);
+        } else if (e.key === 'Escape') {
+            handleTitleCancel();
         }
     };
 
-    const handleSeverityChange = async (bugId, newSeverity, event) => {
-        event.stopPropagation();
+    const handleTitleChange = (value) => {
+        setTitleValue(value);
+    };
 
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
+    const handleShowNewRow = () => {
+        setShowNewRow(true);
+        setNewBugData({
+            title: '',
+            status: 'New',
+            severity: 'Low',
+            assignedTo: '',
+            environment: 'Unknown'
+        });
+    };
 
-        console.log(`[DEBUG] Severity change requested for bug ${bugId}: ${newSeverity}`);
-
-        if (onUpdateBugSeverity) {
+    const handleCreateBug = async () => {
+        if (onAddNewBug && newBugData.title.trim()) {
+            setIsCreatingBug(true);
             try {
-                await onUpdateBugSeverity(bugId, newSeverity);
+                await onAddNewBug(newBugData);
+                setShowNewRow(false);
+                setNewBugData({
+                    title: '',
+                    status: 'New',
+                    severity: 'Low',
+                    assignedTo: '',
+                    environment: 'Unknown'
+                });
             } catch (error) {
-                console.error('Failed to update severity:', error);
+                console.error('Failed to create bug:', error);
+            } finally {
+                setIsCreatingBug(false);
             }
         }
     };
 
-    const handleStatusChange = async (bugId, newStatus, event) => {
-        event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
-        console.log(`[DEBUG] Status change requested for bug ${bugId}: ${newStatus}`);
-
-        if (onUpdateBugStatus) {
-            try {
-                await onUpdateBugStatus(bugId, newStatus);
-                console.log(`[DEBUG] Status update completed for bug ${bugId}`);
-            } catch (error) {
-                console.error('Failed to update status:', error);
-            }
-        } else {
-            console.warn('[DEBUG] onUpdateBugStatus callback not provided');
-        }
+    const handleCancelNewBug = () => {
+        setShowNewRow(false);
+        setNewBugData({
+            title: '',
+            status: 'New',
+            severity: 'Low',
+            assignedTo: '',
+            environment: 'Unknown'
+        });
     };
 
-    const handleAssignmentChange = async (bugId, newAssignee, event) => {
-        event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
-        console.log(`[DEBUG] Assignment change requested for bug ${bugId}: ${newAssignee}`);
-
-        if (onUpdateBugAssignment) {
-            try {
-                await onUpdateBugAssignment(bugId, newAssignee);
-            } catch (error) {
-                console.error('Failed to update assignment:', error);
-            }
-        }
+    const handleNewBugChange = (field, value) => {
+        setNewBugData(prev => ({
+            ...prev,
+            [field]: value
+        }));
     };
 
-    const handleEnvironmentChange = async (bugId, newEnvironment, event) => {
-        event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
-        console.log(`[DEBUG] Environment change requested for bug ${bugId}: ${newEnvironment}`);
-
-        if (onUpdateBugEnvironment) {
-            try {
-                await onUpdateBugEnvironment(bugId, newEnvironment);
-            } catch (error) {
-                console.error('Failed to update environment:', error);
-            }
+    const handleNewBugKeyDown = (e) => {
+        if (e.key === 'Enter' && newBugData.title.trim()) {
+            e.preventDefault();
+            handleCreateBug();
+        } else if (e.key === 'Escape') {
+            handleCancelNewBug();
         }
     };
-
-    // Fixed row height to ensure alignment
-    const ROW_HEIGHT = 'h-16';
 
     return (
-        <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
-            {/* Fixed Left Columns */}
-            <div className="flex-shrink-0 border-r border-gray-200">
-                <table className="divide-y divide-gray-200">
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
-                        <tr className="h-12">
-                            <th scope="col" className="w-10 p-3">
-                                {onToggleGroupSelection && (
-                                    <input
-                                        type="checkbox"
-                                        className="rounded border-gray-300 text-[#00897B] focus:ring-[#00897B]"
-                                        onChange={onToggleGroupSelection}
-                                        checked={allGroupSelected}
-                                        ref={(input) => {
-                                            if (input) input.indeterminate = isGroupSelected && !allGroupSelected;
-                                        }}
-                                    />
-                                )}
+                        <tr className="h-10">
+                            <th scope="col" className="w-10 px-2 py-4 border-r border-gray-200">
+                                <div className="flex items-center justify-center h-full">
+                                    {onToggleGroupSelection && (
+                                        <input
+                                            type="checkbox"
+                                            className="rounded border-gray-300 text-[#00897B] focus:ring-[#00897B]"
+                                            onChange={onToggleGroupSelection}
+                                            checked={allGroupSelected}
+                                            ref={(input) => {
+                                                if (input) input.indeterminate = isGroupSelected && !allGroupSelected;
+                                            }}
+                                        />
+                                    )}
+                                </div>
                             </th>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-[300px] min-w-[300px] max-w-[300px]">
-                                Bug Details
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200">
+                                <div className="flex items-center h-full">
+                                    Bug Title
+                                </div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full">Bug ID</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full">Tags</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap ">
+                                <div className="flex items-center h-full w-20">Status</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full w-28">Assigned To</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-20">
+                                <div className="flex items-center h-full w-20">Priority</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full w-20">Severity</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full w-auto">Evidence</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full">Reporter</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full">Source</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28">
+                                <div className="flex items-center h-full w-28">Environment</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-32">
+                                <div className="flex items-center h-full">Device/Browser</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28">
+                                <div className="flex items-center h-full">Due Date</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-24">
+                                <div className="flex items-center h-full">Created</div>
+                            </th>
+                            <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-24">
+                                <div className="flex items-center h-full">Frequency</div>
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-8">
+                                <div className="flex items-center h-full">
+                                    <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                                    </svg>
+                                </div>
                             </th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {bugs.map((bug) => (
-                            <tr
-                                key={`bug-${bug.id}`}
-                                className={`${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${selectedBug?.id === bug.id ? 'bg-blue-50' : ''
-                                    } ${selectedBugs.includes(bug.id) ? 'bg-blue-50' : ''}`}
-                                draggable
-                                onDragStart={(e) => onDragStart && onDragStart(e, bug)}
-                            >
-                                <td className="p-3 align-top">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedBugs.includes(bug.id)}
-                                        onChange={(e) => {
-                                            e.stopPropagation();
-                                            onToggleSelection(bug.id);
-                                        }}
-                                        className="rounded border-gray-300 text-[#00897B] focus:ring-[#00897B]"
+                        {bugs && bugs.length > 0 ? (
+                            <>
+                                {bugs.map((bug) => (
+                                    <BugTableRow
+                                        key={bug.id}
+                                        bug={bug}
+                                        selectedBugs={selectedBugs}
+                                        selectedBug={selectedBug}
+                                        onToggleSelection={onToggleSelection}
+                                        onBugSelect={onBugSelect}
+                                        onDragStart={onDragStart}
+                                        onUpdateBugStatus={onUpdateBugStatus}
+                                        onUpdateBugSeverity={onUpdateBugSeverity}
+                                        onUpdateBugAssignment={onUpdateBugAssignment}
+                                        onUpdateBugEnvironment={onUpdateBugEnvironment}
+                                        onUpdateBugTitle={onUpdateBugTitle}
+                                        onShowBugDetails={onShowBugDetails}
+                                        teamMembers={teamMembers}
+                                        environments={environments}
+                                        isUpdating={isUpdating}
+                                        editingTitle={editingTitle}
+                                        titleValue={titleValue}
+                                        onTitleEdit={handleTitleEdit}
+                                        onTitleSave={handleTitleSave}
+                                        onTitleCancel={handleTitleCancel}
+                                        onTitleChange={handleTitleChange}
+                                        onTitleKeyDown={handleTitleKeyDown}
                                     />
-                                </td>
-
-                                {/* Bug Details */}
-                                <td
-                                    className="px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] cursor-pointer hover:bg-blue-50"
-                                    onClick={() => onBugSelect(bug)}
-                                >
-                                    <div className="flex flex-col justify-center h-full space-y-2">
-                                        <div className="font-medium text-gray-900 truncate text-sm leading-tight">
-                                            {bug.title}
-                                        </div>
-
-                                        {/* Comments count */}
-                                        {bug.comments && bug.comments.length > 0 && (
-                                            <div className="flex items-center text-xs text-gray-400">
-                                                <MessageSquare className="h-3 w-3 mr-1 flex-shrink-0" />
-                                                <span className="flex-shrink-0">{bug.comments.length} comment{bug.comments.length !== 1 ? 's' : ''}</span>
+                                ))}
+                                {/* New Row for adding bugs - Custom implementation */}
+                                {showNewRow ? (
+                                    <tr className="bg-blue-50 border-l-4 border-[#00897B]">
+                                        {/* Checkbox column */}
+                                        <td className="w-10 px-2 py-4 border-r border-gray-200">
+                                            <div className="flex items-center justify-center h-full">
+                                                <button
+                                                    onClick={handleCreateBug}
+                                                    disabled={!newBugData.title.trim() || isCreatingBug}
+                                                    className="flex items-center justify-center w-6 h-6 rounded-full bg-[#00897B] text-white hover:bg-[#00796B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    title="Save new bug"
+                                                >
+                                                    {isCreatingBug ? (
+                                                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                    ) : (
+                                                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </button>
                                             </div>
+                                        </td>
+                                        
+                                        {/* Bug Title column */}
+                                        <td className="px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200">
+                                            <input
+                                                type="text"
+                                                value={newBugData.title}
+                                                onChange={(e) => handleNewBugChange('title', e.target.value)}
+                                                onKeyDown={handleNewBugKeyDown}
+                                                placeholder="Enter bug title..."
+                                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#00897B] focus:border-transparent"
+                                                autoFocus
+                                            />
+                                        </td>
+                                        
+                                        {/* Bug ID - will be generated */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            Auto-generated
+                                        </td>
+                                        
+                                        {/* Tags */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Status */}
+                                        <td className="px-4 py-3 border-r border-gray-200">
+                                            <select
+                                                value={newBugData.status}
+                                                onChange={(e) => handleNewBugChange('status', e.target.value)}
+                                                className="text-xs px-2 py-1 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#00897B]"
+                                            >
+                                                <option value="New">New</option>
+                                                <option value="Open">Open</option>
+                                                <option value="In Progress">In Progress</option>
+                                                <option value="Fixed">Fixed</option>
+                                                <option value="Closed">Closed</option>
+                                            </select>
+                                        </td>
+                                        
+                                        {/* Assigned To */}
+                                        <td className="px-4 py-3 border-r border-gray-200">
+                                            <select
+                                                value={newBugData.assignedTo}
+                                                onChange={(e) => handleNewBugChange('assignedTo', e.target.value)}
+                                                className="text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#00897B] max-w-28"
+                                            >
+                                                <option value="">Unassigned</option>
+                                                {teamMembers.map((member) => (
+                                                    <option key={member.id || member} value={member.name || member}>
+                                                        {member.name || member}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                        
+                                        {/* Priority */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Severity */}
+                                        <td className="px-4 py-3 border-r border-gray-200">
+                                            <select
+                                                value={newBugData.severity}
+                                                onChange={(e) => handleNewBugChange('severity', e.target.value)}
+                                                className="text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#00897B]"
+                                            >
+                                                <option value="Low">Low</option>
+                                                <option value="Medium">Medium</option>
+                                                <option value="High">High</option>
+                                                <option value="Critical">Critical</option>
+                                            </select>
+                                        </td>
+                                        
+                                        {/* Evidence */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Reporter */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            Current User
+                                        </td>
+                                        
+                                        {/* Source */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Environment */}
+                                        <td className="px-4 py-3 border-r border-gray-200">
+                                            <select
+                                                value={newBugData.environment}
+                                                onChange={(e) => handleNewBugChange('environment', e.target.value)}
+                                                className="text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#00897B] max-w-28"
+                                            >
+                                                {environments.map((env) => (
+                                                    <option key={env} value={env}>{env}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                        
+                                        {/* Device/Browser */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Due Date */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Created */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            Now
+                                        </td>
+                                        
+                                        {/* Frequency */}
+                                        <td className="px-4 py-3 text-sm text-gray-400 border-r border-gray-200">
+                                            -
+                                        </td>
+                                        
+                                        {/* Actions */}
+                                        <td className="px-4 py-3">
+                                            <button
+                                                onClick={handleCancelNewBug}
+                                                className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-400 text-white hover:bg-gray-500 transition-colors"
+                                                title="Cancel"
+                                            >
+                                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    /* Add New Bug Row - Placeholder */
+                                    <tr className="h-12 bg-gray-50 border-dashed border-2 border-gray-300 opacity-60 hover:opacity-100 transition-opacity">
+                                        <td className="px-2 py-3 w-10">
+                                            <div className="flex items-center justify-center h-full">
+                                                <button
+                                                    onClick={handleShowNewRow}
+                                                    className="flex items-center justify-center w-6 h-6 rounded-full bg-[#00897B] text-white hover:bg-[#00796B] transition-colors"
+                                                    title="Add new bug"
+                                                >
+                                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td colSpan="16" className="px-6 py-3 text-center">
+                                            <span className="text-sm text-gray-400">Click + to add new bug</span>
+                                        </td>
+                                    </tr>
+                                )}
+                            </>
+                        ) : (
+                            <tr>
+                                <td colSpan="17" className="px-6 py-8 text-center">
+                                    <div className="flex flex-col items-center justify-center space-y-3">
+                                        <svg className="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <div className="text-sm text-gray-500">
+                                            No bugs found
+                                        </div>
+                                        {onAddNewBug && (
+                                            <button
+                                                onClick={handleShowNewRow}
+                                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-[#00897B] hover:bg-[#00796B] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00897B] transition-colors"
+                                            >
+                                                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                </svg>
+                                                Add First Bug
+                                            </button>
                                         )}
                                     </div>
                                 </td>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Scrollable Right Columns */}
-            <div className="flex-1 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr className="h-12">
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Bug ID
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Tags
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Priority
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Severity
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Status
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Environment
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Frequency
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Evidence
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Assigned To
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Reporter
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Source
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Device/Browser
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Due Date
-                            </th>
-                            <th scope="col" className="border-r border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                                Created
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-8">
-
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {bugs.map((bug) => {
-                            const totalAttachments = bug.attachments?.length || 0;
-                            const evidenceCount = getEvidenceCount(bug);
-                            const assignedUser = getAssignedUser(bug);
-                            const bugIsUpdating = isUpdating.has(bug.id);
-
-                            // Debug log to check bug status
-                            console.log(`[DEBUG] Bug ${bug.id} status:`, bug.status);
-
-                            return (
-                                <tr
-                                    key={`bug-row-${bug.id}`}
-                                    className={`${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${selectedBug?.id === bug.id ? 'bg-blue-50' : ''
-                                        } ${selectedBugs.includes(bug.id) ? 'bg-blue-50' : ''} ${bugIsUpdating ? 'opacity-60' : ''}`}
-                                >
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                                                #{getShortBugId(bug.id)}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    {/* Tags Column */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            {bug.tags && bug.tags.length > 0 ? (
-                                                <div className="flex items-center gap-1 overflow-hidden max-w-32">
-                                                    {bug.tags.slice(0, 2).map((tag, index) => (
-                                                        <span key={index} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800 flex-shrink-0">
-                                                            <Tag className="h-2 w-2 mr-1" />
-                                                            <span className="truncate max-w-16">{tag}</span>
-                                                        </span>
-                                                    ))}
-                                                    {bug.tags.length > 2 && (
-                                                        <span className="text-xs text-gray-400 flex-shrink-0">+{bug.tags.length - 2}</span>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-gray-400">None</span>
-                                            )}
-                                        </div>
-                                    </td>
-
-                                    {/* Priority Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(getPriorityFromSeverity(bug.severity))}`}>
-                                                {getPriorityFromSeverity(bug.severity)}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    {/* Severity Column - Editable Dropdown */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <select
-                                                value={bug.severity || 'Low'}
-                                                onChange={(e) => handleSeverityChange(bug.id, e.target.value, e)}
-                                                disabled={bugIsUpdating}
-                                                className={`text-xs px-2 py-1 rounded border-none focus:ring-2 focus:ring-[#00897B] cursor-pointer ${getSeverityColor(bug.severity)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                {VALID_BUG_SEVERITIES.map(severity => (
-                                                    <option key={severity} value={severity}>{severity}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </td>
-
-                                    {/* Status Column - Editable Dropdown */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <select
-                                                value={bug.status || 'New'}
-                                                onChange={(e) => {
-                                                    console.log(`[DEBUG] Status dropdown change detected:`, e.target.value);
-                                                    handleStatusChange(bug.id, e.target.value, e);
-                                                }}
-                                                disabled={bugIsUpdating}
-                                                className={`text-xs px-2 py-1 rounded border-none focus:ring-2 focus:ring-[#00897B] cursor-pointer ${getStatusColor(bug.status)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                {VALID_BUG_STATUSES.map(status => (
-                                                    <option key={status} value={status}>{status}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </td>
-
-                                    {/* Environment Column - Editable Dropdown */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <select
-                                                value={bug.environment || 'Unknown'}
-                                                onChange={(e) => handleEnvironmentChange(bug.id, e.target.value, e)}
-                                                disabled={bugIsUpdating}
-                                                className={`text-xs px-2 py-1 rounded border-none focus:ring-2 focus:ring-[#00897B] cursor-pointer ${getEnvironmentColor(bug.environment)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                {environments.map(env => (
-                                                    <option key={env} value={env}>{env}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </td>
-
-                                    {/* Frequency Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <span className={`px-2 py-1 rounded text-xs font-medium ${getFrequencyColor(bug.frequency)}`}>
-                                                {bug.frequency || 'Unknown'}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    {/* Evidence Column */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="flex items-center space-x-1">
-                                                {bug.hasAttachments && totalAttachments > 0 && (
-                                                    <div className="flex items-center bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded text-xs">
-                                                        <Paperclip className="h-3 w-3 mr-1" />
-                                                        {totalAttachments}
-                                                    </div>
-                                                )}
-                                                {bug.hasVideoEvidence && (
-                                                    <div className="bg-purple-100 text-purple-800 p-1 rounded">
-                                                        <Video className="h-3 w-3" />
-                                                    </div>
-                                                )}
-                                                {bug.hasConsoleLogs && (
-                                                    <div className="bg-green-100 text-green-800 p-1 rounded">
-                                                        <Terminal className="h-3 w-3" />
-                                                    </div>
-                                                )}
-                                                {bug.hasNetworkLogs && (
-                                                    <div className="bg-orange-100 text-orange-800 p-1 rounded">
-                                                        <Network className="h-3 w-3" />
-                                                    </div>
-                                                )}
-                                                {evidenceCount === 0 && (
-                                                    <span className="text-xs text-gray-400">None</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Assigned To Column - Editable Dropdown */}
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <select
-                                                value={assignedUser || ''}
-                                                onChange={(e) => handleAssignmentChange(bug.id, e.target.value, e)}
-                                                disabled={bugIsUpdating}
-                                                className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-2 focus:ring-[#00897B] focus:border-[#00897B] max-w-32 cursor-pointer bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <option value="">Unassigned</option>
-                                                {teamMembers.map((member) => (
-                                                    <option key={member.id} value={member.email || member.id}>
-                                                        {getTeamMemberName(member.id, teamMembers)}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </td>
-
-                                    {/* Reporter Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="truncate max-w-24" title={bug.reportedByEmail}>
-                                                {bug.reportedByEmail?.split('@')[0] || 'Unknown'}
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Source Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className={`inline-flex items-center px-2 py-1 rounded text-xs ${getSourceColor(bug.source)}`}>
-                                                {getSourceIcon(bug.source)}
-                                                <span className="ml-1 capitalize">{bug.source || 'Unknown'}</span>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Device/Browser Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900 border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="flex items-center">
-                                                <Monitor className="h-3 w-3 mr-1 text-gray-400" />
-                                                <div>
-                                                    <div className="truncate max-w-20">{bug.browserInfo || 'Unknown'}</div>
-                                                    <div className="text-gray-500 truncate max-w-20">{bug.deviceInfo?.split(',')[0] || ''}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Due Date Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            {bug.dueDate ? (
-                                                <div className={`flex items-center ${isPastDue(bug.dueDate) ? 'text-red-600' : 'text-gray-900'}`}>
-                                                    <Calendar className="h-3 w-3 mr-1" />
-                                                    <span className="text-xs">{formatDate(bug.dueDate)}</span>
-                                                    {isPastDue(bug.dueDate) && (
-                                                        <AlertTriangle className="h-3 w-3 ml-1 text-red-500" />
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-gray-400">No due date</span>
-                                            )}
-                                        </div>
-                                    </td>
-
-                                    {/* Created Column - Read Only */}
-                                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500 border-r border-gray-200">
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="flex items-center">
-                                                <Clock className="h-3 w-3 mr-1" />
-                                                {formatDate(bug.createdAt)}
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    {/* Drag Handle */}
-                                    <td className="px-4 py-3 whitespace-nowrap">
-                                        <div className="flex items-center justify-center h-full">
-                                            <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        )}
                     </tbody>
                 </table>
             </div>

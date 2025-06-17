@@ -41,31 +41,26 @@ export const getPriorityColor = (priority) => {
     return priorityColors[priority] || 'bg-gray-100 text-gray-800';
 };
 
-/**
- * Environment color mappings
- */
-export const getEnvironmentColor = (environment) => {
-    const environmentColors = {
-        'production': 'bg-red-100 text-red-800',
-        'staging': 'bg-yellow-100 text-yellow-800',
-        'development': 'bg-green-100 text-green-800',
-        'testing': 'bg-blue-100 text-blue-800'
-    };
-    return environmentColors[environment?.toLowerCase()] || 'bg-gray-100 text-gray-800';
-};
 
 /**
  * Frequency color mappings
  */
 export const getFrequencyColor = (frequency) => {
     const frequencyColors = {
+        'Always': 'bg-red-100 text-red-800',
         'always': 'bg-red-100 text-red-800',
+        'Often': 'bg-orange-100 text-orange-800',
         'often': 'bg-orange-100 text-orange-800',
+        'Sometimes': 'bg-yellow-100 text-yellow-800',
         'sometimes': 'bg-yellow-100 text-yellow-800',
+        'Rarely': 'bg-green-100 text-green-800',
         'rarely': 'bg-green-100 text-green-800',
-        'once': 'bg-gray-100 text-gray-800'
+        'Once': 'bg-gray-100 text-gray-800',
+        'once': 'bg-gray-100 text-gray-800',
+        'Unknown': 'bg-gray-100 text-gray-800',
+        'unknown': 'bg-gray-100 text-gray-800'
     };
-    return frequencyColors[frequency?.toLowerCase()] || 'bg-gray-100 text-gray-800';
+    return frequencyColors[frequency] || 'bg-gray-100 text-gray-800';
 };
 
 /**
@@ -74,7 +69,9 @@ export const getFrequencyColor = (frequency) => {
 export const getSourceColor = (source) => {
     const sourceColors = {
         'manual': 'bg-blue-100 text-blue-800',
-        'automated': 'bg-purple-100 text-purple-800'
+        'Manual': 'bg-blue-100 text-blue-800',
+        'automated': 'bg-purple-100 text-purple-800',
+        'Automated': 'bg-purple-100 text-purple-800'
     };
     return sourceColors[source] || 'bg-gray-100 text-gray-800';
 };
@@ -212,7 +209,7 @@ export const getTeamMemberName = (identifier, teamMembers = []) => {
  * Get assigned user (with fallback logic)
  */
 export const getAssignedUser = (bug) => {
-    return bug.assignedTo || bug.reportedByEmail || bug.createdBy;
+    return bug.assignedTo || bug.reportedByName || bug.createdBy;
 };
 
 /**
@@ -275,14 +272,14 @@ export const VALID_BUG_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 export const VALID_BUG_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
 /**
- * Valid environments
+ * Valid environments - Updated to use capitalized versions for consistency
  */
-export const VALID_ENVIRONMENTS = ['production', 'staging', 'development', 'testing'];
+export const VALID_ENVIRONMENTS = ['Development', 'Staging', 'Production', 'Testing', 'Unknown'];
 
 /**
  * Valid frequencies
  */
-export const VALID_FREQUENCIES = ['always', 'often', 'sometimes', 'rarely', 'once'];
+export const VALID_FREQUENCIES = ['Always', 'Often', 'Sometimes', 'Rarely', 'Once', 'Unknown'];
 
 /**
  * Default form data for bug creation
@@ -298,7 +295,7 @@ export const DEFAULT_BUG_FORM_DATA = {
     hasVideoEvidence: false,
     hasConsoleLogs: false,
     hasNetworkLogs: false,
-    environment: "Production",
+    environment: "Development",
     browserInfo: "",
     deviceInfo: "",
     userAgent: "",
