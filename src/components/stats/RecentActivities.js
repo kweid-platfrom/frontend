@@ -257,7 +257,7 @@ const RecentActivities = ({ maxItems = 15 }) => {
             <div className="max-h-96 overflow-y-auto">
                 {loading ? (
                     <div className="flex items-center justify-center p-8">
-                        <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
+                        <RefreshCw className="w-6 h-6 text-teal-600 animate-spin" />
                         <span className="ml-2 text-gray-600">Loading activities...</span>
                     </div>
                 ) : filteredActivities.length === 0 ? (

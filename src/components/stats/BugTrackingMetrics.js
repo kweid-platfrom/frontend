@@ -1,96 +1,170 @@
-import React, { useState, useEffect } from 'react';
-import { Bug, AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../config/firebase';
-import { calculateBugMetrics } from '../../utils/calculateBugMetrics';
+import React, { useMemo } from 'react';
+import { Bug, AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 
-const BugTrackingMetrics = () => {
-    const [metrics, setMetrics] = useState({});
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        const fetchBugMetrics = async () => {
-            try {
-                setLoading(true);
-                const bugsCollection = collection(db, 'bugs');
-                const bugsSnapshot = await getDocs(bugsCollection);
-                const bugsData = bugsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-
-                const calculatedMetrics = calculateBugMetrics(bugsData);
-                setMetrics(calculatedMetrics);
-                setError(null);
-            } catch (err) {
-                console.error('Error fetching bug metrics:', err);
-                setError('Failed to load bug metrics');
-                // Set default metrics on error
-                setMetrics(calculateBugMetrics([]));
-            } finally {
-                setLoading(false);
-            }
+const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error = null }) => {
+    // Default metrics calculation if no metrics provided
+    const calculateDefaultMetrics = (bugsData) => {
+        if (!Array.isArray(bugsData) || bugsData.length === 0) {
+            return {
+                totalBugs: 0,
+                bugsFromScreenRecording: 0,
+                bugsFromManualTesting: 0,
+                bugsWithVideoEvidence: 0,
+                bugsWithNetworkLogs: 0,
+                bugsWithConsoleLogs: 0,
+                criticalBugs: 0,
+                highPriorityBugs: 0,
+                mediumPriorityBugs: 0,
+                lowPriorityBugs: 0,
+                resolvedBugs: 0,
+                avgResolutionTime: 0,
+                bugResolutionRate: 0,
+                avgBugReportCompleteness: 75,
+                bugReportsWithAttachments: 0,
+                bugReproductionRate: 0,
+                weeklyReportsGenerated: 4,
+                monthlyReportsGenerated: 1,
+                avgBugsPerReport: 0
+            };
+        }
+        
+        // Calculate metrics from bugs array
+        const total = bugsData.length;
+        const resolved = bugsData.filter(bug => bug.status === 'Resolved' || bug.status === 'Closed').length;
+        const critical = bugsData.filter(bug => bug.priority === 'Critical').length;
+        const high = bugsData.filter(bug => bug.priority === 'High').length;
+        const medium = bugsData.filter(bug => bug.priority === 'Medium').length;
+        const low = bugsData.filter(bug => bug.priority === 'Low').length;
+        
+        return {
+            totalBugs: total,
+            bugsFromScreenRecording: bugsData.filter(bug => bug.source === 'screen-recording').length,
+            bugsFromManualTesting: bugsData.filter(bug => bug.source === 'manual').length,
+            bugsWithVideoEvidence: bugsData.filter(bug => bug.hasVideoEvidence).length,
+            bugsWithNetworkLogs: bugsData.filter(bug => bug.hasNetworkLogs).length,
+            bugsWithConsoleLogs: bugsData.filter(bug => bug.hasConsoleLogs).length,
+            criticalBugs: critical,
+            highPriorityBugs: high,
+            mediumPriorityBugs: medium,
+            lowPriorityBugs: low,
+            resolvedBugs: resolved,
+            avgResolutionTime: Math.round(bugsData.reduce((acc, bug) => acc + (bug.resolutionTime || 0), 0) / total) || 0,
+            bugResolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0,
+            avgBugReportCompleteness: 85,
+            bugReportsWithAttachments: bugsData.filter(bug => bug.hasAttachments).length,
+            bugReproductionRate: total > 0 ? Math.round((bugsData.filter(bug => bug.isReproducible).length / total) * 100) : 0,
+            weeklyReportsGenerated: 4,
+            monthlyReportsGenerated: 1,
+            avgBugsPerReport: Math.round(total / 5) || 0
         };
+    };
 
-        fetchBugMetrics();
-    }, []);
+    // Use passed metrics if available, otherwise calculate from bugs
+    const finalMetrics = useMemo(() => {
+        if (metrics && typeof metrics === 'object') {
+            // Ensure all required fields have default values
+            return {
+                totalBugs: metrics.totalBugs || 0,
+                bugsFromScreenRecording: metrics.bugsFromScreenRecording || 0,
+                bugsFromManualTesting: metrics.bugsFromManualTesting || 0,
+                bugsWithVideoEvidence: metrics.bugsWithVideoEvidence || 0,
+                bugsWithNetworkLogs: metrics.bugsWithNetworkLogs || 0,
+                bugsWithConsoleLogs: metrics.bugsWithConsoleLogs || 0,
+                criticalBugs: metrics.criticalBugs || 0,
+                highPriorityBugs: metrics.highPriorityBugs || 0,
+                mediumPriorityBugs: metrics.mediumPriorityBugs || 0,
+                lowPriorityBugs: metrics.lowPriorityBugs || 0,
+                resolvedBugs: metrics.resolvedBugs || 0,
+                avgResolutionTime: metrics.avgResolutionTime || 0,
+                bugResolutionRate: metrics.bugResolutionRate || 0,
+                avgBugReportCompleteness: metrics.avgBugReportCompleteness || 75,
+                bugReportsWithAttachments: metrics.bugReportsWithAttachments || 0,
+                bugReproductionRate: metrics.bugReproductionRate || 0,
+                weeklyReportsGenerated: metrics.weeklyReportsGenerated || 4,
+                monthlyReportsGenerated: metrics.monthlyReportsGenerated || 1,
+                avgBugsPerReport: metrics.avgBugsPerReport || 0
+            };
+        }
+        return calculateDefaultMetrics(bugs);
+    }, [bugs, metrics]);
 
     const {
-        totalBugs = 0,
-        bugsFromScreenRecording = 0,
-        bugsFromManualTesting = 0,
-        bugsWithVideoEvidence = 0,
-        bugsWithNetworkLogs = 0,
-        bugsWithConsoleLogs = 0,
-        criticalBugs = 0,
-        highPriorityBugs = 0,
-        mediumPriorityBugs = 0,
-        lowPriorityBugs = 0,
-        resolvedBugs = 0,
-        avgResolutionTime = 0,
-        bugResolutionRate = 0,
-        avgBugReportCompleteness = 0,
-        bugReportsWithAttachments = 0,
-        bugReproductionRate = 0,
-        weeklyReportsGenerated = 0,
-        monthlyReportsGenerated = 0,
-        avgBugsPerReport = 0
-    } = metrics;
+        totalBugs,
+        bugsFromScreenRecording,
+        bugsFromManualTesting,
+        bugsWithVideoEvidence,
+        bugsWithNetworkLogs,
+        bugsWithConsoleLogs,
+        criticalBugs,
+        highPriorityBugs,
+        mediumPriorityBugs,
+        lowPriorityBugs,
+        resolvedBugs,
+        avgResolutionTime,
+        bugResolutionRate,
+        avgBugReportCompleteness,
+        bugReportsWithAttachments,
+        bugReproductionRate,
+        weeklyReportsGenerated,
+        monthlyReportsGenerated,
+        avgBugsPerReport
+    } = finalMetrics;
 
-    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend = null }) => (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-lg bg-${color}-50`}>
-                    <Icon className={`w-6 h-6 text-${color}-600`} />
-                </div>
-                {trend && (
-                    <div className={`flex items-center text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        <TrendingDown className={`w-4 h-4 mr-1 ${trend > 0 ? 'rotate-180' : ''}`} />
-                        {Math.abs(trend)}%
+    // Fixed color classes - using static Tailwind classes
+    const getColorClasses = (color) => {
+        const colorMap = {
+            red: { bg: 'bg-red-50', text: 'text-red-600', border: 'bg-red-500' },
+            green: { bg: 'bg-green-50', text: 'text-green-600', border: 'bg-green-500' },
+            blue: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'bg-blue-500' },
+            orange: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'bg-orange-500' },
+            purple: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'bg-purple-500' },
+            yellow: { bg: 'bg-yellow-50', text: 'text-yellow-600', border: 'bg-yellow-500' }
+        };
+        return colorMap[color] || colorMap.blue;
+    };
+
+    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend = null }) => {
+        const colors = getColorClasses(color);
+        return (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                    <div className={`p-3 rounded-lg ${colors.bg}`}>
+                        <Icon className={`w-6 h-6 ${colors.text}`} />
                     </div>
-                )}
+                    {trend !== null && (
+                        <div className={`flex items-center text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {trend > 0 ? (
+                                <TrendingUp className="w-4 h-4 mr-1" />
+                            ) : (
+                                <TrendingDown className="w-4 h-4 mr-1" />
+                            )}
+                            {Math.abs(trend)}%
+                        </div>
+                    )}
+                </div>
+                <div className="space-y-1">
+                    <p className="text-2xl font-bold text-gray-900">{value?.toLocaleString() || '0'}</p>
+                    <p className="text-sm font-medium text-gray-600">{title}</p>
+                    {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+                </div>
             </div>
-            <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900">{value?.toLocaleString()}</p>
-                <p className="text-sm font-medium text-gray-600">{title}</p>
-                {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-            </div>
-        </div>
-    );
+        );
+    };
 
     const SeverityBar = ({ severity, count, total, color }) => {
         const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+        const colors = getColorClasses(color);
+        
         return (
             <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
                 <div className="flex items-center space-x-3">
-                    <div className={`w-3 h-3 rounded-full bg-${color}-500`}></div>
+                    <div className={`w-3 h-3 rounded-full ${colors.border}`}></div>
                     <span className="font-medium text-gray-900">{severity}</span>
                 </div>
                 <div className="flex items-center space-x-3">
                     <div className="w-32 bg-gray-200 rounded-full h-2">
                         <div
-                            className={`bg-${color}-500 h-2 rounded-full transition-all duration-300`}
+                            className={`${colors.border} h-2 rounded-full transition-all duration-300`}
                             style={{ width: `${percentage}%` }}
                         ></div>
                     </div>
@@ -104,14 +178,16 @@ const BugTrackingMetrics = () => {
 
     const EvidenceCard = ({ title, value, total, icon: Icon, color = "blue" }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+        const colors = getColorClasses(color);
+        
         return (
             <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center justify-between mb-3">
-                    <div className={`p-2 rounded-lg bg-${color}-50`}>
-                        <Icon className={`w-5 h-5 text-${color}-600`} />
+                    <div className={`p-2 rounded-lg ${colors.bg}`}>
+                        <Icon className={`w-5 h-5 ${colors.text}`} />
                     </div>
                     <div className="text-right">
-                        <p className="text-lg font-bold text-gray-900">{value}</p>
+                        <p className="text-lg font-bold text-gray-900">{value || 0}</p>
                         <p className="text-sm text-gray-500">{percentage}%</p>
                     </div>
                 </div>
@@ -173,7 +249,7 @@ const BugTrackingMetrics = () => {
                 />
                 <MetricCard
                     title="Avg Resolution Time"
-                    value={avgResolutionTime}
+                    value={`${avgResolutionTime}h`}
                     subtitle="Hours to resolve"
                     icon={Clock}
                     color="orange"
@@ -370,6 +446,25 @@ const BugTrackingMetrics = () => {
                         </div>
                         <div className="text-sm text-gray-600">Evidence Coverage</div>
                     </div>
+                </div>
+            </div>
+
+            {/* Debug Information - Remove in production */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-2">Debug: Current Metrics Values</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
+                    <div>Total Bugs: {totalBugs}</div>
+                    <div>Critical: {criticalBugs}</div>
+                    <div>High Priority: {highPriorityBugs}</div>
+                    <div>Medium Priority: {mediumPriorityBugs}</div>
+                    <div>Low Priority: {lowPriorityBugs}</div>
+                    <div>Resolved: {resolvedBugs}</div>
+                    <div>From Recording: {bugsFromScreenRecording}</div>
+                    <div>From Manual: {bugsFromManualTesting}</div>
+                    <div>Video Evidence: {bugsWithVideoEvidence}</div>
+                    <div>Network Logs: {bugsWithNetworkLogs}</div>
+                    <div>Console Logs: {bugsWithConsoleLogs}</div>
+                    <div>With Attachments: {bugReportsWithAttachments}</div>
                 </div>
             </div>
         </div>

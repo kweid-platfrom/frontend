@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { useProject } from "../../context/ProjectContext";
 import BugFilters from "../bug-report/BugFilters";
@@ -9,6 +9,7 @@ import BugTable from "../bug-report/BugTable";
 import BugTrackingMetrics from "../stats/BugTrackingMetrics";
 import { X } from "lucide-react";
 import { useBugTracker } from "../../hooks/useBugTracker";
+import { calculateBugMetrics } from "../../utils/calculateBugMetrics";
 
 const BugTracker = () => {
     const { activeProject, user } = useProject();
@@ -38,6 +39,26 @@ const BugTracker = () => {
         createSprint,
         formatDate
     } = useBugTracker();
+
+    // Calculate comprehensive metrics at the top level
+    const comprehensiveMetrics = useMemo(() => {
+        return calculateBugMetrics(bugs);
+    }, [bugs]);
+
+    // Expose metrics to parent components or global state
+    React.useEffect(() => {
+        // You can dispatch this to a global state manager or context
+        // For now, we'll attach it to window for dashboard access
+        if (typeof window !== 'undefined') {
+            window.bugTrackerMetrics = comprehensiveMetrics;
+            
+            // Dispatch custom event for dashboard to listen to
+            const metricsEvent = new CustomEvent('bugMetricsUpdated', {
+                detail: comprehensiveMetrics
+            });
+            window.dispatchEvent(metricsEvent);
+        }
+    }, [comprehensiveMetrics]);
 
     const handleBugSelect = (bug) => {
         setSelectedBug(bug);
@@ -99,7 +120,7 @@ const BugTracker = () => {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-center">
-                    <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <div className="animate-spin w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full mx-auto mb-4"></div>
                     <p className="text-gray-600">Loading bug tracker...</p>
                 </div>
             </div>
@@ -139,20 +160,20 @@ const BugTracker = () => {
                     showMetrics={showMetrics}
                     setShowMetrics={setShowMetrics}
                     viewMode="table"
-                    setViewMode={() => {}}
+                    setViewMode={() => { }}
                     onBulkStatusUpdate={handleBulkStatusUpdate}
                     onBulkAssignment={handleBulkAssignment}
                     teamMembers={teamMembers}
+                    // Pass comprehensive metrics to header if needed
+                    comprehensiveMetrics={comprehensiveMetrics}
                 />
 
                 {/* Metrics Panel */}
                 {showMetrics && (
                     <div className="bg-white border-b border-gray-200 p-6 flex-shrink-0">
-                        <BugTrackingMetrics
-                            metrics={currentMetrics}
-                            metricsWithTrends={metricsWithTrends}
-                            bugs={bugs}
-                            filteredBugs={filteredBugs}
+                        <BugTrackingMetrics 
+                            bugs={bugs} 
+                            metrics={comprehensiveMetrics}
                         />
                     </div>
                 )}

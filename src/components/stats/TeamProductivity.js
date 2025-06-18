@@ -117,7 +117,7 @@ const TeamProductivity = ({ metrics }) => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                         <div className="p-2 bg-blue-100 rounded-lg">
-                            <Users className="w-5 h-5 text-blue-600" />
+                            <Users className="w-5 h-5 text-teal-600" />
                         </div>
                         <div>
                             <h3 className="text-lg font-semibold text-gray-900">Team Productivity</h3>
@@ -202,8 +202,8 @@ const TeamProductivity = ({ metrics }) => {
 
                 {/* Team Insights */}
                 <div className="bg-blue-50 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-2">Team Insights</h4>
-                    <div className="space-y-2 text-sm text-blue-800">
+                    <h4 className="text-sm font-semibold text-teal-900 mb-2">Team Insights</h4>
+                    <div className="space-y-2 text-sm text-teal-800">
                         {sprintTestingProgress >= 80 && (
                             <div className="flex items-center space-x-2">
                                 <Award className="w-4 h-4 text-green-600" />

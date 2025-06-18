@@ -101,7 +101,7 @@ const sampleActivities = [
         user: 'System',
         timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
         icon: Activity,
-        color: 'blue',
+        color: 'teal',
         details: {
             scriptCount: 8,
             feature: 'API Testing',
@@ -131,7 +131,7 @@ const QuickActions = () => {
         return `${minutes}m ago`;
     };
 
-    const ActionButton = ({ icon: Icon, title, description, color = "blue", onClick, disabled = false }) => (
+    const ActionButton = ({ icon: Icon, title, description, color = "teal", onClick, disabled = false }) => (
         <button
             onClick={onClick}
             disabled={disabled}
@@ -208,7 +208,7 @@ const QuickActions = () => {
             icon: FileText,
             title: "Export Report",
             description: "Generate PDF or CSV reports",
-            color: "blue",
+            color: "teal",
             onClick: () => console.log("Export report")
         },
         {
@@ -344,7 +344,7 @@ const QuickActions = () => {
                                             </span>
                                         )}
                                         {activity.details.hasRecording && (
-                                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs flex items-center space-x-1">
+                                            <span className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs flex items-center space-x-1">
                                                 <Video className="w-3 h-3" />
                                                 <span>Video</span>
                                             </span>
@@ -360,7 +360,7 @@ const QuickActions = () => {
                         ))}
                     </div>
                     <div className="mt-4 pt-3 border-t border-gray-100">
-                        <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        <button className="text-sm text-teal-600 hover:text-teal-800 font-medium">
                             View All Activities →
                         </button>
                     </div>
@@ -371,7 +371,7 @@ const QuickActions = () => {
                     <h3 className="text-sm font-medium text-gray-900 mb-4">Quick Links</h3>
                     <div className="flex flex-wrap gap-2">
                         {[
-                            { label: "Documentation", href: "#", color: "blue" },
+                            { label: "Documentation", href: "#", color: "teal" },
                             { label: "API Reference", href: "#", color: "green" },
                             { label: "Support", href: "#", color: "purple" },
                             { label: "Feedback", href: "#", color: "orange" },

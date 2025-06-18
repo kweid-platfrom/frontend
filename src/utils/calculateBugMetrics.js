@@ -19,6 +19,7 @@ export const calculateBugMetrics = (bugs = []) => {
             mediumPriorityBugs: 0,
             lowPriorityBugs: 0,
             resolvedBugs: 0,
+            activeBugs: 0,
             avgResolutionTime: 0,
             bugResolutionRate: 0,
             avgBugReportCompleteness: 0,
@@ -26,15 +27,49 @@ export const calculateBugMetrics = (bugs = []) => {
             bugReproductionRate: 0,
             weeklyReportsGenerated: 0,
             monthlyReportsGenerated: 0,
-            avgBugsPerReport: 0
+            avgBugsPerReport: 0,
+            recentlyReported: 0,
+            weeklyBugs: 0,
+            monthlyBugs: 0,
+            inProgress: 0,
+            closed: 0,
+            // Add distributions
+            statusDistribution: {},
+            priorityDistribution: {},
+            severityDistribution: {},
+            sourceDistribution: {},
+            // Add trend data
+            bugTrend: {},
+            summary: {
+                totalItems: 0,
+                criticalIssues: 0,
+                resolutionRate: 0,
+                lastUpdated: new Date()
+            }
         };
     }
 
     const totalBugs = bugs.length;
     
-    // Source-based metrics
+    // Helper function to convert Firebase timestamp to Date
+    const convertFirebaseDate = (timestamp) => {
+        if (!timestamp) return null;
+        if (typeof timestamp === 'string') {
+            return new Date(timestamp);
+        }
+        if (timestamp.toDate) {
+            return timestamp.toDate();
+        }
+        if (timestamp.seconds) {
+            return new Date(timestamp.seconds * 1000);
+        }
+        return timestamp;
+    };
+
+    // Source-based metrics - Fixed source matching
     const bugsFromScreenRecording = bugs.filter(bug => 
         bug.source === 'screen_recording' || 
+        bug.source === 'screen-recording' ||
         bug.source === 'recording' ||
         (bug.attachments && bug.attachments.some(att => att.isRecording))
     ).length;
@@ -42,6 +77,7 @@ export const calculateBugMetrics = (bugs = []) => {
     const bugsFromManualTesting = bugs.filter(bug => 
         bug.source === 'manual' || 
         bug.source === 'manual_testing' ||
+        bug.source === 'manual-testing' ||
         !bug.source
     ).length;
 
@@ -70,7 +106,7 @@ export const calculateBugMetrics = (bugs = []) => {
         ))
     ).length;
 
-    // Priority/Severity metrics
+    // Priority/Severity metrics - Fixed to match both priority and severity fields
     const criticalBugs = bugs.filter(bug => 
         bug.severity === 'Critical' || bug.priority === 'Critical'
     ).length;
@@ -87,32 +123,31 @@ export const calculateBugMetrics = (bugs = []) => {
         bug.severity === 'Low' || bug.priority === 'Low'
     ).length;
 
-    // Resolution metrics
+    // Resolution metrics - Fixed to match more status variations
+    const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Verified', 'Done', 'Complete'];
     const resolvedBugs = bugs.filter(bug => 
-        bug.status === 'Resolved' || 
-        bug.status === 'Closed' || 
-        bug.status === 'Done' ||
-        bug.resolvedAt
+        resolvedStatuses.includes(bug.status) || bug.resolvedAt
     ).length;
+
+    const activeBugs = totalBugs - resolvedBugs;
 
     // Calculate average resolution time
     const resolvedBugsWithTimes = bugs.filter(bug => 
-        (bug.status === 'Resolved' || bug.status === 'Closed' || bug.status === 'Done') &&
+        resolvedStatuses.includes(bug.status) &&
         bug.resolvedAt && bug.createdAt
     );
 
     let avgResolutionTime = 0;
     if (resolvedBugsWithTimes.length > 0) {
         const totalResolutionTime = resolvedBugsWithTimes.reduce((total, bug) => {
-            const createdAt = bug.createdAt?.seconds ? 
-                new Date(bug.createdAt.seconds * 1000) : 
-                new Date(bug.createdAt);
-            const resolvedAt = bug.resolvedAt?.seconds ? 
-                new Date(bug.resolvedAt.seconds * 1000) : 
-                new Date(bug.resolvedAt);
+            const createdAt = convertFirebaseDate(bug.createdAt);
+            const resolvedAt = convertFirebaseDate(bug.resolvedAt);
             
-            const diffHours = (resolvedAt - createdAt) / (1000 * 60 * 60);
-            return total + Math.max(0, diffHours);
+            if (createdAt && resolvedAt) {
+                const diffHours = (resolvedAt - createdAt) / (1000 * 60 * 60);
+                return total + Math.max(0, diffHours);
+            }
+            return total;
         }, 0);
         
         avgResolutionTime = Math.round(totalResolutionTime / resolvedBugsWithTimes.length);
@@ -171,23 +206,79 @@ export const calculateBugMetrics = (bugs = []) => {
     const now = new Date();
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const weeklyReportsGenerated = bugs.filter(bug => {
-        const createdAt = bug.createdAt?.seconds ? 
-            new Date(bug.createdAt.seconds * 1000) : 
-            new Date(bug.createdAt);
-        return createdAt >= oneWeekAgo;
+    const weeklyBugs = bugs.filter(bug => {
+        const createdAt = convertFirebaseDate(bug.createdAt);
+        return createdAt && createdAt >= oneWeekAgo;
     }).length;
 
-    const monthlyReportsGenerated = bugs.filter(bug => {
-        const createdAt = bug.createdAt?.seconds ? 
-            new Date(bug.createdAt.seconds * 1000) : 
-            new Date(bug.createdAt);
-        return createdAt >= oneMonthAgo;
+    const monthlyBugs = bugs.filter(bug => {
+        const createdAt = convertFirebaseDate(bug.createdAt);
+        return createdAt && createdAt >= oneMonthAgo;
     }).length;
 
-    // Average bugs per report (assuming 1 bug per report for now)
-    const avgBugsPerReport = 1;
+    const recentlyReported = bugs.filter(bug => {
+        const createdAt = convertFirebaseDate(bug.createdAt);
+        return createdAt && createdAt >= oneDayAgo;
+    }).length;
+
+    // Reports generated (estimated)
+    const weeklyReportsGenerated = Math.ceil(weeklyBugs / 10) || 0;
+    const monthlyReportsGenerated = Math.ceil(monthlyBugs / 20) || 0;
+    const avgBugsPerReport = weeklyReportsGenerated > 0 ? Math.round(weeklyBugs / weeklyReportsGenerated) : 1;
+
+    // Status distribution
+    const statusDistribution = bugs.reduce((acc, bug) => {
+        const status = bug.status || 'New';
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Priority distribution
+    const priorityDistribution = bugs.reduce((acc, bug) => {
+        const priority = bug.priority || 'Medium';
+        acc[priority] = (acc[priority] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Severity distribution
+    const severityDistribution = bugs.reduce((acc, bug) => {
+        const severity = bug.severity || 'Medium';
+        acc[severity] = (acc[severity] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Source distribution
+    const sourceDistribution = bugs.reduce((acc, bug) => {
+        const source = bug.source || 'manual';
+        acc[source] = (acc[source] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Bug trend data
+    const bugTrend = bugs.reduce((acc, bug) => {
+        const createdDate = convertFirebaseDate(bug.createdAt);
+        if (createdDate) {
+            const date = createdDate.toISOString().split('T')[0];
+            if (!acc[date]) acc[date] = { reported: 0, resolved: 0 };
+            acc[date].reported++;
+            
+            if (bug.resolvedAt) {
+                const resolvedDate = convertFirebaseDate(bug.resolvedAt);
+                if (resolvedDate) {
+                    const resolvedDateStr = resolvedDate.toISOString().split('T')[0];
+                    if (!acc[resolvedDateStr]) acc[resolvedDateStr] = { reported: 0, resolved: 0 };
+                    acc[resolvedDateStr].resolved++;
+                }
+            }
+        }
+        return acc;
+    }, {});
+
+    // Additional status counts
+    const inProgress = statusDistribution['In Progress'] || statusDistribution['In-Progress'] || 0;
+    const closed = statusDistribution['Closed'] || statusDistribution['Done'] || 0;
 
     return {
         totalBugs,
@@ -201,6 +292,7 @@ export const calculateBugMetrics = (bugs = []) => {
         mediumPriorityBugs,
         lowPriorityBugs,
         resolvedBugs,
+        activeBugs,
         avgResolutionTime,
         bugResolutionRate,
         avgBugReportCompleteness,
@@ -208,7 +300,26 @@ export const calculateBugMetrics = (bugs = []) => {
         bugReproductionRate,
         weeklyReportsGenerated,
         monthlyReportsGenerated,
-        avgBugsPerReport
+        avgBugsPerReport,
+        recentlyReported,
+        weeklyBugs,
+        monthlyBugs,
+        inProgress,
+        closed,
+        // Distributions
+        statusDistribution,
+        priorityDistribution,
+        severityDistribution,
+        sourceDistribution,
+        // Trend data
+        bugTrend,
+        // Summary
+        summary: {
+            totalItems: totalBugs,
+            criticalIssues: criticalBugs,
+            resolutionRate: bugResolutionRate,
+            lastUpdated: new Date()
+        }
     };
 };
 
@@ -231,9 +342,12 @@ export const calculateBugMetricsWithTrends = (currentBugs = [], previousBugs = [
     return {
         ...currentMetrics,
         trends: {
+            totalBugs: calculateTrend(currentMetrics.totalBugs, previousMetrics.totalBugs),
             resolvedBugs: calculateTrend(currentMetrics.resolvedBugs, previousMetrics.resolvedBugs),
             avgResolutionTime: calculateTrend(previousMetrics.avgResolutionTime, currentMetrics.avgResolutionTime), // Inverted for improvement
-            bugsFromScreenRecording: calculateTrend(currentMetrics.bugsFromScreenRecording, previousMetrics.bugsFromScreenRecording)
+            bugsFromScreenRecording: calculateTrend(currentMetrics.bugsFromScreenRecording, previousMetrics.bugsFromScreenRecording),
+            bugResolutionRate: calculateTrend(currentMetrics.bugResolutionRate, previousMetrics.bugResolutionRate),
+            avgBugReportCompleteness: calculateTrend(currentMetrics.avgBugReportCompleteness, previousMetrics.avgBugReportCompleteness)
         }
     };
 };

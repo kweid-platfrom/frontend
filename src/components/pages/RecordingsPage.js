@@ -18,7 +18,7 @@ export default function RecorderPage() {
                         </div>
                         <h3 className="text-lg font-semibold mb-2">Start Recording</h3>
                         <p className="text-gray-600 mb-4">Click the button below to start recording your screen</p>
-                        <button className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
+                        <button className="bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700">
                             Start Recording
                         </button>
                     </div>
