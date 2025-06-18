@@ -1,12 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useMemo } from "react";
-import { 
-    Calendar, 
-    User, 
-    AlertTriangle, 
-    ChevronDown, 
+import {
+    Calendar,
+    User,
+    AlertTriangle,
+    ChevronDown,
     ChevronRight,
-    Users, 
+    Users,
     Clock,
     Flag,
     AlertCircle,
@@ -17,12 +17,12 @@ import { BugAntIcon } from "@heroicons/react/24/outline";
 import GroupCreationModal from '../modals/GroupCreationModal';
 import BugTable from './BugTable';
 
-const BugList = ({ 
-    bugs, 
-    onBugSelect, 
-    selectedBug, 
-    getSeverityColor, 
-    getStatusColor, 
+const BugList = ({
+    bugs,
+    onBugSelect,
+    selectedBug,
+    getSeverityColor,
+    getStatusColor,
     getPriorityFromSeverity,
     formatDate,
     teamMembers = [],
@@ -47,7 +47,7 @@ const BugList = ({
     const getTeamMemberName = (memberId) => {
         if (!memberId) return 'Unassigned';
         const member = teamMembers.find(m => m.id === memberId || m.userId === memberId);
-        return member ? (member.name || member.displayName || member.email) : 'Unassigned';
+        return member ? (member.name || member.firstName || member.email) : 'Unassigned';
     };
 
     // Enhanced grouping logic with sub-grouping support
@@ -64,51 +64,51 @@ const BugList = ({
         }
 
         const groups = {};
-        
+
         bugs.forEach(bug => {
             let groupKey, groupLabel, groupType;
-            
+
             switch (groupBy) {
                 case 'month':
-                    const date = bug.createdAt?.seconds ? 
-                        new Date(bug.createdAt.seconds * 1000) : 
+                    const date = bug.createdAt?.seconds ?
+                        new Date(bug.createdAt.seconds * 1000) :
                         new Date(bug.createdAt);
                     groupKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
                     groupLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
                     groupType = 'month';
                     break;
-                    
+
                 case 'sprint':
                     const sprint = sprints.find(s => s.id === bug.sprintId);
                     groupKey = bug.sprintId || 'no-sprint';
                     groupLabel = sprint ? sprint.name : 'No Sprint';
                     groupType = 'sprint';
                     break;
-                    
+
                 case 'assignee':
                     groupKey = bug.assignedTo || 'unassigned';
                     groupLabel = getTeamMemberName(bug.assignedTo);
                     groupType = 'assignee';
                     break;
-                    
+
                 case 'status':
                     groupKey = bug.status || 'new';
                     groupLabel = (bug.status || 'new').charAt(0).toUpperCase() + (bug.status || 'new').slice(1);
                     groupType = 'status';
                     break;
-                    
+
                 case 'severity':
                     groupKey = bug.severity || 'low';
                     groupLabel = (bug.severity || 'low').charAt(0).toUpperCase() + (bug.severity || 'low').slice(1);
                     groupType = 'severity';
                     break;
-                    
+
                 default:
                     groupKey = 'all';
                     groupLabel = 'All Bugs';
                     groupType = 'all';
             }
-            
+
             if (!groups[groupKey]) {
                 groups[groupKey] = {
                     id: groupKey,
@@ -119,7 +119,7 @@ const BugList = ({
                     subGroups: []
                 };
             }
-            
+
             groups[groupKey].bugs.push(bug);
             groups[groupKey].count++;
         });
@@ -132,7 +132,7 @@ const BugList = ({
                 }
             });
         }
-        
+
         return Object.values(groups).sort((a, b) => {
             // Sort groups logically
             if (groupBy === 'month') {
@@ -152,10 +152,10 @@ const BugList = ({
 
     const createSubGroups = (bugs, subGroupType) => {
         const subGroups = {};
-        
+
         bugs.forEach(bug => {
             let subGroupKey, subGroupLabel;
-            
+
             switch (subGroupType) {
                 case 'week':
                     const weekNumber = getWeekNumber(new Date(bug.createdAt?.seconds ? bug.createdAt.seconds * 1000 : bug.createdAt));
@@ -178,7 +178,7 @@ const BugList = ({
                 default:
                     return [];
             }
-            
+
             if (!subGroups[subGroupKey]) {
                 subGroups[subGroupKey] = {
                     id: subGroupKey,
@@ -186,10 +186,10 @@ const BugList = ({
                     bugs: []
                 };
             }
-            
+
             subGroups[subGroupKey].bugs.push(bug);
         });
-        
+
         return Object.values(subGroups).sort((a, b) => a.label.localeCompare(b.label));
     };
 
@@ -221,9 +221,9 @@ const BugList = ({
     };
 
     const toggleBugSelection = (bugId) => {
-        setSelectedBugs(prev => 
-            prev.includes(bugId) 
-                ? prev.filter(id => id !== bugId) 
+        setSelectedBugs(prev =>
+            prev.includes(bugId)
+                ? prev.filter(id => id !== bugId)
                 : [...prev, bugId]
         );
     };
@@ -231,7 +231,7 @@ const BugList = ({
     const toggleGroupSelection = (group) => {
         const groupBugIds = group.bugs.map(bug => bug.id);
         const allSelected = groupBugIds.every(id => selectedBugs.includes(id));
-        
+
         if (allSelected) {
             setSelectedBugs(prev => prev.filter(id => !groupBugIds.includes(id)));
         } else {
@@ -259,12 +259,12 @@ const BugList = ({
     const handleDrop = (e, targetGroupId) => {
         e.preventDefault();
         setDragOverGroup(null);
-        
+
         if (!draggedBug || !onUpdateBug) return;
-        
+
         // Update bug based on target group
         const updatedBug = { ...draggedBug };
-        
+
         if (groupBy === 'sprint') {
             updatedBug.sprintId = targetGroupId === 'no-sprint' ? null : targetGroupId;
         } else if (groupBy === 'assignee') {
@@ -274,22 +274,22 @@ const BugList = ({
         } else if (groupBy === 'severity') {
             updatedBug.severity = targetGroupId;
         }
-        
+
         onUpdateBug(updatedBug);
         setDraggedBug(null);
-        
+
         if (onDrop) onDrop(e, targetGroupId);
     };
 
     const moveSelectedBugs = (targetGroupId) => {
         if (selectedBugs.length === 0 || !onUpdateBug) return;
-        
+
         selectedBugs.forEach(bugId => {
             const bug = bugs.find(b => b.id === bugId);
             if (!bug) return;
-            
+
             const updatedBug = { ...bug };
-            
+
             if (groupBy === 'sprint') {
                 updatedBug.sprintId = targetGroupId === 'no-sprint' ? null : targetGroupId;
             } else if (groupBy === 'assignee') {
@@ -299,10 +299,10 @@ const BugList = ({
             } else if (groupBy === 'severity') {
                 updatedBug.severity = targetGroupId;
             }
-            
+
             onUpdateBug(updatedBug);
         });
-        
+
         setSelectedBugs([]);
     };
 
@@ -375,7 +375,7 @@ const BugList = ({
                             {selectedBugs.length} bug{selectedBugs.length !== 1 ? 's' : ''} selected
                         </span>
                         <div className="flex gap-2">
-                            <select 
+                            <select
                                 onChange={(e) => e.target.value && moveSelectedBugs(e.target.value)}
                                 className="px-2 py-1 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 defaultValue=""
@@ -402,8 +402,8 @@ const BugList = ({
             {groupBy !== 'none' && groupedBugs.length > 1 && (
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
                     <div className="flex items-center space-x-2">
-                        <input 
-                            type="checkbox" 
+                        <input
+                            type="checkbox"
                             className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                             onChange={toggleSelectAll}
                             checked={selectedBugs.length === bugs.length && bugs.length > 0}
@@ -429,11 +429,10 @@ const BugList = ({
                 const isDragOver = dragOverGroup === group.id;
 
                 return (
-                    <div 
-                        key={group.id} 
-                        className={`border rounded-lg overflow-hidden shadow-sm transition-all ${
-                            isDragOver ? 'border-teal-500 bg-teal-50' : 'border-gray-200 bg-white'
-                        }`}
+                    <div
+                        key={group.id}
+                        className={`border rounded-lg overflow-hidden shadow-sm transition-all ${isDragOver ? 'border-teal-500 bg-teal-50' : 'border-gray-200 bg-white'
+                            }`}
                         onDragOver={(e) => handleDragOver(e, group.id)}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, group.id)}
@@ -442,7 +441,7 @@ const BugList = ({
                         {groupBy !== 'none' && (
                             <div className="flex items-center bg-gray-50 border-b">
                                 <div className={`${getGroupColor(group.type)} w-1 self-stretch`}></div>
-                                
+
                                 {/* Group Selection Checkbox */}
                                 <div className="px-3 py-2">
                                     <input
@@ -453,12 +452,12 @@ const BugList = ({
                                     />
                                 </div>
 
-                                <button 
+                                <button
                                     className="flex-1 p-4 flex items-center hover:bg-gray-100 transition-colors text-left"
                                     onClick={() => toggleGroupCollapse(group.id)}
                                 >
-                                    {isCollapsed ? 
-                                        <ChevronRight className="h-4 w-4 mr-2 text-gray-500" /> : 
+                                    {isCollapsed ?
+                                        <ChevronRight className="h-4 w-4 mr-2 text-gray-500" /> :
                                         <ChevronDown className="h-4 w-4 mr-2 text-gray-500" />
                                     }
                                     <div className="flex items-center mr-3">
@@ -500,7 +499,7 @@ const BugList = ({
                                                 </div>
                                                 <div className="p-2">
                                                     {viewMode === 'table' ? (
-                                                        <BugTable 
+                                                        <BugTable
                                                             bugs={subGroup.bugs}
                                                             selectedBugs={selectedBugs}
                                                             onBugSelect={onBugSelect}
@@ -518,7 +517,7 @@ const BugList = ({
                                                         // List view for sub-groups
                                                         <div className="divide-y divide-gray-100">
                                                             {subGroup.bugs.map(bug => (
-                                                                <BugCard 
+                                                                <BugCard
                                                                     key={bug.id}
                                                                     bug={bug}
                                                                     selectedBugs={selectedBugs}
@@ -528,9 +527,11 @@ const BugList = ({
                                                                     handleDragStart={handleDragStart}
                                                                     getSeverityColor={getSeverityColor}
                                                                     getStatusColor={getStatusColor}
+                                                                    getPriorityFromSeverity={getPriorityFromSeverity}
                                                                     formatDate={formatDate}
                                                                     getTeamMemberName={getTeamMemberName}
                                                                     isPastDue={isPastDue}
+                                                                    updateBugStatus={updateBugStatus}
                                                                 />
                                                             ))}
                                                         </div>
@@ -540,7 +541,7 @@ const BugList = ({
                                         ))}
                                     </div>
                                 ) : viewMode === 'table' ? (
-                                    <BugTable 
+                                    <BugTable
                                         bugs={group.bugs}
                                         selectedBugs={selectedBugs}
                                         onBugSelect={onBugSelect}
@@ -561,7 +562,7 @@ const BugList = ({
                                     // List View
                                     <div className="divide-y divide-gray-100">
                                         {group.bugs.map(bug => (
-                                            <BugCard 
+                                            <BugCard
                                                 key={bug.id}
                                                 bug={bug}
                                                 selectedBugs={selectedBugs}
@@ -571,9 +572,11 @@ const BugList = ({
                                                 handleDragStart={handleDragStart}
                                                 getSeverityColor={getSeverityColor}
                                                 getStatusColor={getStatusColor}
+                                                getPriorityFromSeverity={getPriorityFromSeverity}
                                                 formatDate={formatDate}
                                                 getTeamMemberName={getTeamMemberName}
                                                 isPastDue={isPastDue}
+                                                updateBugStatus={updateBugStatus}
                                             />
                                         ))}
                                     </div>
@@ -586,7 +589,7 @@ const BugList = ({
 
             {/* Group Creation Modal */}
             {showCreateGroup && (
-                <GroupCreationModal 
+                <GroupCreationModal
                     show={showCreateGroup}
                     onClose={() => setShowCreateGroup(false)}
                     groupBy={groupBy}
@@ -606,16 +609,16 @@ const BugCard = ({
     toggleBugSelection, 
     handleDragStart, 
     getSeverityColor, 
-    getStatusColor, 
+    getStatusColor,
     formatDate, 
     getTeamMemberName,
-    isPastDue
+    isPastDue,
+    // updateBugStatus
 }) => {
     return (
         <div
-            className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                selectedBug?.id === bug.id ? 'bg-blue-50 border-l-4 border-teal-500' : ''
-            } ${selectedBugs.includes(bug.id) ? 'bg-blue-25' : ''}`}
+            className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${selectedBug?.id === bug.id ? 'bg-blue-50 border-l-4 border-teal-500' : ''
+                } ${selectedBugs.includes(bug.id) ? 'bg-blue-25' : ''}`}
             onClick={() => onBugSelect(bug)}
             draggable
             onDragStart={(e) => handleDragStart(e, bug)}
@@ -630,7 +633,7 @@ const BugCard = ({
                     }}
                     className="mt-1 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                 />
-                
+
                 <div className="flex-grow min-w-0">
                     <div className="flex items-start justify-between">
                         <div className="flex-grow pr-4">
@@ -641,7 +644,7 @@ const BugCard = ({
                                 {bug.description}
                             </p>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2 flex-shrink-0">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(bug.severity)}`}>
                                 {bug.severity || 'Low'}
@@ -651,7 +654,7 @@ const BugCard = ({
                             </span>
                         </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-between mt-3 text-sm text-gray-500">
                         <div className="flex items-center space-x-4">
                             <span>#{bug.id?.slice(-6) || 'N/A'}</span>
@@ -672,7 +675,7 @@ const BugCard = ({
                         <span>{formatDate(bug.createdAt)}</span>
                     </div>
                 </div>
-                
+
                 <GripVertical className="h-4 w-4 text-gray-400 mt-1 cursor-move" />
             </div>
         </div>

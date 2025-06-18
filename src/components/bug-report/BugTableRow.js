@@ -323,7 +323,7 @@ const BugTableRow = ({
 
             {/* Status Column - Editable Dropdown */}
             <td className={`whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full px-2">
+                <div className="flex items-center justify-center px-2">
                     <select
                         value={bug?.status || 'New'}
                         onChange={(e) => {
@@ -345,7 +345,7 @@ const BugTableRow = ({
 
             {/* Assigned To Column - Editable Dropdown */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200 w-32 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     <select
                         value={assignedUser || ''}
                         onChange={(e) => {
@@ -354,7 +354,7 @@ const BugTableRow = ({
                             }
                         }}
                         disabled={bugIsUpdating}
-                        className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-2 focus:ring-[#00897B] focus:border-[#00897B] w-full cursor-pointer bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-1 focus:ring-[#00897B] focus:border-[#00897B] w-full cursor-pointer bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Unassigned</option>
@@ -369,7 +369,7 @@ const BugTableRow = ({
 
             {/* Priority Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-20 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && (
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(getPriorityFromSeverity(bug.severity))}`}>
                             {getPriorityFromSeverity(bug.severity)}
@@ -380,7 +380,7 @@ const BugTableRow = ({
 
             {/* Severity Column - Editable Dropdown */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     <select
                         value={bug?.severity || 'Low'}
                         onChange={(e) => {
@@ -389,7 +389,7 @@ const BugTableRow = ({
                             }
                         }}
                         disabled={bugIsUpdating}
-                        className={`text-xs px-2 py-1 rounded border-none focus:ring-2 focus:ring-[#00897B] cursor-pointer w-full ${getSeverityColor(bug?.severity)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border-none focus:ring-1 focus:ring-[#00897B] cursor-pointer w-full ${getSeverityColor(bug?.severity)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_BUG_SEVERITIES.map(severity => (
@@ -401,7 +401,7 @@ const BugTableRow = ({
 
             {/* Evidence Column */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow ? (
                         <div className="flex items-center space-x-1">
                             {bug.hasAttachments && totalAttachments > 0 && (
@@ -437,7 +437,7 @@ const BugTableRow = ({
 
             {/* Reporter Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && (
                         <div className="truncate w-full text-center" title={bug.reportedByEmail}>
                             {bug.reportedByEmail?.split('@')[0] || 'Unknown'}
@@ -448,7 +448,7 @@ const BugTableRow = ({
 
             {/* Source Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && (
                         <div className={`inline-flex items-center px-2 py-1 rounded text-xs ${getSourceColor(bug.source)}`}>
                             {getSourceIcon(bug.source)}
@@ -460,7 +460,7 @@ const BugTableRow = ({
 
             {/* Environment Column - Editable Dropdown */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     <select
                         value={bug?.environment || 'Unknown'}
                         onChange={(e) => {
@@ -481,7 +481,7 @@ const BugTableRow = ({
 
             {/* Device/Browser Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-xs text-gray-900 border-r border-gray-200 w-32 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && (
                         <div className="flex items-center w-full">
                             <Monitor className="h-3 w-3 mr-1 text-gray-400 flex-shrink-0" />
@@ -496,7 +496,7 @@ const BugTableRow = ({
 
             {/* Due Date Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && bug.dueDate ? (
                         <div className={`flex items-center ${isPastDue(bug.dueDate) ? 'text-red-600' : 'text-gray-900'}`}>
                             <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
@@ -513,7 +513,7 @@ const BugTableRow = ({
 
             {/* Created Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-xs text-gray-500 border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && (
                         <div className="flex items-center">
                             <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
@@ -525,7 +525,7 @@ const BugTableRow = ({
 
             {/* Frequency Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {!isNewRow && (
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getFrequencyColor(bug.frequency)}`}>
                             {bug.frequency || 'Unknown'}
@@ -536,7 +536,7 @@ const BugTableRow = ({
 
             {/* Drag Handle / Add Button */}
             <td className={`px-4 py-3 whitespace-nowrap w-8 ${CELL_VERTICAL_ALIGN}`}>
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center">
                     {isNewRow ? (
                         <button
                             onClick={handleCreateBug}
