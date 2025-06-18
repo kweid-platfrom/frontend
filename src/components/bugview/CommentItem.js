@@ -2,7 +2,7 @@
 // components/CommentItem.js
 import React, { useState } from "react";
 import { Reply, MoreVertical, Edit, Trash2, Image as ZoomIn, X } from "lucide-react";
-import AttachmentsList from "../bugview/AttachmentsList";
+import AttachmentsList from "./AttachmentsList";
 
 const CommentItem = ({ comment, formatDate, getUserInitials, getUserColor, level = 0, onReply, onEdit, onDelete }) => {
     const [showReplies, setShowReplies] = useState(true);

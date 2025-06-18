@@ -9,7 +9,7 @@ import AttachmentsList from "../bugview/AttachmentsList";
 import ActivityLog from "../bugview/ActivityLog";
 import { 
     Calendar, User, Flag, AlertCircle, 
-    Paperclip
+    Paperclip, X
 } from "lucide-react";
 
 const BugItemDetails = ({ 
@@ -17,7 +17,8 @@ const BugItemDetails = ({
     teamMembers, 
     sprints, 
     onBugUpdate, 
-    formatDate 
+    formatDate,
+    onClose 
 }) => {
     const [editedBug, setEditedBug] = useState({ ...bug });
     const [comments, setComments] = useState(bug.messages || []);
@@ -200,28 +201,54 @@ const BugItemDetails = ({
         <div className="h-full flex flex-col bg-white shadow-xl">
             {/* Header */}
             <div className="flex-shrink-0 px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <div className="space-y-2">
-                    <EditableField
-                        field="title"
-                        value={editedBug.title}
-                        type="text"
-                        {...editableFieldProps}
-                    />
-                    <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-500 font-medium">
-                            Bug #{editedBug.id?.slice(-6)}
-                        </p>
-                        <div className="flex items-center space-x-4 text-xs text-gray-500">
-                            <span>Created: {safeFormatDate(editedBug.createdAt)}</span>
-                            <span>•</span>
-                            <span>Reporter: {editedBug.reporter}</span>
+                <div className="flex items-start justify-between">
+                    {/* Left side - Title and Bug Info */}
+                    <div className="flex-1 space-y-3 min-w-0">
+                        {/* Bug Title - Editable */}
+                        <div className="pr-4 font-semibold text-2xl">
+                            <EditableField
+                                field="title"
+                                value={editedBug.title}
+                                type="text"
+                                className="text-2xl font-semibold text-gray-900 leading-tight"
+                                placeholder="Bug title..."
+                                {...editableFieldProps}
+                            />
                         </div>
+                        
+                        {/* Bug Metadata */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-teal-800">
+                                    Bug #{editedBug.id?.slice(-6)}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                    Created {safeFormatDate(editedBug.createdAt)}
+                                </span>
+                            </div>
+                            
+                            <div className="flex items-center text-xs text-gray-500">
+                                <User className="h-3 w-3 mr-1" />
+                                <span>Reporter: {editedBug.reporter}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right side - Close Button */}
+                    <div className="flex-shrink-0 ml-4">
+                        <button
+                            onClick={onClose}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-colors duration-200"
+                            aria-label="Close bug details"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
                     </div>
                 </div>
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pb-4">
                 <div className="px-6 py-6 space-y-8">
                     {/* Description */}
                     <div className="space-y-3">
@@ -233,6 +260,7 @@ const BugItemDetails = ({
                                 field="description"
                                 value={editedBug.description}
                                 type="textarea"
+                                placeholder="Enter bug description..."
                                 {...editableFieldProps}
                             />
                         </div>
@@ -311,6 +339,7 @@ const BugItemDetails = ({
                                         field="environment"
                                         value={editedBug.environment}
                                         type="text"
+                                        placeholder="e.g., Production, Staging..."
                                         {...editableFieldProps}
                                     />
                                 </div>
@@ -326,6 +355,7 @@ const BugItemDetails = ({
                                 field="stepsToReproduce"
                                 value={editedBug.stepsToReproduce}
                                 type="textarea"
+                                placeholder="1. Step one&#10;2. Step two&#10;3. Step three..."
                                 {...editableFieldProps}
                             />
                         </div>
@@ -342,6 +372,7 @@ const BugItemDetails = ({
                                         field="expectedResult"
                                         value={editedBug.expectedResult}
                                         type="textarea"
+                                        placeholder="What should have happened..."
                                         {...editableFieldProps}
                                     />
                                 </div>
@@ -354,6 +385,7 @@ const BugItemDetails = ({
                                         field="actualResult"
                                         value={editedBug.actualResult}
                                         type="textarea"
+                                        placeholder="What actually happened..."
                                         {...editableFieldProps}
                                     />
                                 </div>
@@ -377,17 +409,23 @@ const BugItemDetails = ({
                         <ActivityLog activities={editedBug.activityLog} formatDate={safeFormatDate} />
                     )}
 
-                    {/* Comments Section */}
+                    {/* Comments Section Header */}
                     <div className="space-y-3">
                         <h3 className="text-base font-semibold text-gray-900">Comments</h3>
-                        <BugComments
-                            comments={comments}
-                            onAddComment={handleAddComment}
-                            loading={loading}
-                            formatDate={safeFormatDate}
-                            teamMembers={teamMembers}
-                        />
                     </div>
+                </div>
+            </div>
+
+            {/* Sticky Comments Section */}
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white">
+                <div className="px-6">
+                    <BugComments
+                        comments={comments}
+                        onAddComment={handleAddComment}
+                        loading={loading}
+                        formatDate={safeFormatDate}
+                        teamMembers={teamMembers}
+                    />
                 </div>
             </div>
         </div>

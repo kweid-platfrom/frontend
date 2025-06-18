@@ -29,7 +29,7 @@ const EditableField = ({
                                 <select
                                     value={tempValues[field] || value}
                                     onChange={(e) => setTempValues({...tempValues, [field]: e.target.value})}
-                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1ß focus:ring-teal-500 focus:border-transparent"
                                     disabled={loading}
                                 >
                                     {options?.map(option => (
@@ -42,7 +42,7 @@ const EditableField = ({
                                 <textarea
                                     value={tempValues[field] || value}
                                     onChange={(e) => setTempValues({...tempValues, [field]: e.target.value})}
-                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-transparent resize-none"
                                     rows={4}
                                     disabled={loading}
                                 />
@@ -51,7 +51,7 @@ const EditableField = ({
                                     type={type}
                                     value={tempValues[field] || value}
                                     onChange={(e) => setTempValues({...tempValues, [field]: e.target.value})}
-                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-transparent"
                                     disabled={loading}
                                 />
                             )}
