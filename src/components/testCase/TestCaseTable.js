@@ -338,7 +338,7 @@ export default function TestCaseTable({
     if (error) {
         return (
             <div className="p-8 text-center">
-                <div className="text-red-400 text-6xl mb-4">⚠️</div>
+                <div className="text-red-200 text-6xl mb-4"></div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Test Cases</h3>
                 <p className="text-gray-600 mb-4">{error}</p>
                 <button 

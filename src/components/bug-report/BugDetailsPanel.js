@@ -1,7 +1,9 @@
 // components/BugDetailsPanel.js
 import React, { useState, useEffect } from "react";
-import { doc, updateDoc, arrayUnion, Timestamp, onSnapshot } from "firebase/firestore";
-import { db, auth } from "../../config/firebase";
+import { doc, updateDoc, arrayUnion, serverTimestamp, onSnapshot } from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { useProject } from '../../context/ProjectContext';
+import { useAuth } from '../../context/AuthProvider';
 import { toast } from "sonner";
 import BugComments from "../bug-report/BugComments";
 import EditableField from "../bugview/EditableField";
@@ -25,6 +27,9 @@ const BugItemDetails = ({
     const [loading, setLoading] = useState(false);
     const [editingField, setEditingField] = useState(null);
     const [tempValues, setTempValues] = useState({});
+
+    const { activeProject } = useProject();
+    const { hasPermission, user } = useAuth();
 
     // Default formatDate function if not provided
     const defaultFormatDate = (timestamp) => {
@@ -59,9 +64,11 @@ const BugItemDetails = ({
     // Use provided formatDate or fallback to default
     const safeFormatDate = formatDate && typeof formatDate === 'function' ? formatDate : defaultFormatDate;
 
-    // Listen for real-time updates to this specific bug
+    // Listen for real-time updates to this specific bug using the correct subcollection path
     useEffect(() => {
-        const bugRef = doc(db, "bugs", bug.id);
+        if (!activeProject?.id || !bug.id) return;
+
+        const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bug.id);
         
         const unsubscribe = onSnapshot(bugRef, (docSnapshot) => {
             if (docSnapshot.exists()) {
@@ -71,51 +78,76 @@ const BugItemDetails = ({
             }
         }, (error) => {
             console.error("Error listening to bug updates:", error);
-            toast.error("Error loading bug data: " + error.message);
+            if (error.code === 'permission-denied') {
+                toast.error("You do not have permission to view this bug");
+            } else {
+                toast.error("Error loading bug data: " + error.message);
+            }
         });
 
         return () => unsubscribe();
-    }, [bug.id]);
+    }, [bug.id, activeProject?.id]);
 
     const handleFieldEdit = (field, value) => {
+        if (!hasPermission('write_bugs')) {
+            toast.error('You do not have permission to edit bugs');
+            return;
+        }
         setEditingField(field);
         setTempValues({ ...tempValues, [field]: value });
     };
 
     const handleFieldSave = async (field) => {
+        if (!hasPermission('write_bugs')) {
+            toast.error('You do not have permission to edit bugs');
+            return;
+        }
+
+        if (!activeProject?.id) {
+            toast.error('No active project selected');
+            return;
+        }
+
         try {
             setLoading(true);
-            const bugRef = doc(db, "bugs", bug.id);
+            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bug.id);
             
             let updateData = { [field]: tempValues[field] };
             
             // Handle date fields
             if (field === 'dueDate' && tempValues[field]) {
-                updateData[field] = Timestamp.fromDate(new Date(tempValues[field]));
+                updateData[field] = new Date(tempValues[field]);
             }
 
-            // Update the bug data
+            // Update the bug data with serverTimestamp
             await updateDoc(bugRef, {
                 ...updateData,
-                lastUpdated: Timestamp.now()
+                updatedAt: serverTimestamp()
             });
 
             // Add to activity log
             await updateDoc(bugRef, {
                 activityLog: arrayUnion({
                     action: `updated ${field}`,
-                    user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-                    createdAt: Timestamp.now()
+                    user: user?.displayName || user?.email || user?.uid,
+                    createdAt: serverTimestamp()
                 })
             });
 
-            onBugUpdate({ ...editedBug, ...updateData });
+            if (onBugUpdate) {
+                onBugUpdate({ ...editedBug, ...updateData });
+            }
+            
             toast.success(`${field} updated successfully!`);
             setEditingField(null);
             setTempValues({});
         } catch (error) {
             console.error(`Error updating ${field}:`, error);
-            toast.error(`Error updating ${field}: ${error.message}`);
+            if (error.code === 'permission-denied') {
+                toast.error('You do not have permission to update this bug');
+            } else {
+                toast.error(`Error updating ${field}: ${error.message}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -129,17 +161,27 @@ const BugItemDetails = ({
     const handleAddComment = async (commentText, attachments = []) => {
         if (!commentText.trim() && attachments.length === 0) return;
 
+        if (!hasPermission('write_bugs')) {
+            toast.error('You do not have permission to add comments');
+            return;
+        }
+
+        if (!activeProject?.id) {
+            toast.error('No active project selected');
+            return;
+        }
+
         setLoading(true);
         const newMessage = {
             text: commentText,
-            user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-            createdAt: Timestamp.now(),
+            user: user?.displayName || user?.email || user?.uid,
+            createdAt: serverTimestamp(),
             attachments: attachments,
             id: Date.now().toString()
         };
 
         try {
-            const bugRef = doc(db, "bugs", bug.id);
+            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bug.id);
             
             await updateDoc(bugRef, {
                 messages: arrayUnion(newMessage)
@@ -148,15 +190,19 @@ const BugItemDetails = ({
             await updateDoc(bugRef, {
                 activityLog: arrayUnion({
                     action: "commented",
-                    user: auth.currentUser?.displayName || auth.currentUser?.email || auth.currentUser?.uid,
-                    createdAt: Timestamp.now()
+                    user: user?.displayName || user?.email || user?.uid,
+                    createdAt: serverTimestamp()
                 })
             });
             
             toast.success("Comment added successfully");
         } catch (error) {
             console.error("Error sending message:", error);
-            toast.error(`Error sending message: ${error.message}`);
+            if (error.code === 'permission-denied') {
+                toast.error('You do not have permission to add comments');
+            } else {
+                toast.error(`Error sending message: ${error.message}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -178,8 +224,8 @@ const BugItemDetails = ({
     ];
 
     const assigneeOptions = teamMembers?.map(member => ({
-        value: member.id,
-        label: member.name || member.email
+        value: member.id || member.uid,
+        label: member.name || member.email || member.displayName
     })) || [];
 
     const sprintOptions = sprints?.map(sprint => ({
@@ -194,7 +240,8 @@ const BugItemDetails = ({
         onEdit: handleFieldEdit,
         onSave: handleFieldSave,
         onCancel: handleFieldCancel,
-        setTempValues
+        setTempValues,
+        disabled: !hasPermission('write_bugs')
     };
 
     return (
@@ -425,6 +472,7 @@ const BugItemDetails = ({
                         loading={loading}
                         formatDate={safeFormatDate}
                         teamMembers={teamMembers}
+                        disabled={!hasPermission('write_bugs')}
                     />
                 </div>
             </div>

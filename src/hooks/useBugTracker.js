@@ -27,7 +27,6 @@ export const useBugTracker = () => {
     const [environments] = useState(VALID_ENVIRONMENTS || DEFAULT_ENVIRONMENTS);
     const [error, setError] = useState(null);
     const [isUpdating, setIsUpdating] = useState(new Set());
-
     const [filters, setFilters] = useState({
         status: "all",
         severity: "all",
@@ -38,16 +37,16 @@ export const useBugTracker = () => {
         environment: "all",
         searchTerm: ""
     });
-
     const calculatingMetrics = useRef(false);
 
     const currentMetrics = useMemo(() => {
         if (calculatingMetrics.current || bugs.length === 0) return null;
-        
+
         try {
             calculatingMetrics.current = true;
             return calculateBugMetrics(bugs);
         } catch (error) {
+            console.error("Error calculating current metrics:", error);
             return null;
         } finally {
             calculatingMetrics.current = false;
@@ -78,6 +77,7 @@ export const useBugTracker = () => {
 
             return calculateBugMetricsWithTrends(currentPeriodBugs, previousPeriodBugs);
         } catch (error) {
+            console.error("Error calculating metrics with trends:", error);
             return null;
         }
     }, [bugs]);
@@ -103,12 +103,13 @@ export const useBugTracker = () => {
                 minute: '2-digit'
             });
         } catch (error) {
+            console.error("Error formatting date:", timestamp, error);
             return 'Invalid Date';
         }
     }, []);
 
     const updateBugInFirestore = useCallback(async (bugId, updates) => {
-        if (isUpdating.has(bugId) || !bugId || !updates) return;
+        if (isUpdating.has(bugId) || !bugId || !updates || !activeProject?.id) return;
 
         const cleanUpdates = Object.keys(updates).reduce((acc, key) => {
             if (updates[key] !== undefined && updates[key] !== null) {
@@ -122,7 +123,8 @@ export const useBugTracker = () => {
         setIsUpdating(prev => new Set(prev).add(bugId));
 
         try {
-            const bugRef = doc(db, "bugs", bugId);
+            // Update the bug in the subcollection: projects/{projectId}/bugs/{bugId}
+            const bugRef = doc(db, "projects", activeProject.id, "bugs", bugId);
             const updateData = { ...cleanUpdates, updatedAt: new Date() };
 
             // Validate fields
@@ -169,7 +171,7 @@ export const useBugTracker = () => {
                 return newSet;
             });
         }
-    }, [isUpdating]);
+    }, [isUpdating, activeProject?.id]);
 
     const updateBugStatus = useCallback(async (bugId, newStatus) => {
         if (!VALID_BUG_STATUSES.includes(newStatus)) {
@@ -270,59 +272,51 @@ export const useBugTracker = () => {
 
     // Real-time listeners
     useEffect(() => {
-        if (!user || !activeProject) return;
+        if (!user || !activeProject?.id) {
+            setError("Project or user not loaded. Please ensure you are logged in and have an active project selected.");
+            return;
+        }
 
         const unsubscribers = [];
         setError(null);
 
-        const isOrgUser = !!activeProject.organizationId;
-
-        // Bugs listener
+        // Bugs listener - Updated to use subcollection
         try {
-            const bugsRef = collection(db, "bugs");
-            const bugsQuery = isOrgUser
-                ? query(
-                    bugsRef,
-                    where("organizationId", "==", activeProject.organizationId),
-                    where("projectId", "==", activeProject.id),
-                    orderBy("createdAt", "desc")
-                )
-                : query(
-                    bugsRef,
-                    where("createdBy", "==", user.uid),
-                    where("projectId", "==", activeProject.id),
-                    orderBy("createdAt", "desc")
-                );
+            const bugsRef = collection(db, "projects", activeProject.id, "bugs");
+            const bugsQuery = query(bugsRef, orderBy("createdAt", "desc"));
 
             const unsubscribeBugs = onSnapshot(
                 bugsQuery,
                 (snapshot) => {
                     const bugsData = snapshot.docs.map(doc => ({
                         id: doc.id,
-                        ...doc.data()
+                        ...doc.data(),
+                        createdAt: doc.data().createdAt?.toDate(),
+                        updatedAt: doc.data().updatedAt?.toDate()
                     }));
                     setBugs(bugsData);
                     setError(null);
                 },
-                (error) => {
-                    setError("Failed to load bugs. Please refresh the page.");
+                (err) => {
+                    console.error("Firestore onSnapshot (bugs) error:", err);
+                    setError("Failed to load bugs. Please check your internet connection and permissions.");
                 }
             );
 
             unsubscribers.push(unsubscribeBugs);
         } catch (error) {
-            setError("Failed to initialize bug tracking.");
+            console.error("Error setting up bug listener:", error);
+            setError("Failed to initialize bug tracking. Ensure Firebase is configured correctly.");
         }
 
-        // Team members listener
-        if (isOrgUser) {
+        // Team members listener - Only if organization exists
+        if (activeProject.organizationId) {
             try {
                 const membersRef = collection(db, "organizationMembers");
                 const membersQuery = query(
                     membersRef,
                     where("organizationId", "==", activeProject.organizationId)
                 );
-
                 const unsubscribeMembers = onSnapshot(
                     membersQuery,
                     (snapshot) => {
@@ -332,29 +326,33 @@ export const useBugTracker = () => {
                         }));
                         setTeamMembers(membersData);
                     },
-                    () => setTeamMembers([])
+                    (err) => {
+                        console.error("Firestore onSnapshot (teamMembers) error:", err);
+                        setTeamMembers([]);
+                    }
                 );
-
                 unsubscribers.push(unsubscribeMembers);
             } catch (error) {
+                console.error("Error setting up team members listener:", error);
                 setTeamMembers([]);
             }
+        } else {
+            // For personal projects, set user as the only team member
+            setTeamMembers([{
+                id: user.uid,
+                name: user.displayName || user.email,
+                email: user.email
+            }]);
         }
 
-        // Sprints listener
+        // Sprints listener - Updated to use project-based query
         try {
             const sprintsRef = collection(db, "sprints");
-            const sprintsQuery = isOrgUser
-                ? query(
-                    sprintsRef,
-                    where("organizationId", "==", activeProject.organizationId),
-                    where("projectId", "==", activeProject.id)
-                )
-                : query(
-                    sprintsRef,
-                    where("createdBy", "==", user.uid),
-                    where("projectId", "==", activeProject.id)
-                );
+            const sprintsQuery = query(
+                sprintsRef,
+                where("projectId", "==", activeProject.id),
+                orderBy("createdAt", "desc")
+            );
 
             const unsubscribeSprints = onSnapshot(
                 sprintsQuery,
@@ -365,11 +363,14 @@ export const useBugTracker = () => {
                     }));
                     setSprints(sprintsData);
                 },
-                () => setSprints([])
+                (err) => {
+                    console.error("Firestore onSnapshot (sprints) error:", err);
+                    setSprints([]);
+                }
             );
-
             unsubscribers.push(unsubscribeSprints);
         } catch (error) {
+            console.error("Error setting up sprints listener:", error);
             setSprints([]);
         }
 
@@ -378,7 +379,7 @@ export const useBugTracker = () => {
                 try {
                     unsubscribe();
                 } catch (error) {
-                    // Ignore cleanup errors
+                    console.warn("Error unsubscribing Firebase listener:", error);
                 }
             });
         };

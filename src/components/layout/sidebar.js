@@ -263,7 +263,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 />
 
                 {/* Navigation */}
-                <nav className={`flex-1 py-4 space-y-1 transition-all duration-300 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+                <nav className="flex-1 py-4 space-y-2 px-4">
                     {navigation.map((item) => {
                         const isActive = activePage === item.page;
                         const isAccessible = isFeatureAccessible(item.requiresFeature);
@@ -273,40 +273,57 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                             <div key={item.name} className="relative group">
                                 <button
                                     onClick={() => handlePageChange(item)}
-                                    className={`group/btn flex items-center w-full px-3 py-2.5 text-sm rounded transition-all duration-200 hover:scale-[1.02] ${isActive
-                                        ? 'border-r-4 border-r-teal-500 text-teal-700 shadow-md shadow-teal-500/20'
-                                        : showLock
-                                            ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-500 cursor-pointer'
-                                            : 'text-gray-500 font-light hover:bg-gray-50 hover:text-gray-800'
-                                        } ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
+                                    className={`
+                                        group/btn flex items-center w-full h-12 text-sm rounded transition-all duration-200 hover:scale-[1.02]
+                                        ${isCollapsed ? 'px-2 justify-center' : 'px-3 justify-start'}
+                                        ${isActive
+                                            ? 'border-r-4 border-r-teal-500 text-teal-700 shadow-md shadow-teal-500/20'
+                                            : showLock
+                                                ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-500 cursor-pointer'
+                                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                        }
+                                    `}
                                 >
-                                    <div className="flex items-center min-w-0">
+                                    {/* Icon container - fixed width to prevent shifting */}
+                                    <div className="flex items-center justify-center w-5 h-5 flex-shrink-0">
                                         <item.icon
-                                            className={`h-5 w-5 flex-shrink-0 transition-all duration-200 ${isActive
+                                            className={`h-5 w-5 transition-all duration-200 ${isActive
                                                 ? 'text-teal-700'
                                                 : showLock
                                                     ? 'text-gray-400'
                                                     : 'text-teal-700 group-hover/btn:text-gray-600'
                                                 }`}
                                         />
-                                        <span className={`ml-3 transition-all duration-300 ease-out font-semibold ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
+                                    </div>
+                                    
+                                    {/* Text container with consistent spacing */}
+                                    <div className={`
+                                        flex items-center justify-between min-w-0 flex-1
+                                        ${isCollapsed ? 'ml-0 w-0 opacity-0' : 'ml-3 w-auto opacity-100'}
+                                        transition-all duration-300 ease-out
+                                    `}>
+                                        <span className={`whitespace-nowrap ${isActive ? 'font-semibold' : 'font-normal'}`}>
                                             {item.name}
                                         </span>
+                                        {showLock && (
+                                            <LockClosedIcon className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                                        )}
                                     </div>
-                                    {showLock && (
-                                        <LockClosedIcon className={`h-4 w-4 flex-shrink-0 text-gray-400 ml-auto transition-all duration-300 ${isCollapsed ? 'lg:opacity-0 lg:w-0' : 'opacity-100 w-4'}`} />
-                                    )}
                                 </button>
 
-                                {/* Tooltip for collapsed state */}
+                                {/* Tooltip for collapsed state - positioned to avoid overlap */}
                                 {isCollapsed && (
-                                    <div className="hidden lg:group-hover:block absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none transition-all duration-200">
-                                        {item.name}
-                                        {showLock && (
-                                            <span className="block text-xs opacity-75 mt-1">
-                                                Upgrade Required
-                                            </span>
-                                        )}
+                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200">
+                                        <div className="relative">
+                                            {item.name}
+                                            {showLock && (
+                                                <span className="block text-xs opacity-75 mt-1">
+                                                    Upgrade Required
+                                                </span>
+                                            )}
+                                            {/* Tooltip arrow */}
+                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900/90 rotate-45 transform"></div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
