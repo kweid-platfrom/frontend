@@ -6,8 +6,8 @@ import { CheckCircle, Bug } from "lucide-react";
 const BugReportSuccess = ({ 
     onClose, 
     bugId = null, 
-    title = "Bug Report Submitted!",
-    message = "Thank you for helping us improve the application.",
+    title = "Nice catch! Your bug has been reported.",
+    message = "Thanks for helping us squash it 🐞. We appreciate your feedback!",
     showBugId = false,
     autoClose = true,
     autoCloseDelay = 3000,
@@ -58,9 +58,9 @@ const BugReportSuccess = ({
     };
 
     return (
-        <div className={`flex flex-col items-center justify-center text-center ${getVariantStyles()} ${className}`}>
-            {/* Success Icon */}
-            <div className={`${getIconSize()} bg-green-100 rounded-full flex items-center justify-center mb-4 animate-in zoom-in-50 duration-300`}>
+        <div className={`flex flex-col items-center justify-center text-center transition-all duration-300 ${getVariantStyles()} ${className}`}>
+            {/* Animated Success Icon */}
+            <div className={`${getIconSize()} bg-green-100 rounded-full flex items-center justify-center mb-4 animate-scale-in`}>
                 <CheckCircle className={`${getIconInnerSize()} text-green-600`} />
             </div>
 
@@ -92,23 +92,10 @@ const BugReportSuccess = ({
                 </div>
             )}
 
-            {/* Detailed variant additional info */}
-            {variant === "detailed" && (
-                <div className="mb-6 space-y-3 text-sm text-gray-600">
-                    <div className="flex items-center justify-center space-x-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Bug reported su</span>
-                    </div>
-                    <div className="flex items-center justify-center space-x-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    </div>
-                </div>
-            )}
-
-            {/* Auto-close indicator */}
+            {/* Auto-close Indicator */}
             {autoClose && (
                 <div className="mt-2 text-xs text-gray-400">
-                    Closing automatically in {Math.ceil(autoCloseDelay / 1000)} seconds
+                    Closing automatically in {Math.ceil(autoCloseDelay / 1000)} seconds...
                 </div>
             )}
         </div>
