@@ -15,12 +15,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import "../../app/globals.css";
 
-const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
+const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
     const [emails, setEmails] = useState([""]);
     const [orgDomain, setOrgDomain] = useState("");
     const [externalEmails, setExternalEmails] = useState([]);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [inviteLoading, setInviteLoading] = useState(false);
+
+    
 
     useEffect(() => {
         if (userEmail) {
@@ -308,4 +310,4 @@ const TeamInviteForm = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
     );
 };
 
-export default TeamInviteForm;
+export default TeamInviteFormMain   ;

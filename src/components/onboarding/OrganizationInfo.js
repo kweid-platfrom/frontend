@@ -465,7 +465,7 @@ const UnifiedOrganizationOnboarding = ({ onComplete, isLoading: parentLoading })
                         <>
                             <div className="text-center mb-8">
                                 <div className="mx-auto mb-4 w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <Users className="w-8 h-8 text-blue-600" />
+                                    <Users className="w-8 h-8 text-teal-600" />
                                 </div>
                                 <h1 className="text-2xl font-bold text-gray-900 mb-2">
                                     Invite your team

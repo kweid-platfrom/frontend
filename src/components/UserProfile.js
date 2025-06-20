@@ -21,6 +21,7 @@ import {
     StarIcon,
     ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
+import UserManagement from '../components/userManagement/UserManagement';
 
 const UserProfile = () => {
     const { userProfile, updateUserProfile } = useProject();
@@ -173,7 +174,8 @@ const UserProfile = () => {
         { id: 'profile', name: 'Profile', icon: UserIcon },
         { id: 'security', name: 'Security', icon: ShieldCheckIcon },
         { id: 'notifications', name: 'Notifications', icon: BellIcon },
-        { id: 'subscription', name: 'Subscription', icon: CreditCardIcon }
+        { id: 'subscription', name: 'Subscription', icon: CreditCardIcon },
+        { id: 'Team', name: 'Team Management', icon: CreditCardIcon }
     ];
 
     if (!userProfile) {
@@ -249,8 +251,8 @@ const UserProfile = () => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center space-x-2 py-4 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
-                                        ? 'border-teal-500 text-teal-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    ? 'border-teal-500 text-teal-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >
                                 <tab.icon className="h-4 w-4" />
@@ -674,6 +676,23 @@ const UserProfile = () => {
                                         <div className="text-sm text-gray-500">Tests Run</div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* User Management Tab */}
+                    {activeTab === 'Team' && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-gray-900">Team Management</h2>
+                                    <p className="text-gray-600">Manage your team members and their roles.</p>
+                                </div>
+                            </div>
+
+                            {/* Render the UserManagementPage component without the outer container */}
+                            <div className="space-y-6">
+                                <UserManagement />
                             </div>
                         </div>
                     )}
