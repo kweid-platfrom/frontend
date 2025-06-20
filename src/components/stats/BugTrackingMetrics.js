@@ -1,9 +1,105 @@
-import React, { useMemo } from 'react';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Bug, AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
+import { db } from '../../config/firebase';
+import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
+import { useProject } from '../../context/ProjectContext';
+import { useAuth } from '../../context/AuthProvider';
 
 const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error = null }) => {
-    // Default metrics calculation if no metrics provided
-    const calculateDefaultMetrics = (bugsData) => {
+    const [fetchedBugs, setFetchedBugs] = useState([]);
+    const [fetchingBugs, setFetchingBugs] = useState(false);
+    const [fetchError, setFetchError] = useState(null);
+    const [hasFetched, setHasFetched] = useState(false);
+
+    const { activeProject } = useProject();
+    const { hasPermission, user } = useAuth();
+
+    // Memoize the fetch function to prevent infinite re-renders
+    const fetchBugsDirectly = useCallback(async () => {
+        if (!activeProject?.id || !user || !hasPermission('read_bugs') || hasFetched) {
+            return;
+        }
+
+        setFetchingBugs(true);
+        setFetchError(null);
+
+        try {
+            // Try subcollection first
+            const bugsRef = collection(db, 'projects', activeProject.id, 'bugs');
+            let querySnapshot;
+
+            try {
+                const q = query(bugsRef, orderBy('createdAt', 'desc'));
+                querySnapshot = await getDocs(q);
+            } catch (orderError) {
+                querySnapshot = await getDocs(bugsRef);
+            }
+
+            // If subcollection is empty, try main collection with projectId filter
+            if (querySnapshot.size === 0) {
+                const mainBugsRef = collection(db, 'bugs');
+                const mainQuery = query(mainBugsRef, where('projectId', '==', activeProject.id));
+                querySnapshot = await getDocs(mainQuery);
+            }
+
+            const bugList = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt) || new Date(),
+                    updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt) || new Date(),
+                    // Ensure required fields have defaults
+                    status: data.status || 'Open',
+                    priority: data.priority || 'Medium',
+                    severity: data.severity || 'Medium',
+                    source: data.source || 'manual',
+                    hasVideoEvidence: data.hasVideoEvidence || false,
+                    hasNetworkLogs: data.hasNetworkLogs || false,
+                    hasConsoleLogs: data.hasConsoleLogs || false,
+                    hasAttachments: data.hasAttachments || false,
+                    isReproducible: data.isReproducible !== false, // Default to true
+                    resolutionTime: data.resolutionTime || 0
+                };
+            });
+
+            setFetchedBugs(bugList);
+            setHasFetched(true);
+        } catch (error) {
+            setFetchError(error.message);
+        } finally {
+            setFetchingBugs(false);
+        }
+    }, [activeProject?.id, user, hasPermission, hasFetched]);
+
+    // Fetch bugs when component mounts if no bugs provided
+    useEffect(() => {
+        if ((!bugs || bugs.length === 0) && !loading && !error && !hasFetched) {
+            fetchBugsDirectly();
+        }
+    }, [bugs, loading, error, hasFetched, fetchBugsDirectly]);
+
+    // Reset hasFetched when project changes
+    useEffect(() => {
+        setHasFetched(false);
+        setFetchedBugs([]);
+        setFetchError(null);
+    }, [activeProject?.id]);
+
+    // Use provided bugs or fetched bugs
+    const effectiveBugs = useMemo(() => {
+        if (bugs && bugs.length > 0) {
+            return bugs;
+        }
+        if (fetchedBugs && fetchedBugs.length > 0) {
+            return fetchedBugs;
+        }
+        return [];
+    }, [bugs, fetchedBugs]);
+
+    // Enhanced metrics calculation with better defaults
+    const calculateDefaultMetrics = useCallback((bugsData) => {
         if (!Array.isArray(bugsData) || bugsData.length === 0) {
             return {
                 totalBugs: 0,
@@ -27,22 +123,51 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                 avgBugsPerReport: 0
             };
         }
-        
-        // Calculate metrics from bugs array
+
+        // Calculate metrics from bugs array with better field matching
         const total = bugsData.length;
-        const resolved = bugsData.filter(bug => bug.status === 'Resolved' || bug.status === 'Closed').length;
-        const critical = bugsData.filter(bug => bug.priority === 'Critical').length;
-        const high = bugsData.filter(bug => bug.priority === 'High').length;
-        const medium = bugsData.filter(bug => bug.priority === 'Medium').length;
-        const low = bugsData.filter(bug => bug.priority === 'Low').length;
-        
+        const resolved = bugsData.filter(bug => {
+            const status = (bug.status || '').toLowerCase();
+            return status === 'resolved' || status === 'closed' || status === 'fixed';
+        }).length;
+
+        const critical = bugsData.filter(bug => {
+            const priority = (bug.priority || bug.severity || '').toLowerCase();
+            return priority === 'critical' || priority === 'high';
+        }).length;
+
+        const high = bugsData.filter(bug => {
+            const priority = (bug.priority || '').toLowerCase();
+            return priority === 'high';
+        }).length;
+
+        const medium = bugsData.filter(bug => {
+            const priority = (bug.priority || '').toLowerCase();
+            return priority === 'medium' || priority === 'normal';
+        }).length;
+
+        const low = bugsData.filter(bug => {
+            const priority = (bug.priority || '').toLowerCase();
+            return priority === 'low' || priority === 'minor';
+        }).length;
+
+        const screenRecordingBugs = bugsData.filter(bug => {
+            const source = (bug.source || '').toLowerCase();
+            return source.includes('screen') || source.includes('recording') || source.includes('video');
+        }).length;
+
+        const manualBugs = bugsData.filter(bug => {
+            const source = (bug.source || '').toLowerCase();
+            return source === 'manual' || source === 'testing' || source === '';
+        }).length;
+
         return {
             totalBugs: total,
-            bugsFromScreenRecording: bugsData.filter(bug => bug.source === 'screen-recording').length,
-            bugsFromManualTesting: bugsData.filter(bug => bug.source === 'manual').length,
-            bugsWithVideoEvidence: bugsData.filter(bug => bug.hasVideoEvidence).length,
-            bugsWithNetworkLogs: bugsData.filter(bug => bug.hasNetworkLogs).length,
-            bugsWithConsoleLogs: bugsData.filter(bug => bug.hasConsoleLogs).length,
+            bugsFromScreenRecording: screenRecordingBugs,
+            bugsFromManualTesting: Math.max(manualBugs, total - screenRecordingBugs),
+            bugsWithVideoEvidence: bugsData.filter(bug => bug.hasVideoEvidence || bug.videoUrl || bug.screenRecording).length,
+            bugsWithNetworkLogs: bugsData.filter(bug => bug.hasNetworkLogs || bug.networkLogs).length,
+            bugsWithConsoleLogs: bugsData.filter(bug => bug.hasConsoleLogs || bug.consoleLogs).length,
             criticalBugs: critical,
             highPriorityBugs: high,
             mediumPriorityBugs: medium,
@@ -51,13 +176,18 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
             avgResolutionTime: Math.round(bugsData.reduce((acc, bug) => acc + (bug.resolutionTime || 0), 0) / total) || 0,
             bugResolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0,
             avgBugReportCompleteness: 85,
-            bugReportsWithAttachments: bugsData.filter(bug => bug.hasAttachments).length,
-            bugReproductionRate: total > 0 ? Math.round((bugsData.filter(bug => bug.isReproducible).length / total) * 100) : 0,
+            bugReportsWithAttachments: bugsData.filter(bug =>
+                bug.hasAttachments ||
+                bug.attachments?.length > 0 ||
+                bug.screenshots?.length > 0 ||
+                bug.files?.length > 0
+            ).length,
+            bugReproductionRate: total > 0 ? Math.round((bugsData.filter(bug => bug.isReproducible !== false).length / total) * 100) : 85,
             weeklyReportsGenerated: 4,
             monthlyReportsGenerated: 1,
             avgBugsPerReport: Math.round(total / 5) || 0
         };
-    };
+    }, []);
 
     // Use passed metrics if available, otherwise calculate from bugs
     const finalMetrics = useMemo(() => {
@@ -85,8 +215,8 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                 avgBugsPerReport: metrics.avgBugsPerReport || 0
             };
         }
-        return calculateDefaultMetrics(bugs);
-    }, [bugs, metrics]);
+        return calculateDefaultMetrics(effectiveBugs);
+    }, [effectiveBugs, metrics, calculateDefaultMetrics]);
 
     const {
         totalBugs,
@@ -154,7 +284,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
     const SeverityBar = ({ severity, count, total, color }) => {
         const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
         const colors = getColorClasses(color);
-        
+
         return (
             <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
                 <div className="flex items-center space-x-3">
@@ -179,7 +309,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
     const EvidenceCard = ({ title, value, total, icon: Icon, color = "blue" }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
         const colors = getColorClasses(color);
-        
+
         return (
             <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -196,24 +326,42 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
         );
     };
 
-    if (loading) {
+    // Show loading state
+    if (loading || fetchingBugs) {
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-center p-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <span className="ml-2 text-gray-600">Loading bug metrics...</span>
+                    <span className="ml-2 text-gray-600">
+                        {fetchingBugs ? 'Fetching bug data...' : 'Loading bug metrics...'}
+                    </span>
                 </div>
             </div>
         );
     }
 
-    if (error) {
+    // Show error state
+    if (error || fetchError) {
         return (
             <div className="space-y-6">
                 <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                    <div className="flex items-center">
-                        <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
-                        <span className="text-red-800">{error}</span>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+                            <span className="text-red-800">{error || fetchError}</span>
+                        </div>
+                        {fetchError && (
+                            <button
+                                onClick={() => {
+                                    setHasFetched(false);
+                                    setFetchError(null);
+                                    fetchBugsDirectly();
+                                }}
+                                className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200"
+                            >
+                                Retry
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -227,6 +375,11 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                 <h2 className="text-xl font-bold text-gray-900">Bug Tracking & Resolution</h2>
                 <div className="text-sm text-gray-500">
                     Total: {totalBugs.toLocaleString()} bugs tracked
+                    {effectiveBugs.length !== totalBugs && (
+                        <span className="ml-2 text-xs text-orange-600">
+                            ({effectiveBugs.length} loaded)
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -446,25 +599,6 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                         </div>
                         <div className="text-sm text-gray-600">Evidence Coverage</div>
                     </div>
-                </div>
-            </div>
-
-            {/* Debug Information - Remove in production */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-2">Debug: Current Metrics Values</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
-                    <div>Total Bugs: {totalBugs}</div>
-                    <div>Critical: {criticalBugs}</div>
-                    <div>High Priority: {highPriorityBugs}</div>
-                    <div>Medium Priority: {mediumPriorityBugs}</div>
-                    <div>Low Priority: {lowPriorityBugs}</div>
-                    <div>Resolved: {resolvedBugs}</div>
-                    <div>From Recording: {bugsFromScreenRecording}</div>
-                    <div>From Manual: {bugsFromManualTesting}</div>
-                    <div>Video Evidence: {bugsWithVideoEvidence}</div>
-                    <div>Network Logs: {bugsWithNetworkLogs}</div>
-                    <div>Console Logs: {bugsWithConsoleLogs}</div>
-                    <div>With Attachments: {bugReportsWithAttachments}</div>
                 </div>
             </div>
         </div>

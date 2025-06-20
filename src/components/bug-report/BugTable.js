@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { useProject } from '../../context/ProjectContext';
 import { useAuth } from '../../context/AuthProvider';
-import { CheckSquare, Square, MessageSquare } from 'lucide-react';
+import { CheckSquare, Square  } from 'lucide-react';
 import BugTableRow from './BugTableRow';
 
 // Import utility functions
@@ -330,7 +330,7 @@ const BugTable = ({
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             {/* Bulk Actions Bar */}
             {selectedIds.length > 0 && (
-                <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
+                <div className="bg-white border-b border-teal-200 px-6 py-3">
                     <div className="flex items-center justify-between">
                         <span className="text-sm text-teal-700 font-medium">
                             {selectedIds.length} bug{selectedIds.length > 1 ? 's' : ''} selected
@@ -338,21 +338,21 @@ const BugTable = ({
                         <div className="flex gap-2">
                             <button
                                 onClick={() => handleBulkAction('reopen', selectedIds)}
-                                className="px-2 py-1 bg-[#fff] text-gray-600 text-xs rounded-full hover:text-green-700 transition-colors"
+                                className="px-2 py-1 bg-[#fff] text-gray-600 shadow-md text-xs rounded-full hover:text-green-700 transition-colors"
                                 disabled={!hasPermission('write_bugs')}
                             >
                                 Reopen
                             </button>
                             <button
                                 onClick={() => handleBulkAction('close', selectedIds)}
-                                className="px-2 py-1 bg-[#fff] text-gray-600 text-xs rounded-full hover:text-teal-800 transition-colors"
+                                className="px-2 py-1 bg-[#fff] text-gray-600 text-xs rounded-full hover:text-teal-800 shadow-md transition-colors"
                                 disabled={!hasPermission('write_bugs')}
                             >
                                 Close
                             </button>
                             <button
                                 onClick={() => handleBulkAction('delete', selectedIds)}
-                                className="px-2 py-1 bg-[#fff] text-gray-600 text-xs rounded-full hover:text-red-500 transition-colors"
+                                className="px-2 py-1 bg-[#fff] text-gray-600 text-xs shadow-md rounded-full hover:text-red-500 transition-colors"
                                 disabled={!hasPermission('write_bugs')}
                             >
                                 Delete
@@ -430,9 +430,6 @@ const BugTable = ({
                             </th>
                             {/* New Chat column for bug details trigger */}
                             <th scope="col" className="border-r border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-16">
-                                <div className="flex items-center h-full justify-center">
-                                    <MessageSquare className="h-4 w-4" />
-                                </div>
                             </th>
                             <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-8">
                                 <div className="flex items-center h-full">

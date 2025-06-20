@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthProvider';
+import { useProject } from '../context/ProjectContext';
 
 // Utility function to get date range filter
 const getDateRange = (timeRange) => {
@@ -23,29 +24,51 @@ const getDateRange = (timeRange) => {
     return ranges[timeRange] || ranges['7d'];
 };
 
-// Apply filters with proper user permissions based on your auth structure
-const applyFilters = (baseQuery, filters, dateField = 'createdAt', userContext = null) => {
-    let filteredQuery = baseQuery;
-
-    // Security: Add user-based filtering based on your auth structure
-    if (userContext) {
-        // Filter by organization if user belongs to one
-        if (userContext.userProfile?.organizationId) {
-            filteredQuery = query(filteredQuery, where('organizationId', '==', userContext.userProfile.organizationId));
-        }
-        // If no organization, filter by user ID for individual accounts
-        else if (userContext.currentUser?.uid) {
-            filteredQuery = query(filteredQuery, where('createdBy', '==', userContext.currentUser.uid));
-        }
-
-        // Additional team-based filtering if your data model supports it
-        if (userContext.userProfile?.accessibleTeams && userContext.userProfile.accessibleTeams.length > 0) {
-            // Note: This assumes your documents have a 'team' field
-            // Firestore 'in' queries are limited to 10 values
-            const teams = userContext.userProfile.accessibleTeams.slice(0, 10);
-            filteredQuery = query(filteredQuery, where('team', 'in', teams));
-        }
+// Helper function to convert Firebase Timestamp to Date
+const convertFirebaseDate = (timestamp) => {
+    if (!timestamp) return null;
+    if (typeof timestamp === 'string') {
+        return new Date(timestamp);
     }
+    if (timestamp.toDate) {
+        return timestamp.toDate();
+    }
+    return timestamp;
+};
+
+// Helper function to calculate time difference in hours
+const calculateHoursDifference = (startDate, endDate) => {
+    if (!startDate || !endDate) return 0;
+    const start = convertFirebaseDate(startDate);
+    const end = convertFirebaseDate(endDate);
+    return Math.abs(end - start) / (1000 * 60 * 60);
+};
+
+// Calculate bug report completeness score (matching Bug Service)
+const calculateReportCompleteness = (bug) => {
+    let score = 0;
+    const totalFields = 10;
+
+    // Check for required fields
+    if (bug.title && bug.title.trim()) score++;
+    if (bug.actualBehavior && bug.actualBehavior.trim()) score++;
+    if (bug.expectedBehavior && bug.expectedBehavior.trim()) score++;
+    if (bug.stepsToReproduce && bug.stepsToReproduce.trim()) score++;
+    if (bug.environment) score++;
+    if (bug.priority) score++;
+    if (bug.severity) score++;
+    if (bug.category) score++;
+    
+    // Check for attachments/evidence
+    if (bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)) score++;
+    if (bug.hasVideoEvidence || bug.hasConsoleLogs || bug.hasNetworkLogs) score++;
+
+    return Math.round((score / totalFields) * 100);
+};
+
+// Apply filters to the query (matching Bug Service architecture)
+const applyFilters = (baseQuery, filters, dateField = 'createdAt') => {
+    let filteredQuery = baseQuery;
 
     // Time range filter
     if (filters.timeRange && filters.timeRange !== 'all') {
@@ -53,8 +76,8 @@ const applyFilters = (baseQuery, filters, dateField = 'createdAt', userContext =
         filteredQuery = query(filteredQuery, where(dateField, '>=', Timestamp.fromDate(fromDate)));
     }
 
-    // Apply other filters
-    const filterFields = ['team', 'component', 'severity', 'priority', 'status', 'feature', 'sprint'];
+    // Individual field filters
+    const filterFields = ['priority', 'severity', 'status', 'source', 'team', 'component', 'environment', 'feature', 'sprint'];
     filterFields.forEach(field => {
         if (filters[field] && filters[field] !== 'all') {
             filteredQuery = query(filteredQuery, where(field, '==', filters[field]));
@@ -64,21 +87,67 @@ const applyFilters = (baseQuery, filters, dateField = 'createdAt', userContext =
     return filteredQuery;
 };
 
-// Consolidated bug metrics calculator
+// Consolidated bug metrics calculator (enhanced from both services)
 const calculateBugMetrics = (bugs = []) => {
     if (!Array.isArray(bugs) || bugs.length === 0) {
         return {
+            // Core metrics
             totalBugs: 0,
             resolvedBugs: 0,
             activeBugs: 0,
             criticalBugs: 0,
             avgResolutionTime: 0,
             bugResolutionRate: 0,
+            
+            // Quality metrics
             avgReportCompleteness: 0,
+            bugReproductionRate: 0,
+            
+            // Evidence metrics
             bugsWithEvidence: 0,
+            bugsWithVideoEvidence: 0,
+            bugsWithNetworkLogs: 0,
+            bugsWithConsoleLogs: 0,
+            bugReportsWithAttachments: 0,
+            
+            // Source metrics
+            bugsFromScreenRecording: 0,
+            bugsFromManualTesting: 0,
+            bugsFromAutomatedTesting: 0,
+            
+            // Assignment metrics
+            assignedBugs: 0,
+            unassignedBugs: 0,
+            assignmentRate: 0,
+            
+            // Priority breakdown
+            highPriorityBugs: 0,
+            mediumPriorityBugs: 0,
+            lowPriorityBugs: 0,
+            
+            // Severity breakdown
+            criticalSeverity: 0,
+            highSeverity: 0,
+            mediumSeverity: 0,
+            lowSeverity: 0,
+            
+            // Activity metrics
+            recentlyReported: 0,
+            weeklyBugs: 0,
+            monthlyBugs: 0,
+            
+            // Report metrics
+            weeklyReportsGenerated: 0,
+            monthlyReportsGenerated: 0,
+            avgBugsPerReport: 0,
+            
+            // Distributions
             statusDistribution: {},
             priorityDistribution: {},
-            severityDistribution: {}
+            severityDistribution: {},
+            sourceDistribution: {},
+            environmentDistribution: {},
+            assigneeDistribution: {}
         };
     }
 
@@ -86,7 +155,7 @@ const calculateBugMetrics = (bugs = []) => {
     
     // Status distribution
     const statusCounts = bugs.reduce((acc, bug) => {
-        const status = bug.status || 'New';
+        const status = bug.status || 'Open';
         acc[status] = (acc[status] || 0) + 1;
         return acc;
     }, {});
@@ -105,8 +174,22 @@ const calculateBugMetrics = (bugs = []) => {
         return acc;
     }, {});
 
+    // Source distribution
+    const sourceCounts = bugs.reduce((acc, bug) => {
+        const source = bug.source || 'manual';
+        acc[source] = (acc[source] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Environment distribution
+    const environmentCounts = bugs.reduce((acc, bug) => {
+        const environment = bug.environment || 'Unknown';
+        acc[environment] = (acc[environment] || 0) + 1;
+        return acc;
+    }, {});
+
     // Resolution metrics
-    const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Done'];
+    const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Done', 'Verified'];
     const resolvedBugs = bugs.filter(bug => resolvedStatuses.includes(bug.status));
     const activeBugs = totalBugs - resolvedBugs.length;
     
@@ -121,67 +204,172 @@ const calculateBugMetrics = (bugs = []) => {
     
     if (resolvedBugsWithTimes.length > 0) {
         const totalTime = resolvedBugsWithTimes.reduce((sum, bug) => {
-            const created = bug.createdAt.toDate ? bug.createdAt.toDate() : new Date(bug.createdAt);
-            const resolved = bug.resolvedAt.toDate ? bug.resolvedAt.toDate() : new Date(bug.resolvedAt);
-            return sum + (resolved - created);
+            return sum + calculateHoursDifference(bug.createdAt, bug.resolvedAt);
         }, 0);
-        avgResolutionTime = Math.round(totalTime / resolvedBugsWithTimes.length / (1000 * 60 * 60)); // hours
+        avgResolutionTime = Math.round(totalTime / resolvedBugsWithTimes.length);
     }
 
     // Bug resolution rate
     const bugResolutionRate = totalBugs > 0 ? Math.round((resolvedBugs.length / totalBugs) * 100) : 0;
 
     // Report completeness
-    const calculateCompleteness = (bug) => {
-        let score = 0;
-        const fields = ['title', 'stepsToReproduce', 'expectedBehavior', 'actualBehavior', 'environment'];
-        fields.forEach(field => {
-            if (bug[field] && bug[field].toString().trim().length > 5) score++;
-        });
-        if (bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)) score++;
-        return Math.round((score / 6) * 100);
-    };
-
-    const avgReportCompleteness = totalBugs > 0 
-        ? Math.round(bugs.reduce((sum, bug) => sum + calculateCompleteness(bug), 0) / totalBugs)
+    const completenessScores = bugs.map(calculateReportCompleteness);
+    const avgReportCompleteness = completenessScores.length > 0
+        ? Math.round(completenessScores.reduce((sum, score) => sum + score, 0) / completenessScores.length)
         : 0;
 
     // Evidence metrics
+    const bugsWithVideoEvidence = bugs.filter(bug => bug.hasVideoEvidence).length;
+    const bugsWithNetworkLogs = bugs.filter(bug => bug.hasNetworkLogs).length;
+    const bugsWithConsoleLogs = bugs.filter(bug => bug.hasConsoleLogs).length;
+    const bugsWithAttachments = bugs.filter(bug => 
+        bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)
+    ).length;
     const bugsWithEvidence = bugs.filter(bug => 
         bug.hasVideoEvidence || bug.hasConsoleLogs || bug.hasNetworkLogs || 
-        (bug.attachments && bug.attachments.length > 0)
+        bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)
     ).length;
 
+    // Source metrics
+    const bugsFromScreenRecording = sourceCounts['screen-recording'] || 0;
+    const bugsFromManualTesting = sourceCounts['manual'] || 0;
+    const bugsFromAutomatedTesting = sourceCounts['automated'] || 0;
+
+    // Priority breakdown
+    const highPriorityBugs = priorityCounts['High'] || 0;
+    const mediumPriorityBugs = priorityCounts['Medium'] || 0;
+    const lowPriorityBugs = priorityCounts['Low'] || 0;
+
+    // Severity breakdown
+    const criticalSeverity = severityCounts['Critical'] || 0;
+    const highSeverity = severityCounts['High'] || 0;
+    const mediumSeverity = severityCounts['Medium'] || 0;
+    const lowSeverity = severityCounts['Low'] || 0;
+
+    // Assignment metrics
+    const assignedBugs = bugs.filter(bug => bug.assignedTo && bug.assignedTo.trim()).length;
+    const unassignedBugs = totalBugs - assignedBugs;
+    const assignmentRate = totalBugs > 0 ? Math.round((assignedBugs / totalBugs) * 100) : 0;
+
+    // Assignee distribution
+    const assigneeDistribution = bugs.reduce((acc, bug) => {
+        const assignee = bug.assignedTo || 'Unassigned';
+        acc[assignee] = (acc[assignee] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Reproduction rate
+    const bugsWithSteps = bugs.filter(bug => 
+        bug.stepsToReproduce && bug.stepsToReproduce.trim()
+    ).length;
+    const bugReproductionRate = totalBugs > 0 ? Math.round((bugsWithSteps / totalBugs) * 100) : 0;
+
+    // Recent activity metrics
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentBugs = bugs.filter(bug => {
+        const createdDate = convertFirebaseDate(bug.createdAt);
+        return createdDate >= last24Hours;
+    }).length;
+
+    const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const weeklyBugs = bugs.filter(bug => {
+        const createdDate = convertFirebaseDate(bug.createdAt);
+        return createdDate >= last7Days;
+    }).length;
+
+    const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const monthlyBugs = bugs.filter(bug => {
+        const createdDate = convertFirebaseDate(bug.createdAt);
+        return createdDate >= last30Days;
+    }).length;
+
+    // Report generation metrics
+    const weeklyReportsGenerated = Math.ceil(weeklyBugs / 10);
+    const monthlyReportsGenerated = Math.ceil(monthlyBugs / 20);
+    const avgBugsPerReport = weeklyReportsGenerated > 0 ? Math.round(weeklyBugs / weeklyReportsGenerated) : 0;
+
     return {
+        // Core metrics
         totalBugs,
         resolvedBugs: resolvedBugs.length,
         activeBugs,
         criticalBugs,
         avgResolutionTime,
         bugResolutionRate,
+        
+        // Quality metrics
         avgReportCompleteness,
+        bugReproductionRate,
+        
+        // Evidence metrics
         bugsWithEvidence,
+        bugsWithVideoEvidence,
+        bugsWithNetworkLogs,
+        bugsWithConsoleLogs,
+        bugReportsWithAttachments: bugsWithAttachments,
+        
+        // Source metrics
+        bugsFromScreenRecording,
+        bugsFromManualTesting,
+        bugsFromAutomatedTesting,
+        
+        // Assignment metrics
+        assignedBugs,
+        unassignedBugs,
+        assignmentRate,
+        
+        // Priority breakdown
+        highPriorityBugs,
+        mediumPriorityBugs,
+        lowPriorityBugs,
+        
+        // Severity breakdown
+        criticalSeverity,
+        highSeverity,
+        mediumSeverity,
+        lowSeverity,
+        
+        // Activity metrics
+        recentlyReported: recentBugs,
+        weeklyBugs,
+        monthlyBugs,
+        
+        // Report metrics
+        weeklyReportsGenerated,
+        monthlyReportsGenerated,
+        avgBugsPerReport,
+        
+        // Distributions
         statusDistribution: statusCounts,
         priorityDistribution: priorityCounts,
-        severityDistribution: severityCounts
+        severityDistribution: severityCounts,
+        sourceDistribution: sourceCounts,
+        environmentDistribution: environmentCounts,
+        assigneeDistribution,
+        
+        // Additional status metrics
+        openBugs: statusCounts['Open'] || 0,
+        inProgress: statusCounts['In Progress'] || 0,
+        closed: statusCounts['Closed'] || 0
     };
 };
 
-// Secure fetch function with error handling using your auth structure
-const fetchSecureData = async (collectionName, filters, dateField, userContext) => {
+// Secure fetch function matching Bug Service architecture
+const fetchSecureData = async (collectionName, filters, dateField, projectId, hasPermission) => {
     try {
-        // Check authentication using your auth structure
-        if (!userContext?.currentUser) {
-            throw new Error('Authentication required');
+        // Check if project is selected
+        if (!projectId) {
+            throw new Error(`No project selected. Please select a project to view ${collectionName}.`);
         }
 
-        // Check if user has required permissions using your hasPermission method
-        if (!userContext.hasPermission('read_tests')) {
-            throw new Error('Insufficient permissions to read QA data');
+        // Check permissions if available
+        if (hasPermission && !hasPermission('read_bugs')) {
+            throw new Error(`You do not have permission to view ${collectionName} for this project.`);
         }
 
-        const collectionRef = collection(db, collectionName);
-        const filteredQuery = applyFilters(collectionRef, filters, dateField, userContext);
+        // Query the project's subcollection (matching Bug Service logic)
+        const collectionRef = collection(db, 'projects', projectId, collectionName);
+        const filteredQuery = applyFilters(collectionRef, filters, dateField);
         
         // Add ordering and limit for performance
         const finalQuery = query(
@@ -190,14 +378,37 @@ const fetchSecureData = async (collectionName, filters, dateField, userContext) 
             limit(1000) // Reasonable limit
         );
 
+        console.log(`Executing ${collectionName} query for project:`, projectId);
         const snapshot = await getDocs(finalQuery);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const data = snapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+            updatedAt: doc.data().updatedAt?.toDate(),
+            resolvedAt: doc.data().resolvedAt?.toDate()
+        }));
+
+        console.log(`Fetched ${data.length} ${collectionName} for metrics`);
+        return data;
+        
     } catch (error) {
         console.error(`Error fetching ${collectionName}:`, error);
         
-        // Handle specific permission errors
+        // Handle specific Firebase errors
         if (error.code === 'permission-denied') {
-            throw new Error(`Access denied to ${collectionName}. Please check your permissions.`);
+            throw new Error(`You do not have permission to view ${collectionName} for this project`);
+        }
+        
+        if (error.code === 'unauthenticated') {
+            throw new Error('Authentication required. Please log in to continue.');
+        }
+        
+        if (error.code === 'failed-precondition') {
+            throw new Error('Database query failed. Please try again or contact support.');
+        }
+        
+        if (error.code === 'not-found') {
+            throw new Error('Project not found or you do not have access to it.');
         }
         
         throw error;
@@ -286,36 +497,19 @@ const fetchSecureData = async (collectionName, filters, dateField, userContext) 
 //     };
 // };
 
-// Main hook for bug metrics only (other features commented out until implemented)
+// Main hook for bug metrics (updated to match Bug Service architecture)
 export const useBugMetrics = (filters = {}) => {
     const [metrics, setMetrics] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     
-    // Use your actual auth context
-    const {
-        currentUser,
-        userProfile,
-        hasPermission,
-        hasRole,
-        loading: authLoading
-    } = useAuth();
+    // Get auth and project context (matching Bug Service)
+    const { hasPermission } = useAuth();
+    const { activeProject } = useProject();
 
     const fetchBugMetrics = useCallback(async () => {
-        // Wait for auth to be ready
-        if (authLoading) {
-            return;
-        }
-
-        if (!currentUser) {
-            setError('Authentication required');
-            setLoading(false);
-            return;
-        }
-
-        // Check permissions using your auth structure
-        if (!hasPermission('read_tests')) {
-            setError('Insufficient permissions to view bug metrics');
+        if (!activeProject?.id) {
+            setMetrics(null);
             setLoading(false);
             return;
         }
@@ -324,18 +518,10 @@ export const useBugMetrics = (filters = {}) => {
             setLoading(true);
             setError(null);
 
-            // Create user context object from your auth structure
-            const userContext = {
-                currentUser,
-                userProfile,
-                hasPermission,
-                hasRole
-            };
+            // Fetch only bug data for now (matching Bug Service approach)
+            const bugs = await fetchSecureData('bugs', filters, 'createdAt', activeProject.id, hasPermission);
 
-            // Fetch only bug data for now
-            const bugs = await fetchSecureData('bugs', filters, 'createdAt', userContext);
-
-            // Calculate bug metrics
+            // Calculate bug metrics using the enhanced calculator
             const bugMetrics = calculateBugMetrics(bugs);
 
             setMetrics({
@@ -343,9 +529,10 @@ export const useBugMetrics = (filters = {}) => {
                 summary: {
                     totalItems: bugs.length,
                     criticalIssues: bugMetrics.criticalBugs,
-                    bugResolutionRate: bugMetrics.bugResolutionRate
-                },
-                lastUpdated: new Date()
+                    bugResolutionRate: bugMetrics.bugResolutionRate,
+                    projectId: activeProject.id,
+                    lastUpdated: new Date()
+                }
             });
 
         } catch (err) {
@@ -354,7 +541,7 @@ export const useBugMetrics = (filters = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [filters, currentUser, userProfile, hasPermission, hasRole, authLoading]);
+    }, [filters, activeProject?.id, hasPermission]);
 
     useEffect(() => {
         fetchBugMetrics();
@@ -366,13 +553,13 @@ export const useBugMetrics = (filters = {}) => {
 
     return {
         metrics,
-        loading: loading || authLoading,
+        loading,
         error,
         refetch,
-        // Additional helper methods
-        hasAccess: currentUser && hasPermission('read_tests'),
-        canModify: currentUser && hasPermission('write_tests'),
-        isAdmin: currentUser && hasRole('admin')
+        // Additional helper methods (matching Bug Service)
+        hasAccess: activeProject && (!hasPermission || hasPermission('read_bugs')),
+        canModify: activeProject && (!hasPermission || hasPermission('write_bugs')),
+        activeProject
     };
 };
 
@@ -382,19 +569,53 @@ export const useBugMetrics = (filters = {}) => {
 //     const [loading, setLoading] = useState(true);
 //     const [error, setError] = useState(null);
     
-//     // Use your actual auth context
-//     const {
-//         currentUser,
-//         userProfile,
-//         hasPermission,
-//         hasRole,
-//         loading: authLoading
-//     } = useAuth();
+//     // Get auth and project context
+//     const { hasPermission } = useAuth();
+//     const { activeProject } = useProject();
 
 //     const fetchAllMetrics = useCallback(async () => {
-//         // Implementation for when all features are ready
-//         // This will include bugs, testCases, and recordings
-//     }, [filters, currentUser, userProfile, hasPermission, hasRole, authLoading]);
+//         if (!activeProject?.id) {
+//             setMetrics(null);
+//             setLoading(false);
+//             return;
+//         }
+
+//         try {
+//             setLoading(true);
+//             setError(null);
+
+//             // Fetch all data types when ready
+//             const [bugs, testCases, recordings] = await Promise.all([
+//                 fetchSecureData('bugs', filters, 'createdAt', activeProject.id, hasPermission),
+//                 // fetchSecureData('testCases', filters, 'createdAt', activeProject.id, hasPermission),
+//                 // fetchSecureData('recordings', filters, 'createdAt', activeProject.id, hasPermission)
+//             ]);
+
+//             // Calculate metrics for each data type
+//             const bugMetrics = calculateBugMetrics(bugs);
+//             // const testCaseMetrics = calculateTestCaseMetrics(testCases);
+//             // const recordingMetrics = calculateRecordingMetrics(recordings);
+
+//             setMetrics({
+//                 bugs: bugMetrics,
+//                 // testCases: testCaseMetrics,
+//                 // recordings: recordingMetrics,
+//                 summary: {
+//                     totalItems: bugs.length,
+//                     criticalIssues: bugMetrics.criticalBugs,
+//                     bugResolutionRate: bugMetrics.bugResolutionRate,
+//                     projectId: activeProject.id,
+//                     lastUpdated: new Date()
+//                 }
+//             });
+
+//         } catch (err) {
+//             setError(err.message);
+//             console.error('Error fetching QAID metrics:', err);
+//         } finally {
+//             setLoading(false);
+//         }
+//     }, [filters, activeProject?.id, hasPermission]);
 
 //     useEffect(() => {
 //         fetchAllMetrics();
@@ -406,41 +627,14 @@ export const useBugMetrics = (filters = {}) => {
 
 //     return {
 //         metrics,
-//         loading: loading || authLoading,
-//         error,
-//         refetch,
-//         hasAccess: currentUser && hasPermission('read_tests'),
-//         canModify: currentUser && hasPermission('write_tests'),
-//         isAdmin: currentUser && hasRole('admin')
-//     };
-// };
-
-// TODO: Uncomment when test cases feature is implemented
-// export const useTestCaseMetrics = (filters = {}) => {
-//     const { metrics, loading, error, refetch, hasAccess, canModify, isAdmin } = useQAMetrics(filters);
-    
-//     return {
-//         metrics: metrics?.testCases || null,
 //         loading,
 //         error,
 //         refetch,
-//         hasAccess,
-//         canModify,
-//         isAdmin
+//         hasAccess: activeProject && (!hasPermission || hasPermission('read_bugs')),
+//         canModify: activeProject && (!hasPermission || hasPermission('write_bugs')),
+//         activeProject
 //     };
 // };
 
-// TODO: Uncomment when recordings feature is implemented
-// export const useRecordingMetrics = (filters = {}) => {
-//     const { metrics, loading, error, refetch, hasAccess, canModify, isAdmin } = useQAMetrics(filters);
-    
-//     return {
-//         metrics: metrics?.recordings || null,
-//         loading,
-//         error,
-//         refetch,
-//         hasAccess,
-//         canModify,
-//         isAdmin
-//     };
-// };
+// Export the main fetch function for use in other services
+export { fetchSecureData, calculateBugMetrics };
