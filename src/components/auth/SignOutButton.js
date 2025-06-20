@@ -1,72 +1,73 @@
-"use client";
-import { useState } from "react";
-import { useAuth } from "../../context/AuthProvider";
-import { LogOut, Loader2 } from "lucide-react";
+'use client';
 
-const SignOutButton = ({ className, variant = "icon" }) => {
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../context/AuthProvider';
+import { LogOut, Loader2 } from 'lucide-react';
+
+const SignOutButton = ({ className = '', variant = 'icon' }) => {
     const [loading, setLoading] = useState(false);
     const { signOut } = useAuth();
+    const router = useRouter();
 
     const handleSignOut = async () => {
         setLoading(true);
         try {
-            await signOut();
-            // No need to redirect here as the auth provider handles it
+            const result = await signOut();
+
+            // ✅ Optional: fallback redirect if AuthProvider doesn't push
+            if (result?.success && typeof window !== 'undefined') {
+                router.push('login'); // ✅ relative path to avoid /auth/login issue
+            }
         } catch (error) {
-            console.error("Error signing out:", error);
+            console.error('Error signing out:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    // Icon-only variant (for sidebar)
-    if (variant === "icon") {
+    const icon = loading ? (
+        <Loader2 className="animate-spin w-4 h-4" />
+    ) : (
+        <LogOut className="w-4 h-4" />
+    );
+
+    const sharedClasses = `transition-all disabled:opacity-50 ${className}`;
+
+    if (variant === 'icon') {
         return (
             <button
                 onClick={handleSignOut}
                 disabled={loading}
-                className={`ml-auto text-[#2D3142] hover:text-white ${className}`}
+                className={`text-[#2D3142] hover:text-white ${sharedClasses}`}
                 aria-label="Sign out"
             >
-                {loading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                    <LogOut className="h-5 w-5" />
-                )}
+                {icon}
             </button>
         );
     }
 
-    // Text variant (for dropdown menu)
-    if (variant === "text") {
+    if (variant === 'text') {
         return (
             <button
                 onClick={handleSignOut}
                 disabled={loading}
-                className={`flex items-center gap-2 w-full px-2 py-1.5 text-sm text-left text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 ${className}`}
+                className={`flex items-center gap-2 w-full px-2 py-1.5 text-sm text-left text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 ${sharedClasses}`}
             >
-                {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                    <LogOut className="h-4 w-4" />
-                )}
+                {icon}
                 Sign out
             </button>
         );
     }
 
-    // Full variant (icon + text)
+    // Default to full variant
     return (
         <button
             onClick={handleSignOut}
             disabled={loading}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 transition-colors rounded hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 ${className}`}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 rounded ${sharedClasses}`}
         >
-            {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-                <LogOut className="h-4 w-4" />
-            )}
+            {icon}
             Sign out
         </button>
     );

@@ -1,13 +1,13 @@
+'use client';
+
 import React from 'react';
 import Image from 'next/image';
-import { cn } from '@/lib/utils'; // Assume you have a utility for class name merging
+import { cn } from '@/lib/utils';
+import { useAuth } from '../context/AuthProvider';
 
-const UserAvatar = ({
-    user,
-    size = 'md',
-    className
-}) => {
-    // Generate initials from name
+const UserAvatar = ({ size = 'md', className }) => {
+    const { userProfile } = useAuth(); // ✅ Get authenticated user profile
+
     const getInitials = (name) => {
         if (!name) return 'U';
         const nameParts = name.trim().split(' ');
@@ -17,32 +17,31 @@ const UserAvatar = ({
             nameParts[nameParts.length - 1].charAt(0).toUpperCase();
     };
 
-    // Determine avatar size classes
     const sizeClasses = {
         sm: 'w-8 h-8 text-xs',
         md: 'w-10 h-10 text-sm',
-        lg: 'w-12 h-12 text-base'
+        lg: 'w-12 h-12 text-base',
     };
 
-    // Determine full name or fallback
-    const fullName = user?.firstName && user?.lastName
-        ? `${user.firstName} ${user.lastName}`
-        : user?.displayName || 'User';
+    const fullName =
+        userProfile?.firstName && userProfile?.lastName
+            ? `${userProfile.firstName} ${userProfile.lastName}`
+            : userProfile?.displayName || 'User';
 
     return (
         <div
             className={cn(
-                'rounded-full bg-[#00897b] flex items-center justify-center text-white font-medium',
+                'rounded-full bg-gradient-to-r from-accent-600 to-teal-700 flex items-center justify-center text-white font-medium',
                 sizeClasses[size],
                 className
             )}
         >
-            {user?.photoURL ? (
+            {userProfile?.avatarURL ? (
                 <Image
-                    src={user.photoURL}
+                    src={userProfile.avatarURL}
                     alt={`${fullName}'s avatar`}
-                    width={48}
-                    height={48}
+                    width={45}
+                    height={45}
                     className="rounded-full object-cover"
                     priority
                 />

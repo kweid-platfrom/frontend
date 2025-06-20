@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@firebase/firestore": "^4.7.9",
+    "@headlessui/react": "^2.2.4",
+    "@heroicons/react": "^2.2.0",
     "@mui/icons-material": "^6.4.8",
     "@mui/material": "^6.4.8",
     "@prisma/client": "^6.5.0",
@@ -23,9 +25,12 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dotenv": "^16.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
     "file-saver": "^2.0.5",
     "firebase": "^11.4.0",
+    "firebase-admin": "^13.4.0",
     "firestore": "^1.1.6",
     "googleapis": "^146.0.0",
     "jspdf": "^3.0.1",
@@ -52,20 +57,21 @@
     "recharts": "^2.15.1",
     "sonner": "^2.0.5",
     "tailwind-merge": "^3.1.0",
-    "tailwindcss-animate": "^1.0.7",
     "tw-animate-css": "^1.2.5",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/trusted-types": "^2.0.7",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.2.1",
-    "tailwindcss": "^4",
+    "nodemon": "^3.1.10",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^3.4.1",
     "typescript": "^5"
   }
 }

@@ -1,272 +1,350 @@
-import React, { useState, useEffect, useRef } from "react";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import SignOutButton from "@/components/auth/SignOutButton";
+/* eslint-disable react-hooks/exhaustive-deps */
+// components/layout/Sidebar.js
+'use client'
+import { useState, useEffect } from 'react';
+import '../../app/globals.css';
+import { useProject } from '../../context/ProjectContext';
+import { accountService } from '../../services/accountService';
+import ProjectCreationForm from '../onboarding/ProjectCreationForm';
+import UserAvatarClip from '../side-pane/UserAvatarClip'
+import TrialBanner from '../side-pane/TrialBanner';
+import ProjectSelector from '../side-pane/ProjectSelector';
 import {
-    LayoutDashboard, FileCode, BarChart3, Video, Bug, GitPullRequest,
-    Settings, HelpCircle, ChevronsLeft, ChevronsRight, ScrollText, Menu, X
-} from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import UserAvatar from "@/components/UserAvatar";
+    HomeIcon,
+    DocumentTextIcon,
+    BugAntIcon,
+    VideoCameraIcon,
+    BeakerIcon,
+    ChartBarIcon,
+    CogIcon,
+    XMarkIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    LockClosedIcon
+} from '@heroicons/react/24/outline';
 
-const Sidebar = ({ setActivePage }) => {
-    // Better SSR handling with a stronger initial state
-    const [mounted, setMounted] = useState(false);
-    const initialSelectedPage = useRef(null);
+// Modal wrapper for ProjectCreationForm
+const CreateProjectModal = ({ isOpen, onClose }) => {
+    if (!isOpen) return null;
 
-    // State declarations with server-safe defaults
+    return (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                onClick={onClose}
+            />
+            <div className="flex min-h-full items-center justify-center p-4">
+                <div className="relative transform transition-all max-w-md w-full">
+                    <ProjectCreationForm
+                        isOnboarding={false}
+                        onComplete={(projectId) => {
+                            console.log('Project created:', projectId);
+                            onClose();
+                        }}
+                        onCancel={onClose}
+                        className="shadow-2xl"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
+    const {
+        userProfile,
+        hasFeatureAccess,
+        updateUserProfile,
+        subscriptionStatus
+    } = useProject();
+
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [selectedPage, setSelectedPage] = useState("dashboard");
-    const [user, setUser] = useState(null);
-    const initialRenderRef = useRef(true);
+    const [mounted, setMounted] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
-    // First effect - only handle initial mounting and data loading
+    // Handle mounting and localStorage
     useEffect(() => {
-        // Get saved active page first to avoid flashing
         if (typeof window !== 'undefined') {
-            const storedPage = localStorage.getItem("activePage");
-            if (storedPage) {
-                initialSelectedPage.current = storedPage;
-                setSelectedPage(storedPage);
-                // Update parent component immediately
-                setActivePage(storedPage);
-            }
-
-            // Get saved sidebar state
             const storedCollapsed = localStorage.getItem("sidebarCollapsed");
             if (storedCollapsed !== null) {
                 setIsCollapsed(JSON.parse(storedCollapsed));
             }
-        }
 
-        setMounted(true);
-    }, [setActivePage]);
-
-    // Separate effect for auth handling to avoid conflicts
-    useEffect(() => {
-        if (!mounted) return;
-
-        // Auth listener
-        const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-
-            // If user just logged in and we're still in initial render state
-            if (currentUser && initialRenderRef.current) {
-                // Only set to dashboard if no specific page was already saved
-                if (!initialSelectedPage.current) {
-                    setSelectedPage("dashboard");
-                    setActivePage("dashboard");
-                    localStorage.setItem("activePage", "dashboard");
-                }
-                initialRenderRef.current = false;
+            const storedPage = localStorage.getItem("activePage");
+            if (storedPage && setActivePage) {
+                setActivePage(storedPage);
             }
-        });
+        }
+        setMounted(true);
+    }, []);
 
-        return () => unsubscribe();
-    }, [mounted, setActivePage]);
+    // Check and update trial status when component mounts or userProfile changes
+    useEffect(() => {
+        let hasChecked = false;
 
-    // Save collapsed state to localStorage when it changes
+        const checkTrialStatus = async () => {
+            if (!userProfile || !mounted || hasChecked) return;
+
+            hasChecked = true;
+
+            try {
+                const updatedStatus = await accountService.checkAndUpdateTrialStatus(userProfile, true);
+
+                const isChanged =
+                    updatedStatus?.isTrialActive !== userProfile?.isTrialActive ||
+                    updatedStatus?.trialDaysRemaining !== userProfile?.trialDaysRemaining;
+
+                if (isChanged && updateUserProfile) {
+                    await updateUserProfile(updatedStatus);
+                }
+
+                console.log('Trial status checked:', {
+                    isTrialActive: updatedStatus?.isTrialActive,
+                    trialDaysRemaining: updatedStatus?.trialDaysRemaining,
+                    trialExpired: updatedStatus?.trialExpired
+                });
+            } catch (error) {
+                console.error('Error checking trial status:', error);
+            }
+        };
+
+        checkTrialStatus();
+    }, [userProfile?.uid, mounted, updateUserProfile]);
+
+    // Save collapsed state to localStorage
     useEffect(() => {
         if (mounted) {
             localStorage.setItem("sidebarCollapsed", JSON.stringify(isCollapsed));
         }
     }, [isCollapsed, mounted]);
 
-    // Update parent component whenever selectedPage changes
+    // Save active page to localStorage
     useEffect(() => {
-        if (mounted && selectedPage) {
-            setActivePage(selectedPage);
-            // Save to localStorage when page changes
-            localStorage.setItem("activePage", selectedPage);
+        if (mounted && activePage) {
+            localStorage.setItem("activePage", activePage);
         }
-    }, [selectedPage, setActivePage, mounted]);
+    }, [activePage, mounted]);
 
-    // Close mobile menu on page change
-    useEffect(() => {
-        setIsMobileMenuOpen(false);
-    }, [selectedPage]);
+    const navigation = [
+        { name: 'Dashboard', icon: HomeIcon, page: 'dashboard' },
+        { name: 'Bug Tracker', icon: BugAntIcon, page: 'bug-tracker' },
+        { name: 'Test Scripts', icon: DocumentTextIcon, page: 'test-scripts' },
+        { name: 'Automated Scripts', icon: BeakerIcon, page: 'auto-scripts', requiresFeature: 'automation' },
+        { name: 'Reports', icon: ChartBarIcon, page: 'reports', requiresFeature: 'advancedReports' },
+        { name: 'Recordings', icon: VideoCameraIcon, page: 'recordings' },
+        { name: 'Settings', icon: CogIcon, page: 'settings' },
+    ];
 
-    // Close mobile menu when window resizes to larger than mobile breakpoint
-    useEffect(() => {
-        if (!mounted) return;
+    // Simplified premium access check - use userProfile directly
+    const hasPremiumAccess = () => {
+        if (!userProfile) return false;
 
-        const handleResize = () => {
-            if (window.innerWidth >= 768) { // md breakpoint
-                setIsMobileMenuOpen(false);
+        return userProfile.isTrialActive ||
+            (userProfile.subscriptionType && userProfile.subscriptionType !== 'free');
+    };
+
+    // Check if feature is accessible
+    const isFeatureAccessible = (featureName) => {
+        if (!featureName) return true;
+
+        // During trial or paid subscription, all features are accessible
+        if (hasPremiumAccess()) {
+            return true;
+        }
+
+        // For free tier users, check specific feature access
+        return hasFeatureAccess(featureName);
+    };
+
+    const handlePageChange = (item) => {
+        // Check if feature is accessible before allowing navigation
+        if (item.requiresFeature && !isFeatureAccessible(item.requiresFeature)) {
+            if (setActivePage) {
+                setActivePage('upgrade');
             }
-        };
+        } else {
+            if (setActivePage) {
+                setActivePage(item.page);
+            }
+        }
 
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [mounted]);
-
-    const handlePageChange = (page) => {
-        setSelectedPage(page);
+        // Close mobile sidebar on page change
+        if (onClose) {
+            onClose();
+        }
     };
 
     const toggleCollapse = () => {
         setIsCollapsed(prev => !prev);
     };
 
-    const toggleMobileMenu = () => {
-        setIsMobileMenuOpen(prev => !prev);
+    const handleUpgradeClick = () => {
+        if (setActivePage) {
+            setActivePage('upgrade');
+        }
+        if (onClose) {
+            onClose();
+        }
     };
 
-    const navItems = [
-        { icon: LayoutDashboard, label: "Dashboard", page: "dashboard" },
-        { icon: Bug, label: "Bug Tracker", page: "bug-tracker" },
-        { icon: ScrollText, label: "Test Scripts", page: "test-scripts" },
-        { icon: FileCode, label: "Automated Scripts", page: "auto-scripts" },
-        { icon: BarChart3, label: "Reports", page: "reports" },
-        { icon: Video, label: "Recordings", page: "recordings" },
-        { icon: GitPullRequest, label: "Pull Requests", page: "pull-requests" },
-        { icon: Settings, label: "Settings", page: "settings" },
-        { icon: HelpCircle, label: "Help", page: "help" },
-    ];
-
-    // Display nothing during SSR to prevent layout shifts
     if (!mounted) {
         return null;
     }
 
     return (
         <>
-            {/* Mobile Toggle Button - Always visible on mobile */}
-            <button
-                onClick={toggleMobileMenu}
-                className="md:hidden fixed top-4 left-4 z-50 bg-[#2D3142] text-white p-2 rounded-md"
-                aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-            >
-                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-
-            {/* Desktop Sidebar */}
-            <div
-                className={`bg-[#2D3142] text-white h-screen hidden md:flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? "w-20" : "w-56"
-                    }`}
-            >
-                <div className="p-4 flex items-center justify-between">
-                    <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center flex-shrink-0">
-                            <span className="text-xl font-bold text-[#00897B]">QA</span>
-                        </div>
-                        <div className={`ml-3 overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                            }`}>
-                            <h1 className="text-xl text-white font-bold whitespace-nowrap">TestTracker</h1>
-                        </div>
-                    </div>
-                    <button
-                        onClick={toggleCollapse}
-                        className="text-white flex-shrink-0"
-                        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                    >
-                        {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-                    </button>
-                </div>
-
-                <nav className="mt-5 px-2 flex-1">
-                    <div className="space-y-1">
-                        <TooltipProvider>
-                            {navItems.map((item) => (
-                                <Tooltip key={item.page}>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            onClick={() => handlePageChange(item.page)}
-                                            className={`group flex items-center w-full px-4 py-3 text-sm font-medium rounded transition-colors duration-200
-                                                ${selectedPage === item.page ? "bg-[#00897B] text-white" : "text-white hover:bg-[#00796B]"}
-                                            `}
-                                        >
-                                            <item.icon className="h-5 w-5 flex-shrink-0" />
-                                            <span className={`ml-3 whitespace-nowrap transition-all duration-300 ease-in-out ${isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100 inline"
-                                                }`}>
-                                                {item.label}
-                                            </span>
-                                        </button>
-                                    </TooltipTrigger>
-                                    {isCollapsed && (
-                                        <TooltipContent side="right" className="bg-[#2D3142] text-white border-[#00897B]">
-                                            {item.label}
-                                        </TooltipContent>
-                                    )}
-                                </Tooltip>
-                            ))}
-                        </TooltipProvider>
-                    </div>
-                </nav>
-                {/* User Section */}
-                <div className="p-4 border-t border-[#00897B] flex items-center">
-                    <UserAvatar
-                        user={user}
-                        size="sm"
-                        className="flex-shrink-0"
-                    />
-                    <div className={`ml-3 transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                        }`}>
-                        <p className="text-sm font-medium text-white truncate">{user?.displayName || "Guest User"}</p>
-                        <p className="text-xs font-medium text-[#A5D6A7] truncate">{user?.email || "No email available"}</p>
-                    </div>
-                    <div className={`ml-auto transition-opacity duration-300`}>
-                        <SignOutButton variant="icon" className="h-5 w-5 text-white" />
-                    </div>
-                </div>
-            </div>
-
-            {/* Mobile Sidebar - Improved for better overlay */}
-            <div
-                className={`md:hidden fixed inset-0 z-40 ${isMobileMenuOpen ? "pointer-events-auto" : "pointer-events-none"
-                    }`}
-            >
-                {/* Backdrop with proper z-index */}
+            {/* Mobile backdrop */}
+            {isOpen && (
                 <div
-                    className={`absolute inset-0 bg-black transition-opacity duration-300 ${isMobileMenuOpen ? "opacity-50" : "opacity-0"
-                        }`}
-                    onClick={toggleMobileMenu}
-                    aria-hidden="true"
+                    className="fixed inset-0 z-40 bg-gray-600/75 lg:hidden transition-opacity duration-300"
+                    onClick={onClose}
+                />
+            )}
+
+            {/* Sidebar */}
+            <div className={`
+                fixed inset-y-0 left-0 z-50 bg-white shadow-xl transform transition-all duration-300 ease-out
+                lg:translate-x-0 lg:static lg:inset-0
+                ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                ${isCollapsed ? 'lg:w-16' : 'lg:w-64'}
+                w-64 flex flex-col
+            `}>
+                {/* Sidebar Header */}
+                <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white">
+                    <div className="flex items-center min-w-0 flex-1">
+                        <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
+                            <BeakerIcon className="h-8 w-8 text-teal-700" />
+                        </div>
+                        <div className={`ml-3 overflow-hidden transition-all duration-300 ease-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
+                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-accent-600 to-teal-700 bg-clip-text text-transparent">
+                                QA Suite
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* Desktop collapse button */}
+                        <button
+                            onClick={toggleCollapse}
+                            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 hover:scale-105"
+                            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        >
+                            <div className="transition-all duration-300">
+                                {isCollapsed ?
+                                    <ChevronRightIcon className="h-4 w-4 text-gray-600" /> :
+                                    <ChevronLeftIcon className="h-4 w-4 text-gray-600" />
+                                }
+                            </div>
+                        </button>
+
+                        {/* Mobile close button */}
+                        <button
+                            onClick={onClose}
+                            className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-all duration-200"
+                        >
+                            <XMarkIcon className="h-5 w-5 text-gray-600" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Trial Banner - pass userProfile as trialStatus */}
+                <TrialBanner
+                    isCollapsed={isCollapsed}
+                    trialStatus={userProfile} // Pass userProfile directly
+                    onUpgradeClick={handleUpgradeClick}
                 />
 
-                {/* Mobile sidebar with proper z-index and transition */}
-                <div
-                    className={`absolute top-0 left-0 h-full w-16 bg-[#2D3142] transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-                        }`}
-                >
-                    <div className="flex flex-col items-center py-4 pt-16">
-                        <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center mb-6">
-                            <span className="text-xl font-bold text-[#00897B]">QA</span>
-                        </div>
+                {/* Project Selector */}
+                <ProjectSelector
+                    isCollapsed={isCollapsed}
+                    setShowCreateModal={setShowCreateModal}
+                    trialStatus={subscriptionStatus} // ✅ FIXED
+                    onUpgradeClick={handleUpgradeClick}
+                />
 
-                        <div className="flex flex-col space-y-6 items-center">
-                            <TooltipProvider>
-                                {navItems.map((item) => (
-                                    <Tooltip key={item.page}>
-                                        <TooltipTrigger asChild>
-                                            <button
-                                                onClick={() => handlePageChange(item.page)}
-                                                className={`flex items-center justify-center h-10 w-10 rounded transition-colors
-                                                    ${selectedPage === item.page ? "bg-[#00897B] text-white" : "text-white hover:bg-[#00796B]"}
-                                                `}
-                                                aria-label={item.label}
-                                            >
-                                                <item.icon className="h-5 w-5" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right" className="bg-[#2D3142] text-white border-[#00897B]">
-                                            {item.label}
-                                        </TooltipContent>
-                                    </Tooltip>
-                                ))}
-                            </TooltipProvider>
-                        </div>
+                {/* Navigation */}
+                <nav className="flex-1 py-4 space-y-2 px-4">
+                    {navigation.map((item) => {
+                        const isActive = activePage === item.page;
+                        const isAccessible = isFeatureAccessible(item.requiresFeature);
+                        const showLock = item.requiresFeature && !isAccessible;
 
-                        <div className="mt-auto">
-                            <UserAvatar
-                                user={user}
-                                size="sm"
-                            />
-                        </div>
-                    </div>
-                </div>
+                        return (
+                            <div key={item.name} className="relative group">
+                                <button
+                                    onClick={() => handlePageChange(item)}
+                                    className={`
+                                        group/btn flex items-center w-full h-12 text-sm rounded transition-all duration-200 hover:scale-[1.02]
+                                        ${isCollapsed ? 'px-2 justify-center' : 'px-3 justify-start'}
+                                        ${isActive
+                                            ? 'border-r-4 border-r-teal-500 text-teal-700 shadow-md shadow-teal-500/20'
+                                            : showLock
+                                                ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-500 cursor-pointer'
+                                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                                        }
+                                    `}
+                                >
+                                    {/* Icon container - fixed width to prevent shifting */}
+                                    <div className="flex items-center justify-center w-5 h-5 flex-shrink-0">
+                                        <item.icon
+                                            className={`h-5 w-5 transition-all duration-200 ${isActive
+                                                ? 'text-teal-700'
+                                                : showLock
+                                                    ? 'text-gray-400'
+                                                    : 'text-teal-700 group-hover/btn:text-gray-600'
+                                                }`}
+                                        />
+                                    </div>
+                                    
+                                    {/* Text container with consistent spacing */}
+                                    <div className={`
+                                        flex items-center justify-between min-w-0 flex-1
+                                        ${isCollapsed ? 'ml-0 w-0 opacity-0' : 'ml-3 w-auto opacity-100'}
+                                        transition-all duration-300 ease-out
+                                    `}>
+                                        <span className={`whitespace-nowrap ${isActive ? 'font-semibold' : 'font-normal'}`}>
+                                            {item.name}
+                                        </span>
+                                        {showLock && (
+                                            <LockClosedIcon className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                                        )}
+                                    </div>
+                                </button>
+
+                                {/* Tooltip for collapsed state - positioned to avoid overlap */}
+                                {isCollapsed && (
+                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200">
+                                        <div className="relative">
+                                            {item.name}
+                                            {showLock && (
+                                                <span className="block text-xs opacity-75 mt-1">
+                                                    Upgrade Required
+                                                </span>
+                                            )}
+                                            {/* Tooltip arrow */}
+                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900/90 rotate-45 transform"></div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </nav>
+
+                {/* User Profile Section */}
+                {userProfile && (
+                    <UserAvatarClip
+                        isCollapsed={isCollapsed}
+                        trialStatus={userProfile} // Pass userProfile directly
+                    />
+                )}
             </div>
+
+            {/* Create Project Modal */}
+            <CreateProjectModal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+            />
         </>
     );
 };

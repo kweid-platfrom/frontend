@@ -2,38 +2,44 @@
 
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Bug, Upload, File, CheckCircle } from "lucide-react";
-import { db, storage } from "../config/firebase";
+import { Bug } from "lucide-react";
+import { collection, getDocs, query, where, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../config/firebase";
+import { useProject } from "../context/ProjectContext";
+import BugReportForm from "../components/create-bug/BugReportForm";
+import BugReportSuccess from "../components/create-bug/BugReportSuccess";
+import { toast } from "sonner";
 import {
-    collection,
-    addDoc,
-    getDocs,
-    Timestamp,
-    query,
-    where
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { getAuth } from "firebase/auth";
+    getBrowserInfo,
+    getDeviceInfo,
+    getPriorityFromSeverity,
+    validateBugForm,
+    DEFAULT_BUG_FORM_DATA
+} from "../utils/bugUtils";
 
 const BugReportButton = ({ className = "" }) => {
-    const auth = getAuth();
-    const user = auth.currentUser;
+    const { user, userProfile, activeProject } = useProject();
+
     const [showBugForm, setShowBugForm] = useState(false);
-    const [title, setTitle] = useState("");
-    const [category, setCategory] = useState("UI Issue");
-    const [description, setDescription] = useState("");
-    const [stepsToReproduce, setStepsToReproduce] = useState("");
-    const [attachments, setAttachments] = useState([]);
-    const [severity, setSeverity] = useState("Low");
-    const [assignedTo, setAssignedTo] = useState("");
-    const [error, setError] = useState("");
     const [success, setSuccess] = useState(false);
     const [teamMembers, setTeamMembers] = useState([]);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [showRecordingModal, setShowRecordingModal] = useState(false);
     const [recordings, setRecordings] = useState([]);
     const [isLoadingRecordings, setIsLoadingRecordings] = useState(false);
-    const [selectedRecordings, setSelectedRecordings] = useState([]);
+
+    // Form state - using utility default
+    const [formData, setFormData] = useState(DEFAULT_BUG_FORM_DATA);
+    const [attachments, setAttachments] = useState([]);
+    const [error, setError] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Get the effective project ID
+    const effectiveProjectId = activeProject?.id;
+
+    // Get user display name
+    const userDisplayName = userProfile?.displayName || 
+                            `${userProfile?.firstName} ${userProfile?.lastName}`.trim() || 
+                            user?.email || 
+                            'Unknown User';
 
     useEffect(() => {
         document.body.style.overflow = showBugForm ? "hidden" : "auto";
@@ -43,24 +49,31 @@ const BugReportButton = ({ className = "" }) => {
     }, [showBugForm]);
 
     useEffect(() => {
-        // Fetch team members dynamically from Firestore
         const fetchTeamMembers = async () => {
             try {
-                const teamRef = collection(db, "teamMembers");
-                const snapshot = await getDocs(teamRef);
-                const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setTeamMembers(members);
+                if (userProfile?.organizationId) {
+                    // Fetch from organization subcollection
+                    const teamRef = collection(db, "organizations", userProfile.organizationId, "teamMembers");
+                    const snapshot = await getDocs(teamRef);
+                    const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setTeamMembers(members);
+                } else {
+                    // For individual users, no team members
+                    setTeamMembers([]);
+                }
             } catch (error) {
                 console.error("Error fetching team members:", error);
+                setTeamMembers([]);
             }
         };
 
-        // Fetch recordings from Firestore
         const fetchRecordings = async () => {
+            if (!effectiveProjectId) return;
+            
             setIsLoadingRecordings(true);
             try {
-                const recordingsRef = collection(db, "recordings");
-                // If user is authenticated, get their recordings
+                // Fetch recordings from project subcollection
+                const recordingsRef = collection(db, "projects", effectiveProjectId, "recordings");
                 const q = user
                     ? query(recordingsRef, where("createdBy", "==", user.uid))
                     : recordingsRef;
@@ -69,57 +82,34 @@ const BugReportButton = ({ className = "" }) => {
                 setRecordings(recordingData);
             } catch (error) {
                 console.error("Error fetching recordings:", error);
+                setRecordings([]);
             } finally {
                 setIsLoadingRecordings(false);
             }
         };
 
-        if (showBugForm) {
+        if (showBugForm && user && effectiveProjectId) {
             fetchTeamMembers();
             fetchRecordings();
+            
+            // Auto-populate browser and device info
+            setFormData(prev => ({
+                ...prev,
+                userAgent: navigator.userAgent,
+                browserInfo: getBrowserInfo(),
+                deviceInfo: getDeviceInfo()
+            }));
         }
-    }, [showBugForm, user]);
+    }, [showBugForm, user, userProfile, effectiveProjectId]);
 
-    const handleAttachmentChange = (event) => {
-        const files = Array.from(event.target.files);
-        setAttachments((prevAttachments) => [...prevAttachments, ...files]);
-    };
-
-    const removeAttachment = (index) => {
-        setAttachments(prevAttachments => prevAttachments.filter((_, i) => i !== index));
-    };
-
-    const toggleRecordingSelection = (recording) => {
-        setSelectedRecordings(prev => {
-            if (prev.some(r => r.id === recording.id)) {
-                return prev.filter(r => r.id !== recording.id);
-            } else {
-                return [...prev, recording];
-            }
-        });
-    };
-
-    const addSelectedRecordings = () => {
-        // Convert selected recordings to file objects or URLs that can be handled like attachments
-        const recordingFiles = selectedRecordings.map(recording => ({
-            name: recording.title || `Recording-${recording.id}`,
-            url: recording.url,
-            isRecording: true,
-            id: recording.id
-        }));
-
-        setAttachments(prev => [...prev, ...recordingFiles]);
-        setShowRecordingModal(false);
-        setSelectedRecordings([]);
+    const updateFormData = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
     };
 
     const validateForm = () => {
-        if (!title.trim()) {
-            setError("Title is required");
-            return false;
-        }
-        if (!description.trim()) {
-            setError("Description is required");
+        const validation = validateBugForm(formData);
+        if (!validation.isValid) {
+            setError(validation.errors[0]);
             return false;
         }
         setError("");
@@ -127,83 +117,205 @@ const BugReportButton = ({ className = "" }) => {
     };
 
     const closeForm = () => {
-        // Reset form
-        setTitle("");
-        setDescription("");
-        setStepsToReproduce("");
+        setFormData(DEFAULT_BUG_FORM_DATA);
         setAttachments([]);
-        setAssignedTo("");
         setError("");
         setSuccess(false);
         setShowBugForm(false);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-
-        if (!validateForm()) {
-            return;
-        }
-
-        if (!user) {
-            setError("You must be logged in to submit a bug report");
-            return;
-        }
-
-        setIsSubmitting(true);
-
+    // Fixed bug saving logic with proper organization context
+    const saveBugToFirestore = async (bugData) => {
         try {
-            // Upload file attachments to Firebase Storage
-            const uploadedFiles = await Promise.all(
-                attachments.map(async (file) => {
-                    // If it's already a recording with a URL, just return the existing data
-                    if (file.isRecording && file.url) {
-                        return {
-                            name: file.name,
-                            url: file.url,
-                            isRecording: true,
-                            recordingId: file.id
-                        };
-                    }
+            // Validate authentication
+            if (!user?.uid) {
+                throw new Error('User not authenticated. Please log in again.');
+            }
 
-                    // Otherwise upload the file to storage
-                    const storageRef = ref(storage, `bugs/${Date.now()}_${file.name}`);
-                    await uploadBytes(storageRef, file);
-                    const downloadURL = await getDownloadURL(storageRef);
-                    return {
-                        name: file.name,
-                        url: downloadURL
-                    };
-                })
-            );
+            if (!effectiveProjectId) {
+                throw new Error('No project selected. Please select a project first.');
+            }
 
-            // Add bug report to Firestore with all required fields
-            const bugData = {
-                title,
-                category,
-                description,
-                stepsToReproduce,
-                severity,
-                assignedTo: assignedTo || null,
-                reportedBy: user.displayName || user.email || user.uid,
+            // Validate project access
+            if (!activeProject) {
+                throw new Error('Project not found. Please refresh and try again.');
+            }
+
+            const bugId = `bug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const bugRef = doc(db, 'projects', effectiveProjectId, 'bugs', bugId);
+
+            // Prepare bug data with proper organization context
+            const firestoreData = {
+                ...bugData,
+                id: bugId,
+                projectId: effectiveProjectId,
+                
+                // User context
                 createdBy: user.uid,
-                attachments: uploadedFiles,
-                status: "New",
-                createdAt: Timestamp.now(), // Make sure to use createdAt instead of timestamp to match your security rules
-                organizationId: user.organizationId || null
+                createdByName: userDisplayName,
+                
+                // Organization context (critical for security rules)
+                organizationId: activeProject.organizationId || null,
+                
+                // Timestamps
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                updatedBy: user.uid,
+                updatedByName: userDisplayName,
+                
+                // Version control
+                version: 1,
+                
+                // Search optimization
+                searchTerms: [
+                    bugData.title?.toLowerCase(),
+                    bugData.description?.toLowerCase(),
+                    bugData.category?.toLowerCase(),
+                    bugData.severity?.toLowerCase(),
+                    bugData.status?.toLowerCase(),
+                    bugData.source?.toLowerCase(),
+                    bugData.environment?.toLowerCase()
+                ].filter(Boolean),
+                
+                // Tracking fields
+                resolutionHistory: [],
+                commentCount: 0,
+                viewCount: 0,
+                
+                // Activity tracking
+                lastActivity: serverTimestamp(),
+                lastActivityBy: user.uid
             };
 
-            await addDoc(collection(db, "bugs"), bugData);
+            // Save to Firestore
+            await setDoc(bugRef, firestoreData);
+            
+            console.log('Bug saved successfully:', bugId);
+            toast.success('Bug report created successfully');
 
-            // Show success message
+            return { success: true, data: firestoreData };
+        } catch (error) {
+            console.error('Error saving bug to Firestore:', error);
+            
+            // Enhanced error handling
+            let errorMessage = 'Failed to save bug report';
+            
+            if (error.code === 'permission-denied') {
+                errorMessage = 'Permission denied. You may not have access to this project.';
+            } else if (error.code === 'unauthenticated') {
+                errorMessage = 'Authentication required. Please log in and try again.';
+            } else if (error.code === 'not-found') {
+                errorMessage = 'Project not found. Please select a valid project.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            toast.error(errorMessage);
+            throw new Error(errorMessage);
+        }
+    };
+
+    const handleSubmit = async () => {
+        // Pre-submission validation
+        if (!user?.uid) {
+            const errorMsg = 'Please log in to submit bug reports';
+            setError(errorMsg);
+            toast.error(errorMsg);
+            return;
+        }
+
+        if (!effectiveProjectId) {
+            const errorMsg = 'Please select a project first';
+            setError(errorMsg);
+            toast.error(errorMsg);
+            return;
+        }
+
+        if (!activeProject) {
+            const errorMsg = 'Project not found. Please refresh and try again.';
+            setError(errorMsg);
+            toast.error(errorMsg);
+            return;
+        }
+
+        if (!validateForm()) return;
+
+        setIsSubmitting(true);
+        setError("");
+
+        try {
+            // Calculate additional fields
+            const hasVideoEvidence = attachments.some(att => 
+                att.isRecording || att.type?.startsWith('video/')
+            );
+            const hasAttachments = attachments.length > 0;
+            const priority = getPriorityFromSeverity(formData.severity);
+
+            // Prepare bug data with all required fields
+            const bugData = {
+                // Core bug information
+                title: formData.title.trim(),
+                description: formData.description.trim(),
+                actualBehavior: formData.actualBehavior.trim(),
+                
+                // Optional detailed fields
+                stepsToReproduce: formData.stepsToReproduce.trim() || "",
+                expectedBehavior: formData.expectedBehavior.trim() || "",
+                workaround: formData.workaround.trim() || "",
+                
+                // Assignment and reporting
+                assignedTo: formData.assignedTo || null,
+                reportedBy: userDisplayName,
+                reportedByEmail: user.email || "",
+                
+                // Classification (required by security rules)
+                status: "New",
+                priority: priority,
+                severity: formData.severity,
+                category: formData.category,
+                tags: [formData.category.toLowerCase().replace(/\s+/g, '_')],
+                
+                // Technical details
+                source: formData.source || "Manual",
+                environment: formData.environment || "Production",
+                browserInfo: formData.browserInfo || {},
+                deviceInfo: formData.deviceInfo || {},
+                userAgent: formData.userAgent || navigator.userAgent,
+                frequency: formData.frequency || "Once",
+                
+                // Evidence flags
+                hasVideoEvidence,
+                hasConsoleLogs: formData.hasConsoleLogs || false,
+                hasNetworkLogs: formData.hasNetworkLogs || false,
+                hasAttachments,
+                
+                // Attachments
+                attachments: attachments.map(att => ({
+                    name: att.name,
+                    url: att.url || null,
+                    type: att.type || null,
+                    size: att.size || null,
+                    isRecording: att.isRecording || false,
+                    recordingId: att.recordingId || null
+                })),
+                
+                // Resolution fields (empty for new bugs)
+                resolution: "",
+                resolvedAt: null,
+                resolvedBy: null,
+                resolvedByName: null,
+                comments: []
+            };
+
+            // Save to Firestore
+            await saveBugToFirestore(bugData);
+            
+            // Show success state
             setSuccess(true);
-
-            // Reset the form fields but keep the modal open to show the success message
-            setTitle("");
-            setDescription("");
-            setStepsToReproduce("");
+            
+            // Reset form
+            setFormData(DEFAULT_BUG_FORM_DATA);
             setAttachments([]);
-            setAssignedTo("");
             setError("");
 
             // Auto-close after 3 seconds
@@ -213,278 +325,99 @@ const BugReportButton = ({ className = "" }) => {
 
         } catch (error) {
             console.error("Error submitting bug report:", error);
-            setError("Failed to submit bug report. Please check your permissions.");
+            
+            // Set error for display
+            setError(error.message || 'Failed to submit bug report');
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    // Don't show button if not authenticated
+    if (!user) {
+        return null;
+    }
+
+    // Show disabled state if no project selected
+    if (!effectiveProjectId || !activeProject) {
+        return (
+            <button
+                className={`group px-3 py-2 text-sm rounded-lg flex items-center space-x-2 transition-all duration-200 opacity-50 cursor-not-allowed ${className}`}
+                disabled
+                title="Please select a project to report bugs"
+            >
+                <Bug className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Report Bug</span>
+            </button>
+        );
+    }
+
     return (
         <>
             <button
-                className={`px-3 py-2 text-sm rounded flex items-center space-x-2 transition ${className}`}
+                className={`group px-3 py-2 text-sm rounded-lg flex items-center space-x-2 transition-all duration-200 hover:shadow-md ${className}`}
                 onClick={() => setShowBugForm(true)}
             >
-                <Bug className="h-4 w-4" />
-                <span className="hidden md:inline">Report A Bug</span>
+                <Bug className="h-4 w-4 transition-transform group-hover:scale-110" />
+                <span className="hidden sm:inline font-medium">Report Bug</span>
             </button>
 
-            {showBugForm &&
-                createPortal(
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div
-                            className="fixed inset-0 bg-black opacity-30"
-                            aria-hidden="true"
-                            onClick={() => !isSubmitting && !success && closeForm()}
-                        />
-                        <div className="relative bg-white border border-gray-200 rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
-                            <button
-                                onClick={() => !isSubmitting && !success && closeForm()}
-                                className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
-                                aria-label="Close Bug Report"
-                                disabled={isSubmitting || success}
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
-                            <h2 className="text-xl font-semibold mb-4 text-center">Report a Bug</h2>
-
-                            {/* Success message */}
-                            {success ? (
-                                <div className="text-center py-8 flex flex-col items-center">
-                                    <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
-                                    <h3 className="text-xl font-medium text-green-600 mb-2">Bug Report Submitted</h3>
-                                    <p className="text-gray-600">Thank you for helping improve our application!</p>
-                                    <button
-                                        onClick={closeForm}
-                                        className="mt-6 px-6 py-2 bg-[#00897B] text-white rounded hover:bg-[#00796B]"
-                                    >
-                                        Close
-                                    </button>
+            {showBugForm && createPortal(
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col animate-in fade-in-0 zoom-in-95 duration-200">
+                        {/* Header with project info */}
+                        <div className="flex-shrink-0 border-b px-4 sm:px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                                        Report Bug
+                                    </h2>
+                                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                                        Project: {activeProject?.name || effectiveProjectId}
+                                        {userProfile?.organizationId && (
+                                            <span className="ml-2 text-blue-600">
+                                                (Organization)
+                                            </span>
+                                        )}
+                                    </p>
                                 </div>
-                            ) : (
-                                <>
-                                    {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
-
-                                    <form onSubmit={handleSubmit} className="overflow-y-auto flex-grow">
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium">Bug Title</label>
-                                            <small className="text-gray-600 text-xs">A clear title for your bug report.</small>
-                                            <input
-                                                type="text"
-                                                className="w-full border rounded p-2 mt-1"
-                                                value={title}
-                                                onChange={(e) => setTitle(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium">Bug Category</label>
-                                            <small className="text-gray-600 text-xs">Select the category that best describes the bug.</small>
-                                            <select
-                                                className="w-full border rounded p-2 mt-1"
-                                                value={category}
-                                                onChange={(e) => setCategory(e.target.value)}
-                                            >
-                                                <option value="UI Issue">UI Issue</option>
-                                                <option value="Performance">Performance</option>
-                                                <option value="Security">Security</option>
-                                                <option value="Other">Other</option>
-                                            </select>
-                                        </div>
-
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium">Description</label>
-                                            <small className="text-gray-600 text-xs">A detailed description of the issue.</small>
-                                            <textarea
-                                                className="w-full border rounded p-2 mt-1"
-                                                rows="3"
-                                                value={description}
-                                                onChange={(e) => setDescription(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium">Steps To Reproduce</label>
-                                            <small className="text-gray-600 text-xs">Provide steps to reproduce the bug.</small>
-                                            <textarea
-                                                className="w-full border rounded p-2 mt-1"
-                                                rows="3"
-                                                value={stepsToReproduce}
-                                                onChange={(e) => setStepsToReproduce(e.target.value)}
-                                                placeholder="Step 1:
-Expected Result: 
-Actual Result: ..."
-                                            />
-                                        </div>
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium">Attachments</label>
-                                            <small className="text-gray-600 text-xs">Provide files to help developers better understand the issue</small>
-                                            <div className="flex flex-wrap gap-2 border rounded p-4 sm:p-6 bg-gray-100 mt-1">
-                                                <button type="button" className="flex items-center space-x-1 text-sm text-[#00897B]" onClick={() => document.getElementById('file-upload').click()}>
-                                                    <Upload className="h-4 w-4" />
-                                                    <span>From Device</span>
-                                                </button>
-                                                <span className="text-gray-400">|</span>
-                                                <input id="file-upload" type="file" multiple className="hidden" onChange={handleAttachmentChange} />
-                                                <button
-                                                    type="button"
-                                                    className="flex items-center space-x-1 text-sm text-[#00897B]"
-                                                    onClick={() => setShowRecordingModal(true)}
-                                                >
-                                                    <File className="h-4 w-4" />
-                                                    <span>From Recordings</span>
-                                                </button>
-                                            </div>
-
-                                            {/* Display selected attachments */}
-                                            {attachments.length > 0 && (
-                                                <div className="mt-2 border rounded p-2">
-                                                    <p className="text-xs font-medium mb-1">Selected files:</p>
-                                                    <div className="max-h-32 overflow-y-auto">
-                                                        {attachments.map((file, index) => (
-                                                            <div key={index} className="flex justify-between items-center text-xs py-1 border-b last:border-0">
-                                                                <div className="flex items-center">
-                                                                    <File className="h-3 w-3 mr-2 flex-shrink-0" />
-                                                                    <span className="truncate max-w-[180px]">{file.name}</span>
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeAttachment(index)}
-                                                                    className="text-red-500 hover:text-red-700 ml-2 flex-shrink-0"
-                                                                >
-                                                                    <X className="h-3 w-3" />
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium" htmlFor="severity">Severity</label>
-                                            <small className="text-gray-600 text-xs">Indicates the priority of this bug.</small>
-                                            <select
-                                                id="severity"
-                                                className="w-full border rounded p-2 mt-1"
-                                                value={severity}
-                                                onChange={(e) => setSeverity(e.target.value)}
-                                            >
-                                                <option value="Low">Low</option>
-                                                <option value="Medium">Medium</option>
-                                                <option value="High">High</option>
-                                            </select>
-                                            <div className="text-xs mt-1" style={{ color: severity === 'High' ? 'red' : severity === 'Medium' ? 'orange' : 'green' }}>
-                                                Priority: {severity === 'High' ? 'Critical' : severity === 'Medium' ? 'High' : 'Low'}
-                                            </div>
-                                        </div>
-
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium">Assigned To</label>
-                                            <small className="text-gray-600 text-xs">Select a team member to assign this bug.</small>
-                                            <select
-                                                className="w-full border rounded p-2 mt-1"
-                                                value={assignedTo}
-                                                onChange={(e) => setAssignedTo(e.target.value)}
-                                            >
-                                                <option value="">Select Team Member</option>
-                                                {teamMembers.map((member) => (
-                                                    <option key={member.id} value={member.id}>
-                                                        {member.name || member.id}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <button
-                                            type="submit"
-                                            className="w-full bg-[#00897B] hover:bg-[#00796B] text-white py-2 rounded mt-4"
-                                            disabled={isSubmitting || !user}
-                                        >
-                                            {isSubmitting ? "Submitting..." : "Submit"}
-                                        </button>
-                                    </form>
-                                </>
-                            )}
-                        </div>
-                    </div>,
-                    document.body
-                )}
-
-            {/* Recording Selection Modal */}
-            {showRecordingModal &&
-                createPortal(
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div
-                            className="fixed inset-0 bg-black opacity-30"
-                            aria-hidden="true"
-                            onClick={() => setShowRecordingModal(false)}
-                        />
-                        <div className="relative bg-white border border-gray-200 rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-lg">
-                            <button
-                                onClick={() => setShowRecordingModal(false)}
-                                className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
-                                aria-label="Close Recordings Modal"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
-                            <h2 className="text-xl font-semibold mb-4 text-center">Select Recordings</h2>
-
-                            {isLoadingRecordings ? (
-                                <div className="text-center py-8">Loading recordings...</div>
-                            ) : recordings.length === 0 ? (
-                                <div className="text-center py-8">No recordings found</div>
-                            ) : (
-                                <div className="max-h-[50vh] overflow-y-auto">
-                                    {recordings.map(recording => (
-                                        <div
-                                            key={recording.id}
-                                            className={`p-3 border mb-2 rounded cursor-pointer ${selectedRecordings.some(r => r.id === recording.id)
-                                                    ? 'bg-[#E0F2F1] border-[#00897B]'
-                                                    : 'hover:bg-gray-50'
-                                                }`}
-                                            onClick={() => toggleRecordingSelection(recording)}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="font-medium text-sm">{recording.title || `Recording ${recording.id.slice(0, 6)}`}</div>
-                                                    <div className="text-xs text-gray-600">
-                                                        {recording.createdAt?.toDate?.().toLocaleDateString() || 'Unknown date'}
-                                                    </div>
-                                                </div>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedRecordings.some(r => r.id === recording.id)}
-                                                    readOnly
-                                                    className="h-5 w-5 text-[#00897B]"
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className="mt-4 flex justify-end space-x-3">
                                 <button
-                                    className="px-4 py-2 border rounded hover:bg-gray-50 text-sm"
-                                    onClick={() => setShowRecordingModal(false)}
+                                    onClick={closeForm}
+                                    className="text-gray-400 hover:text-gray-600 text-2xl p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                                    type="button"
+                                    disabled={isSubmitting}
                                 >
-                                    Cancel
-                                </button>
-                                <button
-                                    className="px-4 py-2 bg-[#00897B] text-white rounded hover:bg-[#00796B] disabled:opacity-50 text-sm"
-                                    onClick={addSelectedRecordings}
-                                    disabled={selectedRecordings.length === 0}
-                                >
-                                    Add Selected ({selectedRecordings.length})
+                                    ×
                                 </button>
                             </div>
                         </div>
-                    </div>,
-                    document.body
-                )}
+
+                        {/* Form content */}
+                        {success ? (
+                            <BugReportSuccess onClose={closeForm} />
+                        ) : (
+                            <BugReportForm
+                                formData={formData}
+                                updateFormData={updateFormData}
+                                attachments={attachments}
+                                setAttachments={setAttachments}
+                                teamMembers={teamMembers}
+                                recordings={recordings}
+                                isLoadingRecordings={isLoadingRecordings}
+                                error={error}
+                                setError={setError}
+                                isSubmitting={isSubmitting}
+                                onSubmit={handleSubmit}
+                                onClose={closeForm}
+                                projectId={effectiveProjectId}
+                                projectName={activeProject?.name}
+                                userProfile={userProfile}
+                            />
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
         </>
     );
 };

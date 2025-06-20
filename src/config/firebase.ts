@@ -49,4 +49,4 @@ const storage = getStorage(app);
 // Ensure session persists across refresh
 setPersistence(auth, browserLocalPersistence);
 
-export { app, auth, googleProvider, db, storage, environment }; // Export storage
+export { app, auth, googleProvider, db, storage, environment };

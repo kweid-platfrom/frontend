@@ -1,23 +1,206 @@
+// Complete AuthProvider with improved permission handling and consistent role structure
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import {
-    onAuthStateChanged,
-    signOut as firebaseSignOut,
-    signInWithEmailAndPassword,
-    signInWithPopup,
-    signInWithRedirect,
-    getRedirectResult,
-    GoogleAuthProvider
-} from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db, environment } from "../config/firebase";
+import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
+import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
 
-// Create context
+import {
+    createUserIfNotExists,
+    fetchUserData,
+    completeUserSetup,
+    updateOnboardingStep,
+} from "../services/userService";
+import { updateUserProfile as updateUserProfileService } from "../services/userService";
+
+import {
+    signInWithGoogle as authSignInWithGoogle,
+    logInWithEmail as authLoginWithEmail,
+    logout as authLogout,
+    registerWithEmail as authRegisterWithEmail,
+    registerWithEmailLink as authRegisterWithEmailLink,
+    completeEmailLinkSignIn as authCompleteEmailLinkSignIn,
+    setUserPassword as authSetUserPassword
+} from "../services/authService";
+
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};
+
+// Helper function to normalize role structure (handle both string and array formats)
+const normalizeRoles = (roleData) => {
+    if (!roleData) return ['member'];
+    
+    if (typeof roleData === 'string') {
+        return [roleData];
+    }
+    
+    if (Array.isArray(roleData)) {
+        return roleData.length > 0 ? roleData : ['member'];
+    }
+    
+    return ['member'];
+};
+
+// Helper function to get primary role for display/logic purposes
+const getPrimaryRole = (roles) => {
+    if (!roles || roles.length === 0) return 'member';
+    
+    // Priority order for roles (highest to lowest)
+    const rolePriority = [
+        'super_admin',
+        'admin', 
+        'organization_admin', 
+        'project_manager', 
+        'lead', 
+        'developer', 
+        'tester', 
+        'member', 
+        'viewer'
+    ];
+    
+    for (const role of rolePriority) {
+        if (roles.includes(role)) {
+            return role;
+        }
+    }
+    
+    return roles[0]; // fallback to first role
+};
+
+// Comprehensive permission mapping based on roles
+const getRoleCapabilities = (roles) => {
+    const capabilities = new Set(['read_tests']); // Everyone gets read access
+    
+    roles.forEach(role => {
+        switch (role) {
+            case 'super_admin':
+            case 'admin':
+                capabilities.add('write_tests');
+                capabilities.add('admin');
+                capabilities.add('manage_projects');
+                capabilities.add('manage_users');
+                capabilities.add('manage_organizations');
+                capabilities.add('view_analytics');
+                capabilities.add('manage_bugs');
+                capabilities.add('assign_bugs');
+                capabilities.add('manage_billing');
+                capabilities.add('system_settings');
+                break;
+                
+            case 'organization_admin':
+                capabilities.add('write_tests');
+                capabilities.add('manage_bugs');
+                capabilities.add('assign_bugs');
+                capabilities.add('manage_projects');
+                capabilities.add('manage_users');
+                capabilities.add('view_analytics');
+                capabilities.add('manage_billing');
+                break;
+                
+            case 'project_manager':
+            case 'lead':
+                capabilities.add('write_tests');
+                capabilities.add('manage_bugs');
+                capabilities.add('assign_bugs');
+                capabilities.add('manage_projects');
+                capabilities.add('view_analytics');
+                break;
+                
+            case 'developer':
+            case 'tester':
+                capabilities.add('write_tests');
+                capabilities.add('manage_bugs');
+                capabilities.add('create_bugs');
+                break;
+                
+            case 'member':
+                capabilities.add('write_tests');
+                capabilities.add('manage_bugs');
+                capabilities.add('create_bugs');
+                break;
+                
+            case 'viewer':
+                // Only read permissions (already added above)
+                break;
+                
+            default:
+                // Unknown role gets member permissions
+                capabilities.add('write_tests');
+                capabilities.add('manage_bugs');
+                capabilities.add('create_bugs');
+                break;
+        }
+    });
+    
+    return Array.from(capabilities);
+};
+
+// Helper function to determine user permissions based on role and user data
+const determineUserPermissions = (userData, explicitAdmin = false) => {
+    const normalizedRoles = normalizeRoles(userData.role);
+    const primaryRole = getPrimaryRole(normalizedRoles);
+    
+    // Determine admin status
+    const isAdminByRole = normalizedRoles.some(role => 
+        ['admin', 'super_admin'].includes(role)
+    );
+    const isAdmin = explicitAdmin || isAdminByRole || userData.isAdmin === true;
+    
+    // Get base capabilities from roles
+    let capabilities = getRoleCapabilities(normalizedRoles);
+    
+    // Override capabilities if user is admin
+    if (isAdmin) {
+        capabilities = [
+            'read_tests',
+            'write_tests',
+            'admin',
+            'manage_projects',
+            'manage_users',
+            'manage_organizations',
+            'view_analytics',
+            'manage_bugs',
+            'assign_bugs',
+            'manage_billing',
+            'system_settings'
+        ];
+    }
+    
+    // Merge with custom permissions from user data
+    if (userData.permissions?.capabilities) {
+        capabilities = [
+            ...new Set([...capabilities, ...userData.permissions.capabilities])
+        ];
+    }
+    
+    // Override admin status if explicitly set in permissions
+    let finalIsAdmin = isAdmin;
+    if (userData.permissions?.isAdmin !== undefined) {
+        finalIsAdmin = userData.permissions.isAdmin;
+    }
+    
+    const permissions = {
+        isAdmin: finalIsAdmin,
+        roles: normalizedRoles,
+        primaryRole: primaryRole,
+        capabilities: capabilities,
+        // Additional computed properties for convenience
+        canManageUsers: finalIsAdmin || capabilities.includes('manage_users'),
+        canManageProjects: finalIsAdmin || capabilities.includes('manage_projects'),
+        canViewAnalytics: finalIsAdmin || capabilities.includes('view_analytics'),
+        canManageBilling: finalIsAdmin || capabilities.includes('manage_billing'),
+    };
+    
+    return permissions;
+};
 
 export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
@@ -25,159 +208,210 @@ export const AuthProvider = ({ children }) => {
     const [userProfile, setUserProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [authError, setAuthError] = useState(null);
+    const [initialized, setInitialized] = useState(false);
+    const [skipEmailVerificationRedirect, setSkipEmailVerificationRedirect] = useState(false);
     const router = useRouter();
 
-    // Create Google provider instance
-    const googleProvider = new GoogleAuthProvider();
-
-    // Fetch user data from Firestore
-    const fetchUserData = useCallback(async (userId) => {
-        try {
-            const userRef = doc(db, "users", userId);
-            const userSnap = await getDoc(userRef);
-
-            if (userSnap.exists()) {
-                return userSnap.data();
-            } else {
-                console.log("No user data found");
-                return null;
-            }
-        } catch (error) {
-            console.error("Error fetching user data:", error);
-            return null;
-        }
-    }, []);
-
-    // Create default user document structure
-    const createDefaultUserDocument = (user) => ({
-        email: user.email,
-        displayName: user.displayName || "",
-        photoURL: user.photoURL || "",
-        firstName: user.displayName ? user.displayName.split(' ')[0] : "",
-        lastName: user.displayName ? user.displayName.split(' ').slice(1).join(' ') : "",
-        phone: "",
-        location: "",
-        jobRole: "",
-        avatarUrl: user.photoURL || "",
-        permissions: {
-            isAdmin: false,
-            roles: ["user"],
-            capabilities: ["read_tests"]
-        },
-        organizationId: null,
-        role: "user",
-        lastLogin: serverTimestamp(),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        environment: environment // Record which environment the user was created in
-    });
-
-    // Create user document if it doesn't exist
-    const createUserIfNotExists = useCallback(async (user) => {
-        try {
-            const userRef = doc(db, "users", user.uid);
-            const userSnap = await getDoc(userRef);
-
-            if (!userSnap.exists()) {
-                // Create new user document with default structure
-                const userData = createDefaultUserDocument(user);
-                await setDoc(userRef, userData);
-                return { isNewUser: true, userData };
-            }
-
-            // User exists, just return the data
-            return { isNewUser: false, userData: userSnap.data() };
-        } catch (error) {
-            console.error("Error creating/checking user:", error);
-            return { isNewUser: false, userData: null, error };
-        }
-    }, []);
-
-    // Update last login timestamp
-    const updateUserLastLogin = useCallback(async (userId) => {
-        try {
-            const userRef = doc(db, "users", userId);
-            await setDoc(userRef, {
-                lastLogin: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            }, { merge: true });
-    
-            // Fetch the updated user data
-            return await fetchUserData(userId);
-        } catch (error) {
-            console.error("Error updating last login:", error);
-            // Don't fail the authentication process due to last login update failure
-            return await fetchUserData(userId);
-        }
-    }, [fetchUserData]);
-
-    // Process user authentication
     const processUserAuthentication = useCallback(async (user) => {
+        console.log('Processing user authentication:', {
+            hasUser: !!user,
+            uid: user?.uid,
+            email: user?.email,
+            emailVerified: user?.emailVerified,
+        });
+
         if (!user) {
             setCurrentUser(null);
             setUserPermissions(null);
             setUserProfile(null);
             return;
         }
-    
+
         try {
-            // Check if user needs to complete account setup (from localStorage)
-            const needsAccountSetup = typeof window !== 'undefined' ? localStorage.getItem("needsAccountSetup") : null;
-            
-            // Check if user exists and create if needed
-            const { userData, isNewUser } = await createUserIfNotExists(user);
-    
-            // Update last login for existing users
-            let updatedUserData = userData;
-            if (!isNewUser) {
-                updatedUserData = await updateUserLastLogin(user.uid) || userData;
-            }
-    
-            // Set user state
+            // Set current user immediately for UI feedback
             setCurrentUser(user);
-            setUserPermissions(updatedUserData?.permissions || {
-                isAdmin: false,
-                roles: ["user"],
-                capabilities: ["read_tests"]
-            });
-            setUserProfile(updatedUserData?.profile || {});
-            
-            // Handle routing based on user state and current location
+
+            // Determine auth source
+            let authSource = 'email';
+            if (user.providerData?.length > 0) {
+                const provider = user.providerData[0].providerId;
+                if (provider === 'google.com') authSource = 'google';
+            }
+
+            // Handle email verification callback early
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
-                
-                if (isNewUser || needsAccountSetup === "true") {
-                    // New user or needs account setup
-                    localStorage.setItem("needsAccountSetup", "true");
-                    if (currentPath === "/login" || currentPath === "/register") {
-                        router.push("/account-setup");
-                    }
-                } else {
-                    // Existing user - redirect from login/register pages to dashboard
-                    if (currentPath === "/login" || currentPath === "/register") {
-                        router.push("/dashboard");
-                    }
-                    // Clear any setup flags
-                    localStorage.removeItem("needsAccountSetup");
+                const searchParams = new URLSearchParams(window.location.search);
+                const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
+
+                if (isVerificationCallback && currentPath !== "/verify-email") {
+                    router.push(`/verify-email${window.location.search}`);
+                    return;
                 }
             }
+
+            // Create/fetch user data
+            const result = await createUserIfNotExists(user, {}, authSource);
+
+            if (result.error) {
+                console.error('User creation/fetch failed:', result.error);
+                setAuthError(result.error);
+                
+                // Set minimal fallback permissions even on error
+                setUserPermissions({
+                    isAdmin: false,
+                    roles: ["member"],
+                    primaryRole: "member",
+                    capabilities: ["read_tests"],
+                    canManageUsers: false,
+                    canManageProjects: false,
+                    canViewAnalytics: false,
+                    canManageBilling: false
+                });
+                setUserProfile({});
+                return;
+            }
+
+            if (!result.userData) {
+                console.error('No user data available');
+                setAuthError('Failed to load user data');
+                
+                // Set minimal fallback permissions
+                setUserPermissions({
+                    isAdmin: false,
+                    roles: ["member"],
+                    primaryRole: "member",
+                    capabilities: ["read_tests"],
+                    canManageUsers: false,
+                    canManageProjects: false,
+                    canViewAnalytics: false,
+                    canManageBilling: false
+                });
+                setUserProfile({});
+                return;
+            }
+
+            // Normalize user data structure for consistent role handling
+            const normalizedUserData = {
+                ...result.userData,
+                role: normalizeRoles(result.userData.role),
+                primaryRole: getPrimaryRole(normalizeRoles(result.userData.role))
+            };
+
+            // Set comprehensive permissions
+            const permissions = determineUserPermissions(result.userData);
+            
+            console.log('Setting user permissions:', {
+                userData: normalizedUserData,
+                calculatedPermissions: permissions,
+                userRoles: normalizedUserData.role,
+                primaryRole: permissions.primaryRole,
+                isAdmin: permissions.isAdmin
+            });
+
+            setUserPermissions(permissions);
+            setUserProfile(normalizedUserData);
+
+            // Handle routing based on user state
+            if (typeof window !== 'undefined') {
+                const currentPath = window.location.pathname;
+
+                // Skip routing if user is already on appropriate page OR if we should skip email verification redirect
+                if (currentPath === "/verify-email" ||
+                    currentPath.startsWith("/onboarding") ||
+                    currentPath.startsWith("/handle-email-verification") ||
+                    skipEmailVerificationRedirect) {
+                    return;
+                }
+
+                // 1️⃣ EMAIL VERIFICATION GATE - BUT NOT FOR NEW REGISTRATIONS
+                const needsEmailVerification = authSource === 'email' && !user.emailVerified;
+
+                // Only redirect to email verification if user is trying to access protected areas
+                // NOT if they just registered or are on register/login pages
+                const isOnAuthPage = ["/login", "/register"].includes(currentPath);
+                const isNewUser = result.isNewUser;
+
+                if (needsEmailVerification && !isOnAuthPage && !isNewUser) {
+                    console.log('User needs email verification, redirecting...');
+                    router.push("/verify-email");
+                    return;
+                }
+
+                // 2️⃣ ONBOARDING GATE
+                // Check if user needs onboarding (but not for brand new users on register page)
+                const needsOnboarding = !isNewUser && (
+                    result.needsSetup ||
+                    !result.userData.setupCompleted ||
+                    result.userData.setupStep !== 'completed' ||
+                    !result.userData.onboardingStatus?.onboardingComplete ||
+                    !result.userData.onboardingStatus?.projectCreated
+                );
+
+                console.log('Onboarding check:', {
+                    needsOnboarding,
+                    isNewUser: result.isNewUser,
+                    needsSetup: result.needsSetup,
+                    setupCompleted: result.userData.setupCompleted,
+                    setupStep: result.userData.setupStep,
+                    onboardingComplete: result.userData.onboardingStatus?.onboardingComplete,
+                    projectCreated: result.userData.onboardingStatus?.projectCreated,
+                    currentPath
+                });
+
+                if (needsOnboarding) {
+                    console.log('User needs onboarding, redirecting...');
+
+                    // Only redirect from auth/landing pages
+                    const shouldRedirectToOnboarding = [
+                        "/login", "/", "/dashboard"
+                    ].includes(currentPath);
+
+                    if (shouldRedirectToOnboarding) {
+                        router.push("/onboarding");
+                    }
+                    return;
+                }
+
+                // 3️⃣ SUCCESS - Route to dashboard (but not if user just registered)
+                const shouldRedirectToDashboard = [
+                    "/login", "/", "/verify-email"
+                ].includes(currentPath);
+
+                if (shouldRedirectToDashboard && !isNewUser) {
+                    console.log('User setup complete, redirecting to dashboard');
+                    router.push("/dashboard");
+                }
+            }
+
         } catch (error) {
             console.error("Error processing authentication:", error);
-            // Set basic user info even if profile fetch fails
-            setCurrentUser(user);
-            setUserPermissions({ isAdmin: false, roles: ["user"], capabilities: ["read_tests"] });
-            setUserProfile({});
-        }
-    }, [createUserIfNotExists, updateUserLastLogin, router]);
 
-    // Handle redirect result (for redirect sign-in)
+            // Set fallback permissions with more capabilities for error recovery
+            setUserPermissions({
+                isAdmin: false,
+                roles: ["member"],
+                primarily: "member",
+                capabilities: ["read_tests", "manage_bugs"],
+                canManageUsers: false,
+                canManageProjects: false,
+                canViewAnalytics: false,
+                canManageBilling: false
+            });
+            setUserProfile({});
+            setAuthError(error.message);
+        }
+    }, [router, skipEmailVerificationRedirect]);
+
+    // Handle redirect result
     useEffect(() => {
         const handleRedirectResult = async () => {
+            if (initialized) return;
+
             try {
                 setLoading(true);
                 const result = await getRedirectResult(auth);
                 if (result?.user) {
-                    // User signed in via redirect
                     await processUserAuthentication(result.user);
                 }
             } catch (error) {
@@ -185,99 +419,128 @@ export const AuthProvider = ({ children }) => {
                 setAuthError(error.message);
             } finally {
                 setLoading(false);
+                setInitialized(true);
             }
         };
 
         handleRedirectResult();
-    }, [processUserAuthentication]);
+    }, [processUserAuthentication, initialized]);
 
-    // Set up auth state listener
+    // Auth state listener
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             try {
                 await processUserAuthentication(user);
             } catch (error) {
                 console.error("Auth state change error:", error);
+                setAuthError(error.message);
             } finally {
-                setLoading(false);
+                if (!initialized) {
+                    setLoading(false);
+                    setInitialized(true);
+                }
             }
         });
 
-        // Cleanup subscription on unmount
         return () => unsubscribe();
-    }, [processUserAuthentication]);
+    }, [processUserAuthentication, initialized]);
 
-    // Sign in with email and password
+    // Authentication methods
     const signIn = async (email, password) => {
         setAuthError(null);
-
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            // Auth state change listener will handle the rest
-            return { success: true, user: userCredential.user };
+            const result = await authLoginWithEmail(email, password);
+            return { success: true, user: result.user };
         } catch (error) {
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
     };
 
-    // Sign in with Google (popup method)
     const signInWithGoogle = async () => {
         setAuthError(null);
-
         try {
-            // Configure Google provider
-            googleProvider.setCustomParameters({
-                prompt: 'select_account'
-            });
-
-            const result = await signInWithPopup(auth, googleProvider);
-            // Auth state change listener will handle the rest
-            return { 
-                success: true, 
+            const result = await authSignInWithGoogle();
+            return {
+                success: true,
                 user: result.user,
                 isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime
             };
         } catch (error) {
             console.error("Google sign-in error:", error);
-
-            // If popup is blocked or fails, try redirect method
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-                return signInWithGoogleRedirect();
-            }
-
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
     };
 
-    // Sign in with Google (redirect method - fallback)
-    const signInWithGoogleRedirect = async () => {
+    const registerWithEmail = async (email, password) => {
         setAuthError(null);
-
         try {
-            // Configure Google provider
-            googleProvider.setCustomParameters({
-                prompt: 'select_account'
-            });
+            // Set flag to prevent immediate email verification redirect
+            setSkipEmailVerificationRedirect(true);
 
-            await signInWithRedirect(auth, googleProvider);
-            // The result will be handled in useEffect with getRedirectResult
-            return { success: true, isRedirect: true };
+            const result = await authRegisterWithEmail(email, password);
+
+            // Reset the flag after a short delay to allow the register page to handle the success
+            setTimeout(() => {
+                setSkipEmailVerificationRedirect(false);
+            }, 1000);
+
+            return { success: true, user: result.user };
+        } catch (error) {
+            setSkipEmailVerificationRedirect(false);
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const registerWithEmailLink = async (email, name) => {
+        setAuthError(null);
+        try {
+            await authRegisterWithEmailLink(email, name);
+            return { success: true };
         } catch (error) {
             setAuthError(error.message);
             return { success: false, error: error.message };
         }
     };
 
-    // Sign out
+    const completeEmailLinkSignIn = async (email, url, password = null) => {
+        setAuthError(null);
+        try {
+            const result = await authCompleteEmailLinkSignIn(email, url, password);
+            return { success: true, user: result.user };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const setUserPassword = async (password) => {
+        setAuthError(null);
+        try {
+            await authSetUserPassword(password);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
     const signOut = async () => {
         try {
-            await firebaseSignOut(auth);
-            // Clear localStorage
+            await authLogout();
+
+            // Clear all localStorage flags
             if (typeof window !== 'undefined') {
                 localStorage.removeItem("needsAccountSetup");
+                localStorage.removeItem("awaitingEmailVerification");
+                localStorage.removeItem("emailVerificationComplete");
+                localStorage.removeItem("needsOnboarding");
+                localStorage.removeItem("registrationData");
+                localStorage.removeItem("emailForVerification");
             }
+
             router.push("/login");
             return { success: true };
         } catch (error) {
@@ -286,21 +549,60 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Check if user has specific permission
+    // Permission checking methods
     const hasPermission = useCallback((capability) => {
-        if (!userPermissions) return false;
-        if (userPermissions.isAdmin) return true;
-        return userPermissions.capabilities?.includes(capability) || false;
+        if (!userPermissions) {
+            console.log('No user permissions available for capability check:', capability);
+            return false;
+        }
+        
+        if (userPermissions.isAdmin) {
+            console.log('User is admin, granting permission for:', capability);
+            return true;
+        }
+        
+        const hasCapability = userPermissions.capabilities?.includes(capability) || false;
+        console.log('Permission check result:', {
+            capability,
+            hasCapability,
+            userCapabilities: userPermissions.capabilities,
+            isAdmin: userPermissions.isAdmin
+        });
+        
+        return hasCapability;
     }, [userPermissions]);
 
-    // Check if user has specific role
     const hasRole = useCallback((role) => {
-        if (!userPermissions) return false;
-        if (userPermissions.isAdmin) return true;
-        return userPermissions.roles?.includes(role) || false;
+        if (!userPermissions) {
+            console.log('No user permissions available for role check:', role);
+            return false;
+        }
+        
+        const hasUserRole = userPermissions.roles?.includes(role) || false;
+        console.log('Role check result:', {
+            role,
+            hasUserRole,
+            userRoles: userPermissions.roles,
+            primaryRole: userPermissions.primaryRole
+        });
+        
+        return hasUserRole;
     }, [userPermissions]);
 
-    // Refresh user data
+    const hasAnyRole = useCallback((roles) => {
+        if (!userPermissions || !Array.isArray(roles)) return false;
+        return roles.some(role => userPermissions.roles?.includes(role));
+    }, [userPermissions]);
+
+    const isAdmin = useCallback(() => {
+        return userPermissions?.isAdmin || false;
+    }, [userPermissions]);
+
+    const getPrimaryUserRole = useCallback(() => {
+        return userPermissions?.primaryRole || 'member';
+    }, [userPermissions]);
+
+    // Data management methods
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
 
@@ -309,12 +611,16 @@ export const AuthProvider = ({ children }) => {
             const userData = await fetchUserData(currentUser.uid);
 
             if (userData) {
-                setUserPermissions(userData.permissions || {
-                    isAdmin: false,
-                    roles: ["user"],
-                    capabilities: ["read_tests"]
-                });
-                setUserProfile(userData.profile || {});
+                const normalizedUserData = {
+                    ...userData,
+                    role: normalizeRoles(userData.role),
+                    primaryRole: getPrimaryRole(normalizeRoles(userData.role))
+                };
+
+                const permissions = determineUserPermissions(userData);
+                
+                setUserPermissions(permissions);
+                setUserProfile(normalizedUserData);
                 return true;
             }
             return false;
@@ -324,28 +630,106 @@ export const AuthProvider = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, [currentUser, fetchUserData]);
+    }, [currentUser]);
+
+    const updateUserProfile = useCallback(async (userId, updates) => {
+        try {
+            setLoading(true);
+            const result = await updateUserProfileService(userId, updates, currentUser?.uid);
+
+            if (result) {
+                await refreshUserData();
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error("Error updating user profile:", error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [currentUser, refreshUserData]);
+
+    // Helper method to mark email as verified and update onboarding
+    const markEmailVerified = useCallback(async () => {
+        if (!currentUser?.uid) return false;
+
+        try {
+            // Update Firestore to mark email as verified
+            await updateOnboardingStep(currentUser.uid, 'emailVerified', true, {
+                setupStep: userProfile?.accountType === 'organization'
+                    ? 'organization_info'
+                    : 'profile_setup'
+            });
+
+            // Refresh user data
+            await refreshUserData();
+            return true;
+        } catch (error) {
+            console.error("Error marking email as verified:", error);
+            return false;
+        }
+    }, [currentUser, userProfile, refreshUserData]);
+
+    // Helper to manually trigger email verification redirect (for use by register page after showing success)
+    const redirectToEmailVerification = useCallback(() => {
+        if (currentUser && !currentUser.emailVerified) {
+            setSkipEmailVerificationRedirect(false);
+            router.push("/verify-email");
+        }
+    }, [currentUser, router]);
 
     const clearAuthError = () => {
         setAuthError(null);
     };
 
-    // Export context value
+    // Context value
     const value = {
+        // User state
         currentUser,
         userPermissions,
         userProfile,
         loading,
         authError,
-        environment, // Directly use the imported environment value
+        environment,
+        initialized,
+
+        // Authentication methods
         signIn,
         signInWithGoogle,
-        signInWithGoogleRedirect,
+        registerWithEmail,
+        registerWithEmailLink,
+        completeEmailLinkSignIn,
+        setUserPassword,
         signOut,
+
+        // Permission methods
         hasPermission,
         hasRole,
+        hasAnyRole,
+        isAdmin,
+        getPrimaryUserRole,
+
+        // Convenience permission getters
+        canManageUsers: userPermissions?.canManageUsers || false,
+        canManageProjects: userPermissions?.canManageProjects || false,
+        canViewAnalytics: userPermissions?.canViewAnalytics || false,
+        canManageBilling: userPermissions?.canManageBilling || false,
+
+        // Data management
+        updateUserProfile,
+        refreshUserData,
         clearAuthError,
-        refreshUserData
+
+        // Legacy/Service methods
+        createUserIfNotExists,
+        completeUserSetup,
+        markEmailVerified,
+        redirectToEmailVerification,
+        
+        // Aliases for backward compatibility
+        user: currentUser, // Some components may use 'user' instead of 'currentUser'
     };
 
     return (
