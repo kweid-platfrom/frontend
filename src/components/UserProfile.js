@@ -153,7 +153,7 @@ const UserProfile = () => {
             },
             individual: {
                 name: 'Individual Plan',
-                color: 'bg-blue-100 text-blue-800',
+                color: 'bg-teal-100 text-teal-800',
                 features: ['1 Project', 'Advanced Features', 'Email Support']
             },
             team: {
@@ -265,13 +265,13 @@ const UserProfile = () => {
                 <div className="p-6">
                     {/* Profile Tab */}
                     {activeTab === 'profile' && (
-                        <div className="space-y-6">
+                        <div className="max-w-6xl mx-auto p-6">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-semibold text-gray-900">Personal Information</h2>
+                                <h1 className="text-2xl font-bold text-gray-900 mb-6">Personal Information</h1>
                                 {!isEditing ? (
                                     <button
                                         onClick={startEditing}
-                                        className="flex items-center space-x-2 px-4 py-2 bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"
+                                        className="flex items-center space-x-2 px-4 py-2 bg-teal-50 text-teal-700 rounded hover:bg-teal-100 transition-colors"
                                     >
                                         <PencilIcon className="h-4 w-4" />
                                         <span>Edit</span>
@@ -280,7 +280,7 @@ const UserProfile = () => {
                                     <div className="flex space-x-2">
                                         <button
                                             onClick={cancelEditing}
-                                            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                                            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                                         >
                                             <XMarkIcon className="h-4 w-4" />
                                             <span>Cancel</span>
@@ -288,7 +288,7 @@ const UserProfile = () => {
                                         <button
                                             onClick={saveProfile}
                                             disabled={isSaving}
-                                            className="flex items-center space-x-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                                            className="flex items-center space-x-2 px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors disabled:opacity-50"
                                         >
                                             <CheckIcon className="h-4 w-4" />
                                             <span>{isSaving ? 'Saving...' : 'Save'}</span>
@@ -307,7 +307,7 @@ const UserProfile = () => {
                                             type="text"
                                             value={editForm.firstName}
                                             onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     ) : (
                                         <p className="text-gray-900 py-2">{userProfile.firstName || 'Not set'}</p>
@@ -323,7 +323,7 @@ const UserProfile = () => {
                                             type="text"
                                             value={editForm.lastName}
                                             onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     ) : (
                                         <p className="text-gray-900 py-2">{userProfile.lastName || 'Not set'}</p>
@@ -339,7 +339,7 @@ const UserProfile = () => {
                                             type="text"
                                             value={editForm.displayName}
                                             onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     ) : (
                                         <p className="text-gray-900 py-2">{userProfile.displayName || 'Not set'}</p>
@@ -365,7 +365,7 @@ const UserProfile = () => {
                                             type="tel"
                                             value={editForm.phone}
                                             onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     ) : (
                                         <div className="flex items-center space-x-2">
@@ -384,7 +384,7 @@ const UserProfile = () => {
                                             type="text"
                                             value={editForm.company}
                                             onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     ) : (
                                         <div className="flex items-center space-x-2">
@@ -403,7 +403,7 @@ const UserProfile = () => {
                                             type="text"
                                             value={editForm.jobTitle}
                                             onChange={(e) => setEditForm({ ...editForm, jobTitle: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     ) : (
                                         <p className="text-gray-900 py-2">{userProfile.jobTitle || 'Not set'}</p>
@@ -418,7 +418,7 @@ const UserProfile = () => {
                                         <select
                                             value={editForm.timezone}
                                             onChange={(e) => setEditForm({ ...editForm, timezone: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         >
                                             <option value="UTC">UTC</option>
                                             <option value="America/New_York">Eastern Time</option>
@@ -447,7 +447,7 @@ const UserProfile = () => {
                                         rows={4}
                                         value={editForm.bio}
                                         onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         placeholder="Tell us about yourself..."
                                     />
                                 ) : (
@@ -459,10 +459,11 @@ const UserProfile = () => {
 
                     {/* Security Tab */}
                     {activeTab === 'security' && (
-                        <div className="space-y-6">
-                            <h2 className="text-lg font-semibold text-gray-900">Security Settings</h2>
+                        <div className="max-w-6xl mx-auto p-6">
+                            <h1 className="text-2xl font-bold text-gray-900">Security Settings</h1>
+                            <p className="text-sm text-gray-600 mt-1 mb-6">Secure you your access</p>
 
-                            <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="bg-gray-50 rounded p-4">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <h3 className="font-medium text-gray-900">Password</h3>
@@ -470,7 +471,7 @@ const UserProfile = () => {
                                     </div>
                                     <button
                                         onClick={() => setShowPasswordForm(!showPasswordForm)}
-                                        className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                        className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
                                     >
                                         <KeyIcon className="h-4 w-4" />
                                         <span>Change Password</span>
@@ -479,7 +480,7 @@ const UserProfile = () => {
                             </div>
 
                             {showPasswordForm && (
-                                <form onSubmit={handlePasswordChange} className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+                                <form onSubmit={handlePasswordChange} className="bg-white border border-gray-200 rounded p-4 space-y-4">
                                     <h3 className="font-medium text-gray-900">Change Password</h3>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -490,7 +491,7 @@ const UserProfile = () => {
                                             required
                                             value={passwordForm.currentPassword}
                                             onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     </div>
                                     <div>
@@ -502,7 +503,7 @@ const UserProfile = () => {
                                             required
                                             value={passwordForm.newPassword}
                                             onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     </div>
                                     <div>
@@ -514,20 +515,20 @@ const UserProfile = () => {
                                             required
                                             value={passwordForm.confirmPassword}
                                             onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                         />
                                     </div>
                                     <div className="flex space-x-2">
                                         <button
                                             type="submit"
-                                            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                                            className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
                                         >
                                             Update Password
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setShowPasswordForm(false)}
-                                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                                         >
                                             Cancel
                                         </button>
@@ -535,7 +536,7 @@ const UserProfile = () => {
                                 </form>
                             )}
 
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
                                 <div className="flex">
                                     <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mt-0.5" />
                                     <div className="ml-3">
@@ -554,8 +555,9 @@ const UserProfile = () => {
 
                     {/* Notifications Tab */}
                     {activeTab === 'notifications' && (
-                        <div className="space-y-6">
-                            <h2 className="text-lg font-semibold text-gray-900">Notification Preferences</h2>
+                        <div className="max-w-6xl mx-auto p-6">
+                            <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
+                            <p className="text-sm text-gray-600 mt-1 mb-6">Manage your notification preferences</p>
 
                             <div className="space-y-4">
                                 {Object.entries(notifications).map(([key, value]) => (
@@ -590,10 +592,11 @@ const UserProfile = () => {
 
                     {/* Subscription Tab */}
                     {activeTab === 'subscription' && (
-                        <div className="space-y-6">
-                            <h2 className="text-lg font-semibold text-gray-900">Subscription Details</h2>
+                        <div className="max-w-6xl mx-auto p-6">
+                            <h1 className="text-2xl font-bold text-gray-900">Subscription Details</h1>
+                            <p className="text-sm text-gray-600 mt-1 mb-6">View and manage your subscriptions</p>
 
-                            <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-6">
+                            <div className="bg-gradient-to-r from-teal-50 to-teal-50 rounded p-6">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <h3 className="text-xl font-semibold text-gray-900">
@@ -625,7 +628,7 @@ const UserProfile = () => {
 
                                 {userProfile.subscriptionType === 'free' && (
                                     <div className="mt-6 pt-4 border-t border-gray-200">
-                                        <button className="w-full bg-gradient-to-r from-teal-600 to-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:from-teal-700 hover:to-blue-700 transition-all duration-200">
+                                        <button className="w-full bg-gradient-to-r from-teal-600 to-teal-600 text-white px-6 py-3 rounded font-medium hover:from-teal-700 hover:to-teal-700 transition-all duration-200">
                                             Upgrade to Team Plan
                                         </button>
                                     </div>
@@ -633,7 +636,7 @@ const UserProfile = () => {
                             </div>
 
                             {userProfile.subscriptionType !== 'free' && (
-                                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                <div className="bg-white border border-gray-200 rounded p-4">
                                     <div className="flex items-center justify-between mb-4">
                                         <div>
                                             <h3 className="font-medium text-gray-900">Next billing date</h3>
@@ -646,17 +649,17 @@ const UserProfile = () => {
                                     </div>
 
                                     <div className="flex space-x-3">
-                                        <button className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+                                        <button className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-50 transition-colors">
                                             Manage Billing
                                         </button>
-                                        <button className="flex-1 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg hover:bg-red-100 transition-colors">
+                                        <button className="flex-1 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded hover:bg-red-100 transition-colors">
                                             Cancel Subscription
                                         </button>
                                     </div>
                                 </div>
                             )}
 
-                            <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="bg-gray-50 rounded p-4">
                                 <h3 className="font-medium text-gray-900 mb-2">Usage Statistics</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="text-center">
@@ -664,7 +667,7 @@ const UserProfile = () => {
                                         <div className="text-sm text-gray-500">Active Projects</div>
                                     </div>
                                     <div className="text-center">
-                                        <div className="text-2xl font-bold text-blue-600">47</div>
+                                        <div className="text-2xl font-bold text-teal-600">47</div>
                                         <div className="text-sm text-gray-500">Test Cases</div>
                                     </div>
                                     <div className="text-center">
@@ -683,17 +686,7 @@ const UserProfile = () => {
                     {/* User Management Tab */}
                     {activeTab === 'Team' && (
                         <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-gray-900">Team Management</h2>
-                                    <p className="text-gray-600">Manage your team members and their roles.</p>
-                                </div>
-                            </div>
-
-                            {/* Render the UserManagementPage component without the outer container */}
-                            <div className="space-y-6">
-                                <UserManagement />
-                            </div>
+                            <UserManagement />
                         </div>
                     )}
                 </div>

@@ -1,4 +1,4 @@
-// Complete AuthProvider with improved permission handling and consistent role structure
+// Fixed AuthProvider with improved permission handling
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
@@ -34,172 +34,78 @@ export const useAuth = () => {
     return context;
 };
 
-// Helper function to normalize role structure (handle both string and array formats)
-const normalizeRoles = (roleData) => {
-    if (!roleData) return ['member'];
-    
-    if (typeof roleData === 'string') {
-        return [roleData];
-    }
-    
-    if (Array.isArray(roleData)) {
-        return roleData.length > 0 ? roleData : ['member'];
-    }
-    
-    return ['member'];
-};
-
-// Helper function to get primary role for display/logic purposes
-const getPrimaryRole = (roles) => {
-    if (!roles || roles.length === 0) return 'member';
-    
-    // Priority order for roles (highest to lowest)
-    const rolePriority = [
-        'super_admin',
-        'admin', 
-        'organization_admin', 
-        'project_manager', 
-        'lead', 
-        'developer', 
-        'tester', 
-        'member', 
-        'viewer'
-    ];
-    
-    for (const role of rolePriority) {
-        if (roles.includes(role)) {
-            return role;
-        }
-    }
-    
-    return roles[0]; // fallback to first role
-};
-
-// Comprehensive permission mapping based on roles
-const getRoleCapabilities = (roles) => {
-    const capabilities = new Set(['read_tests']); // Everyone gets read access
-    
-    roles.forEach(role => {
-        switch (role) {
-            case 'super_admin':
-            case 'admin':
-                capabilities.add('write_tests');
-                capabilities.add('admin');
-                capabilities.add('manage_projects');
-                capabilities.add('manage_users');
-                capabilities.add('manage_organizations');
-                capabilities.add('view_analytics');
-                capabilities.add('manage_bugs');
-                capabilities.add('assign_bugs');
-                capabilities.add('manage_billing');
-                capabilities.add('system_settings');
-                break;
-                
-            case 'organization_admin':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('assign_bugs');
-                capabilities.add('manage_projects');
-                capabilities.add('manage_users');
-                capabilities.add('view_analytics');
-                capabilities.add('manage_billing');
-                break;
-                
-            case 'project_manager':
-            case 'lead':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('assign_bugs');
-                capabilities.add('manage_projects');
-                capabilities.add('view_analytics');
-                break;
-                
-            case 'developer':
-            case 'tester':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('create_bugs');
-                break;
-                
-            case 'member':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('create_bugs');
-                break;
-                
-            case 'viewer':
-                // Only read permissions (already added above)
-                break;
-                
-            default:
-                // Unknown role gets member permissions
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('create_bugs');
-                break;
-        }
-    });
-    
-    return Array.from(capabilities);
-};
-
 // Helper function to determine user permissions based on role and user data
-const determineUserPermissions = (userData, explicitAdmin = false) => {
-    const normalizedRoles = normalizeRoles(userData.role);
-    const primaryRole = getPrimaryRole(normalizedRoles);
-    
-    // Determine admin status
-    const isAdminByRole = normalizedRoles.some(role => 
-        ['admin', 'super_admin'].includes(role)
-    );
-    const isAdmin = explicitAdmin || isAdminByRole || userData.isAdmin === true;
-    
-    // Get base capabilities from roles
-    let capabilities = getRoleCapabilities(normalizedRoles);
-    
-    // Override capabilities if user is admin
-    if (isAdmin) {
-        capabilities = [
-            'read_tests',
-            'write_tests',
-            'admin',
-            'manage_projects',
-            'manage_users',
-            'manage_organizations',
-            'view_analytics',
-            'manage_bugs',
-            'assign_bugs',
-            'manage_billing',
-            'system_settings'
-        ];
-    }
-    
-    // Merge with custom permissions from user data
-    if (userData.permissions?.capabilities) {
-        capabilities = [
-            ...new Set([...capabilities, ...userData.permissions.capabilities])
-        ];
-    }
-    
-    // Override admin status if explicitly set in permissions
-    let finalIsAdmin = isAdmin;
-    if (userData.permissions?.isAdmin !== undefined) {
-        finalIsAdmin = userData.permissions.isAdmin;
-    }
-    
-    const permissions = {
-        isAdmin: finalIsAdmin,
-        roles: normalizedRoles,
-        primaryRole: primaryRole,
-        capabilities: capabilities,
-        // Additional computed properties for convenience
-        canManageUsers: finalIsAdmin || capabilities.includes('manage_users'),
-        canManageProjects: finalIsAdmin || capabilities.includes('manage_projects'),
-        canViewAnalytics: finalIsAdmin || capabilities.includes('view_analytics'),
-        canManageBilling: finalIsAdmin || capabilities.includes('manage_billing'),
+const determineUserPermissions = (userData, isAdmin) => {
+    const basePermissions = {
+        isAdmin: isAdmin,
+        roles: userData.role || ['member'],
+        capabilities: []
     };
-    
-    return permissions;
+
+    // Set capabilities based on role
+    if (isAdmin) {
+        basePermissions.capabilities = [
+            "read_tests", 
+            "write_tests", 
+            "admin", 
+            "manage_projects", 
+            "manage_users",
+            "manage_organizations",
+            "view_analytics",
+            "manage_bugs",
+            "assign_bugs"
+        ];
+    } else {
+        // Base capabilities for all users
+        basePermissions.capabilities = ["read_tests"];
+        
+        // Add capabilities based on specific roles
+        const userRoles = userData.role || ['member'];
+        
+        if (userRoles.includes('developer') || userRoles.includes('tester')) {
+            basePermissions.capabilities.push("write_tests", "manage_bugs");
+        }
+        
+        if (userRoles.includes('project_manager') || userRoles.includes('lead')) {
+            basePermissions.capabilities.push(
+                "write_tests", 
+                "manage_bugs", 
+                "assign_bugs", 
+                "manage_projects",
+                "view_analytics"
+            );
+        }
+        
+        if (userRoles.includes('organization_admin')) {
+            basePermissions.capabilities.push(
+                "write_tests", 
+                "manage_bugs", 
+                "assign_bugs", 
+                "manage_projects",
+                "manage_users",
+                "view_analytics"
+            );
+        }
+    }
+
+    // Merge with any custom permissions from user data
+    if (userData.permissions) {
+        basePermissions.capabilities = [
+            ...new Set([...basePermissions.capabilities, ...(userData.permissions.capabilities || [])])
+        ];
+        
+        // Override admin status if explicitly set
+        if (userData.permissions.isAdmin !== undefined) {
+            basePermissions.isAdmin = userData.permissions.isAdmin;
+        }
+    }
+
+    // Ensure user always has basic read permissions
+    if (!basePermissions.capabilities.includes("read_tests")) {
+        basePermissions.capabilities.unshift("read_tests");
+    }
+
+    return basePermissions;
 };
 
 export const AuthProvider = ({ children }) => {
@@ -261,12 +167,7 @@ export const AuthProvider = ({ children }) => {
                 setUserPermissions({
                     isAdmin: false,
                     roles: ["member"],
-                    primaryRole: "member",
-                    capabilities: ["read_tests"],
-                    canManageUsers: false,
-                    canManageProjects: false,
-                    canViewAnalytics: false,
-                    canManageBilling: false
+                    capabilities: ["read_tests"]
                 });
                 setUserProfile({});
                 return;
@@ -280,37 +181,30 @@ export const AuthProvider = ({ children }) => {
                 setUserPermissions({
                     isAdmin: false,
                     roles: ["member"],
-                    primaryRole: "member",
-                    capabilities: ["read_tests"],
-                    canManageUsers: false,
-                    canManageProjects: false,
-                    canViewAnalytics: false,
-                    canManageBilling: false
+                    capabilities: ["read_tests"]
                 });
                 setUserProfile({});
                 return;
             }
 
-            // Normalize user data structure for consistent role handling
-            const normalizedUserData = {
-                ...result.userData,
-                role: normalizeRoles(result.userData.role),
-                primaryRole: getPrimaryRole(normalizeRoles(result.userData.role))
-            };
+            // Determine if user is admin
+            const userRole = result.userData.role || ['member'];
+            const isAdmin = userRole.includes('admin') || 
+                           userRole.includes('super_admin') || 
+                           result.userData.isAdmin === true;
 
             // Set comprehensive permissions
-            const permissions = determineUserPermissions(result.userData);
+            const permissions = determineUserPermissions(result.userData, isAdmin);
             
             console.log('Setting user permissions:', {
-                userData: normalizedUserData,
+                userData: result.userData,
                 calculatedPermissions: permissions,
-                userRoles: normalizedUserData.role,
-                primaryRole: permissions.primaryRole,
-                isAdmin: permissions.isAdmin
+                userRoles: userRole,
+                isAdmin
             });
 
             setUserPermissions(permissions);
-            setUserProfile(normalizedUserData);
+            setUserProfile(result.userData);
 
             // Handle routing based on user state
             if (typeof window !== 'undefined') {
@@ -391,12 +285,7 @@ export const AuthProvider = ({ children }) => {
             setUserPermissions({
                 isAdmin: false,
                 roles: ["member"],
-                primarily: "member",
-                capabilities: ["read_tests", "manage_bugs"],
-                canManageUsers: false,
-                canManageProjects: false,
-                canViewAnalytics: false,
-                canManageBilling: false
+                capabilities: ["read_tests", "manage_bugs"] // Give basic bug management on error
             });
             setUserProfile({});
             setAuthError(error.message);
@@ -445,7 +334,6 @@ export const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, [processUserAuthentication, initialized]);
 
-    // Authentication methods
     const signIn = async (email, password) => {
         setAuthError(null);
         try {
@@ -549,7 +437,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Permission checking methods
     const hasPermission = useCallback((capability) => {
         if (!userPermissions) {
             console.log('No user permissions available for capability check:', capability);
@@ -578,31 +465,22 @@ export const AuthProvider = ({ children }) => {
             return false;
         }
         
+        if (userPermissions.isAdmin) {
+            console.log('User is admin, granting role:', role);
+            return true;
+        }
+        
         const hasUserRole = userPermissions.roles?.includes(role) || false;
         console.log('Role check result:', {
             role,
             hasUserRole,
             userRoles: userPermissions.roles,
-            primaryRole: userPermissions.primaryRole
+            isAdmin: userPermissions.isAdmin
         });
         
         return hasUserRole;
     }, [userPermissions]);
 
-    const hasAnyRole = useCallback((roles) => {
-        if (!userPermissions || !Array.isArray(roles)) return false;
-        return roles.some(role => userPermissions.roles?.includes(role));
-    }, [userPermissions]);
-
-    const isAdmin = useCallback(() => {
-        return userPermissions?.isAdmin || false;
-    }, [userPermissions]);
-
-    const getPrimaryUserRole = useCallback(() => {
-        return userPermissions?.primaryRole || 'member';
-    }, [userPermissions]);
-
-    // Data management methods
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
 
@@ -611,16 +489,15 @@ export const AuthProvider = ({ children }) => {
             const userData = await fetchUserData(currentUser.uid);
 
             if (userData) {
-                const normalizedUserData = {
-                    ...userData,
-                    role: normalizeRoles(userData.role),
-                    primaryRole: getPrimaryRole(normalizeRoles(userData.role))
-                };
+                const userRole = userData.role || ['member'];
+                const isAdmin = userRole.includes('admin') || 
+                               userRole.includes('super_admin') || 
+                               userData.isAdmin === true;
 
-                const permissions = determineUserPermissions(userData);
+                const permissions = determineUserPermissions(userData, isAdmin);
                 
                 setUserPermissions(permissions);
-                setUserProfile(normalizedUserData);
+                setUserProfile(userData);
                 return true;
             }
             return false;
@@ -631,6 +508,10 @@ export const AuthProvider = ({ children }) => {
             setLoading(false);
         }
     }, [currentUser]);
+
+    const clearAuthError = () => {
+        setAuthError(null);
+    };
 
     const updateUserProfile = useCallback(async (userId, updates) => {
         try {
@@ -680,13 +561,7 @@ export const AuthProvider = ({ children }) => {
         }
     }, [currentUser, router]);
 
-    const clearAuthError = () => {
-        setAuthError(null);
-    };
-
-    // Context value
     const value = {
-        // User state
         currentUser,
         userPermissions,
         userProfile,
@@ -694,8 +569,7 @@ export const AuthProvider = ({ children }) => {
         authError,
         environment,
         initialized,
-
-        // Authentication methods
+        updateUserProfile,
         signIn,
         signInWithGoogle,
         registerWithEmail,
@@ -703,33 +577,14 @@ export const AuthProvider = ({ children }) => {
         completeEmailLinkSignIn,
         setUserPassword,
         signOut,
-
-        // Permission methods
         hasPermission,
         hasRole,
-        hasAnyRole,
-        isAdmin,
-        getPrimaryUserRole,
-
-        // Convenience permission getters
-        canManageUsers: userPermissions?.canManageUsers || false,
-        canManageProjects: userPermissions?.canManageProjects || false,
-        canViewAnalytics: userPermissions?.canViewAnalytics || false,
-        canManageBilling: userPermissions?.canManageBilling || false,
-
-        // Data management
-        updateUserProfile,
-        refreshUserData,
         clearAuthError,
-
-        // Legacy/Service methods
+        refreshUserData,
         createUserIfNotExists,
         completeUserSetup,
         markEmailVerified,
-        redirectToEmailVerification,
-        
-        // Aliases for backward compatibility
-        user: currentUser, // Some components may use 'user' instead of 'currentUser'
+        redirectToEmailVerification
     };
 
     return (

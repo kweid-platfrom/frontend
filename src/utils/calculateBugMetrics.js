@@ -50,7 +50,7 @@ export const calculateBugMetrics = (bugs = []) => {
     }
 
     const totalBugs = bugs.length;
-    
+
     // Helper function to convert Firebase timestamp to Date
     const convertFirebaseDate = (timestamp) => {
         if (!timestamp) return null;
@@ -67,72 +67,78 @@ export const calculateBugMetrics = (bugs = []) => {
     };
 
     // Source-based metrics - Fixed source matching
-    const bugsFromScreenRecording = bugs.filter(bug => 
-        bug.source === 'screen_recording' || 
+    const bugsFromScreenRecording = bugs.filter(bug =>
+        bug.source === 'screen_recording' ||
         bug.source === 'screen-recording' ||
         bug.source === 'recording' ||
         (bug.attachments && bug.attachments.some(att => att.isRecording))
     ).length;
-    
-    const bugsFromManualTesting = bugs.filter(bug => 
-        bug.source === 'manual' || 
+
+    const bugsFromManualTesting = bugs.filter(bug =>
+        bug.source === 'manual' ||
         bug.source === 'manual_testing' ||
         bug.source === 'manual-testing' ||
         !bug.source
     ).length;
 
     // Evidence-based metrics
-    const bugsWithVideoEvidence = bugs.filter(bug => 
-        bug.hasVideoEvidence || 
-        (bug.attachments && bug.attachments.some(att => 
+    const bugsWithVideoEvidence = bugs.filter(bug =>
+        bug.hasVideoEvidence ||
+        (bug.attachments && bug.attachments.some(att =>
             att.type?.startsWith('video/') || att.isRecording
         ))
     ).length;
 
-    const bugsWithNetworkLogs = bugs.filter(bug => 
-        bug.hasNetworkLogs || 
-        (bug.attachments && bug.attachments.some(att => 
+    const bugsWithNetworkLogs = bugs.filter(bug =>
+        bug.hasNetworkLogs ||
+        (bug.attachments && bug.attachments.some(att =>
             att.name?.toLowerCase().includes('network') ||
             att.name?.toLowerCase().includes('har') ||
             att.type?.includes('json')
         ))
     ).length;
 
-    const bugsWithConsoleLogs = bugs.filter(bug => 
+    const bugsWithConsoleLogs = bugs.filter(bug =>
         bug.hasConsoleLogs ||
-        (bug.attachments && bug.attachments.some(att => 
+        (bug.attachments && bug.attachments.some(att =>
             att.name?.toLowerCase().includes('console') ||
             att.name?.toLowerCase().includes('log')
         ))
     ).length;
 
     // Priority/Severity metrics - Fixed to match both priority and severity fields
-    const criticalBugs = bugs.filter(bug => 
+    const criticalBugs = bugs.filter(bug =>
         bug.severity === 'Critical' || bug.priority === 'Critical'
     ).length;
-    
-    const highPriorityBugs = bugs.filter(bug => 
+
+    const highPriorityBugs = bugs.filter(bug =>
         bug.severity === 'High' || bug.priority === 'High'
     ).length;
-    
-    const mediumPriorityBugs = bugs.filter(bug => 
+
+    const mediumPriorityBugs = bugs.filter(bug =>
         bug.severity === 'Medium' || bug.priority === 'Medium'
     ).length;
-    
-    const lowPriorityBugs = bugs.filter(bug => 
+
+    const lowPriorityBugs = bugs.filter(bug =>
         bug.severity === 'Low' || bug.priority === 'Low'
     ).length;
 
     // Resolution metrics - Fixed to match more status variations
-    const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Verified', 'Done', 'Complete'];
-    const resolvedBugs = bugs.filter(bug => 
-        resolvedStatuses.includes(bug.status) || bug.resolvedAt
+    const resolvedStatuses = ['resolved', 'closed', 'fixed', 'verified', 'done', 'complete'];
+    const normalizedStatus = (status) => (status || '').toLowerCase().trim();
+
+    // Resolved bugs
+    const resolvedBugs = bugs.filter(bug =>
+        resolvedStatuses.includes(normalizedStatus(bug.status))
     ).length;
 
-    const activeBugs = totalBugs - resolvedBugs;
+    // Active bugs = everything not resolved
+    const activeBugs = bugs.filter(bug =>
+        !resolvedStatuses.includes(normalizedStatus(bug.status))
+    ).length;
 
     // Calculate average resolution time
-    const resolvedBugsWithTimes = bugs.filter(bug => 
+    const resolvedBugsWithTimes = bugs.filter(bug =>
         resolvedStatuses.includes(bug.status) &&
         bug.resolvedAt && bug.createdAt
     );
@@ -142,19 +148,19 @@ export const calculateBugMetrics = (bugs = []) => {
         const totalResolutionTime = resolvedBugsWithTimes.reduce((total, bug) => {
             const createdAt = convertFirebaseDate(bug.createdAt);
             const resolvedAt = convertFirebaseDate(bug.resolvedAt);
-            
+
             if (createdAt && resolvedAt) {
                 const diffHours = (resolvedAt - createdAt) / (1000 * 60 * 60);
                 return total + Math.max(0, diffHours);
             }
             return total;
         }, 0);
-        
+
         avgResolutionTime = Math.round(totalResolutionTime / resolvedBugsWithTimes.length);
     }
 
     // Bug resolution rate
-    const bugResolutionRate = totalBugs > 0 ? 
+    const bugResolutionRate = totalBugs > 0 ?
         Math.round((resolvedBugs / totalBugs) * 100) : 0;
 
     // Report completeness calculation
@@ -183,13 +189,13 @@ export const calculateBugMetrics = (bugs = []) => {
         return Math.round((score / maxScore) * 100);
     };
 
-    const avgBugReportCompleteness = totalBugs > 0 ? 
-        Math.round(bugs.reduce((total, bug) => 
+    const avgBugReportCompleteness = totalBugs > 0 ?
+        Math.round(bugs.reduce((total, bug) =>
             total + calculateReportCompleteness(bug), 0) / totalBugs) : 0;
 
     // Attachment metrics
-    const bugReportsWithAttachments = bugs.filter(bug => 
-        bug.hasAttachments || 
+    const bugReportsWithAttachments = bugs.filter(bug =>
+        bug.hasAttachments ||
         (bug.attachments && bug.attachments.length > 0)
     ).length;
 
@@ -199,7 +205,7 @@ export const calculateBugMetrics = (bugs = []) => {
         return completeness >= 70; // 70% completeness threshold
     }).length;
 
-    const bugReproductionRate = totalBugs > 0 ? 
+    const bugReproductionRate = totalBugs > 0 ?
         Math.round((reproducibleBugs / totalBugs) * 100) : 0;
 
     // Time-based reporting metrics
@@ -263,7 +269,7 @@ export const calculateBugMetrics = (bugs = []) => {
             const date = createdDate.toISOString().split('T')[0];
             if (!acc[date]) acc[date] = { reported: 0, resolved: 0 };
             acc[date].reported++;
-            
+
             if (bug.resolvedAt) {
                 const resolvedDate = convertFirebaseDate(bug.resolvedAt);
                 if (resolvedDate) {

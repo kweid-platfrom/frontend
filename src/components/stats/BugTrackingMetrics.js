@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { Bug, AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
 import { useProject } from '../../context/ProjectContext';
 import { useAuth } from '../../context/AuthProvider';
+import { BugAntIcon } from '@heroicons/react/24/outline';
 
 const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error = null }) => {
     const [fetchedBugs, setFetchedBugs] = useState([]);
@@ -389,7 +390,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                     title="Total Bugs"
                     value={totalBugs}
                     subtitle="All bugs reported"
-                    icon={Bug}
+                    icon={BugAntIcon}
                     color="red"
                 />
                 <MetricCard

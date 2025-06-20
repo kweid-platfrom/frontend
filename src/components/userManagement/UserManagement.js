@@ -1,4 +1,4 @@
-// Fixed UserManagementPage.jsx with proper permission handling
+// Fixed UserManagementPage.jsx with proper admin permission handling
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Lock, Crown, AlertTriangle } from 'lucide-react';
 import UserTable from './UserTable';
@@ -54,144 +54,150 @@ const UserManagementPage = () => {
     const [loading, setLoading] = useState(false);
     const [permissionError, setPermissionError] = useState(null);
 
-    const { user, userProfile, userPermissions, hasPermission } = useAuth();
+    const { 
+        currentUser, 
+        userProfile, 
+        userPermissions, 
+        hasPermission, 
+        isAdmin,
+        getPrimaryUserRole 
+    } = useAuth();
+    
     const {
         hasFeatureAccess,
         getFeatureLimits,
         subscriptionStatus
     } = useProject();
 
-    // Helper function to get user's primary role
-    const getUserPrimaryRole = useCallback(() => {
-        if (!userProfile) return null;
-        
-        // Handle both string and array role formats
-        if (typeof userProfile.role === 'string') {
-            return userProfile.role;
-        }
-        
-        if (Array.isArray(userProfile.role)) {
-            // Return the highest priority role
-            const rolePriority = ['super_admin', 'admin', 'organization_admin', 'project_manager', 'lead', 'developer', 'tester', 'member', 'viewer'];
-            for (const role of rolePriority) {
-                if (userProfile.role.includes(role)) {
-                    return role;
-                }
-            }
-            return userProfile.role[0]; // fallback to first role
-        }
-        
-        return 'member'; // default fallback
-    }, [userProfile]);
-
-    // Enhanced permission checks
+    // Enhanced permission checks - simplified and more reliable
     const canManageUsers = useCallback(() => {
+        console.log('=== canManageUsers Check ===');
+        console.log('currentUser:', !!currentUser);
+        console.log('userProfile:', userProfile);
+        console.log('userPermissions:', userPermissions);
+        
         // Must be authenticated
-        if (!user || !userProfile || !userPermissions) {
-            console.log('Permission denied: Missing user data', {
-                hasUser: !!user,
-                hasProfile: !!userProfile,
-                hasPermissions: !!userPermissions
-            });
+        if (!currentUser || !userProfile || !userPermissions) {
+            console.log('Permission denied: Missing user data');
             return false;
         }
 
-        // Check if user has manage_users permission
-        if (!hasPermission('manage_users')) {
-            console.log('Permission denied: No manage_users permission');
-            return false;
+        // Admins can always manage users
+        if (userPermissions.isAdmin || isAdmin()) {
+            console.log('Permission granted: User is admin');
+            return true;
         }
 
-        // Must be organization account
-        if (userProfile.accountType !== 'organization') {
-            console.log('Permission denied: Not organization account', {
-                accountType: userProfile.accountType
-            });
-            return false;
+        // Check specific manage_users permission
+        if (hasPermission('manage_users')) {
+            console.log('Permission granted: Has manage_users permission');
+            return true;
         }
 
-        // Must have team collaboration feature access
-        if (!hasFeatureAccess('teamCollaboration')) {
-            console.log('Permission denied: No team collaboration feature access');
-            return false;
+        // Check if user has canManageUsers convenience property
+        if (userPermissions.canManageUsers) {
+            console.log('Permission granted: Has canManageUsers convenience property');
+            return true;
         }
 
-        console.log('Permission granted: User can manage users');
-        return true;
-    }, [user, userProfile, userPermissions, hasPermission, hasFeatureAccess]);
+        console.log('Permission denied: No manage users permission');
+        return false;
+    }, [currentUser, userProfile, userPermissions, isAdmin, hasPermission]);
 
     const canInviteUsers = useCallback(() => {
         if (!canManageUsers()) return false;
 
+        // Admins can always invite (bypass feature limits)
+        if (userPermissions?.isAdmin || isAdmin()) {
+            return true;
+        }
+
+        // For non-admins, check feature access and limits
+        if (!hasFeatureAccess('teamCollaboration')) {
+            return false;
+        }
+
         const limits = getFeatureLimits();
-        if (!limits) return false;
+        if (!limits) return true; // No limits means unlimited
 
         // Check if we're at the team member limit
         const currentMemberCount = users.filter(u => u.status === 'active').length;
         return currentMemberCount < limits.teamMembers;
-    }, [canManageUsers, getFeatureLimits, users]);
+    }, [canManageUsers, userPermissions, isAdmin, hasFeatureAccess, getFeatureLimits, users]);
 
     const canViewUsers = useCallback(() => {
+        console.log('=== canViewUsers Check ===');
+        
         // Basic checks
-        if (!user || !userProfile || !userPermissions) return false;
-
-        // Must be organization account
-        if (userProfile.accountType !== 'organization') return false;
-
-        // Must have team collaboration feature OR be admin
-        if (!hasFeatureAccess('teamCollaboration') && !userPermissions.isAdmin) return false;
-
-        // Check for read permissions
-        return hasPermission('read_tests') || hasPermission('manage_users') || userPermissions.isAdmin;
-    }, [user, userProfile, userPermissions, hasFeatureAccess, hasPermission]);
-
-    const getPermissionMessage = useCallback(() => {
-        if (!user) return "Please log in to access user management.";
-
-        if (!userProfile) return "Loading user profile...";
-
-        if (userProfile.accountType !== 'organization') {
-            return "User management is only available for organization accounts.";
+        if (!currentUser || !userProfile || !userPermissions) {
+            console.log('View denied: Missing user data');
+            return false;
         }
 
-        const userRole = getUserPrimaryRole();
+        // Admins can always view users
+        if (userPermissions.isAdmin || isAdmin()) {
+            console.log('View granted: User is admin');
+            return true;
+        }
+
+        // Check if user has any relevant permissions
+        if (hasPermission('manage_users') || hasPermission('read_tests') || userPermissions.canManageUsers) {
+            console.log('View granted: Has relevant permissions');
+            return true;
+        }
+
+        console.log('View denied: No relevant permissions');
+        return false;
+    }, [currentUser, userProfile, userPermissions, isAdmin, hasPermission]);
+
+    const getPermissionMessage = useCallback(() => {
+        if (!currentUser) return "Please log in to access user management.";
+        if (!userProfile) return "Loading user profile...";
+
+        const userRole = getPrimaryUserRole();
         
         // Check if user can at least view users
         if (!canViewUsers()) {
-            if (!hasFeatureAccess('teamCollaboration')) {
+            // Check account type only for non-admins
+            if (userProfile.accountType !== 'organization' && !userPermissions?.isAdmin && !isAdmin()) {
+                return "User management is only available for organization accounts.";
+            }
+
+            // Check feature access only for non-admins
+            if (!hasFeatureAccess('teamCollaboration') && !userPermissions?.isAdmin && !isAdmin()) {
                 if (subscriptionStatus?.isTrial) {
                     return `Team collaboration is available during your trial (${subscriptionStatus.trialDaysRemaining} days remaining).`;
                 } else {
                     return "Team collaboration requires a premium subscription. Please upgrade to access user management.";
                 }
             }
+            
             return "You don't have permission to view user management.";
         }
 
         // If user can view but not manage
         if (!canManageUsers()) {
-            if (!hasPermission('manage_users')) {
-                return `You have read-only access to user management. Your role (${userRole}) doesn't include user management permissions.`;
-            }
+            return `You have read-only access to user management. Your role (${userRole}) doesn't include user management permissions.`;
         }
 
         return null;
-    }, [user, userProfile, getUserPrimaryRole, canViewUsers, canManageUsers, hasFeatureAccess, hasPermission, subscriptionStatus]);
+    }, [currentUser, userProfile, getPrimaryUserRole, canViewUsers, canManageUsers, hasFeatureAccess, subscriptionStatus, userPermissions, isAdmin]);
 
     // Check permissions on component mount and when dependencies change
     useEffect(() => {
         const permissionMsg = getPermissionMessage();
         setPermissionError(permissionMsg);
         
-        console.log('Permission check result:', {
-            permissionError: permissionMsg,
-            canView: canViewUsers(),
-            canManage: canManageUsers(),
-            userRole: getUserPrimaryRole(),
-            accountType: userProfile?.accountType,
-            permissions: userPermissions
-        });
-    }, [getPermissionMessage, canViewUsers, canManageUsers, getUserPrimaryRole, userProfile, userPermissions]);
+        console.log('=== Permission Check Summary ===');
+        console.log('permissionError:', permissionMsg);
+        console.log('canView:', canViewUsers());
+        console.log('canManage:', canManageUsers());
+        console.log('userRole:', getPrimaryUserRole());
+        console.log('accountType:', userProfile?.accountType);
+        console.log('isAdmin:', userPermissions?.isAdmin);
+        console.log('permissions:', userPermissions);
+        console.log('===========================');
+    }, [getPermissionMessage, canViewUsers, canManageUsers, getPrimaryUserRole, userProfile, userPermissions]);
 
     const filteredUsers = users.filter(user => {
         const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -219,7 +225,7 @@ const UserManagementPage = () => {
         }
 
         // Prevent self-deletion
-        if (userId === user?.uid) {
+        if (userId === currentUser?.uid) {
             alert('You cannot delete your own account.');
             return;
         }
@@ -244,7 +250,7 @@ const UserManagementPage = () => {
         }
 
         // Prevent self-demotion from admin
-        if (userId === user?.uid && userToUpdate?.role === 'admin' && newRole !== 'admin') {
+        if (userId === currentUser?.uid && userToUpdate?.role === 'admin' && newRole !== 'admin') {
             alert('You cannot remove your own admin privileges.');
             return;
         }
@@ -276,7 +282,7 @@ const UserManagementPage = () => {
             const limits = getFeatureLimits();
             const currentMemberCount = users.filter(u => u.status === 'active').length;
 
-            if (currentMemberCount >= limits?.teamMembers) {
+            if (limits && currentMemberCount >= limits.teamMembers && !userPermissions?.isAdmin && !isAdmin()) {
                 alert(`You've reached your team member limit (${limits.teamMembers}). Please upgrade to invite more users.`);
             } else {
                 alert('You do not have permission to invite users.');
@@ -292,11 +298,11 @@ const UserManagementPage = () => {
     if (permissionError && !canViewUsers()) {
         return (
             <div className="max-w-6xl mx-auto p-6">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                <div className="bg-yellow-50 border border-yellow-200 rounded p-6 text-center">
                     <div className="flex justify-center mb-4">
-                        {userProfile?.accountType !== 'organization' ? (
+                        {userProfile?.accountType !== 'organization' && !userPermissions?.isAdmin ? (
                             <Crown className="w-12 h-12 text-yellow-500" />
-                        ) : !hasFeatureAccess('teamCollaboration') ? (
+                        ) : !hasFeatureAccess('teamCollaboration') && !userPermissions?.isAdmin ? (
                             <Lock className="w-12 h-12 text-yellow-500" />
                         ) : (
                             <AlertTriangle className="w-12 h-12 text-yellow-500" />
@@ -311,14 +317,14 @@ const UserManagementPage = () => {
 
                     {/* Show upgrade button for trial users */}
                     {subscriptionStatus?.isTrial && subscriptionStatus.trialDaysRemaining <= 0 && (
-                        <button className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors">
+                        <button className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded hover:bg-teal-700 transition-colors">
                             Upgrade to Premium
                         </button>
                     )}
 
                     {/* Show trial info for active trial users */}
                     {subscriptionStatus?.isTrial && subscriptionStatus.trialDaysRemaining > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded p-4 mt-4">
                             <p className="text-sm text-blue-800">
                                 Trial Active: {subscriptionStatus.trialDaysRemaining} days remaining
                             </p>
@@ -348,7 +354,7 @@ const UserManagementPage = () => {
                     </p>
 
                     {/* Usage info */}
-                    {limits && (
+                    {limits && !userPermissions?.isAdmin && !isAdmin() && (
                         <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
                             <span>
                                 Team Members: {currentMemberCount} / {limits.teamMembers}
@@ -360,20 +366,28 @@ const UserManagementPage = () => {
                             )}
                         </div>
                     )}
+                    
+                    {/* Admin status indicator */}
+                    {(userPermissions?.isAdmin || isAdmin()) && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-teal-600">
+                            <Crown className="w-3 h-3" />
+                            <span>Administrator Access</span>
+                        </div>
+                    )}
                 </div>
 
                 {!isReadOnly && (
                     <button
                         onClick={handleInviteClick}
                         disabled={!canInviteUsers()}
-                        className={`mt-4 sm:mt-0 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors shadow-sm hover:shadow-md ${canInviteUsers()
+                        className={`mt-4 sm:mt-0 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded transition-colors shadow-sm hover:shadow-md ${canInviteUsers()
                                 ? 'bg-teal-600 text-white hover:bg-teal-700'
                                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                             }`}
                     >
                         <Plus className="w-4 h-4" />
                         Invite Users
-                        {!canInviteUsers() && limits && currentMemberCount >= limits.teamMembers && (
+                        {!canInviteUsers() && limits && currentMemberCount >= limits.teamMembers && !userPermissions?.isAdmin && !isAdmin() && (
                             <span className="ml-1 text-xs">(Limit Reached)</span>
                         )}
                     </button>
@@ -382,41 +396,41 @@ const UserManagementPage = () => {
 
             {/* Read-only banner */}
             {isReadOnly && permissionError && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
                     <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-blue-600" />
-                        <span className="text-sm font-medium text-blue-800">
+                        <AlertTriangle className="w-5 h-5 text-teal-600" />
+                        <span className="text-sm font-medium text-teal-800">
                             Limited Access
                         </span>
                     </div>
-                    <p className="text-sm text-blue-700 mt-1">
+                    <p className="text-sm text-teal-700 mt-1">
                         {permissionError}
                     </p>
                 </div>
             )}
 
-            {/* Trial Banner */}
-            {subscriptionStatus?.showTrialBanner && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            {/* Trial Banner - only show for non-admins */}
+            {subscriptionStatus?.showTrialBanner && !userPermissions?.isAdmin && !isAdmin() && (
+                <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <Crown className="w-5 h-5 text-blue-600" />
-                            <span className="text-sm font-medium text-blue-800">
+                            <Crown className="w-5 h-5 text-teal-600" />
+                            <span className="text-sm font-medium text-teal-800">
                                 Premium Trial Active
                             </span>
                         </div>
-                        <span className="text-sm text-blue-600">
+                        <span className="text-sm text-teal-600">
                             {subscriptionStatus.trialDaysRemaining} days remaining
                         </span>
                     </div>
-                    <p className="text-sm text-blue-700 mt-1">
+                    <p className="text-sm text-teal-700 mt-1">
                         You&apos;re currently enjoying premium features including team collaboration.
                     </p>
                 </div>
             )}
 
             {/* Filters */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 shadow-sm">
+            <div className="bg-white rounded border border-gray-200 p-4 mb-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1">
                         <div className="relative">
@@ -426,7 +440,7 @@ const UserManagementPage = () => {
                                 placeholder="Search users..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
                             />
                         </div>
                     </div>
@@ -434,7 +448,7 @@ const UserManagementPage = () => {
                         <select
                             value={selectedRole}
                             onChange={(e) => setSelectedRole(e.target.value)}
-                            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                            className="px-3 py-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
                         >
                             <option value="all">All Roles</option>
                             {roles.map(role => (
@@ -444,7 +458,7 @@ const UserManagementPage = () => {
                         <select
                             value={selectedStatus}
                             onChange={(e) => setSelectedStatus(e.target.value)}
-                            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                            className="px-3 py-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
                         >
                             <option value="all">All Status</option>
                             <option value="active">Active</option>
@@ -466,8 +480,8 @@ const UserManagementPage = () => {
                 onResendInvite={handleResendInvite}
                 loading={loading}
                 canManageUsers={canManageUsers()}
-                currentUserRole={getUserPrimaryRole()}
-                currentUserId={user?.uid}
+                currentUserRole={getPrimaryUserRole()}
+                currentUserId={currentUser?.uid}
                 isReadOnly={isReadOnly}
             />
         </div>

@@ -13,7 +13,8 @@ import {
     serverTimestamp,
     orderBy
 } from 'firebase/firestore';
-import { db } from '../firebase/config'; // Adjust import path as needed
+import { db } from '../config/firebase';
+
 
 class InviteUserService {
     constructor() {

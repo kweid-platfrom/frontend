@@ -63,7 +63,7 @@ const Dashboard = () => {
 
         window.addEventListener('online', checkConnection);
         window.addEventListener('offline', checkConnection);
-        
+
         return () => {
             window.removeEventListener('online', checkConnection);
             window.removeEventListener('offline', checkConnection);
@@ -106,25 +106,27 @@ const Dashboard = () => {
             // Mock test case data (since test service is not active)
             totalTestCases: 245,
             passRate: 87,
-            
+
             // Real bug data from service
             ...bugMetrics,
-            
+
             // Ensure we have all required fields with defaults
-            activeBugs: bugMetrics.totalBugs || 0,
+            activeBugs: Array.isArray(bugMetrics.bugs)
+                ? bugMetrics.bugs.filter(bug => !['Resolved', 'Closed'].includes(bug.status)).length
+                : (bugMetrics.activeBugs ?? 0),
             criticalIssues: bugMetrics.criticalBugs || 0,
-            
+
             // Calculate derived metrics if not provided
-            bugsFromManualTesting: bugMetrics.bugsFromManualTesting || 
+            bugsFromManualTesting: bugMetrics.bugsFromManualTesting ||
                 Math.max(0, (bugMetrics.totalBugs || 0) - (bugMetrics.bugsFromScreenRecording || 0)),
-            
+
             avgBugReportCompleteness: bugMetrics.avgBugReportCompleteness || 75,
-            bugReproductionRate: bugMetrics.bugReproductionRate || 
+            bugReproductionRate: bugMetrics.bugReproductionRate ||
                 (bugMetrics.totalBugs > 0 ? Math.round(((bugMetrics.bugsWithVideoEvidence || 0) / bugMetrics.totalBugs) * 100) : 0),
-            
+
             weeklyReportsGenerated: bugMetrics.weeklyReportsGenerated || 4,
             monthlyReportsGenerated: bugMetrics.monthlyReportsGenerated || 1,
-            avgBugsPerReport: bugMetrics.avgBugsPerReport || 
+            avgBugsPerReport: bugMetrics.avgBugsPerReport ||
                 (bugMetrics.totalBugs > 0 ? Math.round(bugMetrics.totalBugs / 5) : 0)
         };
     }, [bugMetrics]);
@@ -139,17 +141,17 @@ const Dashboard = () => {
         };
     }, [enhancedMetrics]);
 
+
     const FilterButton = ({ active, onClick, children, disabled = false }) => (
         <button
             onClick={onClick}
             disabled={disabled}
-            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                disabled 
+            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${disabled
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : active 
-                        ? 'bg-teal-100 text-teal-700 border border-teal-200' 
+                    : active
+                        ? 'bg-teal-100 text-teal-700 border border-teal-200'
                         : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
+                }`}
         >
             {children}
         </button>
@@ -202,7 +204,7 @@ const Dashboard = () => {
                         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
                         <h2 className="text-lg font-semibold text-red-800 mb-2">Connection Error</h2>
                         <p className="text-red-600 mb-4">{error}</p>
-                        <button 
+                        <button
                             onClick={handleRefresh}
                             className="bg-red-400 text-white px-4 py-2 rounded hover:bg-red-500 transition-colors"
                         >
@@ -250,7 +252,7 @@ const Dashboard = () => {
                                 />
                                 Auto-refresh
                             </label>
-                            <button 
+                            <button
                                 onClick={handleRefresh}
                                 disabled={loading}
                                 className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
@@ -291,11 +293,10 @@ const Dashboard = () => {
                                 <button
                                     key={tab.value}
                                     onClick={() => setActiveTab(tab.value)}
-                                    className={`flex items-center px-4 py-3 text-sm font-medium rounded transition-colors whitespace-nowrap ${
-                                        activeTab === tab.value
+                                    className={`flex items-center px-4 py-3 text-sm font-medium rounded transition-colors whitespace-nowrap ${activeTab === tab.value
                                             ? 'bg-teal-100 text-teal-700'
                                             : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                    }`}
+                                        }`}
                                 >
                                     <IconComponent className="w-4 h-4 mr-2" />
                                     {tab.label}
@@ -325,7 +326,7 @@ const Dashboard = () => {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="flex flex-wrap items-center gap-4">
                             <div className="flex items-center space-x-2">
                                 <span className="text-sm font-medium text-gray-700">Priority:</span>
@@ -385,8 +386,8 @@ const Dashboard = () => {
                         <div className="flex items-center">
                             <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
                             <p className="text-yellow-800">
-                                Warning: Some bug tracking data may be outdated due to connection issues. 
-                                <button 
+                                Warning: Some bug tracking data may be outdated due to connection issues.
+                                <button
                                     onClick={handleRefresh}
                                     className="underline ml-2 hover:no-underline"
                                 >
@@ -401,43 +402,43 @@ const Dashboard = () => {
                 <div className="space-y-6">
                     {activeTab === 'overview' && (
                         <>
-                            <QAIDMetricsOverview 
-                                metrics={enhancedMetrics} 
-                                loading={false} 
+                            <QAIDMetricsOverview
+                                metrics={enhancedMetrics}
+                                loading={false}
                             />
-                            <QAIDCharts 
-                                metrics={enhancedMetrics} 
-                                loading={false} 
+                            <QAIDCharts
+                                metrics={enhancedMetrics}
+                                loading={false}
                             />
-                            <TeamProductivity 
-                                metrics={enhancedMetrics} 
-                                loading={false} 
+                            <TeamProductivity
+                                metrics={enhancedMetrics}
+                                loading={false}
                             />
                         </>
                     )}
 
                     {activeTab === 'testing' && (
                         <>
-                            <TestCaseMetrics 
+                            <TestCaseMetrics
                                 metrics={{
                                     totalTestCases: enhancedMetrics.totalTestCases,
                                     passRate: enhancedMetrics.passRate
-                                }} 
-                                loading={false} 
+                                }}
+                                loading={false}
                             />
-                            <RecordingMetrics 
+                            <RecordingMetrics
                                 metrics={{
                                     totalRecordings: enhancedMetrics.bugsFromScreenRecording || 52,
                                     successfulRecordings: Math.round((enhancedMetrics.bugsFromScreenRecording || 52) * 0.9)
-                                }} 
-                                loading={false} 
+                                }}
+                                loading={false}
                             />
                         </>
                     )}
 
                     {activeTab === 'bugs' && (
                         <>
-                            <BugTrackingMetrics 
+                            <BugTrackingMetrics
                                 metrics={enhancedMetrics}
                                 loading={loading}
                                 error={error}
@@ -447,44 +448,44 @@ const Dashboard = () => {
 
                     {activeTab === 'ai' && (
                         <>
-                            <AIGenerationMetrics 
+                            <AIGenerationMetrics
                                 metrics={{
                                     totalGenerations: 148,
                                     successRate: enhancedMetrics.avgBugReportCompleteness || 94
-                                }} 
-                                loading={false} 
+                                }}
+                                loading={false}
                             />
                         </>
                     )}
 
                     {activeTab === 'automation' && (
                         <>
-                            <AutomationMetrics 
+                            <AutomationMetrics
                                 metrics={{
                                     automatedTests: 89,
                                     automationCoverage: Math.round(
-                                        enhancedMetrics.totalBugs > 0 ? 
-                                        ((enhancedMetrics.bugsFromScreenRecording || 0) / enhancedMetrics.totalBugs) * 100 : 
-                                        73
+                                        enhancedMetrics.totalBugs > 0 ?
+                                            ((enhancedMetrics.bugsFromScreenRecording || 0) / enhancedMetrics.totalBugs) * 100 :
+                                            73
                                     )
-                                }} 
-                                loading={false} 
+                                }}
+                                loading={false}
                             />
                         </>
                     )}
                 </div>
 
                 {/* Quick Actions */}
-                <QuickActions 
-                    metrics={{ 
+                <QuickActions
+                    metrics={{
                         qa: {
                             testCases: enhancedMetrics.totalTestCases,
                             passRate: enhancedMetrics.passRate
                         },
-                        bugs: enhancedMetrics 
-                    }} 
-                    loading={false} 
-                    onRefresh={handleRefresh} 
+                        bugs: enhancedMetrics
+                    }}
+                    loading={false}
+                    onRefresh={handleRefresh}
                 />
             </div>
         </div>

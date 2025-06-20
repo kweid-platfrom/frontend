@@ -13,16 +13,23 @@ import {
     AlertDialogTitle,
     AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
-import "../../app/globals.css";
+import "../app/globals.css";
 
-const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => {
+const TeamInviteFormMain = ({ 
+    onSendInvites,
+    onSkip,
+    isLoading, 
+    userEmail,
+    organizationName,
+    organizationId,
+    defaultRole = 'member',
+    baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+}) => {
     const [emails, setEmails] = useState([""]);
     const [orgDomain, setOrgDomain] = useState("");
     const [externalEmails, setExternalEmails] = useState([]);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [inviteLoading, setInviteLoading] = useState(false);
-
-    
 
     useEffect(() => {
         if (userEmail) {
@@ -42,25 +49,15 @@ const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => 
         setEmails(updatedEmails);
     };
 
+    const handleSkipClick = () => {
+        if (onSkip) {
+            onSkip();
+        }
+    };
+
     const validateEmails = (emailList) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailList.every((email) => !email.trim() || emailRegex.test(email));
-    };
-
-    const handleSkipClick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (isLoading || inviteLoading) return;
-        
-        try {
-            console.log('TeamInviteForm - Skip button clicked');
-            if (onSkip) {
-                await onSkip();
-            }
-        } catch (error) {
-            console.error('TeamInviteForm - Error during skip:', error);
-            toast.error('Something went wrong. Please try again.');
-        }
     };
 
     const handleSendInvitesClick = (e) => {
@@ -94,13 +91,29 @@ const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => 
         setInviteLoading(true);
         try {
             console.log('TeamInviteForm - Sending invites to:', inviteEmails);
-            await sendInviteEmails(inviteEmails);
-            if (onSendInvites) {
-                await onSendInvites(inviteEmails);
+            const results = await sendInviteEmails(inviteEmails);
+
+            const { successCount, failedEmails } = results;
+
+            if (successCount > 0) {
+                if (failedEmails.length > 0) {
+                    toast.warning(`Successfully sent ${successCount} invitation${successCount !== 1 ? 's' : ''}. ${failedEmails.length} failed to send.`);
+                } else {
+                    toast.success(`Successfully sent ${successCount} invitation${successCount !== 1 ? 's' : ''}`);
+                    setEmails([""]); 
+                }
+            } else {
+                toast.error("Failed to send invitations. Please try again.");
             }
+
+            // Call the parent callback if provided
+            if (onSendInvites) {
+                await onSendInvites(inviteEmails, results);
+            }
+
         } catch (error) {
             console.error("TeamInviteForm - Error sending invites:", error);
-            toast.error("Failed to send some invites. Please try again.");
+            toast.error("Failed to send invitations. Please try again.");
         } finally {
             setInviteLoading(false);
         }
@@ -113,35 +126,82 @@ const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => 
 
     const sendInviteEmails = async (inviteEmails) => {
         try {
-            const response = await fetch('/api/send-invites', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    emails: inviteEmails,
-                    inviterName: userEmail.split('@')[0],
-                    inviterEmail: userEmail,
-                    organizationName: orgDomain,
-                }),
-            });
+            const results = {
+                successCount: 0,
+                failedEmails: [],
+                errors: []
+            };
 
-            if (!response.ok) {
-                throw new Error('Failed to send invites');
+            for (const email of inviteEmails) {
+                try {
+                    // Generate unique invite token
+                    const inviteToken = generateInviteToken();
+                    const inviteUrl = `${baseUrl}/invite?token=${inviteToken}&email=${encodeURIComponent(email)}&orgId=${organizationId}`;
+
+                    const response = await fetch('/api/send-invite', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            email: email,
+                            organizationId: organizationId,
+                            organizationName: organizationName,
+                            inviterEmail: userEmail,
+                            inviterName: userEmail?.split('@')[0] || 'Team Admin',
+                            role: defaultRole,
+                            inviteToken: inviteToken,
+                            inviteUrl: inviteUrl,
+                            expiresIn: '7 days'
+                        }),
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        results.successCount++;
+                        console.log(`Invitation sent successfully to ${email}`);
+                    } else {
+                        results.failedEmails.push(email);
+                        results.errors.push(result.error || 'Unknown error');
+                        console.error(`Failed to send invitation to ${email}:`, result.error);
+                    }
+
+                } catch (emailError) {
+                    results.failedEmails.push(email);
+                    results.errors.push(emailError.message);
+                    console.error(`Error sending invitation to ${email}:`, emailError);
+                }
             }
 
-            const result = await response.json();
-            toast.success(`Invites sent successfully to ${result.sentCount} recipients`);
+            return results;
+
         } catch (error) {
-            console.error('TeamInviteForm - Error sending invite emails:', error);
+            console.error('TeamInviteForm - Error in sendInviteEmails:', error);
             throw error;
         }
     };
 
+    // Simple token generation (you should use a more secure method in production)
+    const generateInviteToken = () => {
+        return Math.random().toString(36).substring(2) + Date.now().toString(36);
+    };
+
     const filledEmailsCount = emails.filter(email => email.trim()).length;
 
+    // Show loading state if required props are missing
+    if (!userEmail || !organizationId) {
+        return (
+            <div className="w-full max-w-md mx-auto p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center justify-center h-64">
+                    <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="w-full max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="w-full max-w-md mx-auto p-4 sm:p-6 lg:p-8">
             {/* Header Section */}
             <div className="text-center mb-6 sm:mb-8">
                 <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-teal-100 rounded-full mb-4">
@@ -153,17 +213,11 @@ const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => 
                 <p className="text-sm sm:text-base text-slate-600 max-w-md mx-auto">
                     Collaborate seamlessly with your teammates. You can always invite more people later.
                 </p>
-            </div>
-
-            {/* Progress indicator */}
-            <div className="mb-6 sm:mb-8">
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                    <span>Step 2 of 3</span>
-                    <span>Team Invites</span>
-                </div>
-                <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-teal-600 h-2 rounded-full w-2/3"></div>
-                </div>
+                {organizationName && (
+                    <p className="text-xs text-slate-500 mt-2">
+                        Organization: {organizationName}
+                    </p>
+                )}
             </div>
 
             {/* Add Button - Mobile Optimized */}
@@ -310,4 +364,4 @@ const TeamInviteFormMain = ({ onSendInvites, onSkip, isLoading, userEmail }) => 
     );
 };
 
-export default TeamInviteFormMain   ;
+export default TeamInviteFormMain;
