@@ -12,6 +12,7 @@ import TeamProductivity from '../stats/TeamProductivity';
 import QAIDCharts from '../stats/QAIDCharts';
 import QuickActions from '../stats/QuickActions';
 
+
 // Import services - Only bug tracking is active
 import { useBugTrackingMetrics } from '../../services/bugTrackingService';
 

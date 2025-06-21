@@ -45,8 +45,8 @@ function generateInviteUrl(token, organizationId, email) {
         email: email
     });
     
-    // 🔧 FIXED: Build URL string directly instead of using URL constructor with path
-    const inviteUrl = `${cleanBaseUrl}/dashboard?${params.toString()}`;
+    // 🔧 FIXED: Point to /onboarding instead of /dashboard to match OnboardingRouter expectations
+    const inviteUrl = `${cleanBaseUrl}/onboarding?${params.toString()}`;
     
     return inviteUrl;
 }

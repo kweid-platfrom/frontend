@@ -16,6 +16,7 @@ import {
 // Import onboarding step components - ONLY what we need
 import ProjectCreationForm from './ProjectCreationForm';
 import UnifiedOrganizationOnboarding from '../onboarding/OrganizationInfo';
+import WelcomeOnboardingPage from '../WelcomeOnboardingPage'; // Changed from Modal to Page
 
 const OnboardingRouter = () => {
     const { currentUser, userProfile, refreshUserData, completeUserSetup, initialized } = useAuth();
@@ -23,17 +24,84 @@ const OnboardingRouter = () => {
     const [currentStep, setCurrentStep] = useState(null);
     const [error, setError] = useState(null);
     const [isTransitioning, setIsTransitioning] = useState(false);
+    const [inviteData, setInviteData] = useState(null);
+    const [redirecting, setRedirecting] = useState(false);
     const router = useRouter();
     const processingRef = useRef(false);
     const stepCompletionRef = useRef(null);
+    const redirectedRef = useRef(false);
     // Add a ref to track if we're completing unified onboarding
     const unifiedCompletionRef = useRef(false);
+    // Add a ref to track if we've detected invite flow
+    const inviteFlowDetectedRef = useRef(false);
 
+    // Function to check if user came from an invite
+    const checkForInviteFlow = () => {
+        if (typeof window === 'undefined') return null;
+
+        // Check URL parameters first
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const orgId = urlParams.get('orgId');
+        const email = urlParams.get('email');
+
+        if (token) {
+            return { token, orgId, email, source: 'url' };
+        }
+
+        // Check localStorage for stored invite data
+        const storedInvite = localStorage.getItem('pending_invite_data');
+        if (storedInvite) {
+            try {
+                const inviteData = JSON.parse(storedInvite);
+                return { ...inviteData, source: 'localStorage' };
+            } catch (err) {
+                console.error('Error parsing stored invite data:', err);
+                localStorage.removeItem('pending_invite_data');
+            }
+        }
+
+        return null;
+    };
+
+    // Separate effect for invite flow detection - runs first and independently
+    useEffect(() => {
+        const detectInviteFlow = () => {
+            // Only check for invite flow once
+            if (inviteFlowDetectedRef.current) {
+                return;
+            }
+
+            console.log('OnboardingRouter - Checking for invite flow...');
+            const inviteInfo = checkForInviteFlow();
+            
+            if (inviteInfo) {
+                console.log('OnboardingRouter - Invite flow detected:', inviteInfo);
+                inviteFlowDetectedRef.current = true;
+                setInviteData(inviteInfo);
+                setCurrentStep('invite-welcome');
+                setLoading(false);
+                return true; // Return true to indicate invite flow was detected
+            }
+            
+            return false; // No invite flow detected
+        };
+
+        detectInviteFlow();
+    }, []); // Run only once on mount
+
+    // Main effect for regular onboarding flow - only runs if NOT invite flow
     useEffect(() => {
         const determineOnboardingStep = async () => {
+            // Skip if invite flow is detected
+            if (inviteFlowDetectedRef.current) {
+                console.log('OnboardingRouter - Invite flow detected, skipping regular onboarding logic');
+                return;
+            }
+
             // Prevent multiple simultaneous executions
-            if (processingRef.current || unifiedCompletionRef.current) {
-                console.log('OnboardingRouter - Already processing or completing unified onboarding, skipping...');
+            if (processingRef.current || unifiedCompletionRef.current || redirecting || redirectedRef.current) {
+                console.log('OnboardingRouter - Already processing, completing unified onboarding, or redirecting, skipping...');
                 return;
             }
 
@@ -42,24 +110,37 @@ const OnboardingRouter = () => {
                 setLoading(true);
                 setError(null);
 
-                console.log('OnboardingRouter - Starting step determination', {
+                console.log('OnboardingRouter - Starting regular onboarding step determination', {
                     initialized,
                     hasCurrentUser: !!currentUser,
                     hasUserProfile: !!userProfile,
-                    isTransitioning
+                    isTransitioning,
+                    redirecting
                 });
 
                 // Wait for auth to be fully initialized
                 if (!initialized) {
                     console.log('OnboardingRouter - Not initialized yet, waiting...');
+                    setLoading(true);
+                    processingRef.current = false;
                     return;
                 }
 
+                // Check for currentUser
                 if (!currentUser) {
                     console.log('OnboardingRouter - No current user, redirecting to login');
-                    router.replace('/login');
+                    if (!redirectedRef.current) {
+                        redirectedRef.current = true;
+                        setRedirecting(true);
+                        setLoading(false);
+                        router.replace('/login');
+                    }
+                    processingRef.current = false;
                     return;
                 }
+
+                // Reset redirect flag if we have a user
+                redirectedRef.current = false;
 
                 // Check email verification
                 const isEmailVerified = currentUser.emailVerified ||
@@ -68,7 +149,12 @@ const OnboardingRouter = () => {
 
                 if (!isEmailVerified) {
                     console.log('OnboardingRouter - Email not verified, redirecting to verify-email');
-                    router.replace('/verify-email');
+                    if (!redirectedRef.current) {
+                        redirectedRef.current = true;
+                        setRedirecting(true);
+                        router.replace('/verify-email');
+                    }
+                    processingRef.current = false;
                     return;
                 }
 
@@ -82,20 +168,31 @@ const OnboardingRouter = () => {
 
                 if (!profile) {
                     console.log('OnboardingRouter - No profile in context, refreshing user data');
-                    const refreshSuccess = await refreshUserData();
-                    if (!refreshSuccess) {
-                        console.error('OnboardingRouter - Failed to refresh user data');
+                    try {
+                        const refreshSuccess = await refreshUserData();
+                        if (!refreshSuccess) {
+                            console.error('OnboardingRouter - Failed to refresh user data');
+                            setError('Failed to load user profile. Please try again.');
+                            processingRef.current = false;
+                            return;
+                        }
+                        // Don't return here - let it continue with the refreshed data
+                        processingRef.current = false;
+                        return; // Will re-run with updated profile
+                    } catch (refreshError) {
+                        console.error('OnboardingRouter - Error refreshing user data:', refreshError);
                         setError('Failed to load user profile. Please try again.');
+                        processingRef.current = false;
                         return;
                     }
-                    return; // Will re-run with updated profile
                 }
 
                 console.log('OnboardingRouter - User profile loaded:', {
                     accountType: profile.accountType,
                     setupCompleted: profile.setupCompleted,
                     onboardingProgress: profile.onboardingProgress,
-                    onboardingStatus: profile.onboardingStatus
+                    onboardingStatus: profile.onboardingStatus,
+                    isInvitedUser: profile.isInvitedUser
                 });
 
                 const { accountType, onboardingStatus = {}, onboardingProgress = {} } = profile;
@@ -104,17 +201,35 @@ const OnboardingRouter = () => {
                 if (window.location.pathname !== '/onboarding') {
                     console.log('OnboardingRouter - Redirecting to main onboarding URL');
                     router.replace('/onboarding');
+                    processingRef.current = false;
+                    return;
+                }
+
+                // Check if this is an invited user who has completed welcome but not regular onboarding
+                if (profile.isInvitedUser && profile.onboardingCompleted) {
+                    console.log('OnboardingRouter - Invited user with completed onboarding, redirecting to dashboard');
+                    if (!redirectedRef.current) {
+                        redirectedRef.current = true;
+                        setRedirecting(true);
+                        router.replace('/dashboard');
+                    }
+                    processingRef.current = false;
                     return;
                 }
 
                 // Check if onboarding is already complete using utility function
                 if (isOnboardingComplete(accountType, onboardingProgress, onboardingStatus)) {
                     console.log('OnboardingRouter - Onboarding already complete, redirecting to dashboard');
-                    router.replace('/dashboard');
+                    if (!redirectedRef.current) {
+                        redirectedRef.current = true;
+                        setRedirecting(true);
+                        router.replace('/dashboard');
+                    }
+                    processingRef.current = false;
                     return;
                 }
 
-                // Determine next step for organization accounts
+                // Determine next step for organization accounts (ADMIN flow)
                 if (accountType === 'organization') {
                     const normalizedProgress = normalizeOnboardingProgress(onboardingProgress);
 
@@ -129,7 +244,12 @@ const OnboardingRouter = () => {
 
                     if (orgSetupComplete) {
                         console.log('OnboardingRouter - Organization setup complete, redirecting to dashboard');
-                        router.replace('/dashboard');
+                        if (!redirectedRef.current) {
+                            redirectedRef.current = true;
+                            setRedirecting(true);
+                            router.replace('/dashboard');
+                        }
+                        processingRef.current = false;
                         return;
                     }
 
@@ -147,7 +267,14 @@ const OnboardingRouter = () => {
                 } else {
                     console.error('OnboardingRouter - No account type found');
                     setError('Account type not found. Please complete your account setup first.');
-                    setTimeout(() => router.replace('/setup'), 2000);
+                    setTimeout(() => {
+                        if (!redirectedRef.current) {
+                            redirectedRef.current = true;
+                            setRedirecting(true);
+                            router.replace('/setup');
+                        }
+                    }, 2000);
+                    processingRef.current = false;
                     return;
                 }
 
@@ -160,9 +287,49 @@ const OnboardingRouter = () => {
             }
         };
 
-        determineOnboardingStep();
-    }, [currentUser, userProfile, router, refreshUserData, completeUserSetup, initialized, isTransitioning]);
+        // Only run regular onboarding logic if NOT invite flow
+        if (!inviteFlowDetectedRef.current) {
+            determineOnboardingStep();
+        }
+    }, [currentUser, userProfile, router, refreshUserData, completeUserSetup, initialized, currentStep, isTransitioning, redirecting]);
 
+    // Handle welcome completion for invited users
+    const handleWelcomeComplete = async (result) => {
+        console.log('OnboardingRouter - Welcome onboarding completed with:', result);
+
+        try {
+            setIsTransitioning(true);
+            setLoading(true);
+
+            // Clear the invite flow flag since we're completing it
+            inviteFlowDetectedRef.current = false;
+
+            // Refresh user data to get the updated profile
+            console.log('OnboardingRouter - Refreshing user data after welcome completion...');
+            const refreshSuccess = await refreshUserData();
+
+            if (!refreshSuccess) {
+                throw new Error('Failed to refresh user data after welcome completion');
+            }
+
+            console.log('OnboardingRouter - Welcome completed, redirecting to dashboard');
+
+            // Redirect to dashboard
+            if (!redirectedRef.current) {
+                redirectedRef.current = true;
+                setRedirecting(true);
+                router.replace('/dashboard');
+            }
+
+        } catch (error) {
+            console.error('OnboardingRouter - Error completing welcome onboarding:', error);
+            setError(`An error occurred while completing the setup: ${error.message}`);
+            setIsTransitioning(false);
+            setLoading(false);
+            // Reset invite flow flag on error
+            inviteFlowDetectedRef.current = false;
+        }
+    };
 
     // Handle unified onboarding completion
     const handleUnifiedOnboardingComplete = async (completionData) => {
@@ -223,7 +390,11 @@ const OnboardingRouter = () => {
             console.log('OnboardingRouter - Organization onboarding completed, redirecting to dashboard');
 
             // Redirect to dashboard
-            router.replace('/dashboard');
+            if (!redirectedRef.current) {
+                redirectedRef.current = true;
+                setRedirecting(true);
+                router.replace('/dashboard');
+            }
 
         } catch (error) {
             console.error('OnboardingRouter - Error completing unified onboarding:', error);
@@ -238,7 +409,6 @@ const OnboardingRouter = () => {
             }, 1000);
         }
     };
-
 
     const handleStepComplete = async (stepData = null) => {
         // Create unique completion ID to prevent duplicate calls
@@ -289,7 +459,11 @@ const OnboardingRouter = () => {
             // For individual accounts, redirect to dashboard after project creation
             if (currentStep === 'project-creation') {
                 console.log('OnboardingRouter - Project creation completed, redirecting to dashboard');
-                router.replace('/dashboard');
+                if (!redirectedRef.current) {
+                    redirectedRef.current = true;
+                    setRedirecting(true);
+                    router.replace('/dashboard');
+                }
                 return;
             }
 
@@ -308,38 +482,48 @@ const OnboardingRouter = () => {
         }
     };
 
-    // Show loading state during transitions
-    if (loading || !initialized || isTransitioning) {
-        const getLoadingMessage = () => {
-            if (isTransitioning) {
-                switch (currentStep) {
-                    case 'unified-organization':
-                        return 'Setting up organization...';
-                    case 'project-creation':
-                        return 'Setting up your workspace...';
-                    default:
-                        return 'Processing...';
+    // Show loading state during transitions or redirects
+    if (loading || !initialized || isTransitioning || redirecting) {
+        // Don't show loading for invite-welcome step when component should be visible
+        if (currentStep === 'invite-welcome' && !isTransitioning && !redirecting) {
+            // Let the WelcomeOnboardingPage render instead of showing loading
+        } else {
+            const getLoadingMessage = () => {
+                if (redirecting) {
+                    return 'Redirecting...';
                 }
-            }
-            return 'Setting up your account...';
-        };
+                if (isTransitioning) {
+                    switch (currentStep) {
+                        case 'invite-welcome':
+                            return 'Setting up your account...';
+                        case 'unified-organization':
+                            return 'Setting up organization...';
+                        case 'project-creation':
+                            return 'Setting up your workspace...';
+                        default:
+                            return 'Processing...';
+                    }
+                }
+                return 'Setting up your account...';
+            };
 
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="text-center">
-                    <Loader2 className="w-8 h-8 text-teal-600 animate-spin mx-auto mb-4" />
-                    <p className="text-gray-600 font-medium">{getLoadingMessage()}</p>
-                    <p className="text-sm text-gray-500 mt-2">
-                        Please wait while we set up your account...
-                    </p>
-                    {currentStep && !isTransitioning && (
-                        <p className="text-xs text-gray-400 mt-1">
-                            Current step: {getStepDisplayName(currentStep)}
+            return (
+                <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                    <div className="text-center">
+                        <Loader2 className="w-8 h-8 text-teal-600 animate-spin mx-auto mb-4" />
+                        <p className="text-gray-600 font-medium">{getLoadingMessage()}</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                            Please wait while we set up your account...
                         </p>
-                    )}
+                        {currentStep && !isTransitioning && !redirecting && (
+                            <p className="text-xs text-gray-400 mt-1">
+                                Current step: {getStepDisplayName(currentStep)}
+                            </p>
+                        )}
+                    </div>
                 </div>
-            </div>
-        );
+            );
+        }
     }
 
     // Error state
@@ -356,9 +540,12 @@ const OnboardingRouter = () => {
                             setError(null);
                             setIsTransitioning(false);
                             setLoading(true);
+                            setRedirecting(false);
                             processingRef.current = false;
                             stepCompletionRef.current = null;
                             unifiedCompletionRef.current = false;
+                            redirectedRef.current = false;
+                            inviteFlowDetectedRef.current = false; // Reset invite flow flag
                             window.location.reload();
                         }}
                         className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition-colors mr-2"
@@ -366,7 +553,11 @@ const OnboardingRouter = () => {
                         Try Again
                     </button>
                     <button
-                        onClick={() => router.replace('/login')}
+                        onClick={() => {
+                            redirectedRef.current = true;
+                            setRedirecting(true);
+                            router.replace('/login');
+                        }}
                         className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
                     >
                         Back to Login
@@ -383,6 +574,15 @@ const OnboardingRouter = () => {
         console.log('OnboardingRouter - Rendering step:', { accountType, currentStep });
 
         switch (currentStep) {
+            case 'invite-welcome':
+                return (
+                    <WelcomeOnboardingPage
+                        onComplete={handleWelcomeComplete}
+                        inviteData={inviteData}
+                        isLoading={isTransitioning}
+                    />
+                );
+
             case 'unified-organization':
                 return (
                     <UnifiedOrganizationOnboarding
@@ -415,12 +615,18 @@ const OnboardingRouter = () => {
                             <p className="text-sm text-gray-500">
                                 Account type: {accountType || 'Unknown'}
                             </p>
+                            <p className="text-sm text-gray-500">
+                                Invite flow: {inviteFlowDetectedRef.current ? 'Yes' : 'No'}
+                            </p>
                             <button
                                 onClick={() => {
                                     setIsTransitioning(false);
+                                    setRedirecting(false);
                                     processingRef.current = false;
                                     stepCompletionRef.current = null;
                                     unifiedCompletionRef.current = false;
+                                    redirectedRef.current = false;
+                                    inviteFlowDetectedRef.current = false; // Reset invite flow flag
                                     window.location.reload();
                                 }}
                                 className="mt-4 bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition-colors"
