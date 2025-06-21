@@ -1,9 +1,18 @@
-import { useState, useEffect, useMemo } from "react";
-import { Loader2, X, Folder, Plus, Users, Mail } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, X, Plus, Users, Mail, AlertCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogFooter,
+    AlertDialogCancel,
+    AlertDialogAction,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogOverlay,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "../context/AuthProvider";
-import InviteDialogs from "./InviteDialogs";
-import ProjectSelector from "./ProjectSelector";
 import "../app/globals.css";
 
 const TeamInviteFormMain = ({
@@ -13,64 +22,63 @@ const TeamInviteFormMain = ({
     userEmail: propUserEmail,
     organizationName: propOrganizationName,
     organizationId: propOrganizationId,
-    organizationProjects: propOrganizationProjects = [],
     defaultRole = 'member'
 }) => {
-    const { userProfile, currentUser } = useAuth();
+    const { userProfile, currentUser } = useAuth(); // Get user data from auth context
 
     // Use props first, then fall back to user profile data
     const userEmail = propUserEmail || currentUser?.email;
     const organizationId = propOrganizationId || userProfile?.organizationId;
     const organizationName = propOrganizationName || userProfile?.organizationName || userProfile?.organization?.name;
-    
-    // Memoize organizationProjects to prevent unnecessary re-renders
-    const organizationProjects = useMemo(() => 
-        propOrganizationProjects.length > 0 
-            ? propOrganizationProjects 
-            : userProfile?.organizationProjects || [],
-        [propOrganizationProjects, userProfile?.organizationProjects]
-    );
 
-    // Form state
+    // Add debug logging
+    console.log('TeamInviteFormMain props and derived values:', {
+        propUserEmail,
+        propOrganizationId,
+        propOrganizationName,
+        userEmail,
+        organizationId,
+        organizationName,
+        userProfile,
+        isLoading
+    });
+
     const [emails, setEmails] = useState([""]);
     const [orgDomain, setOrgDomain] = useState("");
     const [externalEmails, setExternalEmails] = useState([]);
-    const [inviteLoading, setInviteLoading] = useState(false);
-    const [inviteResults, setInviteResults] = useState(null);
-    
-    // Dialog states
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [showResultsDialog, setShowResultsDialog] = useState(false);
-    
-    // Project selection states
-    const [selectedProjects, setSelectedProjects] = useState([]);
+    const [inviteLoading, setInviteLoading] = useState(false);
+    const [inviteResults, setInviteResults] = useState(null);
 
-    // Set organization domain when userEmail changes
     useEffect(() => {
+        console.log('UserEmail changed:', userEmail);
         if (userEmail) {
             setOrgDomain(userEmail.split("@")[1]);
         }
     }, [userEmail]);
 
-    // Initialize project selection based on available projects
-    useEffect(() => {
-        if (organizationProjects.length === 1) {
-            // If only one project, auto-select it
-            setSelectedProjects([organizationProjects[0].id]);
-        } else if (organizationProjects.length > 1) {
-            // If multiple projects, start with none selected (admin must choose)
-            setSelectedProjects([]);
-        }
-    }, [organizationProjects]);
-
     // Show loading state if required props are missing
     if (!userEmail || !organizationId) {
+        console.log('Missing required data - showing loading state:', {
+            userEmail: !!userEmail,
+            organizationId: !!organizationId,
+            userProfileLoaded: !!userProfile,
+            currentUserLoaded: !!currentUser
+        });
+
         return (
             <div className="w-full max-w-md mx-auto p-4 sm:p-6 lg:p-8">
                 <div className="flex items-center justify-center h-64">
                     <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
                     <div className="ml-2 text-sm text-slate-600">
                         Loading team invite form...
+                        <br />
+                        <span className="text-xs">
+                            {!userEmail && 'Missing: userEmail '}
+                            {!organizationId && 'Missing: organizationId '}
+                            {!userProfile && 'Missing: userProfile '}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -100,24 +108,6 @@ const TeamInviteFormMain = ({
         return emailList.every((email) => !email.trim() || emailRegex.test(email));
     };
 
-    const handleProjectSelection = (projectId) => {
-        setSelectedProjects(prev => {
-            if (prev.includes(projectId)) {
-                return prev.filter(id => id !== projectId);
-            } else {
-                return [...prev, projectId];
-            }
-        });
-    };
-
-    const handleSelectAllProjects = () => {
-        if (selectedProjects.length === organizationProjects.length) {
-            setSelectedProjects([]);
-        } else {
-            setSelectedProjects(organizationProjects.map(p => p.id));
-        }
-    };
-
     const handleSendInvitesClick = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -136,12 +126,6 @@ const TeamInviteFormMain = ({
             return;
         }
 
-        // Validate project selection for organizations with multiple projects
-        if (organizationProjects.length > 1 && selectedProjects.length === 0) {
-            toast.error("Please select at least one project to invite users to.");
-            return;
-        }
-
         const external = filtered.filter((email) => !email.endsWith(`@${orgDomain}`));
         if (external.length > 0) {
             setExternalEmails(filtered);
@@ -154,88 +138,109 @@ const TeamInviteFormMain = ({
     const sendInvites = async (inviteEmails) => {
         setInviteLoading(true);
         try {
+            console.log('TeamInviteForm - Sending invites to:', inviteEmails);
+
             const results = [];
             let sent = 0, failed = 0, alreadyInvited = 0;
 
             // Send individual requests for each email
             for (const email of inviteEmails) {
                 try {
-                    const requestBody = {
+                    console.log('🔍 Attempting to send invite to:', email);
+                    console.log('🔍 API URL:', '/api/send-invite');
+                    console.log('🔍 Request body:', {
                         email: email.trim(),
                         organizationId,
                         organizationName,
                         inviterEmail: userEmail,
                         inviterName: userEmail?.split('@')[0] || 'Team Admin',
-                        role: defaultRole,
-                        projectIds: selectedProjects.length > 0 ? selectedProjects : undefined
-                    };
+                        role: defaultRole
+                    });
 
                     const response = await fetch('/api/send-invite', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify(requestBody),
+                        body: JSON.stringify({
+                            email: email.trim(),
+                            organizationId,
+                            organizationName,
+                            inviterEmail: userEmail,
+                            inviterName: userEmail?.split('@')[0] || 'Team Admin',
+                            role: defaultRole
+                        }),
                     });
 
+                    console.log('🔍 Response status:', response.status);
+                    console.log('🔍 Response headers:', [...response.headers.entries()]);
+
+                    // Check if response is HTML (404 page) or JSON
                     const contentType = response.headers.get('content-type');
+                    console.log('🔍 Content-Type:', contentType);
 
                     if (contentType && contentType.includes('application/json')) {
                         const result = await response.json();
+                        console.log('🔍 JSON Response:', result);
 
+                        // Handle different response statuses
                         if (response.ok) {
+                            // Success case (200-299 status codes)
                             results.push({
                                 email: email.trim(),
                                 status: 'sent',
                                 message: result.message || 'Invitation sent successfully',
-                                inviteId: result.inviteId || null,
-                                projectIds: selectedProjects
+                                inviteId: result.inviteId || null
                             });
                             sent++;
                         } else if (response.status === 409) {
+                            // Conflict - user already invited
                             results.push({
                                 email: email.trim(),
                                 status: 'already_invited',
                                 message: result.message || 'User already has a pending invitation',
-                                inviteId: result.inviteId || null,
-                                projectIds: selectedProjects
+                                inviteId: result.inviteId || null
                             });
                             alreadyInvited++;
                         } else {
+                            // Other error responses
                             results.push({
                                 email: email.trim(),
                                 status: 'failed',
                                 message: result.message || `Server error: ${response.status}`,
-                                inviteId: null,
-                                projectIds: selectedProjects
+                                inviteId: null
                             });
                             failed++;
                         }
                     } else {
+                        // It's likely an HTML error page
+                        const htmlText = await response.text();
+                        console.log('🔍 HTML Response (first 200 chars):', htmlText.substring(0, 200));
+                        console.error('❌ Received HTML instead of JSON - API endpoint not found');
+
                         results.push({
                             email: email.trim(),
                             status: 'failed',
                             message: 'API endpoint not found (404)',
-                            inviteId: null,
-                            projectIds: selectedProjects
+                            inviteId: null
                         });
                         failed++;
                     }
 
                 } catch (emailError) {
+                    console.error(`Network error for ${email}:`, emailError);
                     results.push({
                         email: email.trim(),
                         status: 'failed',
                         message: `Network error: ${emailError.message}`,
-                        inviteId: null,
-                        projectIds: selectedProjects
+                        inviteId: null
                     });
                     failed++;
                 }
             }
 
             const finalResult = {
-                success: sent > 0 || alreadyInvited > 0,
+                success: sent > 0 || alreadyInvited > 0, // Consider already invited as partial success
                 results,
                 summary: {
                     sent,
@@ -244,6 +249,7 @@ const TeamInviteFormMain = ({
                 }
             };
 
+            console.log('Combined API Results:', finalResult);
             setInviteResults(finalResult);
             handleInviteResults(finalResult);
 
@@ -291,18 +297,45 @@ const TeamInviteFormMain = ({
             .map(r => r.email);
 
         if (failedEmails.length < inviteResults.length) {
+            // Keep only failed emails for retry
             setEmails(failedEmails.length > 0 ? failedEmails : [""]);
         }
     };
 
-    const handleConfirmExternalInvite = () => {
+    const confirmExternalInvite = () => {
         setShowConfirmDialog(false);
         sendInvites(externalEmails);
     };
 
-    const handleCloseResultsDialog = () => {
+    const closeResultsDialog = () => {
         setShowResultsDialog(false);
         setInviteResults(null);
+    };
+
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case 'sent':
+                return <CheckCircle className="w-4 h-4 text-green-500" />;
+            case 'failed':
+                return <AlertCircle className="w-4 h-4 text-red-500" />;
+            case 'already_invited':
+                return <AlertCircle className="w-4 h-4 text-yellow-500" />;
+            default:
+                return null;
+        }
+    };
+
+    const getStatusText = (status) => {
+        switch (status) {
+            case 'sent':
+                return 'Sent successfully';
+            case 'failed':
+                return 'Failed to send';
+            case 'already_invited':
+                return 'Already invited';
+            default:
+                return status;
+        }
     };
 
     const filledEmailsCount = emails.filter(email => email.trim()).length;
@@ -327,28 +360,6 @@ const TeamInviteFormMain = ({
                         </p>
                     )}
                 </div>
-
-                {/* Project Selection - Only show if there are multiple projects */}
-                {organizationProjects.length > 1 && (
-                    <ProjectSelector
-                        organizationProjects={organizationProjects}
-                        selectedProjects={selectedProjects}
-                        onProjectSelection={handleProjectSelection}
-                        onSelectAllProjects={handleSelectAllProjects}
-                    />
-                )}
-
-                {/* Single project info */}
-                {organizationProjects.length === 1 && (
-                    <div className="mb-6 sm:mb-8 p-3 bg-teal-50 border border-teal-200 rounded-lg">
-                        <div className="flex items-center gap-2 text-sm text-teal-700">
-                            <Folder className="w-4 h-4" />
-                            <span className="font-medium">Project:</span>
-                            <span>{organizationProjects[0].name}</span>
-                        </div>
-                        <p className="text-xs text-teal-600 mt-1">Users will be invited to this project automatically.</p>
-                    </div>
-                )}
 
                 {/* Add Button - Mobile Optimized */}
                 <div className="flex justify-between items-center mb-4 sm:mb-6">
@@ -462,20 +473,101 @@ const TeamInviteFormMain = ({
                 )}
             </div>
 
-            {/* Invite Dialogs Component */}
-            <InviteDialogs
-                showConfirmDialog={showConfirmDialog}
-                setShowConfirmDialog={setShowConfirmDialog}
-                showResultsDialog={showResultsDialog}
-                setShowResultsDialog={setShowResultsDialog}
-                externalEmails={externalEmails}
-                orgDomain={orgDomain}
-                selectedProjects={selectedProjects}
-                organizationProjects={organizationProjects}
-                inviteResults={inviteResults}
-                onConfirmExternalInvite={handleConfirmExternalInvite}
-                onCloseResultsDialog={handleCloseResultsDialog}
-            />
+            {/* External Email Confirmation Dialog */}
+            <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                <AlertDialogOverlay className="fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
+                <AlertDialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg mx-4">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-lg sm:text-xl font-semibold text-slate-900">
+                            Invite External Members?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm sm:text-base text-slate-600 mt-2">
+                            {externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).length} email{externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).length !== 1 ? 's are' : ' is'} outside your organization ({orgDomain}).
+                            External members will have the same access as internal team members.
+                            
+                            <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                                <div className="text-sm font-medium text-slate-700 mb-2">External emails:</div>
+                                <div className="space-y-1">
+                                    {externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).map((email, index) => (
+                                        <div key={index} className="text-sm text-slate-600 flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                                            {email}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0 mt-6">
+                        <AlertDialogCancel
+                            onClick={() => setShowConfirmDialog(false)}
+                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmExternalInvite}
+                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                        >
+                            Yes, Send Invites
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Invitation Results Dialog */}
+            <AlertDialog open={showResultsDialog} onOpenChange={setShowResultsDialog}>
+                <AlertDialogOverlay className="fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
+                <AlertDialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg mx-4">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-lg sm:text-xl font-semibold text-slate-900">
+                            Invitation Results
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-4 mt-2">
+                                {inviteResults?.summary && (
+                                    <div className="text-sm text-slate-600">
+                                        <div className="flex gap-4 text-xs bg-slate-50 p-3 rounded-lg">
+                                            <span className="text-green-600 font-medium">✓ {inviteResults.summary.sent} sent</span>
+                                            {inviteResults.summary.failed > 0 && (
+                                                <span className="text-red-600 font-medium">✗ {inviteResults.summary.failed} failed</span>
+                                            )}
+                                            {inviteResults.summary.alreadyInvited > 0 && (
+                                                <span className="text-yellow-600 font-medium">⚠ {inviteResults.summary.alreadyInvited} already invited</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {inviteResults?.results && (
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {inviteResults.results.map((result, index) => (
+                                            <div key={index} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg text-sm">
+                                                {getStatusIcon(result.status)}
+                                                <div className="flex-1">
+                                                    <div className="font-medium text-slate-900">{result.email}</div>
+                                                    <div className="text-xs text-slate-500">{getStatusText(result.status)}</div>
+                                                    {result.message && result.message !== getStatusText(result.status) && (
+                                                        <div className="text-xs text-slate-500 mt-1">{result.message}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-6">
+                        <AlertDialogAction
+                            onClick={closeResultsDialog}
+                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                        >
+                            Got it
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 };

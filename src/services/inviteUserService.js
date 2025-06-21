@@ -11,14 +11,14 @@ import {
     deleteDoc,
     doc,
     serverTimestamp,
-    orderBy
+    orderBy,
+    setDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-
 class InviteUserService {
     constructor() {
-        this.baseUrl = process.env.REACT_APP_BASE_URL || 'http://localhost:3000';
+        this.baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.REACT_APP_BASE_URL || 'http://localhost:3000';
     }
 
     /**
@@ -34,7 +34,7 @@ class InviteUserService {
             const results = [];
 
             for (const invite of inviteData) {
-                const { email, role } = invite;
+                const { email, role = 'member' } = invite;
 
                 // Check if user is already invited or exists
                 const existingInvite = await this.checkExistingInvite(organizationId, email);
@@ -42,7 +42,8 @@ class InviteUserService {
                     results.push({
                         email,
                         status: 'already_invited',
-                        message: 'User already invited or exists'
+                        message: 'User already invited or exists',
+                        inviteId: null
                     });
                     continue;
                 }
@@ -50,7 +51,7 @@ class InviteUserService {
                 // Generate invitation token
                 const inviteToken = this.generateInviteToken();
 
-                // Save invitation to database
+                // Save invitation to organization subcollection
                 const inviteDoc = await this.saveInvitation({
                     organizationId,
                     email,
@@ -62,7 +63,25 @@ class InviteUserService {
                     status: 'pending',
                     createdAt: serverTimestamp(),
                     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-                    lastActive: null
+                    lastActive: null,
+                    acceptedAt: null,
+                    cancelledAt: null,
+                    resentAt: null
+                });
+
+                // Also save to global invitations collection for token lookup
+                await this.saveGlobalInvitation({
+                    organizationId,
+                    email,
+                    role,
+                    inviterEmail,
+                    inviterName,
+                    organizationName,
+                    token: inviteToken,
+                    status: 'pending',
+                    createdAt: serverTimestamp(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                    orgInviteId: inviteDoc.id
                 });
 
                 // Send email
@@ -72,7 +91,8 @@ class InviteUserService {
                     inviterName,
                     organizationName,
                     inviteToken,
-                    inviteId: inviteDoc.id
+                    inviteId: inviteDoc.id,
+                    organizationId
                 });
 
                 results.push({
@@ -94,7 +114,7 @@ class InviteUserService {
             };
         } catch (error) {
             console.error('Error sending invites:', error);
-            throw new Error('Failed to send invitations');
+            throw new Error('Failed to send invitations: ' + error.message);
         }
     }
 
@@ -103,7 +123,7 @@ class InviteUserService {
      */
     async checkExistingInvite(organizationId, email) {
         try {
-            // Check existing invitations
+            // Check existing invitations in organization subcollection
             const invitesRef = collection(db, 'organizations', organizationId, 'invitations');
             const inviteQuery = query(
                 invitesRef,
@@ -116,7 +136,7 @@ class InviteUserService {
                 return true;
             }
 
-            // Check existing users
+            // Check existing users in organization subcollection
             const usersRef = collection(db, 'organizations', organizationId, 'users');
             const userQuery = query(
                 usersRef,
@@ -133,27 +153,55 @@ class InviteUserService {
     }
 
     /**
-     * Save invitation to database
+     * Save invitation to organization subcollection
      */
     async saveInvitation(inviteData) {
         try {
             const invitesRef = collection(db, 'organizations', inviteData.organizationId, 'invitations');
-            const docRef = await addDoc(invitesRef, inviteData);
+            const docRef = await addDoc(invitesRef, {
+                email: inviteData.email,
+                role: inviteData.role,
+                inviterEmail: inviteData.inviterEmail,
+                inviterName: inviteData.inviterName,
+                organizationName: inviteData.organizationName,
+                token: inviteData.token,
+                status: inviteData.status,
+                createdAt: inviteData.createdAt,
+                expiresAt: inviteData.expiresAt,
+                lastActive: inviteData.lastActive,
+                acceptedAt: inviteData.acceptedAt,
+                cancelledAt: inviteData.cancelledAt,
+                resentAt: inviteData.resentAt
+            });
             return docRef;
         } catch (error) {
-            console.error('Error saving invitation:', error);
+            console.error('Error saving invitation to organization:', error);
             throw error;
         }
     }
 
     /**
-     * Send invitation email (integrate with your email service)
+     * Save invitation to global collection for token lookup
      */
-    async sendInvitationEmail({ email, role, inviterName, organizationName, inviteToken, inviteId }) {
+    async saveGlobalInvitation(inviteData) {
         try {
-            const inviteUrl = `${this.baseUrl}/accept-invite/${inviteToken}`;
+            const globalInvitesRef = collection(db, 'invitations');
+            const docRef = await addDoc(globalInvitesRef, inviteData);
+            return docRef;
+        } catch (error) {
+            console.error('Error saving global invitation:', error);
+            throw error;
+        }
+    }
 
-            // Replace this with your actual email service (SendGrid, AWS SES, etc.)
+    /**
+     * Send invitation email
+     */
+    async sendInvitationEmail({ email, role, inviterName, organizationName, inviteToken, inviteId, organizationId }) {
+        try {
+            const inviteUrl = `${this.baseUrl}/invite?token=${inviteToken}&email=${encodeURIComponent(email)}&orgId=${organizationId}`;
+
+            // This should match your actual email service implementation
             const emailData = {
                 to: email,
                 subject: `You're invited to join ${organizationName}`,
@@ -167,8 +215,8 @@ class InviteUserService {
                 }
             };
 
-            // Example API call to your email service
-            const response = await fetch('/api/send-email', {
+            // If you have an email service endpoint
+            const response = await fetch('/api/send-invites', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -177,12 +225,17 @@ class InviteUserService {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to send email');
+                console.error('Email service responded with error:', await response.text());
+                return false;
             }
 
-            return true;
+            const result = await response.json();
+            return result.success !== false;
+
         } catch (error) {
             console.error('Error sending invitation email:', error);
+            // Don't fail the entire process if email fails
+            // You might want to add email to a retry queue here
             return false;
         }
     }
@@ -191,7 +244,46 @@ class InviteUserService {
      * Generate a secure invitation token
      */
     generateInviteToken() {
-        return crypto.randomUUID() + '-' + Date.now().toString(36);
+        // Use crypto.randomUUID if available, fallback to alternative
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID() + '-' + Date.now().toString(36);
+        } else {
+            // Fallback for environments without crypto.randomUUID
+            return Math.random().toString(36).substring(2) + '-' + Date.now().toString(36);
+        }
+    }
+
+    /**
+     * Find invitation by token
+     */
+    async findInvitationByToken(token) {
+        try {
+            const globalInvitesRef = collection(db, 'invitations');
+            const q = query(
+                globalInvitesRef,
+                where('token', '==', token),
+                where('status', '==', 'pending')
+            );
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                return null;
+            }
+
+            const inviteDoc = snapshot.docs[0];
+            const data = inviteDoc.data();
+            
+            return {
+                id: inviteDoc.id,
+                ...data,
+                createdAt: data.createdAt,
+                expiresAt: data.expiresAt,
+                acceptedAt: data.acceptedAt
+            };
+        } catch (error) {
+            console.error('Error finding invitation:', error);
+            return null;
+        }
     }
 
     /**
@@ -214,7 +306,7 @@ class InviteUserService {
                 throw new Error('Invitation already used');
             }
 
-            // Create user account in organization
+            // Create user account in organization subcollection
             const usersRef = collection(db, 'organizations', invitation.organizationId, 'users');
             const userDoc = await addDoc(usersRef, {
                 ...userData,
@@ -226,9 +318,17 @@ class InviteUserService {
                 invitedBy: invitation.inviterEmail
             });
 
-            // Update invitation status
-            const inviteRef = doc(db, 'organizations', invitation.organizationId, 'invitations', invitation.id);
-            await updateDoc(inviteRef, {
+            // Update organization invitation status
+            const orgInviteRef = doc(db, 'organizations', invitation.organizationId, 'invitations', invitation.orgInviteId);
+            await updateDoc(orgInviteRef, {
+                status: 'accepted',
+                acceptedAt: serverTimestamp(),
+                userId: userDoc.id
+            });
+
+            // Update global invitation status
+            const globalInviteRef = doc(db, 'invitations', invitation.id);
+            await updateDoc(globalInviteRef, {
                 status: 'accepted',
                 acceptedAt: serverTimestamp(),
                 userId: userDoc.id
@@ -246,59 +346,29 @@ class InviteUserService {
     }
 
     /**
-     * Find invitation by token across all organizations
-     */
-    async findInvitationByToken(token) {
-        try {
-            // Create a global invitations collection to store all invites with organization reference
-            const globalInvitesRef = collection(db, 'invitations');
-            const q = query(
-                globalInvitesRef,
-                where('token', '==', token),
-                where('status', '==', 'pending')
-            );
-            const snapshot = await getDocs(q);
-
-            if (snapshot.empty) {
-                return null;
-            }
-
-            const inviteDoc = snapshot.docs[0];
-            return {
-                id: inviteDoc.id,
-                ...inviteDoc.data(),
-                createdAt: inviteDoc.data().createdAt,
-                expiresAt: inviteDoc.data().expiresAt,
-                acceptedAt: inviteDoc.data().acceptedAt
-            };
-        } catch (error) {
-            console.error('Error finding invitation:', error);
-            return null;
-        }
-    }
-
-    /**
      * Get all users for an organization (including pending invitations)
      */
     async getOrganizationUsers(organizationId) {
         try {
             const users = [];
 
-            // Get active users
+            // Get active users from organization subcollection
             const usersRef = collection(db, 'organizations', organizationId, 'users');
             const usersQuery = query(usersRef, orderBy('joinedAt', 'desc'));
             const usersSnapshot = await getDocs(usersQuery);
 
             usersSnapshot.docs.forEach(doc => {
+                const data = doc.data();
                 users.push({
                     id: doc.id,
-                    ...doc.data(),
-                    joinedAt: doc.data().joinedAt?.toDate()?.toISOString().split('T')[0],
-                    lastActive: doc.data().lastActive?.toDate()?.toISOString().split('T')[0]
+                    ...data,
+                    joinedAt: data.joinedAt?.toDate()?.toISOString().split('T')[0],
+                    lastActive: data.lastActive?.toDate()?.toISOString().split('T')[0],
+                    isInvitation: false
                 });
             });
 
-            // Get pending invitations
+            // Get pending invitations from organization subcollection
             const invitesRef = collection(db, 'organizations', organizationId, 'invitations');
             const invitesQuery = query(
                 invitesRef, 
@@ -318,35 +388,14 @@ class InviteUserService {
                     joinedAt: inviteData.createdAt?.toDate()?.toISOString().split('T')[0],
                     lastActive: null,
                     isInvitation: true,
-                    invitationId: doc.id
+                    invitationId: doc.id,
+                    expiresAt: inviteData.expiresAt?.toDate()?.toISOString()
                 });
             });
 
             return users;
         } catch (error) {
             console.error('Error fetching organization users:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Get all invitations for an organization
-     */
-    async getOrganizationInvitations(organizationId) {
-        try {
-            const invitesRef = collection(db, 'organizations', organizationId, 'invitations');
-            const q = query(invitesRef, orderBy('createdAt', 'desc'));
-            const snapshot = await getDocs(q);
-
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate(),
-                expiresAt: doc.data().expiresAt?.toDate(),
-                acceptedAt: doc.data().acceptedAt?.toDate()
-            }));
-        } catch (error) {
-            console.error('Error fetching invitations:', error);
             throw error;
         }
     }
@@ -374,13 +423,30 @@ class InviteUserService {
             const newToken = this.generateInviteToken();
             const newExpiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-            // Update invitation
+            // Update organization invitation
             await updateDoc(inviteRef, {
                 token: newToken,
                 expiresAt: newExpiryDate,
-                status: 'pending',
                 resentAt: serverTimestamp()
             });
+
+            // Update global invitation
+            const globalInvitesRef = collection(db, 'invitations');
+            const globalQuery = query(
+                globalInvitesRef,
+                where('orgInviteId', '==', invitationId),
+                where('organizationId', '==', organizationId)
+            );
+            const globalSnapshot = await getDocs(globalQuery);
+            
+            if (!globalSnapshot.empty) {
+                const globalInviteRef = doc(db, 'invitations', globalSnapshot.docs[0].id);
+                await updateDoc(globalInviteRef, {
+                    token: newToken,
+                    expiresAt: newExpiryDate,
+                    resentAt: serverTimestamp()
+                });
+            }
 
             // Resend email
             const emailSent = await this.sendInvitationEmail({
@@ -389,7 +455,8 @@ class InviteUserService {
                 inviterName: inviteData.inviterName,
                 organizationName: inviteData.organizationName,
                 inviteToken: newToken,
-                inviteId: invitationId
+                inviteId: invitationId,
+                organizationId: organizationId
             });
 
             return {
@@ -407,11 +474,29 @@ class InviteUserService {
      */
     async cancelInvitation(organizationId, invitationId) {
         try {
+            // Update organization invitation
             const inviteRef = doc(db, 'organizations', organizationId, 'invitations', invitationId);
             await updateDoc(inviteRef, {
                 status: 'cancelled',
                 cancelledAt: serverTimestamp()
             });
+
+            // Update global invitation
+            const globalInvitesRef = collection(db, 'invitations');
+            const globalQuery = query(
+                globalInvitesRef,
+                where('orgInviteId', '==', invitationId),
+                where('organizationId', '==', organizationId)
+            );
+            const globalSnapshot = await getDocs(globalQuery);
+            
+            if (!globalSnapshot.empty) {
+                const globalInviteRef = doc(db, 'invitations', globalSnapshot.docs[0].id);
+                await updateDoc(globalInviteRef, {
+                    status: 'cancelled',
+                    cancelledAt: serverTimestamp()
+                });
+            }
 
             return { success: true, message: 'Invitation cancelled successfully' };
         } catch (error) {
@@ -429,36 +514,17 @@ class InviteUserService {
             const user = await this.getUserById(organizationId, userId);
             
             if (user?.isInvitation) {
-                // Delete invitation
-                const inviteRef = doc(db, 'organizations', organizationId, 'invitations', userId);
-                await deleteDoc(inviteRef);
+                // Cancel invitation instead of deleting
+                return await this.cancelInvitation(organizationId, userId);
             } else {
-                // Delete user
+                // Delete user from organization
                 const userRef = doc(db, 'organizations', organizationId, 'users', userId);
                 await deleteDoc(userRef);
             }
 
-            return { success: true, message: 'User deleted successfully' };
+            return { success: true, message: 'User removed successfully' };
         } catch (error) {
             console.error('Error deleting user:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Update user role
-     */
-    async updateUserRole(organizationId, userId, newRole) {
-        try {
-            const userRef = doc(db, 'organizations', organizationId, 'users', userId);
-            await updateDoc(userRef, {
-                role: newRole,
-                updatedAt: serverTimestamp()
-            });
-
-            return { success: true, message: 'User role updated successfully' };
-        } catch (error) {
-            console.error('Error updating user role:', error);
             throw error;
         }
     }
@@ -496,30 +562,6 @@ class InviteUserService {
         } catch (error) {
             console.error('Error getting user by ID:', error);
             return null;
-        }
-    }
-
-    /**
-     * Get user statistics for an organization
-     */
-    async getUserStats(organizationId) {
-        try {
-            const users = await this.getOrganizationUsers(organizationId);
-            
-            const stats = {
-                total: users.length,
-                active: users.filter(u => u.status === 'active').length,
-                pending: users.filter(u => u.status === 'pending').length,
-                inactive: users.filter(u => u.status === 'inactive').length,
-                admins: users.filter(u => u.role === 'admin').length,
-                members: users.filter(u => u.role === 'member').length,
-                viewers: users.filter(u => u.role === 'viewer').length
-            };
-
-            return stats;
-        } catch (error) {
-            console.error('Error getting user stats:', error);
-            throw error;
         }
     }
 
