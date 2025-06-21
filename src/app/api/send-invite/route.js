@@ -186,9 +186,7 @@ export async function POST(request) {
         let emailError = null;
         
         try {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-            const inviteUrl = `${baseUrl}/accept-invite?token=${inviteToken}`;
-
+            // 🔧 FIXED: Pass the correct parameters to sendInviteEmail
             const emailResult = await sendInviteEmail({
                 to: normalizedEmail,
                 subject: `You're invited to join ${organizationName}`,
@@ -196,7 +194,8 @@ export async function POST(request) {
                 inviterName: inviterName || inviterEmail.split('@')[0],
                 inviterEmail,
                 role,
-                inviteUrl,
+                inviteToken, // ✅ Pass inviteToken instead of inviteUrl
+                organizationId, // ✅ Pass organizationId 
                 expiresIn: '7 days',
                 projectIds: normalizedProjectIds // Use normalized array
             });

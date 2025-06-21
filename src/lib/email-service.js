@@ -64,9 +64,36 @@ export async function sendInviteEmail({
     projectIds = []
 }) {
     try {
-        // Validate required parameters
-        if (!to || !subject || !organizationName || !inviterName || !inviteToken || !organizationId) {
-            throw new Error('Missing required email parameters');
+        // 🔧 FIXED: More detailed parameter validation with specific error messages
+        console.log('🔍 Email parameters validation:', {
+            to: to || 'MISSING',
+            subject: subject || 'MISSING',
+            organizationName: organizationName || 'MISSING',
+            inviterName: inviterName || 'MISSING',
+            inviteToken: inviteToken || 'MISSING',
+            organizationId: organizationId || 'MISSING',
+            inviterEmail: inviterEmail || 'MISSING',
+            role: role || 'MISSING',
+            expiresIn: expiresIn || 'MISSING',
+            projectIds: Array.isArray(projectIds) ? projectIds : 'NOT_ARRAY'
+        });
+
+        // 🔧 FIXED: Check each parameter individually and provide specific error messages
+        const missingParams = [];
+        if (!to) missingParams.push('to');
+        if (!subject) missingParams.push('subject');
+        if (!organizationName) missingParams.push('organizationName');
+        if (!inviterName) missingParams.push('inviterName');
+        if (!inviteToken) missingParams.push('inviteToken');
+        if (!organizationId) missingParams.push('organizationId');
+        if (!inviterEmail) missingParams.push('inviterEmail');
+        if (!role) missingParams.push('role');
+        if (!expiresIn) missingParams.push('expiresIn');
+
+        if (missingParams.length > 0) {
+            const errorMessage = `Missing required email parameters: ${missingParams.join(', ')}`;
+            console.error('❌ Parameter validation failed:', errorMessage);
+            throw new Error(errorMessage);
         }
 
         // Validate email format

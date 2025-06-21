@@ -16,6 +16,15 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
+// Custom error classes for better error handling
+class InvitationError extends Error {
+    constructor(message, code) {
+        super(message);
+        this.code = code;
+        this.name = 'InvitationError';
+    }
+}
+
 class InviteUserService {
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.REACT_APP_BASE_URL || 'http://localhost:3000';
@@ -66,6 +75,7 @@ class InviteUserService {
                     lastActive: null,
                     acceptedAt: null,
                     cancelledAt: null,
+                    declinedAt: null,
                     resentAt: null
                 });
 
@@ -114,7 +124,7 @@ class InviteUserService {
             };
         } catch (error) {
             console.error('Error sending invites:', error);
-            throw new Error('Failed to send invitations: ' + error.message);
+            throw new InvitationError('Failed to send invitations: ' + error.message, 'SEND_FAILED');
         }
     }
 
@@ -171,6 +181,7 @@ class InviteUserService {
                 lastActive: inviteData.lastActive,
                 acceptedAt: inviteData.acceptedAt,
                 cancelledAt: inviteData.cancelledAt,
+                declinedAt: inviteData.declinedAt,
                 resentAt: inviteData.resentAt
             });
             return docRef;
@@ -254,7 +265,7 @@ class InviteUserService {
     }
 
     /**
-     * Find invitation by token
+     * Find invitation by token - Returns consistent data structure
      */
     async findInvitationByToken(token) {
         try {
@@ -273,12 +284,47 @@ class InviteUserService {
             const inviteDoc = snapshot.docs[0];
             const data = inviteDoc.data();
             
+            // Return consistent data structure for InviteHandler
             return {
                 id: inviteDoc.id,
-                ...data,
+                token: data.token,
+                email: data.email,
+                role: data.role || 'member',
+                status: data.status || 'pending',
+                
+                // Organization info
+                organizationId: data.organizationId,
+                organizationName: data.organizationName,
+                orgId: data.organizationId, // Backward compatibility
+                orgName: data.organizationName, // Backward compatibility
+                
+                // Inviter info  
+                inviterName: data.inviterName,
+                inviterEmail: data.inviterEmail,
+                inviter: { // Backward compatibility
+                    name: data.inviterName,
+                    email: data.inviterEmail
+                },
+                invitedBy: { // Backward compatibility
+                    name: data.inviterName,
+                    email: data.inviterEmail
+                },
+                
+                // Project info (if available)
+                projects: data.projects || [],
+                projectIds: data.projectIds || [],
+                
+                // Timestamps
                 createdAt: data.createdAt,
                 expiresAt: data.expiresAt,
-                acceptedAt: data.acceptedAt
+                acceptedAt: data.acceptedAt,
+                invitedAt: data.createdAt, // Backward compatibility
+                
+                // Internal references
+                orgInviteId: data.orgInviteId,
+                
+                // Keep original data for debugging
+                _original: data
             };
         } catch (error) {
             console.error('Error finding invitation:', error);
@@ -294,37 +340,45 @@ class InviteUserService {
             // Find invitation by token
             const invitation = await this.findInvitationByToken(token);
             if (!invitation) {
-                throw new Error('Invalid or expired invitation');
+                throw new InvitationError('Invalid or expired invitation', 'INVALID_TOKEN');
             }
 
             // Check if invitation is still valid
-            if (invitation.expiresAt.toDate() < new Date()) {
-                throw new Error('Invitation has expired');
+            const expiryDate = invitation.expiresAt.toDate ? invitation.expiresAt.toDate() : new Date(invitation.expiresAt);
+            if (expiryDate < new Date()) {
+                throw new InvitationError('Invitation has expired', 'EXPIRED');
             }
 
             if (invitation.status !== 'pending') {
-                throw new Error('Invitation already used');
+                throw new InvitationError('Invitation already used', 'ALREADY_USED');
             }
 
             // Create user account in organization subcollection
             const usersRef = collection(db, 'organizations', invitation.organizationId, 'users');
             const userDoc = await addDoc(usersRef, {
-                ...userData,
                 email: invitation.email,
                 role: invitation.role,
+                name: userData.userName || userData.displayName || invitation.email.split('@')[0],
+                displayName: userData.displayName || userData.userName || invitation.email.split('@')[0],
                 status: 'active',
                 joinedAt: serverTimestamp(),
                 lastActive: serverTimestamp(),
-                invitedBy: invitation.inviterEmail
+                invitedBy: invitation.inviterEmail,
+                organizationId: invitation.organizationId,
+                projectIds: userData.projectIds || [],
+                // Include any additional user data
+                ...userData
             });
 
             // Update organization invitation status
-            const orgInviteRef = doc(db, 'organizations', invitation.organizationId, 'invitations', invitation.orgInviteId);
-            await updateDoc(orgInviteRef, {
-                status: 'accepted',
-                acceptedAt: serverTimestamp(),
-                userId: userDoc.id
-            });
+            if (invitation.orgInviteId) {
+                const orgInviteRef = doc(db, 'organizations', invitation.organizationId, 'invitations', invitation.orgInviteId);
+                await updateDoc(orgInviteRef, {
+                    status: 'accepted',
+                    acceptedAt: serverTimestamp(),
+                    userId: userDoc.id
+                });
+            }
 
             // Update global invitation status
             const globalInviteRef = doc(db, 'invitations', invitation.id);
@@ -337,11 +391,60 @@ class InviteUserService {
             return {
                 success: true,
                 userId: userDoc.id,
-                organizationId: invitation.organizationId
+                organizationId: invitation.organizationId,
+                organizationName: invitation.organizationName,
+                message: 'Invitation accepted successfully'
             };
         } catch (error) {
             console.error('Error accepting invitation:', error);
-            throw error;
+            if (error instanceof InvitationError) {
+                throw error;
+            }
+            throw new InvitationError('Failed to accept invitation: ' + error.message, 'ACCEPT_FAILED');
+        }
+    }
+
+    /**
+     * Decline invitation - NEW METHOD
+     */
+    async declineInvitation(token) {
+        try {
+            // Find invitation by token
+            const invitation = await this.findInvitationByToken(token);
+            if (!invitation) {
+                throw new InvitationError('Invalid or expired invitation', 'INVALID_TOKEN');
+            }
+
+            if (invitation.status !== 'pending') {
+                throw new InvitationError('Invitation already processed', 'ALREADY_PROCESSED');
+            }
+
+            // Update organization invitation status
+            if (invitation.orgInviteId) {
+                const orgInviteRef = doc(db, 'organizations', invitation.organizationId, 'invitations', invitation.orgInviteId);
+                await updateDoc(orgInviteRef, {
+                    status: 'declined',
+                    declinedAt: serverTimestamp()
+                });
+            }
+
+            // Update global invitation status
+            const globalInviteRef = doc(db, 'invitations', invitation.id);
+            await updateDoc(globalInviteRef, {
+                status: 'declined',
+                declinedAt: serverTimestamp()
+            });
+
+            return {
+                success: true,
+                message: 'Invitation declined successfully'
+            };
+        } catch (error) {
+            console.error('Error declining invitation:', error);
+            if (error instanceof InvitationError) {
+                throw error;
+            }
+            throw new InvitationError('Failed to decline invitation: ' + error.message, 'DECLINE_FAILED');
         }
     }
 
@@ -396,7 +499,7 @@ class InviteUserService {
             return users;
         } catch (error) {
             console.error('Error fetching organization users:', error);
-            throw error;
+            throw new InvitationError('Failed to fetch organization users: ' + error.message, 'FETCH_FAILED');
         }
     }
 
@@ -409,14 +512,14 @@ class InviteUserService {
             const inviteDoc = await getDoc(inviteRef);
 
             if (!inviteDoc.exists()) {
-                throw new Error('Invitation not found');
+                throw new InvitationError('Invitation not found', 'NOT_FOUND');
             }
 
             const inviteData = inviteDoc.data();
 
             // Check if invitation is still pending
             if (inviteData.status !== 'pending') {
-                throw new Error('Cannot resend non-pending invitation');
+                throw new InvitationError('Cannot resend non-pending invitation', 'INVALID_STATUS');
             }
 
             // Generate new token and extend expiry
@@ -465,7 +568,10 @@ class InviteUserService {
             };
         } catch (error) {
             console.error('Error resending invitation:', error);
-            throw error;
+            if (error instanceof InvitationError) {
+                throw error;
+            }
+            throw new InvitationError('Failed to resend invitation: ' + error.message, 'RESEND_FAILED');
         }
     }
 
@@ -501,7 +607,7 @@ class InviteUserService {
             return { success: true, message: 'Invitation cancelled successfully' };
         } catch (error) {
             console.error('Error cancelling invitation:', error);
-            throw error;
+            throw new InvitationError('Failed to cancel invitation: ' + error.message, 'CANCEL_FAILED');
         }
     }
 
@@ -525,7 +631,7 @@ class InviteUserService {
             return { success: true, message: 'User removed successfully' };
         } catch (error) {
             console.error('Error deleting user:', error);
-            throw error;
+            throw new InvitationError('Failed to delete user: ' + error.message, 'DELETE_FAILED');
         }
     }
 
