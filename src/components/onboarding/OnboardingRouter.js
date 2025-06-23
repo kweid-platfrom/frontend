@@ -93,7 +93,7 @@ const OnboardingRouter = () => {
     // Main effect for regular onboarding flow - only runs if NOT invite flow
     useEffect(() => {
         const determineOnboardingStep = async () => {
-            // Skip if invite flow is detected
+            // CRITICAL FIX: Skip if invite flow is detected
             if (inviteFlowDetectedRef.current) {
                 console.log('OnboardingRouter - Invite flow detected, skipping regular onboarding logic');
                 return;
@@ -126,7 +126,7 @@ const OnboardingRouter = () => {
                     return;
                 }
 
-                // Check for currentUser
+                // Check for currentUser - ONLY if not in invite flow
                 if (!currentUser) {
                     console.log('OnboardingRouter - No current user, redirecting to login');
                     if (!redirectedRef.current) {
@@ -291,7 +291,7 @@ const OnboardingRouter = () => {
         if (!inviteFlowDetectedRef.current) {
             determineOnboardingStep();
         }
-    }, [currentUser, userProfile, router, refreshUserData, completeUserSetup, initialized, currentStep, isTransitioning, redirecting]);
+    }, [currentUser, userProfile, router, refreshUserData, completeUserSetup, initialized, isTransitioning, redirecting]); // REMOVED currentStep from dependencies
 
     // Handle welcome completion for invited users
     const handleWelcomeComplete = async (result) => {
@@ -482,48 +482,48 @@ const OnboardingRouter = () => {
         }
     };
 
-    // Show loading state during transitions or redirects
+    // FIXED: Show loading state during transitions or redirects
     if (loading || !initialized || isTransitioning || redirecting) {
-        // Don't show loading for invite-welcome step when component should be visible
-        if (currentStep === 'invite-welcome' && !isTransitioning && !redirecting) {
-            // Let the WelcomeOnboardingPage render instead of showing loading
-        } else {
-            const getLoadingMessage = () => {
-                if (redirecting) {
-                    return 'Redirecting...';
-                }
-                if (isTransitioning) {
-                    switch (currentStep) {
-                        case 'invite-welcome':
-                            return 'Setting up your account...';
-                        case 'unified-organization':
-                            return 'Setting up organization...';
-                        case 'project-creation':
-                            return 'Setting up your workspace...';
-                        default:
-                            return 'Processing...';
-                    }
-                }
-                return 'Setting up your account...';
-            };
-
-            return (
-                <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                    <div className="text-center">
-                        <Loader2 className="w-8 h-8 text-teal-600 animate-spin mx-auto mb-4" />
-                        <p className="text-gray-600 font-medium">{getLoadingMessage()}</p>
-                        <p className="text-sm text-gray-500 mt-2">
-                            Please wait while we set up your account...
-                        </p>
-                        {currentStep && !isTransitioning && !redirecting && (
-                            <p className="text-xs text-gray-400 mt-1">
-                                Current step: {getStepDisplayName(currentStep)}
-                            </p>
-                        )}
-                    </div>
-                </div>
-            );
+        // CRITICAL FIX: Actually render the invite-welcome component when it should be shown
+        if (currentStep === 'invite-welcome' && !isTransitioning && !redirecting && !loading) {
+            return renderOnboardingStep();
         }
+        
+        const getLoadingMessage = () => {
+            if (redirecting) {
+                return 'Redirecting...';
+            }
+            if (isTransitioning) {
+                switch (currentStep) {
+                    case 'invite-welcome':
+                        return 'Setting up your account...';
+                    case 'unified-organization':
+                        return 'Setting up organization...';
+                    case 'project-creation':
+                        return 'Setting up your workspace...';
+                    default:
+                        return 'Processing...';
+                }
+            }
+            return 'Setting up your account...';
+        };
+
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 text-teal-600 animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600 font-medium">{getLoadingMessage()}</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                        Please wait while we set up your account...
+                    </p>
+                    {currentStep && !isTransitioning && !redirecting && (
+                        <p className="text-xs text-gray-400 mt-1">
+                            Current step: {getStepDisplayName(currentStep)}
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
     }
 
     // Error state

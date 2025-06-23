@@ -6,11 +6,9 @@ import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
 
 import {
-    createUserIfNotExists,
-    fetchUserData,
-    completeUserSetup,
-    updateOnboardingStep,
+    fetchUserData
 } from "../services/userService";
+import { createUserIfNotExists, completeUserSetup } from "../services/onboardingService";
 import { updateUserProfile as updateUserProfileService } from "../services/userService";
 
 import {
