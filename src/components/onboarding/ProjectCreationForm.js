@@ -10,13 +10,13 @@ import { createProject } from '../../services/projectService';
 import { validateProjectName } from '../../utils/onboardingUtils';
 import { PlusIcon } from '@heroicons/react/24/outline';
 
-const ProjectCreationForm = ({ 
+const ProjectCreationForm = ({
     onComplete,
     isLoading: externalLoading = false,
     userProfile: externalUserProfile = null
 }) => {
     const { currentUser, userProfile: contextUserProfile, refreshUserData, isLoading: authLoading } = useAuth();
-    
+
     // Use external userProfile if provided (for onboarding), otherwise use context
     const userProfile = externalUserProfile || contextUserProfile;
     const { refetchProjects } = useProject();
@@ -60,7 +60,7 @@ const ProjectCreationForm = ({
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="flex items-center space-x-2">
-                    <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
                     <span className="text-gray-600">Loading...</span>
                 </div>
             </div>
@@ -78,10 +78,10 @@ const ProjectCreationForm = ({
                         </svg>
                     </div>
                     <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-                        Project Created Successfully!
+                        Suite Created Successfully!
                     </h1>
                     <p className="text-gray-600 mb-4">
-                        {isOrganizationAccount 
+                        {isOrganizationAccount
                             ? 'Redirecting to your organization dashboard...'
                             : 'Redirecting to your dashboard...'
                         }
@@ -122,7 +122,7 @@ const ProjectCreationForm = ({
 
     const handleCreateProject = async (e) => {
         e.preventDefault();
-        
+
         setErrors({});
 
         const validation = validateProjectName(projectName);
@@ -145,51 +145,51 @@ const ProjectCreationForm = ({
                 return;
             }
 
-            console.log('Project created successfully with ID:', result.projectId);
-            
+            console.log('Suite created successfully with ID:', result.projectId);
+
             // Mark as completed to prevent re-rendering
             setIsCompleted(true);
-            
+
             // Store the new project ID for the dashboard
             localStorage.setItem('activeProjectId', result.projectId);
-            
+
             // Complete onboarding in Firestore
             const onboardingCompleted = await completeOnboarding();
-            
+
             if (!onboardingCompleted) {
                 throw new Error('Failed to complete onboarding setup');
             }
-            
+
             // Show success message
-            const successMessage = isOrganizationAccount 
-                ? 'Project created successfully! Welcome to your organization workspace!'
-                : 'Project created successfully! Welcome to QA Suite!';
+            const successMessage = isOrganizationAccount
+                ? 'Suite created successfully! Welcome to your organization workspace!'
+                : 'Suite created successfully! Welcome to QA Suite!';
             toast.success(successMessage);
-            
+
             // Call the onComplete callback if provided
             if (typeof onComplete === 'function') {
                 await onComplete(result.projectId);
             }
-            
+
             // Refresh projects to include the new one
             if (refetchProjects) {
                 await refetchProjects();
             }
-            
+
             // Navigate to dashboard with a delay
             setTimeout(() => {
                 router.push('/dashboard');
             }, 1500); // 1.5 second delay to show success state
-            
+
         } catch (error) {
             console.error('Error creating project:', error);
             setIsCompleted(false); // Reset completion state on error
             if (error.message.includes('Failed to complete onboarding')) {
-                setErrors({ general: 'Project created but failed to complete setup. Please try refreshing the page.' });
+                setErrors({ general: 'Suite created but failed to complete setup. Please try refreshing the page.' });
             } else {
-                setErrors({ general: 'Failed to create project. Please try again.' });
+                setErrors({ general: 'Failed to create suite. Please try again.' });
             }
-            toast.error('Failed to create project. Please try again.');
+            toast.error('Failed to create suite. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -197,37 +197,47 @@ const ProjectCreationForm = ({
 
     // Get plan information with better organization account handling
     const getPlanInfo = () => {
-        if (isOrganizationAccount) {
-            // Organization accounts might have different subscription handling
-            const orgSubscription = userProfile?.organizationSubscription || userProfile?.subscriptionType;
-            return {
-                type: orgSubscription || 'organization',
-                limit: orgSubscription === 'free' ? '1 project limit' : 'Multiple projects available',
-                showWarning: orgSubscription === 'free'
-            };
-        } else {
-            return {
-                type: userProfile?.subscriptionType || 'free',
-                limit: userProfile?.subscriptionType === 'free' ? '1 project limit' : 'Multiple projects available',
-                showWarning: userProfile?.subscriptionType === 'free'
-            };
+        const subscription = userProfile?.subscriptionType;
+        const isTrial = subscription === 'trial';
+        const isFree = subscription === 'free';
+        const isUpgraded = !isTrial && !isFree;
+
+        let planType = 'Free';
+        let limit = 'Limited access';
+        let showWarning = false;
+
+        if (isTrial) {
+            planType = 'Trial';
+            limit = '30 days free trial - Full access';
+            showWarning = true;
+        } else if (isUpgraded) {
+            planType = subscription;
+            limit = 'Full access';
+            showWarning = false;
         }
+
+        return {
+            type: planType,
+            limit,
+            showWarning
+        };
     };
+
 
     const planInfo = getPlanInfo();
 
     // Render onboarding form (full screen only)
     return (
-        <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="bg-white flex items-center justify-center p-6">
             <div className="w-full max-w-xs">
                 <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-teal-600 rounded flex items-center justify-center mx-auto mb-6">
                         <PlusIcon className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-                        {isOrganizationAccount 
-                            ? 'Create your first organization project'
-                            : 'Create your first project'
+                        {isOrganizationAccount
+                            ? 'Create Another Test Suite'
+                            : 'Add Another Test Suite'
                         }
                     </h1>
                     <p className="text-gray-600">
@@ -245,9 +255,8 @@ const ProjectCreationForm = ({
                             value={projectName}
                             onChange={(e) => setProjectName(e.target.value)}
                             placeholder="Project name"
-                            className={`w-full px-4 py-3 border rounded text-gray-900 placeholder-gray-500 focus:border-teal-600 focus:outline-none transition-colors ${
-                                errors.projectName ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                            }`}
+                            className={`w-full px-4 py-3 border rounded text-gray-900 placeholder-gray-500 focus:border-teal-600 focus:outline-none transition-colors ${errors.projectName ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                }`}
                             disabled={isLoading}
                             autoFocus
                         />
@@ -284,7 +293,7 @@ const ProjectCreationForm = ({
                                 Creating...
                             </div>
                         ) : (
-                            'Create project'
+                            'Create suite'
                         )}
                     </button>
                 </form>
@@ -293,7 +302,7 @@ const ProjectCreationForm = ({
                 {planInfo.showWarning && (
                     <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
                         <p className="text-sm text-amber-800 text-center">
-                            {isOrganizationAccount ? 'Organization free plan' : 'Free plan'}: {planInfo.limit}
+                            {isOrganizationAccount ? 'Organization free Trial' : 'Free trial'}: {planInfo.limit}
                         </p>
                     </div>
                 )}

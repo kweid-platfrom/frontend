@@ -45,9 +45,19 @@ export const ProjectProvider = ({ children }) => {
         timestamp: null
     });
 
+    // Track if we've already updated the trial status in this session
+    const [trialStatusUpdated, setTrialStatusUpdated] = useState(false);
+
     // Memoized subscription status with trial logic
     const subscriptionStatus = useMemo(() => {
-        if (!userProfile) return { isValid: false, isExpired: true, isTrial: false };
+        if (!userProfile) return { 
+            isValid: false, 
+            isExpired: true, 
+            isTrial: false,
+            trialDaysRemaining: 0,
+            subscriptionType: 'free',
+            subscriptionStatus: 'active'
+        };
 
         // Check and update trial status
         const updatedProfile = accountService.checkAndUpdateTrialStatus(userProfile);
@@ -63,7 +73,8 @@ export const ProjectProvider = ({ children }) => {
             capabilities: capabilities,
             // Helper methods
             showTrialBanner: capabilities.isTrialActive && capabilities.trialDaysRemaining <= 7,
-            showUpgradePrompt: !capabilities.isTrialActive && updatedProfile.subscriptionType === 'free'
+            showUpgradePrompt: !capabilities.isTrialActive && updatedProfile.subscriptionType === 'free',
+            profile: updatedProfile
         };
     }, [userProfile]);
 
@@ -171,7 +182,72 @@ export const ProjectProvider = ({ children }) => {
         return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
     }, [cache.timestamp]);
 
-    // Fetch user profile with caching and trial status update
+    // Enhanced function to update trial status in database
+    const updateTrialStatusInDatabase = useCallback(async (uid, originalProfile, updatedProfile) => {
+        // Skip if no significant changes or already updated in this session
+        if (trialStatusUpdated) return updatedProfile;
+
+        const needsUpdate = (
+            originalProfile.isTrialActive !== updatedProfile.isTrialActive ||
+            originalProfile.subscriptionStatus !== updatedProfile.subscriptionStatus ||
+            originalProfile.trialDaysRemaining !== updatedProfile.trialDaysRemaining ||
+            (!originalProfile.hasUsedTrial && updatedProfile.hasUsedTrial) ||
+            (!originalProfile.trialStartDate && updatedProfile.trialStartDate)
+        );
+
+        if (!needsUpdate) return updatedProfile;
+
+        try {
+            console.log('Updating trial status in database:', {
+                uid,
+                changes: {
+                    isTrialActive: { from: originalProfile.isTrialActive, to: updatedProfile.isTrialActive },
+                    subscriptionStatus: { from: originalProfile.subscriptionStatus, to: updatedProfile.subscriptionStatus },
+                    trialDaysRemaining: { from: originalProfile.trialDaysRemaining, to: updatedProfile.trialDaysRemaining }
+                }
+            });
+
+            const updateData = {
+                subscriptionType: updatedProfile.subscriptionType,
+                subscriptionStatus: updatedProfile.subscriptionStatus,
+                isTrialActive: updatedProfile.isTrialActive,
+                trialDaysRemaining: updatedProfile.trialDaysRemaining,
+                showTrialBanner: updatedProfile.showTrialBanner,
+                features: updatedProfile.features,
+                limits: updatedProfile.limits,
+                updatedAt: serverTimestamp()
+            };
+
+            // Add trial-specific fields if they exist
+            if (updatedProfile.trialStartDate) {
+                updateData.trialStartDate = updatedProfile.trialStartDate;
+            }
+            if (updatedProfile.trialEndDate) {
+                updateData.trialEndDate = updatedProfile.trialEndDate;
+            }
+            if (updatedProfile.hasUsedTrial !== undefined) {
+                updateData.hasUsedTrial = updatedProfile.hasUsedTrial;
+            }
+            if (updatedProfile.trialExpiredAt) {
+                updateData.trialExpiredAt = updatedProfile.trialExpiredAt;
+                updateData.trialExpired = true;
+            }
+
+            await updateDoc(doc(db, 'users', uid), updateData);
+            console.log('Trial status successfully updated in database');
+            
+            // Mark as updated for this session
+            setTrialStatusUpdated(true);
+            
+            return updatedProfile;
+        } catch (error) {
+            console.error('Error updating trial status in database:', error);
+            // Return the updated profile even if database update fails
+            return updatedProfile;
+        }
+    }, [trialStatusUpdated]);
+
+    // Fetch user profile with enhanced trial handling
     const fetchUserProfile = useCallback(async (uid, forceRefresh = false) => {
         try {
             // Return cached data if valid and not forcing refresh
@@ -181,43 +257,65 @@ export const ProjectProvider = ({ children }) => {
 
             const userDoc = await getDoc(doc(db, 'users', uid));
             if (userDoc.exists()) {
-                const profileData = userDoc.data();
+                const originalProfile = { uid, ...userDoc.data() };
                 
-                // Check if trial status needs to be updated in database
-                const updatedProfile = accountService.checkAndUpdateTrialStatus(profileData);
+                // Check if trial status needs to be updated
+                const updatedProfile = accountService.checkAndUpdateTrialStatus(originalProfile);
                 
-                // If trial has expired, update the database
-                if (profileData.isTrialActive && !updatedProfile.isTrialActive) {
-                    try {
-                        await updateDoc(doc(db, 'users', uid), {
-                            subscriptionType: updatedProfile.subscriptionType,
-                            subscriptionStatus: updatedProfile.subscriptionStatus,
-                            isTrialActive: false,
-                            trialExpiredAt: new Date(),
-                            features: updatedProfile.features,
-                            limits: updatedProfile.limits,
-                            updatedAt: serverTimestamp()
-                        });
-                        console.log('Trial status updated in database');
-                    } catch (error) {
-                        console.error('Error updating trial status:', error);
-                    }
-                }
+                // Update database if needed
+                const finalProfile = await updateTrialStatusInDatabase(uid, originalProfile, updatedProfile);
                 
+                // Update cache
                 setCache(prev => ({
                     ...prev,
-                    userProfile: updatedProfile,
+                    userProfile: finalProfile,
                     timestamp: Date.now()
                 }));
-                return updatedProfile;
+                
+                return finalProfile;
+            } else {
+                // User document doesn't exist - this might be a new user
+                console.log('User document not found, might be a new user:', uid);
+                return null;
             }
-            return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
             // Return cached data as fallback
             return cache.userProfile || null;
         }
-    }, [cache.userProfile, isCacheValid]);
+    }, [cache.userProfile, isCacheValid, updateTrialStatusInDatabase]);
+
+    // Enhanced setup for new users without profiles
+    const setupNewUserProfile = useCallback(async (uid, userEmail) => {
+        try {
+            console.log('Setting up new user profile with trial:', uid);
+            
+            const accountType = accountService.getAccountType(userEmail);
+            const trialConfig = accountService.createFreemiumSubscription(accountType);
+            
+            const newProfile = {
+                uid,
+                email: userEmail,
+                accountType,
+                role: accountType === 'organization' ? 'admin' : 'user',
+                createdAt: new Date(),
+                accountCreatedAt: new Date(),
+                onboardingCompleted: false,
+                ...trialConfig
+            };
+
+            await setDoc(doc(db, 'users', uid), newProfile);
+            console.log('New user profile created with trial');
+            
+            // Reset trial status updated flag since this is a new user
+            setTrialStatusUpdated(false);
+            
+            return newProfile;
+        } catch (error) {
+            console.error('Error setting up new user profile:', error);
+            throw error;
+        }
+    }, []);
 
     // Update user profile method
     const updateUserProfile = useCallback(async (profileData) => {
@@ -252,6 +350,9 @@ export const ProjectProvider = ({ children }) => {
                 timestamp: null
             }));
 
+            // Reset trial status updated flag
+            setTrialStatusUpdated(false);
+
             return updatedProfile;
         } catch (error) {
             console.error('Error updating user profile:', error);
@@ -272,14 +373,29 @@ export const ProjectProvider = ({ children }) => {
             
             const userDocRef = doc(db, 'users', user.uid);
             
-            // Prepare profile data with timestamps
-            const profileWithTimestamps = {
+            // Check if this is a new user by checking if they have trial data
+            const existingDoc = await getDoc(userDocRef);
+            const isNewUser = !existingDoc.exists() || !existingDoc.data().hasUsedTrial;
+            
+            let profileWithTimestamps = {
                 ...profileData,
                 uid: user.uid,
                 email: user.email,
-                createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             };
+
+            // If new user, add trial configuration
+            if (isNewUser) {
+                const accountType = profileData.accountType || accountService.getAccountType(user.email);
+                const trialConfig = accountService.createFreemiumSubscription(accountType);
+                
+                profileWithTimestamps = {
+                    ...profileWithTimestamps,
+                    ...trialConfig,
+                    createdAt: serverTimestamp(),
+                    accountCreatedAt: serverTimestamp()
+                };
+            }
 
             // Use setDoc with merge option to create or update
             await setDoc(userDocRef, profileWithTimestamps, { merge: true });
@@ -297,6 +413,9 @@ export const ProjectProvider = ({ children }) => {
                 timestamp: null
             }));
 
+            // Reset trial status updated flag
+            setTrialStatusUpdated(false);
+
             return updatedProfile;
         } catch (error) {
             console.error('Error creating/updating user profile:', error);
@@ -312,6 +431,8 @@ export const ProjectProvider = ({ children }) => {
 
         try {
             setIsUserLoading(true);
+            // Reset trial status updated flag to allow fresh updates
+            setTrialStatusUpdated(false);
             const freshProfile = await fetchUserProfile(user.uid, true);
             setUserProfile(freshProfile);
             return freshProfile;
@@ -415,14 +536,21 @@ export const ProjectProvider = ({ children }) => {
         }
     }, []);
 
-    // Optimized data loading with parallel requests
+    // Enhanced data loading with better error handling and new user setup
     const loadUserData = useCallback(async (currentUser) => {
         if (!currentUser) return;
 
         try {
             // Load user profile first (needed for project query)
             setIsUserLoading(true);
-            const profile = await fetchUserProfile(currentUser.uid);
+            let profile = await fetchUserProfile(currentUser.uid);
+            
+            // If no profile exists, set up a new user profile
+            if (!profile) {
+                console.log('No profile found, setting up new user');
+                profile = await setupNewUserProfile(currentUser.uid, currentUser.email);
+            }
+            
             setUserProfile(profile);
             setIsUserLoading(false);
 
@@ -462,7 +590,7 @@ export const ProjectProvider = ({ children }) => {
             setIsUserLoading(false);
             setIsProjectsLoading(false);
         }
-    }, [fetchUserProfile, fetchUserProjects, setActiveProjectWithStorage]);
+    }, [fetchUserProfile, setupNewUserProfile, fetchUserProjects, setActiveProjectWithStorage]);
 
     // Optimized auth state listener
     useEffect(() => {
@@ -476,6 +604,8 @@ export const ProjectProvider = ({ children }) => {
 
             if (currentUser) {
                 setUser(currentUser);
+                // Reset trial status updated flag for new auth session
+                setTrialStatusUpdated(false);
                 await loadUserData(currentUser);
             } else {
                 // Clear all user data
@@ -485,6 +615,7 @@ export const ProjectProvider = ({ children }) => {
                 setActiveProject(null);
                 setIsUserLoading(false);
                 setIsProjectsLoading(false);
+                setTrialStatusUpdated(false);
                 // Clear cache
                 setCache({ userProfile: null, projects: null, timestamp: null });
                 // Clear localStorage
@@ -541,6 +672,25 @@ export const ProjectProvider = ({ children }) => {
         }
     }, [user, userProfile, fetchUserProjects, setActiveProjectWithStorage]);
 
+    // Force trial status check and update
+    const forceTrialStatusUpdate = useCallback(async () => {
+        if (!user) return null;
+
+        try {
+            // Reset the flag to allow update
+            setTrialStatusUpdated(false);
+            
+            // Force refresh profile which will trigger trial status check
+            const freshProfile = await fetchUserProfile(user.uid, true);
+            setUserProfile(freshProfile);
+            
+            return freshProfile;
+        } catch (error) {
+            console.error('Error forcing trial status update:', error);
+            throw error;
+        }
+    }, [user, fetchUserProfile]);
+
     const value = useMemo(() => ({
         // User and profile data
         user,
@@ -562,6 +712,7 @@ export const ProjectProvider = ({ children }) => {
         createOrUpdateUserProfile,
         refreshUserProfile,
         updateProfileField,
+        forceTrialStatusUpdate,
         
         // Project methods
         refetchProjects,
@@ -589,6 +740,7 @@ export const ProjectProvider = ({ children }) => {
         createOrUpdateUserProfile,
         refreshUserProfile,
         updateProfileField,
+        forceTrialStatusUpdate,
         refetchProjects,
         needsOnboarding,
         canCreateProject,

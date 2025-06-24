@@ -7,7 +7,14 @@ import {
     completeOnboarding,
     getUserOnboardingStatus
 } from './onboardingService.js'
-import { getUserPermissions, checkPermission } from './permissionService.js'
+import {
+    getUserPermissions,
+    checkPermission,
+    hasPermission,
+    PERMISSIONS,
+    getVisibleTabs,
+    createPermissionChecker
+} from './permissionService.js'
 import { updateUserRole, getOrganizationMembers } from './organizationService.js'
 
 /**
@@ -21,8 +28,16 @@ export const fetchUserDataWithPermissions = async (userId) => {
 
     const permissions = getUserPermissions(userData)
     const onboardingStatus = await getUserOnboardingStatus(userId)
+    const visibleTabs = getVisibleTabs(userData)
 
-    return { ...userData, permissions, onboardingStatus }
+    return {
+        ...userData,
+        permissions,
+        onboardingStatus,
+        visibleTabs,
+        // Add permission checker for easy component use
+        permissionChecker: createPermissionChecker(userData)
+    }
 }
 
 /**
@@ -78,7 +93,10 @@ export const completeOnboarding = async (userId, completionData = {}) => {
  */
 export const updateUserWithPermissionCheck = async (userId, updateData, currentUserUid, currentUserProfile) => {
     // Check if user can update this profile
-    const canUpdate = currentUserUid === userId || checkPermission(currentUserProfile, 'canManageUsers')
+    // Support both legacy permission checking and new permission constants
+    const canUpdate = currentUserUid === userId ||
+        checkPermission(currentUserProfile, 'canManageUsers') ||
+        hasPermission(currentUserProfile, PERMISSIONS.MANAGE_USERS)
 
     if (!canUpdate) {
         throw new Error('You do not have permission to update this profile')
@@ -97,7 +115,11 @@ export const getUserDashboardData = async (userId) => {
     if (!userWithPermissions) return null
 
     let organizationMembers = null
-    if (userWithPermissions.permissions.canViewTeamMembers) {
+    // Use both legacy and new permission checking for backward compatibility
+    const canViewTeam = userWithPermissions.permissions.canViewTeamMembers ||
+        hasPermission(userWithPermissions, PERMISSIONS.VIEW_TEAM_MEMBERS)
+
+    if (canViewTeam) {
         try {
             organizationMembers = await getOrganizationMembers(userWithPermissions)
         } catch (error) {
@@ -108,8 +130,13 @@ export const getUserDashboardData = async (userId) => {
     return {
         user: userWithPermissions,
         organizationMembers,
-        hasTeamAccess: userWithPermissions.permissions.canViewTeamMembers,
-        hasAdminAccess: userWithPermissions.permissions.isAdmin
+        hasTeamAccess: canViewTeam,
+        hasAdminAccess: userWithPermissions.permissions.isAdmin,
+        // Additional dashboard permissions
+        canViewAnalytics: hasPermission(userWithPermissions, PERMISSIONS.VIEW_ANALYTICS),
+        canViewReports: hasPermission(userWithPermissions, PERMISSIONS.VIEW_REPORTS),
+        canViewBilling: hasPermission(userWithPermissions, PERMISSIONS.VIEW_BILLING),
+        canManageOrganization: hasPermission(userWithPermissions, PERMISSIONS.MANAGE_ORGANIZATION)
     }
 }
 
@@ -122,5 +149,109 @@ export const getUserDashboardData = async (userId) => {
  * @returns {Object} - Updated user data
  */
 export const handleRoleUpdate = async (adminUserId, targetUserId, newRole, currentAdminProfile) => {
+    // Enhanced permission check for role updates
+    const canManageRoles = checkPermission(currentAdminProfile, 'canAssignPermissions') ||
+        hasPermission(currentAdminProfile, PERMISSIONS.MANAGE_ROLES)
+
+    if (!canManageRoles) {
+        throw new Error('You do not have permission to manage user roles')
+    }
+
     return await updateUserRole(adminUserId, targetUserId, newRole, currentAdminProfile)
+}
+
+/**
+ * Get user navigation data - determines what navigation items user can see
+ * @param {Object} userProfile - User profile
+ * @returns {Object} - Navigation configuration
+ */
+export const getUserNavigationData = (userProfile) => {
+    if (!userProfile) return { visibleTabs: {}, permissions: {} }
+
+    const visibleTabs = getVisibleTabs(userProfile)
+    const permissions = getUserPermissions(userProfile)
+
+    return {
+        visibleTabs,
+        permissions,
+        navigationItems: {
+            showDashboard: visibleTabs.dashboard,
+            showAnalytics: visibleTabs.analytics,
+            showSettings: visibleTabs.settings,
+            showAdmin: visibleTabs.admin,
+            showBilling: visibleTabs.billing,
+            showReports: visibleTabs.reports,
+            showUsers: visibleTabs.users,
+            showSubscription: visibleTabs.subscription,
+            showUserManagement: visibleTabs.userManagement
+        }
+    }
+}
+
+/**
+ * Validate user action permissions
+ * @param {Object} userProfile - User profile
+ * @param {string} action - Action to validate
+ * @param {Object} context - Additional context for validation
+ * @returns {boolean} - Whether action is permitted
+ */
+export const validateUserAction = (userProfile, action = {}) => {
+    if (!userProfile) return false
+
+    switch (action) {
+        case 'invite_user':
+            return checkPermission(userProfile, 'canInviteUsers') ||
+                hasPermission(userProfile, PERMISSIONS.INVITE_USERS)
+
+        case 'remove_user':
+            return checkPermission(userProfile, 'canManageUsers') ||
+                hasPermission(userProfile, PERMISSIONS.REMOVE_USERS)
+
+        case 'modify_organization':
+            return checkPermission(userProfile, 'canModifyOrganization') ||
+                hasPermission(userProfile, PERMISSIONS.MODIFY_ORGANIZATION)
+
+        case 'view_billing':
+            return checkPermission(userProfile, 'canViewSubscription') ||
+                hasPermission(userProfile, PERMISSIONS.VIEW_BILLING)
+
+        case 'manage_subscriptions':
+            return hasPermission(userProfile, PERMISSIONS.MANAGE_SUBSCRIPTIONS)
+
+        case 'create_content':
+            return hasPermission(userProfile, PERMISSIONS.CREATE_CONTENT)
+
+        case 'edit_content':
+            return hasPermission(userProfile, PERMISSIONS.EDIT_CONTENT)
+
+        case 'publish_content':
+            return hasPermission(userProfile, PERMISSIONS.PUBLISH_CONTENT)
+
+        case 'delete_content':
+            return hasPermission(userProfile, PERMISSIONS.DELETE_CONTENT)
+
+        default:
+            return false
+    }
+}
+
+/**
+ * Get comprehensive user context for components
+ * @param {string} userId - User ID
+ * @returns {Object} - Complete user context
+ */
+export const getUserContext = async (userId) => {
+    const userWithPermissions = await fetchUserDataWithPermissions(userId)
+    if (!userWithPermissions) return null
+
+    const navigationData = getUserNavigationData(userWithPermissions)
+
+    return {
+        ...userWithPermissions,
+        ...navigationData,
+        // Helper functions for components
+        canPerform: (action, context) => validateUserAction(userWithPermissions, action, context),
+        hasAccess: (permission) => checkPermission(userWithPermissions, permission) ||
+            hasPermission(userWithPermissions, permission)
+    }
 }

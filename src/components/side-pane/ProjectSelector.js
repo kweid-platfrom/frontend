@@ -76,7 +76,7 @@ const ProjectSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgra
                         : 'bg-blue-100 text-blue-800'
                     }`}>
                     <ClockIcon className="h-3 w-3 mr-1" />
-                    Trial ({trialDaysRemaining || 0}d)
+                    Trial
                 </span>
             );
         }
@@ -136,14 +136,14 @@ const ProjectSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgra
 
                 {/* Trial Countdown - Only show when trial is active and sidebar is not collapsed */}
                 {currentStatus?.isTrialActive && !isCollapsed && (
-                    <div className="mt-2 px-3 py-2 bg-blue-50/80 backdrop-blur-sm rounded-lg border border-blue-200/50">
+                    <div className="mt-2 px-3 py-2 backdrop-blur-sm rounded border border-[#FFF675]">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center">
                                 <ClockIcon className={`h-3 w-3 mr-1.5 ${
-                                    currentStatus.trialDaysRemaining <= 3 ? 'text-red-500' : 'text-blue-500'
+                                    currentStatus.trialDaysRemaining <= 3 ? 'text-red-500' : 'text-teal-500'
                                 }`} />
                                 <span className={`text-xs font-medium ${
-                                    currentStatus.trialDaysRemaining <= 3 ? 'text-red-700' : 'text-blue-700'
+                                    currentStatus.trialDaysRemaining <= 3 ? 'text-red-700' : 'text-teal-700'
                                 }`}>
                                     Trial: {currentStatus.trialDaysRemaining || 0} days left
                                 </span>
@@ -154,7 +154,7 @@ const ProjectSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgra
                                     className={`text-xs font-medium px-2 py-1 rounded transition-all duration-200 hover:scale-105 ${
                                         currentStatus.trialDaysRemaining <= 3 
                                             ? 'bg-red-100 text-red-700 hover:bg-red-200' 
-                                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                            : 'bg-blue-100 text-teal-700 hover:bg-blue-200'
                                     }`}
                                 >
                                     Upgrade
@@ -171,7 +171,7 @@ const ProjectSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgra
                     }`}>
                     <div className="p-3">
                         <div className="flex items-center justify-between mb-3 px-2">
-                            <span className="text-xs font-semibold text-gray-600">Your Projects</span>
+                            <span className="text-xs font-semibold text-gray-600">Your Suites</span>
                             <button
                                 onClick={handleRefreshProjects}
                                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-all duration-200 hover:scale-105"
@@ -211,11 +211,11 @@ const ProjectSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgra
                                 className="w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 text-gray-600 border-t border-gray-100 mt-3 pt-3 transition-all duration-200 hover:scale-[1.01]"
                             >
                                 <PlusIcon className="h-4 w-4 mr-3 flex-shrink-0" />
-                                <span className="text-sm font-medium">New Project</span>
+                                <span className="text-sm font-medium">New Suite</span>
                             </button>
                         ) : (
                             <div className="text-xs text-gray-500 p-2.5 border-t border-gray-100 mt-3 pt-3 text-center">
-                                Project limit reached for your plan.
+                                Suites limit reached for your plan.
                             </div>
                         )}
 
@@ -245,7 +245,7 @@ const ProjectSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgra
                             <div className="border-t border-gray-100 mt-3 pt-3">
                                 <button
                                     onClick={handleUpgrade}
-                                    className="w-full flex items-center justify-center p-2.5 text-center rounded-lg bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 text-white transition-all duration-200 hover:scale-[1.02] font-medium"
+                                    className="w-full flex items-center justify-center p-2.5 text-center rounded bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white transition-all duration-200 hover:scale-[1.02] font-medium"
                                 >
                                     <ArrowUpIcon className="h-4 w-4 mr-2" />
                                     <span className="text-sm">Upgrade Plan</span>

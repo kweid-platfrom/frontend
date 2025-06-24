@@ -10,7 +10,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthProvider';
-import { useProject } from '../context/ProjectContext'; // Add this import
+import { useProject } from '../context/ProjectContext';
+import { 
+    canAccessBugs,
+    getUserPermissions
+} from '../services/permissionService';
 
 // Utility function to get date range filter
 const getDateRange = (timeRange) => {
@@ -66,7 +70,7 @@ const calculateReportCompleteness = (bug) => {
     return Math.round((score / totalFields) * 100);
 };
 
-// Apply filters to the query (similar to your BugTable logic)
+// Apply filters to the query
 const applyFilters = (baseQuery, filters, dateField = 'createdAt') => {
     let filteredQuery = baseQuery;
 
@@ -87,24 +91,29 @@ const applyFilters = (baseQuery, filters, dateField = 'createdAt') => {
     return filteredQuery;
 };
 
-// Secure fetch function matching your BugTable architecture
-const fetchBugTrackingMetrics = async (filters = {}, projectId = null, hasPermission = null) => {
+// Secure fetch function with corrected permission system
+const fetchBugTrackingMetrics = async (filters = {}, projectContext = {}, userProfile = null) => {
     try {
+        const { projectId, projectOwnerId = false } = projectContext;
+
         // Check if project is selected
         if (!projectId) {
             throw new Error('No project selected. Please select a project to view bug metrics.');
         }
 
-        // Check permissions if available
-        if (hasPermission && !hasPermission('read_bugs')) {
-            throw new Error('You do not have permission to view bugs for this project.');
+        // Check permissions for accessing bugs
+        if (!canAccessBugs(userProfile, 'read', { 
+            projectId, 
+            projectOwnerId 
+        })) {
+            throw new Error('Access denied: You cannot read bugs in this project.');
         }
 
-        // Query the project's bugs subcollection (matching your BugTable logic)
+        // Query the project's bugs subcollection
         const bugsRef = collection(db, 'projects', projectId, 'bugs');
         const filteredQuery = applyFilters(bugsRef, filters, 'createdAt');
         
-        // Add ordering similar to your BugTable
+        // Add ordering and limit for performance
         const finalQuery = query(
             filteredQuery,
             orderBy('createdAt', 'desc'),
@@ -376,15 +385,18 @@ const fetchBugTrackingMetrics = async (filters = {}, projectId = null, hasPermis
     }
 };
 
-// Main hook for bug tracking metrics (updated to match your architecture)
+// Main hook for bug tracking metrics (updated with corrected permission system)
 export const useBugTrackingMetrics = (filters = {}) => {
     const [metrics, setMetrics] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     
-    // Get auth and project context (matching your BugTable)
-    const { hasPermission } = useAuth();
+    // Get auth and project context
+    const { userProfile } = useAuth(); // Get full userProfile instead of just hasPermission
     const { activeProject } = useProject();
+
+    // Get user permissions using the corrected permission system
+    const userPermissions = userProfile ? getUserPermissions(userProfile) : null;
 
     const fetchMetrics = useCallback(async () => {
         if (!activeProject?.id) {
@@ -397,7 +409,14 @@ export const useBugTrackingMetrics = (filters = {}) => {
             setLoading(true);
             setError(null);
 
-            const data = await fetchBugTrackingMetrics(filters, activeProject.id, hasPermission);
+            // Create project context for permission checking
+            const projectContext = {
+                projectId: activeProject.id,
+                projectOwnerId: activeProject.ownerId || activeProject.owner,
+                isPublic: activeProject.isPublic || false
+            };
+
+            const data = await fetchBugTrackingMetrics(filters, projectContext, userProfile);
             setMetrics(data);
         } catch (err) {
             setError(err.message);
@@ -405,7 +424,7 @@ export const useBugTrackingMetrics = (filters = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [filters, activeProject?.id, hasPermission]);
+    }, [filters, activeProject?.id, activeProject?.ownerId, activeProject?.owner, activeProject?.isPublic, userProfile]);
 
     useEffect(() => {
         fetchMetrics();
@@ -415,15 +434,47 @@ export const useBugTrackingMetrics = (filters = {}) => {
         fetchMetrics();
     }, [fetchMetrics]);
 
+    // Enhanced permission checks using the corrected system
+    const hasReadAccess = userPermissions?.canReadBugs && 
+        canAccessBugs(userProfile, 'read', { 
+            projectId: activeProject?.id, 
+            projectOwnerId: activeProject?.ownerId || activeProject?.owner 
+        });
+
+    const hasWriteAccess = userPermissions?.canWriteBugs && 
+        canAccessBugs(userProfile, 'write', { 
+            projectId: activeProject?.id, 
+            projectOwnerId: activeProject?.ownerId || activeProject?.owner 
+        });
+
+    const hasAnalyticsAccess = userPermissions?.canViewBugAnalytics;
+
     return {
         metrics,
         loading,
         error,
         refetch,
-        // Helper properties
-        hasAccess: activeProject && (!hasPermission || hasPermission('read_bugs')),
-        canModify: activeProject && (!hasPermission || hasPermission('write_bugs')),
-        activeProject
+        
+        // Enhanced permission properties using corrected system
+        hasAccess: hasReadAccess,
+        canRead: hasReadAccess,
+        canWrite: hasWriteAccess,
+        canModify: hasWriteAccess,
+        canViewAnalytics: hasAnalyticsAccess,
+        canExportReports: userPermissions?.canExportBugReports,
+        
+        // User and project context
+        activeProject,
+        userProfile,
+        userPermissions,
+        
+        // Account type information
+        isIndividualAccount: userPermissions?.isIndividual,
+        isOrganizationAccount: userPermissions?.isOrganization,
+        isAdmin: userPermissions?.isAdmin,
+        
+        // Upgrade prompts for individual accounts trying to access org features
+        shouldShowUpgradePrompts: userPermissions?.shouldShowUpgradePrompts || {}
     };
 };
 

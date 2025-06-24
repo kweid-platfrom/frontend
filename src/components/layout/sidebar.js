@@ -4,11 +4,11 @@
 import { useState, useEffect } from 'react';
 import '../../app/globals.css';
 import { useProject } from '../../context/ProjectContext';
-import { accountService } from '../../services/accountService';
 import ProjectCreationForm from '../onboarding/ProjectCreationForm';
 import UserAvatarClip from '../side-pane/UserAvatarClip'
 import TrialBanner from '../side-pane/TrialBanner';
 import ProjectSelector from '../side-pane/ProjectSelector';
+import { getUserPermissions } from '../../services/permissionService';
 import {
     HomeIcon,
     DocumentTextIcon,
@@ -23,30 +23,51 @@ import {
     LockClosedIcon
 } from '@heroicons/react/24/outline';
 
-// Modal wrapper for ProjectCreationForm
-const CreateProjectModal = ({ isOpen, onClose }) => {
+// Enhanced Project Creation Drawer - content-based height instead of full height
+const ProjectCreationDrawer = ({ isOpen, onClose }) => {
+    const { currentOrganization } = useProject();
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                onClick={onClose}
-            />
-            <div className="flex min-h-full items-center justify-center p-4">
-                <div className="relative transform transition-all max-w-md w-full">
-                    <ProjectCreationForm
-                        isOnboarding={false}
-                        onComplete={(projectId) => {
-                            console.log('Project created:', projectId);
-                            onClose();
-                        }}
-                        onCancel={onClose}
-                        className="shadow-2xl"
-                    />
+        <>
+
+            {/* Drawer with content-based height and proper spacing */}
+            <div className="absolute left-72 top-24 max-w-2xl w-auto bg-white shadow-2xl border border-gray-200 rounded-lg z-50 overflow-hidden">
+                <div className="flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50/50 to-white">
+                        <div className="flex-1">
+                            <h2 className="text-lg font-semibold text-gray-900">Create New Project</h2>
+                            {currentOrganization && (
+                                <p className="text-sm text-gray-500 truncate">in {currentOrganization.name}</p>
+                            )}
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-2 rounded-lg hover:bg-gray-100 transition-colors ml-4"
+                        >
+                            <XMarkIcon className="h-5 w-5 text-gray-500" />
+                        </button>
+                    </div>
+
+                    {/* Content (form + optional footer) */}
+                    <div className="px-6 py-4">
+                        <ProjectCreationForm
+                            isOnboarding={false}
+                            onComplete={(projectId) => {
+                                console.log('Project created:', projectId);
+                                onClose();
+                            }}
+                            onCancel={onClose}
+                            organizationId={currentOrganization?.id}
+                        />
+                    </div>
                 </div>
             </div>
-        </div>
+
+
+        </>
     );
 };
 
@@ -60,7 +81,8 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
 
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [mounted, setMounted] = useState(false);
-    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+    const [actualSubscriptionState, setActualSubscriptionState] = useState(null);
 
     // Handle mounting and localStorage
     useEffect(() => {
@@ -78,38 +100,88 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         setMounted(true);
     }, []);
 
-    // Check and update trial status when component mounts or userProfile changes
+    // Helper function to safely parse date
+    const parseDate = (dateValue) => {
+        if (!dateValue) return null;
+
+        // Handle Firestore Timestamp objects
+        if (dateValue && typeof dateValue.toDate === 'function') {
+            return dateValue.toDate();
+        }
+
+        // Handle string dates
+        if (typeof dateValue === 'string') {
+            const parsed = new Date(dateValue);
+            return isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        // Handle Date objects
+        if (dateValue instanceof Date) {
+            return isNaN(dateValue.getTime()) ? null : dateValue;
+        }
+
+        return null;
+    };
+
+    // Calculate actual subscription state based on 30-day trial from registration - Fixed display text
     useEffect(() => {
-        let hasChecked = false;
+        if (!userProfile || !mounted) return;
 
-        const checkTrialStatus = async () => {
-            if (!userProfile || !mounted || hasChecked) return;
+        const calculateActualSubscriptionState = () => {
+            const now = new Date();
+            const registrationDate = parseDate(userProfile.createdAt) || now;
+            const daysSinceRegistration = Math.floor((now - registrationDate) / (1000 * 60 * 60 * 24));
+            const trialDaysRemaining = Math.max(0, 30 - daysSinceRegistration);
 
-            hasChecked = true;
+            const actualState = {
+                isTrialActive: trialDaysRemaining > 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
+                trialDaysRemaining,
+                trialExpired: trialDaysRemaining === 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
+                subscriptionType: userProfile.subscriptionType || 'free',
+                isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
+                registrationDate: registrationDate.toISOString(),
+                daysSinceRegistration,
+                // // Fixed: Remove days completely from display text
+                // displayText: trialDaysRemaining > 0 ? 'Trial' : 'Free',
+                // planDisplayName: trialDaysRemaining > 0 ? 'Trial' : 'Free',
+                // // Don't include trialDaysRemaining in the display logic
+                // showTrialDays: false
+            };
 
-            try {
-                const updatedStatus = await accountService.checkAndUpdateTrialStatus(userProfile, true);
-
-                const isChanged =
-                    updatedStatus?.isTrialActive !== userProfile?.isTrialActive ||
-                    updatedStatus?.trialDaysRemaining !== userProfile?.trialDaysRemaining;
-
-                if (isChanged && updateUserProfile) {
-                    await updateUserProfile(updatedStatus);
-                }
-
-                console.log('Trial status checked:', {
-                    isTrialActive: updatedStatus?.isTrialActive,
-                    trialDaysRemaining: updatedStatus?.trialDaysRemaining,
-                    trialExpired: updatedStatus?.trialExpired
-                });
-            } catch (error) {
-                console.error('Error checking trial status:', error);
-            }
+            return actualState;
         };
 
-        checkTrialStatus();
-    }, [userProfile?.uid, mounted, updateUserProfile]);
+        try {
+            const newState = calculateActualSubscriptionState();
+            setActualSubscriptionState(newState);
+
+            // Update user profile if trial status has significantly changed
+            if (userProfile.isTrialActive !== newState.isTrialActive ||
+                Math.abs((userProfile.trialDaysRemaining || 0) - newState.trialDaysRemaining) > 1) {
+                updateUserProfile({
+                    ...userProfile,
+                    isTrialActive: newState.isTrialActive,
+                    trialDaysRemaining: newState.trialDaysRemaining,
+                    trialExpired: newState.trialExpired
+                });
+            }
+        } catch (error) {
+            console.error('Error calculating subscription state:', error);
+            // Set a fallback state
+            setActualSubscriptionState({
+                isTrialActive: false,
+                trialDaysRemaining: 0,
+                trialExpired: true,
+                subscriptionType: userProfile.subscriptionType || 'free',
+                isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
+                registrationDate: new Date().toISOString(),
+                daysSinceRegistration: 0,
+                displayText: 'Free',
+                planDisplayName: 'Free',
+                showTrialDays: false
+            });
+        }
+    }, [userProfile?.createdAt, userProfile?.subscriptionType, mounted, updateUserProfile]);
 
     // Save collapsed state to localStorage
     useEffect(() => {
@@ -125,40 +197,86 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         }
     }, [activePage, mounted]);
 
+    // Get user permissions using the permission service
+    const userPermissions = getUserPermissions(userProfile);
+
     const navigation = [
-        { name: 'Dashboard', icon: HomeIcon, page: 'dashboard' },
-        { name: 'Bug Tracker', icon: BugAntIcon, page: 'bug-tracker' },
-        { name: 'Test Scripts', icon: DocumentTextIcon, page: 'test-scripts' },
-        { name: 'Automated Scripts', icon: BeakerIcon, page: 'auto-scripts', requiresFeature: 'automation' },
-        { name: 'Reports', icon: ChartBarIcon, page: 'reports', requiresFeature: 'advancedReports' },
-        { name: 'Recordings', icon: VideoCameraIcon, page: 'recordings' },
-        { name: 'Settings', icon: CogIcon, page: 'settings' },
+        {
+            name: 'Dashboard',
+            icon: HomeIcon,
+            page: 'dashboard',
+            permission: 'canViewDashboard'
+        },
+        {
+            name: 'Bug Tracker',
+            icon: BugAntIcon,
+            page: 'bug-tracker',
+            permission: 'canReadBugs'
+        },
+        {
+            name: 'Test Scripts',
+            icon: DocumentTextIcon,
+            page: 'test-scripts',
+            permission: 'canReadProjects'
+        },
+        {
+            name: 'Automated Scripts',
+            icon: BeakerIcon,
+            page: 'auto-scripts',
+            requiresFeature: 'automation',
+            permission: 'canReadProjects'
+        },
+        {
+            name: 'Reports',
+            icon: ChartBarIcon,
+            page: 'reports',
+            requiresFeature: 'advancedReports',
+            permission: 'canViewReports'
+        },
+        {
+            name: 'Recordings',
+            icon: VideoCameraIcon,
+            page: 'recordings',
+            permission: 'canReadProjects'
+        },
+        {
+            name: 'Settings',
+            icon: CogIcon,
+            page: 'settings',
+            permission: 'canViewSettings'
+        },
     ];
 
-    // Simplified premium access check - use userProfile directly
+    // Enhanced premium access check using actual subscription state
     const hasPremiumAccess = () => {
-        if (!userProfile) return false;
-
-        return userProfile.isTrialActive ||
-            (userProfile.subscriptionType && userProfile.subscriptionType !== 'free');
+        if (!actualSubscriptionState) return false;
+        return actualSubscriptionState.isTrialActive || actualSubscriptionState.isPaid;
     };
 
-    // Check if feature is accessible
-    const isFeatureAccessible = (featureName) => {
-        if (!featureName) return true;
-
-        // During trial or paid subscription, all features are accessible
-        if (hasPremiumAccess()) {
-            return true;
+    // Check if feature is accessible - Fixed permission logic
+    const isFeatureAccessible = (item) => {
+        // First check if user has the required permission
+        if (item.permission && !userPermissions[item.permission]) {
+            return false;
         }
 
-        // For free tier users, check specific feature access
-        return hasFeatureAccess(featureName);
+        // If there's a specific feature requirement, check it
+        if (item.requiresFeature) {
+            // During trial or paid subscription, all features are accessible
+            if (hasPremiumAccess()) {
+                return true;
+            }
+            // For free tier users, check specific feature access
+            return hasFeatureAccess(item.requiresFeature);
+        }
+
+        // If no specific feature requirement, just check the permission
+        return true;
     };
 
     const handlePageChange = (item) => {
         // Check if feature is accessible before allowing navigation
-        if (item.requiresFeature && !isFeatureAccessible(item.requiresFeature)) {
+        if (!isFeatureAccessible(item)) {
             if (setActivePage) {
                 setActivePage('upgrade');
             }
@@ -247,18 +365,18 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                     </div>
                 </div>
 
-                {/* Trial Banner - pass userProfile as trialStatus */}
+                {/* Trial Banner - using actual subscription state with fixed display */}
                 <TrialBanner
                     isCollapsed={isCollapsed}
-                    trialStatus={userProfile} // Pass userProfile directly
+                    trialStatus={actualSubscriptionState || userProfile}
                     onUpgradeClick={handleUpgradeClick}
                 />
 
                 {/* Project Selector */}
                 <ProjectSelector
                     isCollapsed={isCollapsed}
-                    setShowCreateModal={setShowCreateModal}
-                    trialStatus={subscriptionStatus} // ✅ FIXED
+                    setShowCreateModal={setShowCreateDrawer} 
+                    trialStatus={actualSubscriptionState || subscriptionStatus}
                     onUpgradeClick={handleUpgradeClick}
                 />
 
@@ -266,8 +384,8 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 <nav className="flex-1 py-4 space-y-2 px-4">
                     {navigation.map((item) => {
                         const isActive = activePage === item.page;
-                        const isAccessible = isFeatureAccessible(item.requiresFeature);
-                        const showLock = item.requiresFeature && !isAccessible;
+                        const isAccessible = isFeatureAccessible(item);
+                        const showLock = !isAccessible;
 
                         return (
                             <div key={item.name} className="relative group">
@@ -295,7 +413,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                                 }`}
                                         />
                                     </div>
-                                    
+
                                     {/* Text container with consistent spacing */}
                                     <div className={`
                                         flex items-center justify-between min-w-0 flex-1
@@ -311,7 +429,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                     </div>
                                 </button>
 
-                                {/* Tooltip for collapsed state - positioned to avoid overlap */}
+                                {/* Tooltip for collapsed state */}
                                 {isCollapsed && (
                                     <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200">
                                         <div className="relative">
@@ -335,16 +453,18 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 {userProfile && (
                     <UserAvatarClip
                         isCollapsed={isCollapsed}
-                        trialStatus={userProfile} // Pass userProfile directly
+                        trialStatus={actualSubscriptionState || userProfile}
                     />
                 )}
             </div>
 
-            {/* Create Project Modal */}
-            <CreateProjectModal
-                isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-            />
+            {/* Project Creation Drawer - Fixed positioning and sizing */}
+            {showCreateDrawer && (
+                <ProjectCreationDrawer
+                    isOpen={showCreateDrawer}
+                    onClose={() => setShowCreateDrawer(false)}
+                />
+            )}
         </>
     );
 };

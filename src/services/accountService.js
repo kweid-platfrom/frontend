@@ -17,24 +17,23 @@ export const accountService = {
         'protonmail.com', 'tutanota.com', 'zoho.com', 'fastmail.com'
     ],
 
+    // Cache to prevent repeated processing
+    _processedUsers: new Map(),
+    _lastProcessTime: new Map(),
+    _updateQueue: new Set(), // Prevent multiple simultaneous updates
+
     /**
      * Determines if an email is from a public domain
-     * @param {string} email - The email address to check
-     * @returns {boolean} - True if it's a public domain, false if custom domain
      */
     isPublicDomain(email) {
-        if (!email) return true; // Default to public if no email
-        
+        if (!email) return true;
         const domain = email.split('@')[1]?.toLowerCase();
         if (!domain) return true;
-        
         return this.publicDomains.includes(domain);
     },
 
     /**
      * Determines account type based on email domain
-     * @param {string} email - The email address to check
-     * @returns {string} - 'individual' or 'organization'
      */
     getAccountType(email) {
         return this.isPublicDomain(email) ? 'individual' : 'organization';
@@ -42,65 +41,63 @@ export const accountService = {
 
     /**
      * Helper function to safely convert Firestore timestamp to Date
-     * @param {any} timestamp - Firestore timestamp or Date object
-     * @returns {Date} - JavaScript Date object
      */
     toDate(timestamp) {
         if (!timestamp) return null;
-        
+
         // If it's already a Date object
         if (timestamp instanceof Date) {
             return timestamp;
         }
-        
+
         // If it's a Firestore timestamp with toDate method
         if (timestamp && typeof timestamp.toDate === 'function') {
             return timestamp.toDate();
         }
-        
+
         // If it's a timestamp object with seconds and nanoseconds (Firestore format)
         if (timestamp && typeof timestamp === 'object' && timestamp.seconds !== undefined) {
             return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
         }
-        
+
         // If it's a string or number, try to parse it
         if (typeof timestamp === 'string' || typeof timestamp === 'number') {
             const date = new Date(timestamp);
             return isNaN(date.getTime()) ? null : date;
         }
-        
+
         console.warn('Unable to convert timestamp to Date:', timestamp);
         return null;
     },
 
     /**
      * Creates subscription details for new users with 30-day freemium trial
-     * @param {'individual' | 'organization'} accountType - Account type
-     * @returns {object} - Subscription configuration
      */
     createFreemiumSubscription(accountType) {
         const now = new Date();
-        // Add 30 days to current date
         const trialEnd = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000));
-        
+
         console.log('Creating freemium subscription:', {
             accountType,
             trialStart: now.toISOString(),
             trialEnd: trialEnd.toISOString(),
             daysFromNow: 30
         });
-        
+
         return {
-            subscriptionType: 'free', // Base subscription is free
-            subscriptionStatus: 'trial', // Currently in trial
-            subscriptionExpiry: null, // Free tier doesn't expire
+            subscriptionType: 'free',
+            subscriptionStatus: 'trial',
+            subscriptionExpiry: null,
             trialStartDate: now,
             trialEndDate: trialEnd,
             isTrialActive: true,
             trialDaysRemaining: 30,
-            hasUsedTrial: true, // Mark that user has used their trial
+            hasUsedTrial: true,
             showTrialBanner: true,
-            // Premium features enabled during trial
+            // Mark as processed to prevent loops
+            _trialProcessed: true,
+            _lastTrialCheck: now,
+
             features: {
                 multipleProjects: true,
                 advancedReports: true,
@@ -110,7 +107,7 @@ export const accountService = {
                 customIntegrations: true,
                 advancedAutomation: true
             },
-            // Limits during trial (generous limits)
+
             limits: {
                 projects: accountType === 'organization' ? 10 : 5,
                 testScripts: 1000,
@@ -124,10 +121,10 @@ export const accountService = {
 
     /**
      * Gets subscription configuration after trial expires
-     * @param {'individual' | 'organization'} accountType - Account type
-     * @returns {object} - Free tier configuration
      */
     getFreeTierSubscription(accountType) {
+        const now = new Date();
+
         return {
             subscriptionType: 'free',
             subscriptionStatus: 'active',
@@ -136,7 +133,10 @@ export const accountService = {
             trialExpired: true,
             trialDaysRemaining: 0,
             showTrialBanner: false,
-            // Limited features for free tier
+            // Mark as processed to prevent loops
+            _trialProcessed: true,
+            _lastTrialCheck: now,
+
             features: {
                 multipleProjects: false,
                 advancedReports: false,
@@ -146,7 +146,7 @@ export const accountService = {
                 customIntegrations: false,
                 advancedAutomation: false
             },
-            // Strict limits for free tier
+
             limits: {
                 projects: 1,
                 testScripts: accountType === 'organization' ? 15 : 10,
@@ -218,17 +218,20 @@ export const accountService = {
 
         await setDoc(doc(db, "users", user.uid), userDoc);
 
+        // Cache the processed user to prevent loops
+        this._processedUsers.set(user.uid, { ...userDoc });
+        this._lastProcessTime.set(user.uid, Date.now());
+
         // Handle invites only for organization accounts
         if (accountType === 'organization' && inviteEmails.length > 0) {
             console.log("Sending invites to:", inviteEmails);
-            // The TeamInvite component handles the actual email sending
         }
 
         // Cleanup localStorage
         this.cleanupLocalStorage();
 
-        return { 
-            success: true, 
+        return {
+            success: true,
             accountType,
             subscriptionStatus: 'trial',
             trialDaysRemaining: 30,
@@ -237,123 +240,213 @@ export const accountService = {
     },
 
     /**
-     * Check if user's trial has expired and update subscription accordingly
-     * @param {object} userProfile - Current user profile
-     * @param {boolean} updateFirestore - Whether to update Firestore with new status
-     * @returns {object} - Updated subscription status
+     * CRITICAL FIX: Check if user's trial has expired and update subscription accordingly
+     * Now with improved caching and loop prevention
      */
-    async checkAndUpdateTrialStatus(userProfile, updateFirestore = false) {
+    checkAndUpdateTrialStatus(userProfile) {
         if (!userProfile) {
             console.log('No user profile provided');
             return userProfile;
         }
 
-        // If user never had a trial, return as-is
-        if (!userProfile.hasUsedTrial && !userProfile.isTrialActive) {
-            console.log('User never had a trial');
+        const userId = userProfile.uid || userProfile.id;
+        if (!userId) {
+            console.warn('No user ID found in profile');
             return userProfile;
+        }
+
+        // CRITICAL: Check cache first - prevent processing same user repeatedly
+        const now = Date.now();
+        const lastProcessTime = this._lastProcessTime.get(userId);
+        const cachedUser = this._processedUsers.get(userId);
+
+        // Increased cache time to 5 minutes to prevent frequent recalculations
+        if (lastProcessTime && cachedUser && (now - lastProcessTime) < 300000) {
+            console.log('Returning cached trial status for user:', userId);
+            return cachedUser;
+        }
+
+        // If trial was already processed and marked, don't reprocess unless absolutely necessary
+        if (userProfile._trialProcessed && userProfile._lastTrialCheck) {
+            const lastCheck = this.toDate(userProfile._lastTrialCheck);
+            // Increased to 30 minutes for processed trials
+            if (lastCheck && (now - lastCheck.getTime()) < 1800000) {
+                console.log('Trial already processed recently, skipping check');
+                const profileWithTimestamp = {
+                    ...userProfile,
+                    _lastTrialCheck: new Date(now)
+                };
+                this._processedUsers.set(userId, profileWithTimestamp);
+                this._lastProcessTime.set(userId, now);
+                return profileWithTimestamp;
+            }
+        }
+
+        console.log('Processing trial status for user:', userId, 'accountType:', userProfile.accountType);
+
+        let updatedProfile = { ...userProfile };
+
+        // If user has never had trial fields set, they might be a new user
+        if (!userProfile.hasUsedTrial && !userProfile.trialStartDate && !userProfile.isTrialActive) {
+            console.log('User has no trial data - setting up trial');
+            const accountType = userProfile.accountType || 'individual';
+            const trialConfig = this.createFreemiumSubscription(accountType);
+
+            updatedProfile = {
+                ...userProfile,
+                ...trialConfig
+            };
+
+            // Update in Firestore asynchronously with error handling
+            this.updateUserSubscriptionStatus(userId, updatedProfile).catch(error => {
+                console.error('Failed to update trial in Firestore:', error);
+            });
+
+            // Cache the result
+            this._processedUsers.set(userId, updatedProfile);
+            this._lastProcessTime.set(userId, now);
+
+            return updatedProfile;
         }
 
         // If trial is already marked as inactive and expired, return as-is
         if (!userProfile.isTrialActive && userProfile.trialExpired) {
             console.log('Trial already expired and processed');
-            return userProfile;
+            updatedProfile = {
+                ...userProfile,
+                _trialProcessed: true,
+                _lastTrialCheck: new Date()
+            };
+
+            this._processedUsers.set(userId, updatedProfile);
+            this._lastProcessTime.set(userId, now);
+
+            return updatedProfile;
         }
 
-        const now = new Date();
+        const currentTime = new Date();
         const trialEnd = this.toDate(userProfile.trialEndDate);
-        
+
         console.log('Checking trial status:', {
-            now: now.toISOString(),
+            now: currentTime.toISOString(),
             trialEnd: trialEnd ? trialEnd.toISOString() : 'null',
             isTrialActive: userProfile.isTrialActive,
-            userId: userProfile.uid || 'unknown'
+            userId: userId
         });
-        
+
         if (!trialEnd) {
-            console.error('Invalid trial end date for user:', userProfile.uid);
-            // If we can't parse the trial end date, check trial start date
+            console.error('Invalid trial end date for user:', userId);
+
+            // Try to calculate from trial start date
             const trialStart = this.toDate(userProfile.trialStartDate);
             if (trialStart) {
                 const calculatedTrialEnd = new Date(trialStart.getTime() + (30 * 24 * 60 * 60 * 1000));
-                const daysRemaining = Math.ceil((calculatedTrialEnd - now) / (1000 * 60 * 60 * 24));
-                
+                const daysRemaining = Math.ceil((calculatedTrialEnd - currentTime) / (1000 * 60 * 60 * 24));
+
                 if (daysRemaining <= 0) {
                     // Trial has expired
-                    const updatedProfile = {
+                    updatedProfile = {
                         ...userProfile,
-                        ...this.getFreeTierSubscription(userProfile.accountType),
-                        trialExpiredAt: now
+                        ...this.getFreeTierSubscription(userProfile.accountType || 'individual'),
+                        trialExpiredAt: currentTime
                     };
-
-                    if (updateFirestore && userProfile.uid) {
-                        await this.updateUserSubscriptionStatus(userProfile.uid, updatedProfile);
-                    }
-
-                    return updatedProfile;
+                } else {
+                    updatedProfile = {
+                        ...userProfile,
+                        trialEndDate: calculatedTrialEnd,
+                        trialDaysRemaining: Math.max(0, daysRemaining),
+                        showTrialBanner: true,
+                        isTrialActive: true,
+                        subscriptionStatus: 'trial',
+                        _trialProcessed: true,
+                        _lastTrialCheck: currentTime
+                    };
                 }
-                
-                return {
+            } else {
+                // If we can't determine anything, set up a trial ONLY if user doesn't have basic trial fields
+                if (!userProfile.subscriptionType) {
+                    console.log('Cannot determine trial status, setting up new trial');
+                    const accountType = userProfile.accountType || 'individual';
+                    const trialConfig = this.createFreemiumSubscription(accountType);
+
+                    updatedProfile = {
+                        ...userProfile,
+                        ...trialConfig
+                    };
+                } else {
+                    // Keep existing subscription status but mark as processed
+                    updatedProfile = {
+                        ...userProfile,
+                        _trialProcessed: true,
+                        _lastTrialCheck: currentTime
+                    };
+                }
+            }
+        } else {
+            // Calculate days remaining
+            const daysRemaining = Math.ceil((trialEnd - currentTime) / (1000 * 60 * 60 * 24));
+
+            // Check if trial has expired
+            if (daysRemaining <= 0) {
+                console.log('Trial has expired, updating to free tier');
+                updatedProfile = {
                     ...userProfile,
-                    trialEndDate: calculatedTrialEnd,
+                    ...this.getFreeTierSubscription(userProfile.accountType || 'individual'),
+                    trialExpiredAt: currentTime
+                };
+            } else {
+                // Trial is still active
+                console.log('Trial is still active:', {
+                    daysRemaining,
+                    trialEnd: trialEnd.toISOString()
+                });
+
+                updatedProfile = {
+                    ...userProfile,
                     trialDaysRemaining: Math.max(0, daysRemaining),
-                    showTrialBanner: true
+                    isTrialActive: true,
+                    showTrialBanner: true,
+                    subscriptionStatus: 'trial',
+                    _trialProcessed: true,
+                    _lastTrialCheck: currentTime
                 };
             }
-            
-            // If we can't determine anything, assume trial expired
-            const updatedProfile = {
-                ...userProfile,
-                ...this.getFreeTierSubscription(userProfile.accountType),
-                trialExpiredAt: now
-            };
-
-            if (updateFirestore && userProfile.uid) {
-                await this.updateUserSubscriptionStatus(userProfile.uid, updatedProfile);
-            }
-
-            return updatedProfile;
         }
 
-        // Calculate days remaining
-        const daysRemaining = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
-        
-        // Check if trial has expired
-        if (daysRemaining <= 0) {
-            console.log('Trial has expired, updating to free tier');
-            // Trial has expired - return free tier configuration
-            const updatedProfile = {
-                ...userProfile,
-                ...this.getFreeTierSubscription(userProfile.accountType),
-                trialExpiredAt: now
-            };
+        // Cache the result BEFORE any async operations
+        this._processedUsers.set(userId, updatedProfile);
+        this._lastProcessTime.set(userId, now);
 
-            if (updateFirestore && userProfile.uid) {
-                await this.updateUserSubscriptionStatus(userProfile.uid, updatedProfile);
-            }
-
-            return updatedProfile;
+        // Only update Firestore if there were actual changes AND we're not already updating
+        const hasChanges = this.hasSubscriptionChanges(userProfile, updatedProfile);
+        if (hasChanges && !this._updateQueue.has(userId)) {
+            this._updateQueue.add(userId);
+            this.updateUserSubscriptionStatus(userId, updatedProfile)
+                .catch(error => {
+                    console.error('Failed to update subscription status in Firestore:', error);
+                })
+                .finally(() => {
+                    this._updateQueue.delete(userId);
+                });
         }
 
-        // Trial is still active
-        console.log('Trial is still active:', {
-            daysRemaining,
-            trialEnd: trialEnd.toISOString()
-        });
-        
-        return {
-            ...userProfile,
-            trialDaysRemaining: Math.max(0, daysRemaining),
-            isTrialActive: true,
-            showTrialBanner: true,
-            subscriptionStatus: 'trial'
-        };
+        return updatedProfile;
     },
 
     /**
-     * Update user subscription status in Firestore
-     * @param {string} userId - User ID
-     * @param {object} subscriptionData - Updated subscription data
+     * Helper to check if subscription data has actually changed
+     */
+    hasSubscriptionChanges(oldProfile, newProfile) {
+        const fieldsToCheck = [
+            'subscriptionType', 'subscriptionStatus', 'isTrialActive', 
+            'trialDaysRemaining', 'showTrialBanner', 'trialExpired'
+        ];
+        
+        return fieldsToCheck.some(field => oldProfile[field] !== newProfile[field]);
+    },
+
+    /**
+     * Update user subscription status in Firestore with better error handling
      */
     async updateUserSubscriptionStatus(userId, subscriptionData) {
         try {
@@ -365,7 +458,9 @@ export const accountService = {
                 trialDaysRemaining: subscriptionData.trialDaysRemaining,
                 showTrialBanner: subscriptionData.showTrialBanner,
                 features: subscriptionData.features,
-                limits: subscriptionData.limits
+                limits: subscriptionData.limits,
+                _trialProcessed: subscriptionData._trialProcessed || true,
+                _lastTrialCheck: subscriptionData._lastTrialCheck || new Date()
             };
 
             if (subscriptionData.trialExpiredAt) {
@@ -373,28 +468,47 @@ export const accountService = {
                 updateData.trialExpired = true;
             }
 
+            // Add trial dates if they exist
+            if (subscriptionData.trialStartDate) {
+                updateData.trialStartDate = subscriptionData.trialStartDate;
+            }
+            if (subscriptionData.trialEndDate) {
+                updateData.trialEndDate = subscriptionData.trialEndDate;
+            }
+            if (subscriptionData.hasUsedTrial !== undefined) {
+                updateData.hasUsedTrial = subscriptionData.hasUsedTrial;
+            }
+
             await updateDoc(userRef, updateData);
             console.log('User subscription status updated in Firestore');
         } catch (error) {
             console.error('Error updating user subscription status:', error);
+            // Don't throw the error to prevent breaking the UI
         }
     },
 
     /**
      * Get user's current subscription capabilities
-     * @param {object} userProfile - Current user profile
-     * @returns {object} - Current capabilities and limits
+     * CRITICAL FIX: Make this method pure and non-mutating for React
      */
-    async getUserCapabilities(userProfile) {
-        const updatedProfile = await this.checkAndUpdateTrialStatus(userProfile, true);
+    getUserCapabilities(userProfile) {
+        // Create a deep copy to avoid mutations
+        const profileCopy = JSON.parse(JSON.stringify(userProfile));
         
+        // This is now safe from loops due to improved caching
+        const updatedProfile = this.checkAndUpdateTrialStatus(profileCopy);
+
+        // Ensure we have features and limits
+        const features = updatedProfile.features || this.getFreeTierSubscription(updatedProfile.accountType || 'individual').features;
+        const limits = updatedProfile.limits || this.getFreeTierSubscription(updatedProfile.accountType || 'individual').limits;
+
         return {
-            canCreateMultipleProjects: updatedProfile.features?.multipleProjects || false,
-            canAccessAdvancedReports: updatedProfile.features?.advancedReports || false,
-            canInviteTeamMembers: updatedProfile.features?.teamCollaboration || false,
-            canUseAPI: updatedProfile.features?.apiAccess || false,
-            canUseAutomation: updatedProfile.features?.advancedAutomation || false,
-            limits: updatedProfile.limits || this.getFreeTierSubscription(updatedProfile.accountType).limits,
+            canCreateMultipleProjects: features.multipleProjects || false,
+            canAccessAdvancedReports: features.advancedReports || false,
+            canInviteTeamMembers: features.teamCollaboration || false,
+            canUseAPI: features.apiAccess || false,
+            canUseAutomation: features.advancedAutomation || false,
+            limits: limits,
             isTrialActive: updatedProfile.isTrialActive || false,
             trialDaysRemaining: updatedProfile.trialDaysRemaining || 0,
             subscriptionType: updatedProfile.subscriptionType || 'free',
@@ -402,6 +516,24 @@ export const accountService = {
             showTrialBanner: updatedProfile.showTrialBanner || false,
             profile: updatedProfile
         };
+    },
+
+    /**
+     * Clear cache for a specific user (useful for forced refresh)
+     */
+    clearUserCache(userId) {
+        this._processedUsers.delete(userId);
+        this._lastProcessTime.delete(userId);
+        this._updateQueue.delete(userId);
+    },
+
+    /**
+     * Clear all caches (useful for logout)
+     */
+    clearAllCaches() {
+        this._processedUsers.clear();
+        this._lastProcessTime.clear();
+        this._updateQueue.clear();
     },
 
     cleanupLocalStorage() {
@@ -413,7 +545,6 @@ export const accountService = {
             "userFullName",
             "registeredUserName"
         ];
-
         keysToRemove.forEach(key => localStorage.removeItem(key));
     }
 };
