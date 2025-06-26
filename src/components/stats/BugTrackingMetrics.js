@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { BugAntIcon } from '@heroicons/react/24/outline';
 
@@ -13,12 +13,12 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
     const [fetchError, setFetchError] = useState(null);
     const [hasFetched, setHasFetched] = useState(false);
 
-    const { activeProject } = useProject();
+    const { activeSuite } = useSuite();
     const { hasPermission, user } = useAuth();
 
     // Memoize the fetch function to prevent infinite re-renders
     const fetchBugsDirectly = useCallback(async () => {
-        if (!activeProject?.id || !user || !hasPermission('read_bugs') || hasFetched) {
+        if (!activeSuite?.id || !user || !hasPermission('read_bugs') || hasFetched) {
             return;
         }
 
@@ -27,7 +27,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
 
         try {
             // Try subcollection first
-            const bugsRef = collection(db, 'projects', activeProject.id, 'bugs');
+            const bugsRef = collection(db, 'suites', activeSuite.id, 'bugs');
             let querySnapshot;
 
             try {
@@ -37,10 +37,10 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                 querySnapshot = await getDocs(bugsRef);
             }
 
-            // If subcollection is empty, try main collection with projectId filter
+            // If subcollection is empty, try main collection with suiteId filter
             if (querySnapshot.size === 0) {
                 const mainBugsRef = collection(db, 'bugs');
-                const mainQuery = query(mainBugsRef, where('projectId', '==', activeProject.id));
+                const mainQuery = query(mainBugsRef, where('suiteId', '==', activeSuite.id));
                 querySnapshot = await getDocs(mainQuery);
             }
 
@@ -72,7 +72,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
         } finally {
             setFetchingBugs(false);
         }
-    }, [activeProject?.id, user, hasPermission, hasFetched]);
+    }, [activeSuite?.id, user, hasPermission, hasFetched]);
 
     // Fetch bugs when component mounts if no bugs provided
     useEffect(() => {
@@ -81,12 +81,12 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
         }
     }, [bugs, loading, error, hasFetched, fetchBugsDirectly]);
 
-    // Reset hasFetched when project changes
+    // Reset hasFetched when suite changes
     useEffect(() => {
         setHasFetched(false);
         setFetchedBugs([]);
         setFetchError(null);
-    }, [activeProject?.id]);
+    }, [activeSuite?.id]);
 
     // Use provided bugs or fetched bugs
     const effectiveBugs = useMemo(() => {

@@ -3,11 +3,11 @@
 'use client'
 import { useState, useEffect } from 'react';
 import '../../app/globals.css';
-import { useProject } from '../../context/SuiteContext';
-import ProjectCreationForm from '../onboarding/SuiteCreationForm';
+import { useSuite } from '../../context/SuiteContext';
+import SuiteCreationForm from '../onboarding/SuiteCreationForm';
 import UserAvatarClip from '../side-pane/UserAvatarClip'
 import TrialBanner from '../side-pane/TrialBanner';
-import ProjectSelector from '../side-pane/ProjectSelector';
+import SuiteSelector from '../side-pane/SuiteSelector';
 import { getUserPermissions } from '../../services/permissionService';
 import {
     HomeIcon,
@@ -23,9 +23,9 @@ import {
     LockClosedIcon
 } from '@heroicons/react/24/outline';
 
-// Enhanced Project Creation Drawer - content-based height instead of full height
-const ProjectCreationDrawer = ({ isOpen, onClose }) => {
-    const { currentOrganization } = useProject();
+// Enhanced Suite Creation Drawer - content-based height instead of full height
+const SuiteCreationDrawer = ({ isOpen, onClose }) => {
+    const { currentOrganization } = useSuite();
 
     if (!isOpen) return null;
 
@@ -38,7 +38,7 @@ const ProjectCreationDrawer = ({ isOpen, onClose }) => {
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50/50 to-white">
                         <div className="flex-1">
-                            <h2 className="text-lg font-semibold text-gray-900">Create New Project</h2>
+                            <h2 className="text-lg font-semibold text-gray-900">Create New Suite</h2>
                             {currentOrganization && (
                                 <p className="text-sm text-gray-500 truncate">in {currentOrganization.name}</p>
                             )}
@@ -53,10 +53,10 @@ const ProjectCreationDrawer = ({ isOpen, onClose }) => {
 
                     {/* Content (form + optional footer) */}
                     <div className="px-6 py-4">
-                        <ProjectCreationForm
+                        <SuiteCreationForm
                             isOnboarding={false}
-                            onComplete={(projectId) => {
-                                console.log('Project created:', projectId);
+                            onComplete={(suiteId) => {
+                                console.log('Suite created:', suiteId);
                                 onClose();
                             }}
                             onCancel={onClose}
@@ -77,7 +77,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         hasFeatureAccess,
         updateUserProfile,
         subscriptionStatus
-    } = useProject();
+    } = useSuite();
 
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -217,14 +217,14 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
             name: 'Test Scripts',
             icon: DocumentTextIcon,
             page: 'test-scripts',
-            permission: 'canReadProjects'
+            permission: 'canReadSuites'
         },
         {
             name: 'Automated Scripts',
             icon: BeakerIcon,
             page: 'auto-scripts',
             requiresFeature: 'automation',
-            permission: 'canReadProjects'
+            permission: 'canReadSuites'
         },
         {
             name: 'Reports',
@@ -237,7 +237,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
             name: 'Recordings',
             icon: VideoCameraIcon,
             page: 'recordings',
-            permission: 'canReadProjects'
+            permission: 'canReadSuites'
         },
         {
             name: 'Settings',
@@ -372,8 +372,8 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                     onUpgradeClick={handleUpgradeClick}
                 />
 
-                {/* Project Selector */}
-                <ProjectSelector
+                {/* Suite Selector */}
+                <SuiteSelector
                     isCollapsed={isCollapsed}
                     setShowCreateModal={setShowCreateDrawer} 
                     trialStatus={actualSubscriptionState || subscriptionStatus}
@@ -458,9 +458,9 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 )}
             </div>
 
-            {/* Project Creation Drawer - Fixed positioning and sizing */}
+            {/* Suite Creation Drawer - Fixed positioning and sizing */}
             {showCreateDrawer && (
-                <ProjectCreationDrawer
+                <SuiteCreationDrawer
                     isOpen={showCreateDrawer}
                     onClose={() => setShowCreateDrawer(false)}
                 />

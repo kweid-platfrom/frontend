@@ -3,7 +3,7 @@ import { Loader2, X, Folder, Plus, Users, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthProvider";
 import InviteDialogs from "./InviteDialogs";
-import ProjectSelector from "./ProjectSelector";
+import SuiteSelector from "./SuiteSelector";
 import "../app/globals.css";
 
 const TeamInviteFormMain = ({
@@ -13,7 +13,7 @@ const TeamInviteFormMain = ({
     userEmail: propUserEmail,
     organizationName: propOrganizationName,
     organizationId: propOrganizationId,
-    organizationProjects: propOrganizationProjects = [],
+    organizationSuites: propOrganizationSuites = [],
     defaultRole = 'member'
 }) => {
     const { userProfile, currentUser } = useAuth();
@@ -23,12 +23,12 @@ const TeamInviteFormMain = ({
     const organizationId = propOrganizationId || userProfile?.organizationId;
     const organizationName = propOrganizationName || userProfile?.organizationName || userProfile?.organization?.name;
     
-    // Memoize organizationProjects to prevent unnecessary re-renders
-    const organizationProjects = useMemo(() => 
-        propOrganizationProjects.length > 0 
-            ? propOrganizationProjects 
-            : userProfile?.organizationProjects || [],
-        [propOrganizationProjects, userProfile?.organizationProjects]
+    // Memoize organizationSuites to prevent unnecessary re-renders
+    const organizationSuites = useMemo(() => 
+        propOrganizationSuites.length > 0 
+            ? propOrganizationSuites 
+            : userProfile?.organizationSuites || [],
+        [propOrganizationSuites, userProfile?.organizationSuites]
     );
 
     // Form state
@@ -42,8 +42,8 @@ const TeamInviteFormMain = ({
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [showResultsDialog, setShowResultsDialog] = useState(false);
     
-    // Project selection states
-    const [selectedProjects, setSelectedProjects] = useState([]);
+    // Suite selection states
+    const [selectedSuites, setSelectedSuites] = useState([]);
 
     // Set organization domain when userEmail changes
     useEffect(() => {
@@ -52,16 +52,16 @@ const TeamInviteFormMain = ({
         }
     }, [userEmail]);
 
-    // Initialize project selection based on available projects
+    // Initialize suite selection based on available suites
     useEffect(() => {
-        if (organizationProjects.length === 1) {
-            // If only one project, auto-select it
-            setSelectedProjects([organizationProjects[0].id]);
-        } else if (organizationProjects.length > 1) {
-            // If multiple projects, start with none selected (admin must choose)
-            setSelectedProjects([]);
+        if (organizationSuites.length === 1) {
+            // If only one suite, auto-select it
+            setSelectedSuites([organizationSuites[0].id]);
+        } else if (organizationSuites.length > 1) {
+            // If multiple suites, start with none selected (admin must choose)
+            setSelectedSuites([]);
         }
-    }, [organizationProjects]);
+    }, [organizationSuites]);
 
     // Show loading state if required props are missing
     if (!userEmail || !organizationId) {
@@ -100,21 +100,21 @@ const TeamInviteFormMain = ({
         return emailList.every((email) => !email.trim() || emailRegex.test(email));
     };
 
-    const handleProjectSelection = (projectId) => {
-        setSelectedProjects(prev => {
-            if (prev.includes(projectId)) {
-                return prev.filter(id => id !== projectId);
+    const handleSuiteSelection = (suiteId) => {
+        setSelectedSuites(prev => {
+            if (prev.includes(suiteId)) {
+                return prev.filter(id => id !== suiteId);
             } else {
-                return [...prev, projectId];
+                return [...prev, suiteId];
             }
         });
     };
 
-    const handleSelectAllProjects = () => {
-        if (selectedProjects.length === organizationProjects.length) {
-            setSelectedProjects([]);
+    const handleSelectAllSuites = () => {
+        if (selectedSuites.length === organizationSuites.length) {
+            setSelectedSuites([]);
         } else {
-            setSelectedProjects(organizationProjects.map(p => p.id));
+            setSelectedSuites(organizationSuites.map(p => p.id));
         }
     };
 
@@ -136,9 +136,9 @@ const TeamInviteFormMain = ({
             return;
         }
 
-        // Validate project selection for organizations with multiple projects
-        if (organizationProjects.length > 1 && selectedProjects.length === 0) {
-            toast.error("Please select at least one project to invite users to.");
+        // Validate suite selection for organizations with multiple suites
+        if (organizationSuites.length > 1 && selectedSuites.length === 0) {
+            toast.error("Please select at least one suite to invite users to.");
             return;
         }
 
@@ -167,7 +167,7 @@ const TeamInviteFormMain = ({
                         inviterEmail: userEmail,
                         inviterName: userEmail?.split('@')[0] || 'Team Admin',
                         role: defaultRole,
-                        projectIds: selectedProjects.length > 0 ? selectedProjects : undefined
+                        suiteIds: selectedSuites.length > 0 ? selectedSuites : undefined
                     };
 
                     const response = await fetch('/api/send-invite', {
@@ -189,7 +189,7 @@ const TeamInviteFormMain = ({
                                 status: 'sent',
                                 message: result.message || 'Invitation sent successfully',
                                 inviteId: result.inviteId || null,
-                                projectIds: selectedProjects
+                                suiteIds: selectedSuites
                             });
                             sent++;
                         } else if (response.status === 409) {
@@ -198,7 +198,7 @@ const TeamInviteFormMain = ({
                                 status: 'already_invited',
                                 message: result.message || 'User already has a pending invitation',
                                 inviteId: result.inviteId || null,
-                                projectIds: selectedProjects
+                                suiteIds: selectedSuites
                             });
                             alreadyInvited++;
                         } else {
@@ -207,7 +207,7 @@ const TeamInviteFormMain = ({
                                 status: 'failed',
                                 message: result.message || `Server error: ${response.status}`,
                                 inviteId: null,
-                                projectIds: selectedProjects
+                                suiteIds: selectedSuites
                             });
                             failed++;
                         }
@@ -217,7 +217,7 @@ const TeamInviteFormMain = ({
                             status: 'failed',
                             message: 'API endpoint not found (404)',
                             inviteId: null,
-                            projectIds: selectedProjects
+                            suiteIds: selectedSuites
                         });
                         failed++;
                     }
@@ -228,7 +228,7 @@ const TeamInviteFormMain = ({
                         status: 'failed',
                         message: `Network error: ${emailError.message}`,
                         inviteId: null,
-                        projectIds: selectedProjects
+                        suiteIds: selectedSuites
                     });
                     failed++;
                 }
@@ -328,25 +328,25 @@ const TeamInviteFormMain = ({
                     )}
                 </div>
 
-                {/* Project Selection - Only show if there are multiple projects */}
-                {organizationProjects.length > 1 && (
-                    <ProjectSelector
-                        organizationProjects={organizationProjects}
-                        selectedProjects={selectedProjects}
-                        onProjectSelection={handleProjectSelection}
-                        onSelectAllProjects={handleSelectAllProjects}
+                {/* Suite Selection - Only show if there are multiple suites */}
+                {organizationSuites.length > 1 && (
+                    <SuiteSelector
+                        organizationSuites={organizationSuites}
+                        selectedSuites={selectedSuites}
+                        onSuiteSelection={handleSuiteSelection}
+                        onSelectAllSuites={handleSelectAllSuites}
                     />
                 )}
 
-                {/* Single project info */}
-                {organizationProjects.length === 1 && (
+                {/* Single suite info */}
+                {organizationSuites.length === 1 && (
                     <div className="mb-6 sm:mb-8 p-3 bg-teal-50 border border-teal-200 rounded-lg">
                         <div className="flex items-center gap-2 text-sm text-teal-700">
                             <Folder className="w-4 h-4" />
-                            <span className="font-medium">Project:</span>
-                            <span>{organizationProjects[0].name}</span>
+                            <span className="font-medium">Suite:</span>
+                            <span>{organizationSuites[0].name}</span>
                         </div>
-                        <p className="text-xs text-teal-600 mt-1">Users will be invited to this project automatically.</p>
+                        <p className="text-xs text-teal-600 mt-1">Users will be invited to this suite automatically.</p>
                     </div>
                 )}
 
@@ -470,8 +470,8 @@ const TeamInviteFormMain = ({
                 setShowResultsDialog={setShowResultsDialog}
                 externalEmails={externalEmails}
                 orgDomain={orgDomain}
-                selectedProjects={selectedProjects}
-                organizationProjects={organizationProjects}
+                selectedSuites={selectedSuites}
+                organizationSuites={organizationSuites}
                 inviteResults={inviteResults}
                 onConfirmExternalInvite={handleConfirmExternalInvite}
                 onCloseResultsDialog={handleCloseResultsDialog}

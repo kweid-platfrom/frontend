@@ -80,10 +80,7 @@ export const SuiteProvider = ({ children }) => {
         };
     }, [userProfile]);
 
-    // Memoized values for better performance with trial logic
-    const needsOnboarding = useMemo(() => {
-        return !isUserLoading && !isSuitesLoading && suites.length === 0;
-    }, [isUserLoading, isSuitesLoading, suites.length]);
+    // Removed needsOnboarding - no longer needed
 
     // Updated canCreateSuite with trial logic and proper error handling
     const canCreateSuite = useMemo(() => {
@@ -308,7 +305,6 @@ export const SuiteProvider = ({ children }) => {
                 role: accountType === 'organization' ? 'admin' : 'user',
                 createdAt: new Date(),
                 accountCreatedAt: new Date(),
-                onboardingCompleted: false,
                 ...trialConfig
             };
 
@@ -829,7 +825,6 @@ export const SuiteProvider = ({ children }) => {
         createTestSuite,
         
         // Computed values
-        needsOnboarding,
         canCreateSuite,
         checkSubscriptionStatus: () => subscriptionStatus,
         
@@ -854,7 +849,6 @@ export const SuiteProvider = ({ children }) => {
         forceTrialStatusUpdate,
         refetchSuites,
         createTestSuite,
-        needsOnboarding,
         canCreateSuite,
         subscriptionStatus,
         hasFeatureAccess,

@@ -1,12 +1,12 @@
 'use client'
 import { useState, Suspense, lazy, memo, useCallback, useEffect } from 'react';
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import Header from './header';
 import Sidebar from './sidebar';
 import '../../app/globals.css';
 
 // Lazy load onboarding
-const CreateProjectOnboarding = lazy(() => import('../onboarding/SuiteCreationForm'));
+const CreateSuiteForm = lazy(() => import('../onboarding/SuiteCreationForm'));
 
 // Lazy load page components
 const Dashboard = lazy(() => import('../pages/Dashboard'));
@@ -16,7 +16,6 @@ const AutoScripts = lazy(() => import('../pages/AutoScriptsPage'));
 const Reports = lazy(() => import('../pages/ReportsPage'));
 const Recordings = lazy(() => import('../pages/ReportsPage'));
 const UserProfile = lazy(() => import('../../components/UserProfile'));
-// const CreateProject = lazy(() => import('../../pages/CreateProjectPage'));
 const Upgrade = lazy(() => import('../pages/UpgradePage.js'));
 
 // Optimized loading skeleton component
@@ -46,7 +45,7 @@ PageLoadingFallback.displayName = 'PageLoadingFallback';
 const DashboardLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activePage, setActivePage] = useState('dashboard');
-    const { needsOnboarding, isLoading } = useProject();
+    const { needsOnboarding, isLoading } = useSuite();
 
     // Load saved active page from localStorage on mount
     useEffect(() => {
@@ -97,7 +96,7 @@ const DashboardLayout = ({ children }) => {
     if (needsOnboarding) {
         return (
             <Suspense fallback={<LoadingSkeleton />}>
-                <CreateProjectOnboarding />
+                <CreateSuiteForm />
             </Suspense>
         );
     }

@@ -47,10 +47,10 @@ const getPrimaryRole = (roles) => {
         'super_admin',
         'admin', 
         'organization_admin', 
-        'project_manager', 
+        'suite_manager', 
         'lead', 
-        'developer', 
         'tester', 
+        'developer', 
         'member', 
         'viewer'
     ];
@@ -70,7 +70,7 @@ const getRoleCapabilities = (roles) => {
             case 'admin':
                 capabilities.add('write_tests');
                 capabilities.add('admin');
-                capabilities.add('manage_projects');
+                capabilities.add('manage_test_suites');
                 capabilities.add('manage_users');
                 capabilities.add('manage_organizations');
                 capabilities.add('view_analytics');
@@ -78,41 +78,52 @@ const getRoleCapabilities = (roles) => {
                 capabilities.add('assign_bugs');
                 capabilities.add('manage_billing');
                 capabilities.add('system_settings');
+                capabilities.add('create_test_suites');
+                capabilities.add('delete_test_suites');
                 break;
             case 'organization_admin':
                 capabilities.add('write_tests');
                 capabilities.add('manage_bugs');
                 capabilities.add('assign_bugs');
-                capabilities.add('manage_projects');
+                capabilities.add('manage_test_suites');
                 capabilities.add('manage_users');
                 capabilities.add('view_analytics');
                 capabilities.add('manage_billing');
+                capabilities.add('create_test_suites');
+                capabilities.add('delete_test_suites');
                 break;
-            case 'project_manager':
+            case 'suite_manager':
             case 'lead':
                 capabilities.add('write_tests');
                 capabilities.add('manage_bugs');
                 capabilities.add('assign_bugs');
-                capabilities.add('manage_projects');
+                capabilities.add('manage_test_suites');
                 capabilities.add('view_analytics');
+                capabilities.add('create_test_suites');
                 break;
             case 'developer':
             case 'tester':
                 capabilities.add('write_tests');
                 capabilities.add('manage_bugs');
                 capabilities.add('create_bugs');
+                capabilities.add('create_test_cases');
+                capabilities.add('run_tests');
                 break;
             case 'member':
                 capabilities.add('write_tests');
                 capabilities.add('manage_bugs');
                 capabilities.add('create_bugs');
+                capabilities.add('create_test_cases');
+                capabilities.add('run_tests');
                 break;
             case 'viewer':
+                // Only has read_tests from default
                 break;
             default:
                 capabilities.add('write_tests');
                 capabilities.add('manage_bugs');
                 capabilities.add('create_bugs');
+                capabilities.add('create_test_cases');
                 break;
         }
     });
@@ -123,44 +134,60 @@ const determineUserPermissions = (userData, explicitAdmin = false) => {
     const normalizedRoles = normalizeRoles(userData.role);
     const primaryRole = getPrimaryRole(normalizedRoles);
     const isAdminByRole = normalizedRoles.some(role => 
-        ['admin', 'super_admin'].includes(role)
+        ['admin', 'super_admin', 'organization_admin'].includes(role)
     );
     const isAdmin = explicitAdmin || isAdminByRole || userData.isAdmin === true;
     let capabilities = getRoleCapabilities(normalizedRoles);
+    
     if (isAdmin) {
         capabilities = [
             'read_tests',
             'write_tests',
             'admin',
-            'manage_projects',
+            'manage_test_suites',
             'manage_users',
             'manage_organizations',
             'view_analytics',
             'manage_bugs',
             'assign_bugs',
             'manage_billing',
-            'system_settings'
+            'system_settings',
+            'create_test_suites',
+            'delete_test_suites',
+            'create_test_cases',
+            'run_tests'
         ];
     }
+    
     if (userData.permissions?.capabilities) {
         capabilities = [
             ...new Set([...capabilities, ...userData.permissions.capabilities])
         ];
     }
+    
     let finalIsAdmin = isAdmin;
     if (userData.permissions?.isAdmin !== undefined) {
         finalIsAdmin = userData.permissions.isAdmin;
     }
+    
     const permissions = {
         isAdmin: finalIsAdmin,
         roles: normalizedRoles,
         primaryRole: primaryRole,
         capabilities: capabilities,
         canManageUsers: finalIsAdmin || capabilities.includes('manage_users'),
-        canManageProjects: finalIsAdmin || capabilities.includes('manage_projects'),
+        canManageTestSuites: finalIsAdmin || capabilities.includes('manage_test_suites'),
+        canCreateTestSuites: finalIsAdmin || capabilities.includes('create_test_suites'),
+        canDeleteTestSuites: finalIsAdmin || capabilities.includes('delete_test_suites'),
         canViewAnalytics: finalIsAdmin || capabilities.includes('view_analytics'),
         canManageBilling: finalIsAdmin || capabilities.includes('manage_billing'),
+        canManageBugs: capabilities.includes('manage_bugs'),
+        canAssignBugs: capabilities.includes('assign_bugs'),
+        canCreateBugs: capabilities.includes('create_bugs'),
+        canCreateTestCases: capabilities.includes('create_test_cases'),
+        canRunTests: capabilities.includes('run_tests'),
     };
+    
     return permissions;
 };
 
@@ -181,22 +208,28 @@ export const AuthProvider = ({ children }) => {
             setUserProfile(null);
             return;
         }
+        
         try {
             setCurrentUser(user);
             let authSource = 'email';
+            
             if (user.providerData?.length > 0) {
                 const provider = user.providerData[0].providerId;
                 if (provider === 'google.com') authSource = 'google';
             }
+            
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 const searchParams = new URLSearchParams(window.location.search);
                 const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
+                
                 if (isVerificationCallback && currentPath !== "/verify-email") {
                     router.push(`/verify-email${window.location.search}`);
                     return;
                 }
             }
+
+            const result = await fetchUserData(user.uid);
 
             if (result.error) {
                 setAuthError(result.error);
@@ -206,13 +239,21 @@ export const AuthProvider = ({ children }) => {
                     primaryRole: "member",
                     capabilities: ["read_tests"],
                     canManageUsers: false,
-                    canManageProjects: false,
+                    canManageTestSuites: false,
+                    canCreateTestSuites: false,
+                    canDeleteTestSuites: false,
                     canViewAnalytics: false,
-                    canManageBilling: false
+                    canManageBilling: false,
+                    canManageBugs: false,
+                    canAssignBugs: false,
+                    canCreateBugs: false,
+                    canCreateTestCases: false,
+                    canRunTests: false
                 });
                 setUserProfile({});
                 return;
             }
+            
             if (!result.userData) {
                 setAuthError('Failed to load user data');
                 setUserPermissions({
@@ -221,55 +262,73 @@ export const AuthProvider = ({ children }) => {
                     primaryRole: "member",
                     capabilities: ["read_tests"],
                     canManageUsers: false,
-                    canManageProjects: false,
+                    canManageTestSuites: false,
+                    canCreateTestSuites: false,
+                    canDeleteTestSuites: false,
                     canViewAnalytics: false,
-                    canManageBilling: false
+                    canManageBilling: false,
+                    canManageBugs: false,
+                    canAssignBugs: false,
+                    canCreateBugs: false,
+                    canCreateTestCases: false,
+                    canRunTests: false
                 });
                 setUserProfile({});
                 return;
             }
+            
             const normalizedUserData = {
                 ...result.userData,
                 role: normalizeRoles(result.userData.role),
                 primaryRole: getPrimaryRole(normalizeRoles(result.userData.role))
             };
+            
             const permissions = determineUserPermissions(result.userData);
             setUserPermissions(permissions);
             setUserProfile(normalizedUserData);
+            
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
+                
                 if (currentPath === "/verify-email" ||
                     currentPath.startsWith("/onboarding") ||
                     currentPath.startsWith("/handle-email-verification") ||
                     skipEmailVerificationRedirect) {
                     return;
                 }
+                
                 const needsEmailVerification = authSource === 'email' && !user.emailVerified;
                 const isOnAuthPage = ["/login", "/register"].includes(currentPath);
                 const isNewUser = result.isNewUser;
+                
                 if (needsEmailVerification && !isOnAuthPage && !isNewUser) {
                     router.push("/verify-email");
                     return;
                 }
+                
                 const needsOnboarding = !isNewUser && (
                     result.needsSetup ||
                     !result.userData.setupCompleted ||
                     result.userData.setupStep !== 'completed' ||
                     !result.userData.onboardingStatus?.onboardingComplete ||
-                    !result.userData.onboardingStatus?.projectCreated
+                    !result.userData.onboardingStatus?.testSuiteCreated // Changed from projectCreated
                 );
+                
                 if (needsOnboarding) {
                     const shouldRedirectToOnboarding = [
                         "/login", "/", "/dashboard"
                     ].includes(currentPath);
+                    
                     if (shouldRedirectToOnboarding) {
                         router.push("/onboarding");
                     }
                     return;
                 }
+                
                 const shouldRedirectToDashboard = [
                     "/login", "/", "/verify-email"
                 ].includes(currentPath);
+                
                 if (shouldRedirectToDashboard && !isNewUser) {
                     router.push("/dashboard");
                 }
@@ -278,12 +337,19 @@ export const AuthProvider = ({ children }) => {
             setUserPermissions({
                 isAdmin: false,
                 roles: ["member"],
-                primarily: "member",
+                primaryRole: "member",
                 capabilities: ["read_tests", "manage_bugs"],
                 canManageUsers: false,
-                canManageProjects: false,
+                canManageTestSuites: false,
+                canCreateTestSuites: false,
+                canDeleteTestSuites: false,
                 canViewAnalytics: false,
-                canManageBilling: false
+                canManageBilling: false,
+                canManageBugs: true,
+                canAssignBugs: false,
+                canCreateBugs: true,
+                canCreateTestCases: true,
+                canRunTests: true
             });
             setUserProfile({});
             setAuthError(error.message);
@@ -293,9 +359,11 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const handleRedirectResult = async () => {
             if (initialized) return;
+            
             try {
                 setLoading(true);
                 const result = await getRedirectResult(auth);
+                
                 if (result?.user) {
                     await processUserAuthentication(result.user);
                 }
@@ -306,6 +374,7 @@ export const AuthProvider = ({ children }) => {
                 setInitialized(true);
             }
         };
+        
         handleRedirectResult();
     }, [processUserAuthentication, initialized]);
 
@@ -322,6 +391,7 @@ export const AuthProvider = ({ children }) => {
                 }
             }
         });
+        
         return () => unsubscribe();
     }, [processUserAuthentication, initialized]);
 
@@ -356,9 +426,11 @@ export const AuthProvider = ({ children }) => {
         try {
             setSkipEmailVerificationRedirect(true);
             const result = await authRegisterWithEmail(email, password);
+            
             setTimeout(() => {
                 setSkipEmailVerificationRedirect(false);
             }, 1000);
+            
             return { success: true, user: result.user };
         } catch (error) {
             setSkipEmailVerificationRedirect(false);
@@ -403,6 +475,7 @@ export const AuthProvider = ({ children }) => {
     const signOut = async () => {
         try {
             await authLogout();
+            
             if (typeof window !== 'undefined') {
                 localStorage.removeItem("needsAccountSetup");
                 localStorage.removeItem("awaitingEmailVerification");
@@ -411,6 +484,7 @@ export const AuthProvider = ({ children }) => {
                 localStorage.removeItem("registrationData");
                 localStorage.removeItem("emailForVerification");
             }
+            
             router.push("/login");
             return { success: true };
         } catch (error) {
@@ -422,9 +496,11 @@ export const AuthProvider = ({ children }) => {
         if (!userPermissions) {
             return false;
         }
+        
         if (userPermissions.isAdmin) {
             return true;
         }
+        
         const hasCapability = userPermissions.capabilities?.includes(capability) || false;
         return hasCapability;
     }, [userPermissions]);
@@ -433,6 +509,7 @@ export const AuthProvider = ({ children }) => {
         if (!userPermissions) {
             return false;
         }
+        
         const hasUserRole = userPermissions.roles?.includes(role) || false;
         return hasUserRole;
     }, [userPermissions]);
@@ -452,20 +529,24 @@ export const AuthProvider = ({ children }) => {
 
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
+        
         try {
             setLoading(true);
             const userData = await fetchUserData(currentUser.uid);
+            
             if (userData) {
                 const normalizedUserData = {
                     ...userData,
                     role: normalizeRoles(userData.role),
                     primaryRole: getPrimaryRole(normalizeRoles(userData.role))
                 };
+                
                 const permissions = determineUserPermissions(userData);
                 setUserPermissions(permissions);
                 setUserProfile(normalizedUserData);
                 return true;
             }
+            
             return false;
         } catch {
             return false;
@@ -478,10 +559,12 @@ export const AuthProvider = ({ children }) => {
         try {
             setLoading(true);
             const result = await updateUserProfileService(userId, updates, currentUser?.uid);
+            
             if (result) {
                 await refreshUserData();
                 return true;
             }
+            
             return false;
         } catch {
             throw new Error('Failed to update user profile');
@@ -492,6 +575,7 @@ export const AuthProvider = ({ children }) => {
 
     const markEmailVerified = useCallback(async () => {
         if (!currentUser?.uid) return false;
+        
         try {
             await updateOnboardingStep(currentUser.uid, 'emailVerified', true, {
                 setupStep: userProfile?.accountType === 'organization'
@@ -536,10 +620,18 @@ export const AuthProvider = ({ children }) => {
         hasAnyRole,
         isAdmin,
         getPrimaryUserRole,
+        // Test Suite specific permissions (replacing project permissions)
         canManageUsers: userPermissions?.canManageUsers || false,
-        canManageProjects: userPermissions?.canManageProjects || false,
+        canManageTestSuites: userPermissions?.canManageTestSuites || false,
+        canCreateTestSuites: userPermissions?.canCreateTestSuites || false,
+        canDeleteTestSuites: userPermissions?.canDeleteTestSuites || false,
         canViewAnalytics: userPermissions?.canViewAnalytics || false,
         canManageBilling: userPermissions?.canManageBilling || false,
+        canManageBugs: userPermissions?.canManageBugs || false,
+        canAssignBugs: userPermissions?.canAssignBugs || false,
+        canCreateBugs: userPermissions?.canCreateBugs || false,
+        canCreateTestCases: userPermissions?.canCreateTestCases || false,
+        canRunTests: userPermissions?.canRunTests || false,
         updateUserProfile,
         refreshUserData,
         clearAuthError,

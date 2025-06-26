@@ -465,3 +465,157 @@ export const getUserEmail = (userData) => {
     // Legacy format
     return userData.email || '';
 };
+
+/**
+ * Check if user is admin of any account
+ */
+export const isUserAdmin = (userData) => {
+    if (!userData) return false;
+
+    // Check role field (legacy)
+    if (userData.role && Array.isArray(userData.role) && userData.role.includes('admin')) {
+        return true;
+    }
+
+    // Check account memberships for admin role
+    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
+        return userData.account_memberships.some(membership => 
+            membership.role === 'Admin' && membership.status === 'active'
+        );
+    }
+
+    return false;
+};
+
+/**
+ * Check if user is admin of specific account
+ */
+export const isUserAdminOfAccount = (userData, accountId) => {
+    if (!userData || !accountId) return false;
+
+    // Check account memberships for specific account admin role
+    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
+        return userData.account_memberships.some(membership => 
+            membership.account_id === accountId && 
+            membership.role === 'Admin' && 
+            membership.status === 'active'
+        );
+    }
+
+    return false;
+};
+
+/**
+ * Get user's current account information
+ */
+export const getCurrentAccountInfo = (userData) => {
+    if (!userData) return null;
+
+    // New format
+    if (userData.session_context?.current_account_id) {
+        const accountId = userData.session_context.current_account_id;
+        const accountType = userData.session_context.current_account_type;
+        
+        // Find the membership info for current account
+        const membership = userData.account_memberships?.find(
+            m => m.account_id === accountId
+        );
+
+        return {
+            account_id: accountId,
+            account_type: accountType,
+            role: membership?.role || 'Member',
+            is_admin: membership?.role === 'Admin'
+        };
+    }
+
+    // Legacy format fallback
+    return {
+        account_id: userData.organizationId || userData.user_id,
+        account_type: userData.accountType || userData.userType || 'individual',
+        role: userData.role?.includes('admin') ? 'Admin' : 'Member',
+        is_admin: userData.role?.includes('admin') || false
+    };
+};
+
+/**
+ * Check if user has specific permission
+ */
+export const hasPermission = (userData) => {
+    if (!userData) return false;
+
+    // Admins have all permissions
+    if (isUserAdmin(userData)) {
+        return true;
+    }
+
+    // Check specific permissions based on account type and role
+    const currentAccount = getCurrentAccountInfo(userData);
+    if (!currentAccount) return false;
+
+    // Individual account owners have all permissions for their account
+    if (currentAccount.account_type === 'individual' && currentAccount.is_admin) {
+        return true;
+    }
+
+    // Organization admins have all organization permissions
+    if (currentAccount.account_type === 'organization' && currentAccount.is_admin) {
+        return true;
+    }
+
+    // Add more granular permission checking here if needed
+    return false;
+};
+
+/**
+ * Initialize onboarding progress for consistent structure
+ */
+export const initializeOnboardingProgress = (userType) => {
+    const baseProgress = {
+        emailVerified: false,
+        profileCompleted: false,
+        accountSetupCompleted: false,
+        welcomeShown: false
+    };
+
+    if (userType === 'organization') {
+        return {
+            ...baseProgress,
+            organizationInfoCompleted: false,
+            teamMembersInvited: false
+        };
+    }
+
+    return baseProgress;
+};
+
+/**
+ * Initialize onboarding status for consistent structure
+ */
+export const initializeOnboardingStatus = (userType) => {
+    return {
+        isOnboardingComplete: false,
+        currentStep: userType === 'organization' ? 'organization_info' : 'profile_setup',
+        completedSteps: [],
+        skippedSteps: []
+    };
+};
+
+/**
+ * Normalize onboarding progress from legacy data
+ */
+export const normalizeOnboardingProgress = (existingProgress) => {
+    if (!existingProgress || typeof existingProgress !== 'object') {
+        return initializeOnboardingProgress('individual');
+    }
+
+    return {
+        emailVerified: Boolean(existingProgress.emailVerified),
+        profileCompleted: Boolean(existingProgress.profileCompleted),
+        accountSetupCompleted: Boolean(existingProgress.accountSetupCompleted),
+        welcomeShown: Boolean(existingProgress.welcomeShown),
+        organizationInfoCompleted: Boolean(existingProgress.organizationInfoCompleted),
+        teamMembersInvited: Boolean(existingProgress.teamMembersInvited),
+        ...existingProgress
+    };
+};

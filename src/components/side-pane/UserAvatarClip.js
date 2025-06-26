@@ -1,10 +1,10 @@
 // components/layout/UserProfile.js
 'use client'
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import SignOutButton from '../auth/SignOutButton';
 
 const UserAvatarClip = ({ isCollapsed }) => {
-    const { userProfile } = useProject();
+    const { userProfile } = useSuite();
 
     // Get user display name with proper fallback logic
     const getUserDisplayName = () => {

@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthProvider';
-import { useProject } from '../context/SuiteContext';
+import { useSuite } from '../context/SuiteContext';
 import { 
     canAccessBugs,
     getUserPermissions
@@ -92,25 +92,25 @@ const applyFilters = (baseQuery, filters, dateField = 'createdAt') => {
 };
 
 // Secure fetch function with corrected permission system
-const fetchBugTrackingMetrics = async (filters = {}, projectContext = {}, userProfile = null) => {
+const fetchBugTrackingMetrics = async (filters = {}, suiteContext = {}, userProfile = null) => {
     try {
-        const { projectId, projectOwnerId = false } = projectContext;
+        const { suiteId, suiteOwnerId = false } = suiteContext;
 
-        // Check if project is selected
-        if (!projectId) {
-            throw new Error('No project selected. Please select a project to view bug metrics.');
+        // Check if suite is selected
+        if (!suiteId) {
+            throw new Error('No suite selected. Please select a suite to view bug metrics.');
         }
 
         // Check permissions for accessing bugs
         if (!canAccessBugs(userProfile, 'read', { 
-            projectId, 
-            projectOwnerId 
+            suiteId, 
+            suiteOwnerId 
         })) {
-            throw new Error('Access denied: You cannot read bugs in this project.');
+            throw new Error('Access denied: You cannot read bugs in this suite.');
         }
 
-        // Query the project's bugs subcollection
-        const bugsRef = collection(db, 'projects', projectId, 'bugs');
+        // Query the suite's bugs subcollection
+        const bugsRef = collection(db, 'suites', suiteId, 'bugs');
         const filteredQuery = applyFilters(bugsRef, filters, 'createdAt');
         
         // Add ordering and limit for performance
@@ -120,7 +120,7 @@ const fetchBugTrackingMetrics = async (filters = {}, projectContext = {}, userPr
             limit(1000) // Reasonable limit for performance
         );
 
-        console.log('Executing bug metrics query for project:', projectId);
+        console.log('Executing bug metrics query for suite:', suiteId);
         const snapshot = await getDocs(finalQuery);
         const bugs = snapshot.docs.map(doc => ({ 
             id: doc.id, 
@@ -356,7 +356,7 @@ const fetchBugTrackingMetrics = async (filters = {}, projectContext = {}, userPr
                 totalItems: totalBugs,
                 criticalIssues: criticalBugs,
                 resolutionRate: bugResolutionRate,
-                projectId,
+                suiteId,
                 lastUpdated: new Date()
             }
         };
@@ -366,7 +366,7 @@ const fetchBugTrackingMetrics = async (filters = {}, projectContext = {}, userPr
         
         // Handle specific Firebase errors
         if (error.code === 'permission-denied') {
-            throw new Error('You do not have permission to view bugs for this project');
+            throw new Error('You do not have permission to view bugs for this suite');
         }
         
         if (error.code === 'unauthenticated') {
@@ -378,7 +378,7 @@ const fetchBugTrackingMetrics = async (filters = {}, projectContext = {}, userPr
         }
         
         if (error.code === 'not-found') {
-            throw new Error('Project not found or you do not have access to it.');
+            throw new Error('Suite not found or you do not have access to it.');
         }
         
         throw error;
@@ -391,15 +391,15 @@ export const useBugTrackingMetrics = (filters = {}) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     
-    // Get auth and project context
+    // Get auth and suite context
     const { userProfile } = useAuth(); // Get full userProfile instead of just hasPermission
-    const { activeProject } = useProject();
+    const { activeSuite } = useSuite();
 
     // Get user permissions using the corrected permission system
     const userPermissions = userProfile ? getUserPermissions(userProfile) : null;
 
     const fetchMetrics = useCallback(async () => {
-        if (!activeProject?.id) {
+        if (!activeSuite?.id) {
             setMetrics(null);
             setLoading(false);
             return;
@@ -409,14 +409,14 @@ export const useBugTrackingMetrics = (filters = {}) => {
             setLoading(true);
             setError(null);
 
-            // Create project context for permission checking
-            const projectContext = {
-                projectId: activeProject.id,
-                projectOwnerId: activeProject.ownerId || activeProject.owner,
-                isPublic: activeProject.isPublic || false
+            // Create suite context for permission checking
+            const suiteContext = {
+                suiteId: activeSuite.id,
+                suiteOwnerId: activeSuite.ownerId || activeSuite.owner,
+                isPublic: activeSuite.isPublic || false
             };
 
-            const data = await fetchBugTrackingMetrics(filters, projectContext, userProfile);
+            const data = await fetchBugTrackingMetrics(filters, suiteContext, userProfile);
             setMetrics(data);
         } catch (err) {
             setError(err.message);
@@ -424,7 +424,7 @@ export const useBugTrackingMetrics = (filters = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [filters, activeProject?.id, activeProject?.ownerId, activeProject?.owner, activeProject?.isPublic, userProfile]);
+    }, [filters, activeSuite?.id, activeSuite?.ownerId, activeSuite?.owner, activeSuite?.isPublic, userProfile]);
 
     useEffect(() => {
         fetchMetrics();
@@ -437,14 +437,14 @@ export const useBugTrackingMetrics = (filters = {}) => {
     // Enhanced permission checks using the corrected system
     const hasReadAccess = userPermissions?.canReadBugs && 
         canAccessBugs(userProfile, 'read', { 
-            projectId: activeProject?.id, 
-            projectOwnerId: activeProject?.ownerId || activeProject?.owner 
+            suiteId: activeSuite?.id, 
+            suiteOwnerId: activeSuite?.ownerId || activeSuite?.owner 
         });
 
     const hasWriteAccess = userPermissions?.canWriteBugs && 
         canAccessBugs(userProfile, 'write', { 
-            projectId: activeProject?.id, 
-            projectOwnerId: activeProject?.ownerId || activeProject?.owner 
+            suiteId: activeSuite?.id, 
+            suiteOwnerId: activeSuite?.ownerId || activeSuite?.owner 
         });
 
     const hasAnalyticsAccess = userPermissions?.canViewBugAnalytics;
@@ -463,8 +463,8 @@ export const useBugTrackingMetrics = (filters = {}) => {
         canViewAnalytics: hasAnalyticsAccess,
         canExportReports: userPermissions?.canExportBugReports,
         
-        // User and project context
-        activeProject,
+        // User and suite context
+        activeSuite,
         userProfile,
         userPermissions,
         

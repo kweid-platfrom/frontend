@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState, useMemo } from "react";
 import { toast } from "sonner";
-import { useProject } from "../../context/SuiteContext";
+import { useSuite } from "../../context/SuiteContext";
 import { useAuth } from "../../context/AuthProvider";
 import BugFilters from "../bug-report/BugFilters";
 import BugDetailsPanel from "../bug-report/BugDetailsPanel";
@@ -13,7 +13,7 @@ import { useBugTracker } from "../../hooks/useBugTracker";
 import { calculateBugMetrics } from "../../utils/calculateBugMetrics";
 
 const BugTracker = () => {
-    const { activeProject, user } = useProject();
+    const { activeSuite, user } = useSuite();
     const { hasPermission } = useAuth();
     const [showFilters, setShowFilters] = useState(false);
     const [showDetailsPanel, setShowDetailsPanel] = useState(false);
@@ -106,7 +106,7 @@ const BugTracker = () => {
                 detail: {
                     metrics: comprehensiveMetrics,
                     timestamp: Date.now(),
-                    projectId: activeProject?.id,
+                    suiteId: activeSuite?.id,
                     userId: user?.uid
                 }
             });
@@ -117,13 +117,13 @@ const BugTracker = () => {
                 localStorage.setItem('bugTrackerMetrics', JSON.stringify({
                     ...comprehensiveMetrics,
                     timestamp: Date.now(),
-                    projectId: activeProject?.id
+                    suiteId: activeSuite?.id
                 }));
             } catch (err) {
                 console.warn('Failed to store metrics in localStorage:', err);
             }
         }
-    }, [comprehensiveMetrics, activeProject?.id, user?.uid]);
+    }, [comprehensiveMetrics, activeSuite?.id, user?.uid]);
 
     // Permission-aware event handlers
     const handleBugSelect = (bug) => {
@@ -211,7 +211,7 @@ const BugTracker = () => {
     const isGroupSelected = selectedBugs.length > 0;
 
     // Loading state
-    if (!user || !activeProject) {
+    if (!user || !activeSuite) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-center">
@@ -235,7 +235,7 @@ const BugTracker = () => {
                         You don&apos;t have permission to view the bug tracker.
                     </p>
                     <p className="text-sm text-yellow-600">
-                        Contact your project administrator to request access.
+                        Contact your suite administrator to request access.
                     </p>
                 </div>
             </div>

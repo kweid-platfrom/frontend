@@ -2,7 +2,7 @@
 'use client'
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import {
     CheckIcon,
     XMarkIcon,
@@ -18,7 +18,7 @@ import {
 
 const UpgradePage = () => {
     const router = useRouter();
-    const { userProfile } = useProject();
+    const { userProfile } = useSuite();
     const [selectedPlan] = useState('pro');
     const [billingCycle, setBillingCycle] = useState('monthly'); // monthly or yearly
     const [isLoading, setIsLoading] = useState(false);
@@ -29,7 +29,7 @@ const UpgradePage = () => {
             price: { monthly: 0, yearly: 0 },
             description: 'Perfect for getting started',
             features: [
-                '1 Project',
+                '1 Suite',
                 '50 Test Cases',
                 '25 Bug Reports',
                 'Basic Dashboard',
@@ -50,7 +50,7 @@ const UpgradePage = () => {
             price: { monthly: 29, yearly: 290 },
             description: 'Best for professional QA teams',
             features: [
-                'Unlimited Projects',
+                'Unlimited Suites',
                 'Unlimited Test Cases',
                 'Unlimited Bug Reports',
                 'AI-Powered Test Generation',

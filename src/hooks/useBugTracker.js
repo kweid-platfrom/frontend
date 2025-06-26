@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { collection, onSnapshot, query, orderBy, where, doc, updateDoc, addDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { toast } from "sonner";
-import { useProject } from "../context/SuiteContext";
+import { useSuite } from "../context/SuiteContext";
 import {
     getTeamMemberName,
     getPriorityFromSeverity,
@@ -19,7 +19,7 @@ import { calculateBugMetrics, calculateBugMetricsWithTrends } from "../utils/cal
 const DEFAULT_ENVIRONMENTS = ['Development', 'Staging', 'Production', 'Testing', 'Unknown'];
 
 export const useBugTracker = () => {
-    const { activeProject, user } = useProject();
+    const { activeSuite, user } = useSuite();
     const [bugs, setBugs] = useState([]);
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
@@ -109,7 +109,7 @@ export const useBugTracker = () => {
     }, []);
 
     const updateBugInFirestore = useCallback(async (bugId, updates) => {
-        if (isUpdating.has(bugId) || !bugId || !updates || !activeProject?.id) return;
+        if (isUpdating.has(bugId) || !bugId || !updates || !activeSuite?.id) return;
 
         const cleanUpdates = Object.keys(updates).reduce((acc, key) => {
             if (updates[key] !== undefined && updates[key] !== null) {
@@ -123,8 +123,8 @@ export const useBugTracker = () => {
         setIsUpdating(prev => new Set(prev).add(bugId));
 
         try {
-            // Update the bug in the subcollection: projects/{projectId}/bugs/{bugId}
-            const bugRef = doc(db, "projects", activeProject.id, "bugs", bugId);
+            // Update the bug in the subcollection: suites/{suiteId}/bugs/{bugId}
+            const bugRef = doc(db, "suites", activeSuite.id, "bugs", bugId);
             const updateData = { ...cleanUpdates, updatedAt: new Date() };
 
             // Validate fields
@@ -171,7 +171,7 @@ export const useBugTracker = () => {
                 return newSet;
             });
         }
-    }, [isUpdating, activeProject?.id]);
+    }, [isUpdating, activeSuite?.id]);
 
     const updateBugStatus = useCallback(async (bugId, newStatus) => {
         if (!VALID_BUG_STATUSES.includes(newStatus)) {
@@ -254,8 +254,8 @@ export const useBugTracker = () => {
             const sprintRef = collection(db, "sprints");
             const newSprint = {
                 ...sprintData,
-                projectId: activeProject.id,
-                organizationId: activeProject.organizationId || null,
+                suiteId: activeSuite.id,
+                organizationId: activeSuite.organizationId || null,
                 createdBy: user.uid,
                 createdAt: new Date(),
                 updatedAt: new Date()
@@ -268,12 +268,12 @@ export const useBugTracker = () => {
             toast.error("Failed to create sprint");
             throw error;
         }
-    }, [activeProject, user]);
+    }, [activeSuite, user]);
 
     // Real-time listeners
     useEffect(() => {
-        if (!user || !activeProject?.id) {
-            setError("Project or user not loaded. Please ensure you are logged in and have an active project selected.");
+        if (!user || !activeSuite?.id) {
+            setError("Suite or user not loaded. Please ensure you are logged in and have an active suite selected.");
             return;
         }
 
@@ -282,7 +282,7 @@ export const useBugTracker = () => {
 
         // Bugs listener - Updated to use subcollection
         try {
-            const bugsRef = collection(db, "projects", activeProject.id, "bugs");
+            const bugsRef = collection(db, "suites", activeSuite.id, "bugs");
             const bugsQuery = query(bugsRef, orderBy("createdAt", "desc"));
 
             const unsubscribeBugs = onSnapshot(
@@ -310,12 +310,12 @@ export const useBugTracker = () => {
         }
 
         // Team members listener - Only if organization exists
-        if (activeProject.organizationId) {
+        if (activeSuite.organizationId) {
             try {
                 const membersRef = collection(db, "organizationMembers");
                 const membersQuery = query(
                     membersRef,
-                    where("organizationId", "==", activeProject.organizationId)
+                    where("organizationId", "==", activeSuite.organizationId)
                 );
                 const unsubscribeMembers = onSnapshot(
                     membersQuery,
@@ -337,7 +337,7 @@ export const useBugTracker = () => {
                 setTeamMembers([]);
             }
         } else {
-            // For personal projects, set user as the only team member
+            // For personal suites, set user as the only team member
             setTeamMembers([{
                 id: user.uid,
                 name: user.displayName || user.email,
@@ -345,12 +345,12 @@ export const useBugTracker = () => {
             }]);
         }
 
-        // Sprints listener - Updated to use project-based query
+        // Sprints listener - Updated to use suite-based query
         try {
             const sprintsRef = collection(db, "sprints");
             const sprintsQuery = query(
                 sprintsRef,
-                where("projectId", "==", activeProject.id),
+                where("suiteId", "==", activeSuite.id),
                 orderBy("createdAt", "desc")
             );
 
@@ -383,7 +383,7 @@ export const useBugTracker = () => {
                 }
             });
         };
-    }, [user, activeProject]);
+    }, [user, activeSuite]);
 
     // Filter bugs
     useEffect(() => {

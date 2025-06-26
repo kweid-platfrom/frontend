@@ -2,7 +2,7 @@
 // components/layout/Header.js
 'use client'
 import { useState, useRef, useEffect } from 'react';
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import { signOut } from 'firebase/auth';
 import '../../app/globals.css';
 import {
@@ -27,7 +27,7 @@ import NotificationsDropdown from "../NotificationsDropdown";
 import TeamInviteFormMain from "../TeamInviteFormMain";
 
 const Header = ({ onMenuClick, setShowBugForm, setActivePage }) => {
-    const { user, userProfile } = useProject();
+    const { user, userProfile } = useSuite();
 
     // State management for all dropdowns
     const [showUserMenu, setShowUserMenu] = useState(false);

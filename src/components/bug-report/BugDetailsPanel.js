@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { doc, updateDoc, arrayUnion, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { toast } from "sonner";
 import BugComments from "../bug-report/BugComments";
@@ -28,7 +28,7 @@ const BugItemDetails = ({
     const [editingField, setEditingField] = useState(null);
     const [tempValues, setTempValues] = useState({});
 
-    const { activeProject } = useProject();
+    const { activeSuite } = useSuite();
     const { hasPermission, user } = useAuth();
 
     // Default formatDate function if not provided
@@ -66,9 +66,9 @@ const BugItemDetails = ({
 
     // Listen for real-time updates to this specific bug using the correct subcollection path
     useEffect(() => {
-        if (!activeProject?.id || !bug.id) return;
+        if (!activeSuite?.suite_id || !bug.id) return;
 
-        const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bug.id);
+        const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bug.id);
         
         const unsubscribe = onSnapshot(bugRef, (docSnapshot) => {
             if (docSnapshot.exists()) {
@@ -86,7 +86,7 @@ const BugItemDetails = ({
         });
 
         return () => unsubscribe();
-    }, [bug.id, activeProject?.id]);
+    }, [bug.id, activeSuite?.suite_id]);
 
     const handleFieldEdit = (field, value) => {
         if (!hasPermission('write_bugs')) {
@@ -103,14 +103,14 @@ const BugItemDetails = ({
             return;
         }
 
-        if (!activeProject?.id) {
-            toast.error('No active project selected');
+        if (!activeSuite?.suite_id) {
+            toast.error('No active suite selected');
             return;
         }
 
         try {
             setLoading(true);
-            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bug.id);
+            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bug.id);
             
             let updateData = { [field]: tempValues[field] };
             
@@ -166,8 +166,8 @@ const BugItemDetails = ({
             return;
         }
 
-        if (!activeProject?.id) {
-            toast.error('No active project selected');
+        if (!activeSuite?.suite_id) {
+            toast.error('No active suite selected');
             return;
         }
 
@@ -181,7 +181,7 @@ const BugItemDetails = ({
         };
 
         try {
-            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bug.id);
+            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bug.id);
             
             await updateDoc(bugRef, {
                 messages: arrayUnion(newMessage)

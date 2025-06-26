@@ -5,11 +5,11 @@
     import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
     import { toast } from 'sonner';
     import { db } from '../../config/firebase';
-    import { useProject } from '../../context/SuiteContext';
+    import { useSuite } from '../../context/SuiteContext';
 
-    export default function TestCaseModal({ testCase, onClose, onSave, projectId }) {
-        // Use useProject instead of useAuth
-        const { user, userProfile, activeProject } = useProject();
+    export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
+        // Use useSuite instead of useAuth
+        const { user, userProfile, activeSuite } = useSuite();
         
         const [formData, setFormData] = useState({
             title: '',
@@ -30,8 +30,8 @@
         const [tagInput, setTagInput] = useState('');
         const [loading, setLoading] = useState(false);
 
-        // Get the project ID from props or active project
-        const effectiveProjectId = projectId || activeProject?.id;
+        // Get the suite ID from props or active suite
+        const effectiveSuiteId = suiteId || activeSuite?.id;
 
         useEffect(() => {
             if (testCase) {
@@ -98,12 +98,12 @@
                     throw new Error('User not authenticated. Please log in again.');
                 }
 
-                if (!effectiveProjectId) {
-                    throw new Error('No project selected. Please select a project first.');
+                if (!effectiveSuiteId) {
+                    throw new Error('No suite selected. Please select a suite first.');
                 }
 
                 const testCaseId = testCase?.id || `tc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                const testCaseRef = doc(db, 'projects', effectiveProjectId, 'testCases', testCaseId);
+                const testCaseRef = doc(db, 'suites', effectiveSuiteId, 'testCases', testCaseId);
 
                 // Get user display name
                 const userDisplayName = userProfile?.displayName || 
@@ -114,7 +114,7 @@
                 const firestoreData = {
                     ...testCaseData,
                     id: testCaseId,
-                    projectId: effectiveProjectId,
+                    suiteId: effectiveSuiteId,
                     createdBy: user.uid,
                     createdByName: userDisplayName,
                     createdAt: testCase ? undefined : serverTimestamp(),
@@ -172,8 +172,8 @@
                 return;
             }
 
-            if (!effectiveProjectId) {
-                toast.error('Please select a project first');
+            if (!effectiveSuiteId) {
+                toast.error('Please select a suite first');
                 return;
             }
 
@@ -233,7 +233,7 @@
             }
         };
 
-        // Show loading or error state if user/project data is not available
+        // Show loading or error state if user/suite data is not available
         if (!user) {
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -268,10 +268,10 @@
                                 ×
                             </button>
                         </div>
-                        {/* Show project info */}
-                        {effectiveProjectId && (
+                        {/* Show suite info */}
+                        {effectiveSuiteId && (
                             <p className="text-sm text-gray-500 mt-1">
-                                Project: {activeProject?.name || effectiveProjectId}
+                                Suite: {activeSuite?.name || effectiveSuiteId}
                             </p>
                         )}
                     </div>
@@ -564,7 +564,7 @@
                             <button
                                 type="submit"
                                 onClick={handleSubmit}
-                                disabled={loading || !user || !effectiveProjectId}
+                                disabled={loading || !user || !effectiveSuiteId}
                                 className="w-full sm:w-auto px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 text-sm"
                             >
                                 {loading ? 'Saving...' : (testCase ? 'Update' : 'Create')} Test Case

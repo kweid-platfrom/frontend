@@ -27,7 +27,7 @@ import {
     orderBy,
     serverTimestamp
 } from 'firebase/firestore';
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 
 export default function TestCaseTable({ 
@@ -45,12 +45,12 @@ export default function TestCaseTable({
     const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
     const [error, setError] = useState(null);
     
-    const { activeProject } = useProject();
+    const { activeSuite } = useSuite();
     const { currentUser, hasPermission } = useAuth();
 
     // Fetch test cases from Firestore subcollection
     const fetchTestCases = useCallback(async () => {
-        if (!activeProject?.id) {
+        if (!activeSuite?.id) {
             setTestCases([]);
             setLoading(false);
             return;
@@ -60,8 +60,8 @@ export default function TestCaseTable({
             setLoading(true);
             setError(null);
 
-            // Query the subcollection: projects/{projectId}/testCases
-            const testCasesRef = collection(db, 'projects', activeProject.id, 'testCases');
+            // Query the subcollection: suites/{suiteId}/testCases
+            const testCasesRef = collection(db, 'suites', activeSuite.id, 'testCases');
             const q = query(
                 testCasesRef,
                 orderBy('createdAt', 'desc')
@@ -78,14 +78,14 @@ export default function TestCaseTable({
             setTestCases(testCaseList);
             
             if (testCaseList.length === 0) {
-                toast.info('No test cases found for this project');
+                toast.info('No test cases found for this suite');
             } else {
                 toast.success(`Loaded ${testCaseList.length} test case${testCaseList.length > 1 ? 's' : ''}`);
             }
         } catch (error) {
             console.error('Error fetching test cases:', error);
             const errorMessage = error.code === 'permission-denied' 
-                ? 'You do not have permission to view test cases for this project'
+                ? 'You do not have permission to view test cases for this suite'
                 : 'Failed to load test cases. Please try again.';
             
             setError(errorMessage);
@@ -93,9 +93,9 @@ export default function TestCaseTable({
         } finally {
             setLoading(false);
         }
-    }, [activeProject?.id]);
+    }, [activeSuite?.id]);
 
-    // Fetch test cases on component mount and when activeProject changes
+    // Fetch test cases on component mount and when activeSuite changes
     useEffect(() => {
         fetchTestCases();
     }, [fetchTestCases, refreshTrigger]);
@@ -180,7 +180,7 @@ export default function TestCaseTable({
                                 toast.loading('Deleting test case...', { id: 'delete-toast' });
                                 
                                 // Delete from subcollection
-                                await deleteDoc(doc(db, 'projects', activeProject.id, 'testCases', testCaseId));
+                                await deleteDoc(doc(db, 'suites', activeSuite.id, 'testCases', testCaseId));
                                 await fetchTestCases(); // Refresh the list
                                 
                                 toast.success('Test case deleted successfully', { id: 'delete-toast' });
@@ -228,7 +228,7 @@ export default function TestCaseTable({
             delete duplicatedTestCase.id;
             
             // Add to subcollection
-            await addDoc(collection(db, 'projects', activeProject.id, 'testCases'), duplicatedTestCase);
+            await addDoc(collection(db, 'suites', activeSuite.id, 'testCases'), duplicatedTestCase);
             await fetchTestCases(); // Refresh the list
             
             toast.success(`Test case "${testCase.title}" duplicated successfully`, { id: 'duplicate-toast' });
@@ -258,7 +258,7 @@ export default function TestCaseTable({
             });
             
             const promises = ids.map(async (id) => {
-                const testCaseRef = doc(db, 'projects', activeProject.id, 'testCases', id);
+                const testCaseRef = doc(db, 'suites', activeSuite.id, 'testCases', id);
                 
                 switch (action) {
                     case 'activate':
@@ -363,9 +363,9 @@ export default function TestCaseTable({
                 <div className="text-gray-400 text-6xl mb-4">📋</div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No test cases found</h3>
                 <p className="text-gray-600">
-                    {activeProject ? 
+                    {activeSuite ? 
                         'Create your first test case to get started' : 
-                        'Select a project to view test cases'
+                        'Select a suite to view test cases'
                     }
                 </p>
             </div>

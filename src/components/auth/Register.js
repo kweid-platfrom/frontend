@@ -39,7 +39,7 @@ const Register = () => {
     const [isCreatingAccount, setIsCreatingAccount] = useState(false);
     const [isResendingEmail] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-    const [registeredUserEmail, setRegisteredUserEmail] = useState(''); 
+    const [registeredUserEmail, setRegisteredUserEmail] = useState('');
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -64,27 +64,30 @@ const Register = () => {
 
     const handleGoogleRegister = async () => {
         setIsGoogleLoading(true);
-        
+
         try {
             const provider = new GoogleAuthProvider();
             provider.addScope('email');
             provider.addScope('profile');
-            
+
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
-            
+
             // Check if user already exists in Firestore
             const userDocRef = doc(db, 'users', user.uid);
             const userDocSnap = await getDoc(userDocRef);
-            
+
             if (userDocSnap.exists()) {
                 // User already exists, redirect to dashboard
                 toast.success("Welcome back!");
                 router.push('/dashboard');
                 return;
             }
-            
-            // Create user document aligned with security rules
+
+            // Create new Google user with individual account and admin role
+            const individualAccountId = `ind_${user.uid}_${Date.now()}`;
+
+            // Create user document with proper admin role for individual account
             const userData = {
                 user_id: user.uid,
                 primary_email: user.email,
@@ -93,24 +96,63 @@ const Register = () => {
                     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                     photo_url: user.photoURL || ''
                 },
-                account_memberships: [], // Always include as empty array
+                account_memberships: [{
+                    account_id: individualAccountId,
+                    account_type: 'individual',
+                    role: 'Admin', // Google user becomes admin of their individual account
+                    status: 'active'
+                }],
                 session_context: {
+                    current_account_id: individualAccountId,
+                    current_account_type: 'individual',
                     provider: 'google',
                     email_verified: user.emailVerified,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
-                }
+                },
+                role: ['admin'], // Individual account owner is admin
+                setupCompleted: true, // Google users can skip some setup steps
+                setupStep: 'completed'
             };
 
             await setDoc(userDocRef, userData);
-            
+
+            // Create individual account document for Google user
+            const individualAccountData = {
+                account_id: individualAccountId,
+                account_type: 'individual',
+                owner_id: user.uid,
+                account_profile: {
+                    name: user.displayName || 'Google User',
+                    email: user.email,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                },
+                members: [user.uid],
+                admins: [user.uid], // Google user is admin of their individual account
+                settings: {
+                    trial_active: true,
+                    trial_start_date: new Date().toISOString(),
+                    trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+                    subscription_status: 'trial'
+                },
+                permissions: {
+                    can_manage_users: true,
+                    can_manage_billing: true,
+                    can_manage_settings: true,
+                    can_access_admin_features: true
+                }
+            };
+
+            await setDoc(doc(db, 'individualAccounts', individualAccountId), individualAccountData);
+
             toast.success("Account created successfully with Google!");
             router.push('/dashboard');
-            
+
         } catch (error) {
             console.error('Error with Google registration:', error);
             let errorMessage = "Failed to sign up with Google. Please try again.";
-            
+
             if (error.code === 'auth/popup-closed-by-user') {
                 errorMessage = "Sign-up was cancelled.";
             } else if (error.code === 'auth/popup-blocked') {
@@ -118,7 +160,7 @@ const Register = () => {
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 errorMessage = "An account already exists with this email using a different sign-in method.";
             }
-            
+
             toast.error(errorMessage);
         } finally {
             setIsGoogleLoading(false);
@@ -134,7 +176,7 @@ const Register = () => {
 
         if (step === 2) {
             if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
-            
+
             if (!formData.email.trim()) {
                 newErrors.email = 'Email is required';
             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -146,7 +188,7 @@ const Register = () => {
                     newErrors.email = 'Organization accounts require a custom company domain email';
                 }
             }
-            
+
             if (!formData.password) {
                 newErrors.password = 'Password is required';
             } else if (formData.password.length < 8) {
@@ -187,39 +229,110 @@ const Register = () => {
         try {
             // Create user with Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(
-                auth, 
-                formData.email, 
+                auth,
+                formData.email,
                 formData.password
             );
-            
+
             const user = userCredential.user;
 
-            // Create user document aligned with security rules FIRST
-            const userData = {
-                user_id: user.uid,
-                primary_email: formData.email,
-                profile_info: {
-                    name: formData.fullName,
-                    timezone: formData.timezone
-                },
-                account_memberships: [], // Always include as empty array initially
-                session_context: {
-                    provider: 'email',
-                    email_verified: false,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }
-            };
-
-            await setDoc(doc(db, 'users', user.uid), userData);
-
             if (accountType === 'individual') {
-                // For individual accounts, user document is sufficient
-                // The rules check for individual account through account_memberships
-                console.log('Individual account created - user document only');
+                // Create individual account document with admin role
+                const individualAccountId = `ind_${user.uid}_${Date.now()}`;
+
+                // Create user document with proper admin role
+                const userData = {
+                    user_id: user.uid,
+                    primary_email: formData.email,
+                    profile_info: {
+                        name: formData.fullName,
+                        timezone: formData.timezone
+                    },
+                    account_memberships: [{
+                        account_id: individualAccountId,
+                        account_type: 'individual',
+                        role: 'Admin', // Make user admin of their individual account
+                        status: 'active'
+                    }],
+                    session_context: {
+                        current_account_id: individualAccountId,
+                        current_account_type: 'individual',
+                        provider: 'email',
+                        email_verified: false,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    },
+                    // Add role field for backward compatibility
+                    role: ['admin'], // Individual account owner is admin
+                    setupCompleted: false,
+                    setupStep: 'email_verification'
+                };
+
+                await setDoc(doc(db, 'users', user.uid), userData);
+
+                // Create individual account document
+                const individualAccountData = {
+                    account_id: individualAccountId,
+                    account_type: 'individual',
+                    owner_id: user.uid,
+                    account_profile: {
+                        name: formData.fullName,
+                        email: formData.email,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    },
+                    members: [user.uid],
+                    admins: [user.uid], // User is admin of their individual account
+                    settings: {
+                        trial_active: true,
+                        trial_start_date: new Date().toISOString(),
+                        trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+                        subscription_status: 'trial'
+                    },
+                    permissions: {
+                        can_manage_users: true,
+                        can_manage_billing: true,
+                        can_manage_settings: true,
+                        can_access_admin_features: true
+                    }
+                };
+
+                await setDoc(doc(db, 'individualAccounts', individualAccountId), individualAccountData);
+
+                console.log('Individual account created with admin privileges');
+
             } else {
-                // Create organization
+                // Organization account creation (your existing code)
                 const orgId = `org_${user.uid}_${Date.now()}`;
+
+                const userData = {
+                    user_id: user.uid,
+                    primary_email: formData.email,
+                    profile_info: {
+                        name: formData.fullName,
+                        timezone: formData.timezone
+                    },
+                    account_memberships: [{
+                        account_id: orgId,
+                        account_type: 'organization',
+                        role: 'Admin',
+                        status: 'active'
+                    }],
+                    session_context: {
+                        current_account_id: orgId,
+                        current_account_type: 'organization',
+                        provider: 'email',
+                        email_verified: false,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    },
+                    role: ['admin'], // Organization founder is admin
+                    setupCompleted: false,
+                    setupStep: 'email_verification'
+                };
+
+                await setDoc(doc(db, 'users', user.uid), userData);
+
                 const organizationData = {
                     org_id: orgId,
                     organization_profile: {
@@ -232,7 +345,17 @@ const Register = () => {
                     admins: [user.uid],
                     settings: {
                         allow_member_invites: true,
-                        require_domain_verification: true
+                        require_domain_verification: true,
+                        trial_active: true,
+                        trial_start_date: new Date().toISOString(),
+                        trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                        subscription_status: 'trial'
+                    },
+                    permissions: {
+                        can_manage_users: true,
+                        can_manage_billing: true,
+                        can_manage_settings: true,
+                        can_access_admin_features: true
                     }
                 };
 
@@ -242,22 +365,10 @@ const Register = () => {
                 await setDoc(doc(db, 'organizations', orgId, 'members', user.uid), {
                     user_id: user.uid,
                     org_email: formData.email,
-                    role: 'Admin', // Capital 'A' to match rules
+                    role: 'Admin',
                     join_date: new Date().toISOString(),
                     status: 'active'
                 });
-
-                // Update user's account memberships with proper structure
-                const updatedUserData = {
-                    ...userData,
-                    account_memberships: [{ 
-                        org_id: orgId, // This is what the rules check for
-                        role: 'Admin',
-                        status: 'active'
-                    }]
-                };
-
-                await setDoc(doc(db, 'users', user.uid), updatedUserData);
             }
 
             // Send email verification after user document is created
@@ -271,20 +382,19 @@ const Register = () => {
                 console.error('Error sending verification email:', emailError);
                 toast.success("Account created successfully! Verification email will be sent shortly.");
             }
-            
+
             // Store the email for display and sign out the user
             setRegisteredUserEmail(formData.email);
-            
+
             // Sign out the user after successful registration
-            // This prevents issues when they navigate to login page
             await signOut(auth);
-            
+
             setCurrentStep(4);
-            
+
         } catch (error) {
             console.error('Error creating account:', error);
             let errorMessage = "Failed to create account. Please try again.";
-            
+
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = "An account with this email already exists.";
             } else if (error.code === 'auth/weak-password') {
@@ -294,7 +404,7 @@ const Register = () => {
             } else if (error.code === 'permission-denied') {
                 errorMessage = "Permission denied. Please check your account settings.";
             }
-            
+
             toast.error(errorMessage);
         } finally {
             setIsCreatingAccount(false);
@@ -304,7 +414,7 @@ const Register = () => {
     const handleResendEmail = async () => {
         // Since we signed out the user, we need to show a message instead
         toast.info("Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.");
-        
+
         // Navigate to login page
         router.push('/login');
     };
@@ -323,7 +433,7 @@ const Register = () => {
 
                         {/* Google Sign Up */}
                         <div className="mb-6">
-                            <GoogleSignUp 
+                            <GoogleSignUp
                                 onGoogleRegister={handleGoogleRegister}
                                 loading={isGoogleLoading}
                             />
@@ -407,7 +517,7 @@ const Register = () => {
                             >
                                 Didn&apos;t receive the email? Go to Sign In
                             </button>
-                            
+
                             <button
                                 onClick={() => router.push('/login')}
                                 className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2 px-4 text-sm rounded transition-colors font-medium"
@@ -436,7 +546,7 @@ const Register = () => {
                     }
                 }}
             />
-            
+
             <BackgroundDecorations />
 
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">

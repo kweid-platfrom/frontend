@@ -1,6 +1,6 @@
 // components/layout/TrialBanner.js
 'use client'
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import {
     ClockIcon,
     ExclamationTriangleIcon,
@@ -8,7 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const TrialBanner = ({ isCollapsed, trialStatus, onUpgradeClick }) => {
-    const { subscriptionStatus } = useProject();
+    const { subscriptionStatus } = useSuite();
 
     const handleUpgrade = () => {
         if (onUpgradeClick) {

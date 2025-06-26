@@ -11,7 +11,7 @@ import {
     deleteDoc,
     serverTimestamp
 } from 'firebase/firestore';
-import { useProject } from '../../context/SuiteContext';
+import { useSuite } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { CheckSquare, Square  } from 'lucide-react';
 import BugTableRow from './BugTableRow';
@@ -46,12 +46,12 @@ const BugTable = ({
     const [titleValue, setTitleValue] = useState('');
     const [selectedIds, setSelectedIds] = useState([]);
 
-    const { activeProject } = useProject();
+    const { activeSuite } = useSuite();
     const { hasPermission } = useAuth();
 
     // Fetch bugs from Firestore subcollection
     const fetchBugs = useCallback(async () => {
-        if (!activeProject?.id) {
+        if (!activeSuite?.suite_id) {
             setBugs([]);
             setLoading(false);
             return;
@@ -61,8 +61,8 @@ const BugTable = ({
             setLoading(true);
             setError(null);
 
-            // Query the subcollection: projects/{projectId}/bugs
-            const bugsRef = collection(db, 'projects', activeProject.id, 'bugs');
+            // Query the subcollection: testSuites/{suiteId}/bugs
+            const bugsRef = collection(db, 'testSuites', activeSuite.suite_id, 'bugs');
             const q = query(
                 bugsRef,
                 orderBy('createdAt', 'desc')
@@ -80,7 +80,7 @@ const BugTable = ({
         } catch (error) {
             console.error('Error fetching bugs:', error);
             const errorMessage = error.code === 'permission-denied'
-                ? 'You do not have permission to view bugs for this project'
+                ? 'You do not have permission to view bugs for this test suite'
                 : 'Failed to load bugs. Please try again.';
 
             setError(errorMessage);
@@ -88,9 +88,9 @@ const BugTable = ({
         } finally {
             setLoading(false);
         }
-    }, [activeProject?.id]);
+    }, [activeSuite?.suite_id]);
 
-    // Fetch bugs on component mount and when activeProject changes
+    // Fetch bugs on component mount and when activeSuite changes
     useEffect(() => {
         fetchBugs();
     }, [fetchBugs]);
@@ -122,7 +122,7 @@ const BugTable = ({
 
         try {
             const promises = ids.map(async (id) => {
-                const bugRef = doc(db, 'projects', activeProject.id, 'bugs', id);
+                const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', id);
 
                 switch (action) {
                     case 'close':
@@ -156,7 +156,7 @@ const BugTable = ({
     // Handle immediate bug updates
     const handleImmediateStatusUpdate = async (bugId, newStatus) => {
         try {
-            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bugId);
+            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bugId);
             await updateDoc(bugRef, {
                 status: newStatus,
                 updatedAt: serverTimestamp()
@@ -176,7 +176,7 @@ const BugTable = ({
 
     const handleImmediateSeverityUpdate = async (bugId, newSeverity) => {
         try {
-            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bugId);
+            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bugId);
             await updateDoc(bugRef, {
                 severity: newSeverity,
                 updatedAt: serverTimestamp()
@@ -196,7 +196,7 @@ const BugTable = ({
 
     const handleImmediateAssignmentUpdate = async (bugId, newAssignee) => {
         try {
-            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bugId);
+            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bugId);
             await updateDoc(bugRef, {
                 assignedTo: newAssignee,
                 updatedAt: serverTimestamp()
@@ -216,7 +216,7 @@ const BugTable = ({
 
     const handleImmediateEnvironmentUpdate = async (bugId, newEnvironment) => {
         try {
-            const bugRef = doc(db, 'projects', activeProject.id, 'bugs', bugId);
+            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bugId);
             await updateDoc(bugRef, {
                 environment: newEnvironment,
                 updatedAt: serverTimestamp()
