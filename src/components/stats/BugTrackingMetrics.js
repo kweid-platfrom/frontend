@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { BugAntIcon } from '@heroicons/react/24/outline';
 

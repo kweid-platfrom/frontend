@@ -2,7 +2,7 @@
 // components/layout/Header.js
 'use client'
 import { useState, useRef, useEffect } from 'react';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import { signOut } from 'firebase/auth';
 import '../../app/globals.css';
 import {

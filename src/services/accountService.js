@@ -85,36 +85,35 @@ export const accountService = {
         });
 
         return {
-            subscriptionType: 'free',
-            subscriptionStatus: 'trial',
-            subscriptionExpiry: null,
-            trialStartDate: now,
-            trialEndDate: trialEnd,
-            isTrialActive: true,
-            trialDaysRemaining: 30,
-            hasUsedTrial: true,
-            showTrialBanner: true,
+            plan_type: 'freemium',
+            status: 'trial',
+            trial_start_date: now,
+            trial_end_date: trialEnd,
+            is_trial_active: true,
+            trial_days_remaining: 30,
+            has_used_trial: true,
+            show_trial_banner: true,
             // Mark as processed to prevent loops
-            _trialProcessed: true,
-            _lastTrialCheck: now,
+            _trial_processed: true,
+            _last_trial_check: now,
 
             features: {
-                multipleProjects: true,
-                advancedReports: true,
-                teamCollaboration: accountType === 'organization',
-                apiAccess: true,
-                prioritySupport: true,
-                customIntegrations: true,
-                advancedAutomation: true
+                multiple_suites: true,
+                advanced_reports: true,
+                team_collaboration: accountType === 'organization',
+                api_access: true,
+                priority_support: true,
+                custom_integrations: true,
+                advanced_automation: true
             },
 
             limits: {
-                projects: accountType === 'organization' ? 10 : 5,
-                testScripts: 1000,
-                automatedTests: 500,
+                suites: accountType === 'organization' ? 10 : 5,
+                test_scripts: 1000,
+                automated_tests: 500,
                 recordings: 100,
-                reportExports: 50,
-                teamMembers: accountType === 'organization' ? 10 : 1
+                report_exports: 50,
+                team_members: accountType === 'organization' ? 10 : 1
             }
         };
     },
@@ -126,38 +125,41 @@ export const accountService = {
         const now = new Date();
 
         return {
-            subscriptionType: 'free',
-            subscriptionStatus: 'active',
-            subscriptionExpiry: null,
-            isTrialActive: false,
-            trialExpired: true,
-            trialDaysRemaining: 0,
-            showTrialBanner: false,
+            plan_type: 'free',
+            status: 'active',
+            expiry_date: null,
+            is_trial_active: false,
+            trial_expired: true,
+            trial_days_remaining: 0,
+            show_trial_banner: false,
             // Mark as processed to prevent loops
-            _trialProcessed: true,
-            _lastTrialCheck: now,
+            _trial_processed: true,
+            _last_trial_check: now,
 
             features: {
-                multipleProjects: false,
-                advancedReports: false,
-                teamCollaboration: false,
-                apiAccess: false,
-                prioritySupport: false,
-                customIntegrations: false,
-                advancedAutomation: false
+                multiple_suites: false,
+                advanced_reports: false,
+                team_collaboration: false,
+                api_access: false,
+                priority_support: false,
+                custom_integrations: false,
+                advanced_automation: false
             },
 
             limits: {
-                projects: 1,
-                testScripts: accountType === 'organization' ? 15 : 10,
-                automatedTests: accountType === 'organization' ? 8 : 5,
+                suites: 1,
+                test_scripts: accountType === 'organization' ? 15 : 10,
+                automated_tests: accountType === 'organization' ? 8 : 5,
                 recordings: accountType === 'organization' ? 5 : 3,
-                reportExports: accountType === 'organization' ? 3 : 2,
-                teamMembers: 1
+                report_exports: accountType === 'organization' ? 3 : 2,
+                team_members: 1
             }
         };
     },
 
+    /**
+     * Setup account with new architecture-compliant structure
+     */
     async setupAccount({ name, email, company, industry, companySize, password, isGoogleAuth, inviteEmails = [] }) {
         const user = auth.currentUser;
         if (!user) {
@@ -165,23 +167,117 @@ export const accountService = {
         }
 
         const accountType = this.getAccountType(email);
-        const orgId = user.uid;
+        const userId = user.uid;
+        const now = new Date();
 
         // Create freemium subscription with 30-day trial
         const subscriptionConfig = this.createFreemiumSubscription(accountType);
 
-        // Create organization only for organization accounts
+        // Create user document with new architecture structure
+        const userDoc = {
+            user_id: userId,
+            primary_email: user.email,
+            profile_info: {
+                name: name,
+                avatar: user.photoURL || null,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                preferences: {
+                    theme: 'light',
+                    notifications: true,
+                    language: 'en'
+                }
+            },
+            account_memberships: [],
+            session_context: {
+                current_account_type: accountType,
+                current_org_id: accountType === 'organization' ? userId : null
+            },
+            created_at: now,
+            updated_at: now
+        };
+
+        // Handle Individual Account
+        if (accountType === 'individual') {
+            userDoc.account_memberships.push({
+                account_type: 'individual',
+                subscription_plan: subscriptionConfig,
+                billing_info: {
+                    payment_method: null,
+                    billing_address: null,
+                    next_billing_date: null
+                },
+                owned_test_suites: [],
+                created_at: now
+            });
+        }
+
+        // Handle Organization Account
         if (accountType === 'organization' && company && industry && companySize) {
+            const orgId = userId; // Using user ID as org ID for simplicity
+
+            // Create organization document
             await setDoc(doc(db, "organizations", orgId), {
-                name: company,
-                industry: industry,
-                size: companySize,
-                createdAt: new Date(),
-                createdBy: user.uid,
-                admin: [user.uid],
-                members: [user.uid],
-                // Add subscription info to organization
-                ...subscriptionConfig
+                org_id: orgId,
+                organization_profile: {
+                    name: company,
+                    custom_domain: null, // Can be set later
+                    logo: null,
+                    industry: industry,
+                    size: companySize,
+                    settings: {
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                        default_permissions: {
+                            can_create_test_suites: true,
+                            can_invite_members: false,
+                            can_export_data: true
+                        }
+                    }
+                },
+                subscription: subscriptionConfig,
+                created_at: now,
+                updated_at: now
+            });
+
+            // Create organization membership for the admin
+            await setDoc(doc(db, "organizations", orgId, "members", userId), {
+                user_id: userId,
+                org_email: user.email,
+                role: 'Admin',
+                join_date: now,
+                status: 'active',
+                permissions: [
+                    'manage_organization',
+                    'invite_members',
+                    'create_test_suites',
+                    'delete_test_suites',
+                    'manage_billing'
+                ],
+                test_suite_access: []
+            });
+
+            // Add organization membership to user
+            userDoc.account_memberships.push({
+                org_id: orgId,
+                org_email: user.email,
+                role: 'Admin',
+                join_date: now,
+                status: 'active',
+                accessible_test_suites: []
+            });
+
+            // Create user membership document for cross-referencing
+            await setDoc(doc(db, "userMemberships", userId, "organizations", orgId), {
+                org_id: orgId,
+                role: 'Admin',
+                join_date: now,
+                status: 'active',
+                permissions: [
+                    'manage_organization',
+                    'invite_members',
+                    'create_test_suites',
+                    'delete_test_suites',
+                    'manage_billing'
+                ]
             });
         }
 
@@ -196,35 +292,16 @@ export const accountService = {
             }
         }
 
-        // Create user document with freemium trial
-        const userDoc = {
-            name,
-            email: user.email,
-            accountType: accountType,
-            role: accountType === 'organization' ? "admin" : "user",
-            createdAt: new Date(),
-            // Add subscription configuration
-            ...subscriptionConfig,
-            // Track onboarding
-            onboardingCompleted: true,
-            accountCreatedAt: new Date()
-        };
-
-        // Add organization info only for organization accounts
-        if (accountType === 'organization' && company) {
-            userDoc.company = company;
-            userDoc.organisationId = orgId;
-        }
-
-        await setDoc(doc(db, "users", user.uid), userDoc);
+        // Create the user document
+        await setDoc(doc(db, "users", userId), userDoc);
 
         // Cache the processed user to prevent loops
-        this._processedUsers.set(user.uid, { ...userDoc });
-        this._lastProcessTime.set(user.uid, Date.now());
+        this._processedUsers.set(userId, userDoc);
+        this._lastProcessTime.set(userId, Date.now());
 
-        // Handle invites only for organization accounts
+        // Handle invites for organization accounts
         if (accountType === 'organization' && inviteEmails.length > 0) {
-            console.log("Sending invites to:", inviteEmails);
+            await this.sendOrganizationInvites(userId, inviteEmails, company);
         }
 
         // Cleanup localStorage
@@ -235,190 +312,146 @@ export const accountService = {
             accountType,
             subscriptionStatus: 'trial',
             trialDaysRemaining: 30,
-            features: subscriptionConfig.features
+            features: subscriptionConfig.features,
+            userId: userId,
+            orgId: accountType === 'organization' ? userId : null
         };
     },
 
     /**
+     * Send organization invites
+     */
+    async sendOrganizationInvites(orgId, inviteEmails, companyName) {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const invitePromises = inviteEmails.map(async (email) => {
+            const inviteId = `invite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            await setDoc(doc(db, "invitations", inviteId), {
+                invite_id: inviteId,
+                organization_id: orgId,
+                invited_email: email.trim(),
+                invited_by: user.uid,
+                invite_type: 'organization',
+                status: 'pending',
+                role: 'Member',
+                created_date: new Date(),
+                expires_date: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)), // 7 days
+                organization_name: companyName,
+                inviter_name: user.displayName || user.email
+            });
+        });
+
+        await Promise.all(invitePromises);
+        console.log(`Sent ${inviteEmails.length} organization invites`);
+    },
+
+    /**
      * CRITICAL FIX: Check if user's trial has expired and update subscription accordingly
-     * Now with improved caching and loop prevention
+     * Updated to work with new architecture
      */
     checkAndUpdateTrialStatus(userProfile) {
-        if (!userProfile) {
-            console.log('No user profile provided');
+        if (!userProfile || !userProfile.account_memberships) {
+            console.log('No user profile or account memberships provided');
             return userProfile;
         }
 
-        const userId = userProfile.uid || userProfile.id;
+        const userId = userProfile.user_id || userProfile.id;
         if (!userId) {
             console.warn('No user ID found in profile');
             return userProfile;
         }
 
-        // CRITICAL: Check cache first - prevent processing same user repeatedly
+        // Check cache first
         const now = Date.now();
         const lastProcessTime = this._lastProcessTime.get(userId);
         const cachedUser = this._processedUsers.get(userId);
 
-        // Increased cache time to 5 minutes to prevent frequent recalculations
         if (lastProcessTime && cachedUser && (now - lastProcessTime) < 300000) {
             console.log('Returning cached trial status for user:', userId);
             return cachedUser;
         }
 
-        // If trial was already processed and marked, don't reprocess unless absolutely necessary
-        if (userProfile._trialProcessed && userProfile._lastTrialCheck) {
-            const lastCheck = this.toDate(userProfile._lastTrialCheck);
-            // Increased to 30 minutes for processed trials
-            if (lastCheck && (now - lastCheck.getTime()) < 1800000) {
-                console.log('Trial already processed recently, skipping check');
-                const profileWithTimestamp = {
-                    ...userProfile,
-                    _lastTrialCheck: new Date(now)
-                };
-                this._processedUsers.set(userId, profileWithTimestamp);
-                this._lastProcessTime.set(userId, now);
-                return profileWithTimestamp;
-            }
-        }
-
-        console.log('Processing trial status for user:', userId, 'accountType:', userProfile.accountType);
-
         let updatedProfile = { ...userProfile };
+        let hasChanges = false;
 
-        // If user has never had trial fields set, they might be a new user
-        if (!userProfile.hasUsedTrial && !userProfile.trialStartDate && !userProfile.isTrialActive) {
-            console.log('User has no trial data - setting up trial');
-            const accountType = userProfile.accountType || 'individual';
-            const trialConfig = this.createFreemiumSubscription(accountType);
+        // Process each account membership
+        updatedProfile.account_memberships = userProfile.account_memberships.map(membership => {
+            // Skip if not individual account or no subscription plan
+            if (membership.account_type !== 'individual' || !membership.subscription_plan) {
+                return membership;
+            }
 
-            updatedProfile = {
-                ...userProfile,
-                ...trialConfig
-            };
-
-            // Update in Firestore asynchronously with error handling
-            this.updateUserSubscriptionStatus(userId, updatedProfile).catch(error => {
-                console.error('Failed to update trial in Firestore:', error);
-            });
-
-            // Cache the result
-            this._processedUsers.set(userId, updatedProfile);
-            this._lastProcessTime.set(userId, now);
-
-            return updatedProfile;
-        }
-
-        // If trial is already marked as inactive and expired, return as-is
-        if (!userProfile.isTrialActive && userProfile.trialExpired) {
-            console.log('Trial already expired and processed');
-            updatedProfile = {
-                ...userProfile,
-                _trialProcessed: true,
-                _lastTrialCheck: new Date()
-            };
-
-            this._processedUsers.set(userId, updatedProfile);
-            this._lastProcessTime.set(userId, now);
-
-            return updatedProfile;
-        }
-
-        const currentTime = new Date();
-        const trialEnd = this.toDate(userProfile.trialEndDate);
-
-        console.log('Checking trial status:', {
-            now: currentTime.toISOString(),
-            trialEnd: trialEnd ? trialEnd.toISOString() : 'null',
-            isTrialActive: userProfile.isTrialActive,
-            userId: userId
-        });
-
-        if (!trialEnd) {
-            console.error('Invalid trial end date for user:', userId);
-
-            // Try to calculate from trial start date
-            const trialStart = this.toDate(userProfile.trialStartDate);
-            if (trialStart) {
-                const calculatedTrialEnd = new Date(trialStart.getTime() + (30 * 24 * 60 * 60 * 1000));
-                const daysRemaining = Math.ceil((calculatedTrialEnd - currentTime) / (1000 * 60 * 60 * 24));
-
-                if (daysRemaining <= 0) {
-                    // Trial has expired
-                    updatedProfile = {
-                        ...userProfile,
-                        ...this.getFreeTierSubscription(userProfile.accountType || 'individual'),
-                        trialExpiredAt: currentTime
-                    };
-                } else {
-                    updatedProfile = {
-                        ...userProfile,
-                        trialEndDate: calculatedTrialEnd,
-                        trialDaysRemaining: Math.max(0, daysRemaining),
-                        showTrialBanner: true,
-                        isTrialActive: true,
-                        subscriptionStatus: 'trial',
-                        _trialProcessed: true,
-                        _lastTrialCheck: currentTime
-                    };
-                }
-            } else {
-                // If we can't determine anything, set up a trial ONLY if user doesn't have basic trial fields
-                if (!userProfile.subscriptionType) {
-                    console.log('Cannot determine trial status, setting up new trial');
-                    const accountType = userProfile.accountType || 'individual';
-                    const trialConfig = this.createFreemiumSubscription(accountType);
-
-                    updatedProfile = {
-                        ...userProfile,
-                        ...trialConfig
-                    };
-                } else {
-                    // Keep existing subscription status but mark as processed
-                    updatedProfile = {
-                        ...userProfile,
-                        _trialProcessed: true,
-                        _lastTrialCheck: currentTime
-                    };
+            const subscription = membership.subscription_plan;
+            
+            // If trial was already processed recently, skip
+            if (subscription._trial_processed && subscription._last_trial_check) {
+                const lastCheck = this.toDate(subscription._last_trial_check);
+                if (lastCheck && (now - lastCheck.getTime()) < 1800000) { // 30 minutes
+                    return membership;
                 }
             }
-        } else {
-            // Calculate days remaining
-            const daysRemaining = Math.ceil((trialEnd - currentTime) / (1000 * 60 * 60 * 24));
+
+            // Check if trial needs to be set up
+            if (!subscription.has_used_trial && !subscription.trial_start_date && !subscription.is_trial_active) {
+                console.log('Setting up trial for individual account');
+                const trialConfig = this.createFreemiumSubscription('individual');
+                hasChanges = true;
+                
+                return {
+                    ...membership,
+                    subscription_plan: trialConfig
+                };
+            }
 
             // Check if trial has expired
-            if (daysRemaining <= 0) {
-                console.log('Trial has expired, updating to free tier');
-                updatedProfile = {
-                    ...userProfile,
-                    ...this.getFreeTierSubscription(userProfile.accountType || 'individual'),
-                    trialExpiredAt: currentTime
-                };
-            } else {
-                // Trial is still active
-                console.log('Trial is still active:', {
-                    daysRemaining,
-                    trialEnd: trialEnd.toISOString()
-                });
+            const trialEnd = this.toDate(subscription.trial_end_date);
+            if (trialEnd) {
+                const currentTime = new Date();
+                const daysRemaining = Math.ceil((trialEnd - currentTime) / (1000 * 60 * 60 * 24));
 
-                updatedProfile = {
-                    ...userProfile,
-                    trialDaysRemaining: Math.max(0, daysRemaining),
-                    isTrialActive: true,
-                    showTrialBanner: true,
-                    subscriptionStatus: 'trial',
-                    _trialProcessed: true,
-                    _lastTrialCheck: currentTime
-                };
+                if (daysRemaining <= 0 && subscription.is_trial_active) {
+                    console.log('Trial has expired, updating to free tier');
+                    hasChanges = true;
+                    
+                    return {
+                        ...membership,
+                        subscription_plan: {
+                            ...this.getFreeTierSubscription('individual'),
+                            trial_expired_at: currentTime
+                        }
+                    };
+                } else if (daysRemaining > 0) {
+                    // Update days remaining
+                    const updatedSubscription = {
+                        ...subscription,
+                        trial_days_remaining: Math.max(0, daysRemaining),
+                        is_trial_active: true,
+                        show_trial_banner: true,
+                        _trial_processed: true,
+                        _last_trial_check: currentTime
+                    };
+
+                    if (subscription.trial_days_remaining !== daysRemaining) {
+                        hasChanges = true;
+                    }
+
+                    return {
+                        ...membership,
+                        subscription_plan: updatedSubscription
+                    };
+                }
             }
-        }
 
-        // Cache the result BEFORE any async operations
+            return membership;
+        });
+
+        // Cache the result
         this._processedUsers.set(userId, updatedProfile);
         this._lastProcessTime.set(userId, now);
 
-        // Only update Firestore if there were actual changes AND we're not already updating
-        const hasChanges = this.hasSubscriptionChanges(userProfile, updatedProfile);
+        // Update Firestore if there were changes
         if (hasChanges && !this._updateQueue.has(userId)) {
             this._updateQueue.add(userId);
             this.updateUserSubscriptionStatus(userId, updatedProfile)
@@ -434,92 +467,115 @@ export const accountService = {
     },
 
     /**
-     * Helper to check if subscription data has actually changed
+     * Update user subscription status in Firestore with new architecture
      */
-    hasSubscriptionChanges(oldProfile, newProfile) {
-        const fieldsToCheck = [
-            'subscriptionType', 'subscriptionStatus', 'isTrialActive', 
-            'trialDaysRemaining', 'showTrialBanner', 'trialExpired'
-        ];
-        
-        return fieldsToCheck.some(field => oldProfile[field] !== newProfile[field]);
-    },
-
-    /**
-     * Update user subscription status in Firestore with better error handling
-     */
-    async updateUserSubscriptionStatus(userId, subscriptionData) {
+    async updateUserSubscriptionStatus(userId, userData) {
         try {
             const userRef = doc(db, "users", userId);
             const updateData = {
-                subscriptionType: subscriptionData.subscriptionType,
-                subscriptionStatus: subscriptionData.subscriptionStatus,
-                isTrialActive: subscriptionData.isTrialActive,
-                trialDaysRemaining: subscriptionData.trialDaysRemaining,
-                showTrialBanner: subscriptionData.showTrialBanner,
-                features: subscriptionData.features,
-                limits: subscriptionData.limits,
-                _trialProcessed: subscriptionData._trialProcessed || true,
-                _lastTrialCheck: subscriptionData._lastTrialCheck || new Date()
+                account_memberships: userData.account_memberships,
+                updated_at: new Date()
             };
-
-            if (subscriptionData.trialExpiredAt) {
-                updateData.trialExpiredAt = subscriptionData.trialExpiredAt;
-                updateData.trialExpired = true;
-            }
-
-            // Add trial dates if they exist
-            if (subscriptionData.trialStartDate) {
-                updateData.trialStartDate = subscriptionData.trialStartDate;
-            }
-            if (subscriptionData.trialEndDate) {
-                updateData.trialEndDate = subscriptionData.trialEndDate;
-            }
-            if (subscriptionData.hasUsedTrial !== undefined) {
-                updateData.hasUsedTrial = subscriptionData.hasUsedTrial;
-            }
 
             await updateDoc(userRef, updateData);
             console.log('User subscription status updated in Firestore');
         } catch (error) {
             console.error('Error updating user subscription status:', error);
-            // Don't throw the error to prevent breaking the UI
         }
     },
 
     /**
-     * Get user's current subscription capabilities
-     * CRITICAL FIX: Make this method pure and non-mutating for React
+     * Get user's current subscription capabilities with new architecture
      */
     getUserCapabilities(userProfile) {
+        if (!userProfile || !userProfile.account_memberships) {
+            return this.getDefaultCapabilities();
+        }
+
         // Create a deep copy to avoid mutations
         const profileCopy = JSON.parse(JSON.stringify(userProfile));
-        
-        // This is now safe from loops due to improved caching
         const updatedProfile = this.checkAndUpdateTrialStatus(profileCopy);
 
-        // Ensure we have features and limits
-        const features = updatedProfile.features || this.getFreeTierSubscription(updatedProfile.accountType || 'individual').features;
-        const limits = updatedProfile.limits || this.getFreeTierSubscription(updatedProfile.accountType || 'individual').limits;
+        // Find the most permissive subscription
+        let bestSubscription = null;
+        let isTrialActive = false;
+        let trialDaysRemaining = 0;
+
+        for (const membership of updatedProfile.account_memberships) {
+            if (membership.subscription_plan) {
+                const subscription = membership.subscription_plan;
+                
+                if (subscription.is_trial_active) {
+                    isTrialActive = true;
+                    trialDaysRemaining = Math.max(trialDaysRemaining, subscription.trial_days_remaining || 0);
+                }
+
+                if (!bestSubscription || this.compareSubscriptions(subscription, bestSubscription) > 0) {
+                    bestSubscription = subscription;
+                }
+            }
+        }
+
+        if (!bestSubscription) {
+            return this.getDefaultCapabilities();
+        }
 
         return {
-            canCreateMultipleProjects: features.multipleProjects || false,
-            canAccessAdvancedReports: features.advancedReports || false,
-            canInviteTeamMembers: features.teamCollaboration || false,
-            canUseAPI: features.apiAccess || false,
-            canUseAutomation: features.advancedAutomation || false,
-            limits: limits,
-            isTrialActive: updatedProfile.isTrialActive || false,
-            trialDaysRemaining: updatedProfile.trialDaysRemaining || 0,
-            subscriptionType: updatedProfile.subscriptionType || 'free',
-            subscriptionStatus: updatedProfile.subscriptionStatus || 'active',
-            showTrialBanner: updatedProfile.showTrialBanner || false,
+            canCreateMultipleSuites: bestSubscription.features?.multiple_suites || false,
+            canAccessAdvancedReports: bestSubscription.features?.advanced_reports || false,
+            canInviteTeamMembers: bestSubscription.features?.team_collaboration || false,
+            canUseAPI: bestSubscription.features?.api_access || false,
+            canUseAutomation: bestSubscription.features?.advanced_automation || false,
+            limits: bestSubscription.limits || {},
+            isTrialActive: isTrialActive,
+            trialDaysRemaining: trialDaysRemaining,
+            subscriptionType: bestSubscription.plan_type || 'free',
+            subscriptionStatus: bestSubscription.status || 'active',
+            showTrialBanner: bestSubscription.show_trial_banner || false,
             profile: updatedProfile
         };
     },
 
     /**
-     * Clear cache for a specific user (useful for forced refresh)
+     * Compare subscriptions to find the most permissive one
+     */
+    compareSubscriptions(sub1, sub2) {
+        const planPriority = { 'enterprise': 4, 'premium': 3, 'freemium': 2, 'free': 1 };
+        const priority1 = planPriority[sub1.plan_type] || 0;
+        const priority2 = planPriority[sub2.plan_type] || 0;
+        
+        return priority1 - priority2;
+    },
+
+    /**
+     * Get default capabilities for users without subscription
+     */
+    getDefaultCapabilities() {
+        return {
+            canCreateMultipleSuites: false,
+            canAccessAdvancedReports: false,
+            canInviteTeamMembers: false,
+            canUseAPI: false,
+            canUseAutomation: false,
+            limits: {
+                suites: 1,
+                test_scripts: 5,
+                automated_tests: 3,
+                recordings: 2,
+                report_exports: 1,
+                team_members: 1
+            },
+            isTrialActive: false,
+            trialDaysRemaining: 0,
+            subscriptionType: 'free',
+            subscriptionStatus: 'active',
+            showTrialBanner: false,
+            profile: null
+        };
+    },
+
+    /**
+     * Clear cache for a specific user
      */
     clearUserCache(userId) {
         this._processedUsers.delete(userId);
@@ -528,7 +584,7 @@ export const accountService = {
     },
 
     /**
-     * Clear all caches (useful for logout)
+     * Clear all caches
      */
     clearAllCaches() {
         this._processedUsers.clear();
@@ -536,6 +592,9 @@ export const accountService = {
         this._updateQueue.clear();
     },
 
+    /**
+     * Clean up localStorage
+     */
     cleanupLocalStorage() {
         const keysToRemove = [
             "needsAccountSetup",

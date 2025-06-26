@@ -1,6 +1,6 @@
 // components/layout/TrialBanner.js
 'use client'
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import {
     ClockIcon,
     ExclamationTriangleIcon,

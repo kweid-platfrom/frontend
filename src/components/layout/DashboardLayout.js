@@ -1,12 +1,12 @@
 'use client'
 import { useState, Suspense, lazy, memo, useCallback, useEffect } from 'react';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import Header from './header';
 import Sidebar from './sidebar';
 import '../../app/globals.css';
 
 // Lazy load onboarding
-const CreateProjectOnboarding = lazy(() => import('../onboarding/ProjectCreationForm'));
+const CreateProjectOnboarding = lazy(() => import('../onboarding/SuiteCreationForm'));
 
 // Lazy load page components
 const Dashboard = lazy(() => import('../pages/Dashboard'));

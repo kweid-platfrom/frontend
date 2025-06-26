@@ -1,7 +1,7 @@
 // components/layout/ProjectSelector.js
 'use client'
 import { useState, useEffect } from 'react';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import {
     FolderIcon,
     PlusIcon,

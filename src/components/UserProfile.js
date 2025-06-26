@@ -1,7 +1,7 @@
 // components/pages/UserProfile.js
 'use client'
 import { useState, useRef } from 'react';
-import { useProject } from '../context/ProjectContext';
+import { useProject } from '../context/SuiteContext';
 import '../app/globals.css'
 import {
     CameraIcon,

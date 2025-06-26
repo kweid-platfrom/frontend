@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthProvider';
-import { useProject } from '../context/ProjectContext';
+import { useProject } from '../context/SuiteContext';
 import { 
     canAccessBugs,
     getUserPermissions

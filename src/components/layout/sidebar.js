@@ -3,8 +3,8 @@
 'use client'
 import { useState, useEffect } from 'react';
 import '../../app/globals.css';
-import { useProject } from '../../context/ProjectContext';
-import ProjectCreationForm from '../onboarding/ProjectCreationForm';
+import { useProject } from '../../context/SuiteContext';
+import ProjectCreationForm from '../onboarding/SuiteCreationForm';
 import UserAvatarClip from '../side-pane/UserAvatarClip'
 import TrialBanner from '../side-pane/TrialBanner';
 import ProjectSelector from '../side-pane/ProjectSelector';

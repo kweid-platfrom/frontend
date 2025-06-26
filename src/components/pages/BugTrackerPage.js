@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState, useMemo } from "react";
 import { toast } from "sonner";
-import { useProject } from "../../context/ProjectContext";
+import { useProject } from "../../context/SuiteContext";
 import { useAuth } from "../../context/AuthProvider";
 import BugFilters from "../bug-report/BugFilters";
 import BugDetailsPanel from "../bug-report/BugDetailsPanel";

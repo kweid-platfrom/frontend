@@ -1,475 +1,425 @@
-"use client";
-
-import { useState } from "react";
-import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
-import { auth, googleProvider } from "../../config/firebase";
-import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
-import { toast, Toaster } from "sonner";
-import { createUserDocument } from "../../services/userService";
-import { validateRegistration } from "../../utils/validation";
-
-// Component imports
-import RegistrationForm from "./reg/RegistrationForm";
-import GoogleSignUp from "./reg/GoogleSignUp";
-import BackgroundDecorations from "../BackgroundDecorations";
-
-
+'use client';
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../config/firebase';
+import { FcGoogle } from 'react-icons/fc';
+import AccountTypeStep from './reg/AccountTypeStep';
+import PersonalInfoStep from './reg/PersonalInfoStep';
+import ReviewStep from './reg/ReviewStep';
+import { Mail, Square } from 'lucide-react';
+import BackgroundDecorations from '../BackgroundDecorations';
+import { toast, Toaster } from 'sonner';
 import '../../app/globals.css';
-import RegistrationSuccess from "./RegistrationSuccess";
+
+const GoogleSignUp = ({ onGoogleRegister, loading }) => {
+    return (
+        <button
+            onClick={onGoogleRegister}
+            className="w-full bg-white hover:bg-slate-50 text-slate-700 font-semibold border-2 border-slate-200 rounded px-4 py-2 transition-all duration-200 flex justify-center items-center gap-3 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            disabled={loading}
+        >
+            {loading ? (
+                <Square className="animate-spin h-5 w-5 text-slate-400" />
+            ) : (
+                <FcGoogle className="w-5 h-5" />
+            )}
+            <span>
+                {loading ? 'Signing up with Google...' : 'Continue with Google'}
+            </span>
+        </button>
+    );
+};
 
 const Register = () => {
-    // Form state
+    const router = useRouter();
+    const [currentStep, setCurrentStep] = useState(1);
+    const [accountType, setAccountType] = useState('individual');
+    const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+    const [isResendingEmail] = useState(false);
+    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+    const [registeredUserEmail, setRegisteredUserEmail] = useState(''); 
+
     const [formData, setFormData] = useState({
-        firstName: "",
-        lastName: "",
-        email: "",
-        userType: "individual",
-        password: "",
-        confirmPassword: "",
-        termsAccepted: false
+        fullName: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+        companyName: '',
+        companyType: 'startup',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        agreeToTerms: false
     });
+
     const [errors, setErrors] = useState({});
-    const [loading, setLoading] = useState(false);
-
-    // Email verification state
-    const [registrationSuccess, setRegistrationSuccess] = useState(false);
-    const [resendLoading, setResendLoading] = useState(false);
-    const [lastResendTime, setLastResendTime] = useState(0);
-    const [resendCountdown, setResendCountdown] = useState(0);
-
-    // Google registration state
-    const [googleLoading, setGoogleLoading] = useState(false);
-
-    // Helper function to determine account type based on email domain
-    const determineAccountTypeFromEmail = (email) => {
-        if (!email) return "individual";
-        
-        const domain = email.split('@')[1]?.toLowerCase();
-        if (!domain) return "individual";
-        
-        // List of common public email domains
-        const publicDomains = [
-            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com',
-            'aol.com', 'icloud.com', 'me.com', 'mac.com', 'protonmail.com',
-            'yandex.com', 'mail.com', 'zoho.com', 'fastmail.com', 'tutanota.com',
-            'gmx.com', 'msn.com', 'comcast.net', 'verizon.net', 'att.net'
-        ];
-        
-        // If it's a public domain, it's an individual account
-        if (publicDomains.includes(domain)) {
-            return "individual";
-        }
-        
-        // Custom domain = organization account
-        return "organization";
-    };
 
     const handleInputChange = (field, value) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: value
-        }));
-
+        setFormData(prev => ({ ...prev, [field]: value }));
         // Clear error when user starts typing
         if (errors[field]) {
-            setErrors(prev => ({
-                ...prev,
-                [field]: ""
-            }));
-        }
-    };
-
-    // Store registration data for onboarding flow
-    const storeRegistrationData = (userData, method, accountType) => {
-        const registrationData = {
-            firstName: userData.firstName,
-            lastName: userData.lastName,
-            email: userData.email,
-            userType: accountType,
-            accountType: accountType === "organization" ? "business" : "personal",
-            registrationMethod: method,
-            needsOnboarding: true,
-            needsEmailVerification: method === 'email',
-            registrationTimestamp: Date.now(),
-            ...(method === 'google' && {
-                photoURL: userData.photoURL,
-                isGoogleUser: true
-            })
-        };
-
-        localStorage.setItem("registrationData", JSON.stringify(registrationData));
-        localStorage.setItem("emailForVerification", userData.email);
-        
-        if (method === 'email') {
-            localStorage.setItem("awaitingEmailVerification", "true");
-        }
-    };
-
-    const handleResendVerification = async () => {
-        const now = Date.now();
-        const timeSinceLastResend = now - lastResendTime;
-        const cooldownTime = 60000; // 60 seconds cooldown
-
-        if (timeSinceLastResend < cooldownTime) {
-            const remainingTime = Math.ceil((cooldownTime - timeSinceLastResend) / 1000);
-            toast.error(`Please wait ${remainingTime} seconds before resending.`, {
-                duration: 3000,
-                position: "top-center"
-            });
-            return;
-        }
-
-        setResendLoading(true);
-
-        try {
-            const email = localStorage.getItem("emailForVerification") || formData.email;
-            const registrationData = JSON.parse(localStorage.getItem("registrationData") || "{}");
-            
-            if (!email || !registrationData.password) {
-                toast.error("Unable to resend verification. Please try registering again.", {
-                    duration: 5000,
-                    position: "top-center"
-                });
-                return;
-            }
-
-            // Sign in temporarily to resend verification
-            const userCredential = await signInWithEmailAndPassword(auth, email, registrationData.password);
-            const user = userCredential.user;
-
-            if (user.emailVerified) {
-                toast.success("Your email is already verified! You can now sign in.", {
-                    duration: 5000,
-                    position: "top-center"
-                });
-                await auth.signOut();
-                return;
-            }
-
-            await sendEmailVerification(user);
-            await auth.signOut();
-
-            setLastResendTime(now);
-            
-            // Start countdown timer
-            let countdown = 60;
-            setResendCountdown(countdown);
-            const timer = setInterval(() => {
-                countdown--;
-                setResendCountdown(countdown);
-                if (countdown <= 0) {
-                    clearInterval(timer);
-                    setResendCountdown(0);
-                }
-            }, 1000);
-
-            toast.success("Verification email sent successfully! Check your inbox.", {
-                duration: 5000,
-                position: "top-center"
-            });
-
-        } catch (error) {
-            console.error("Resend verification error:", error);
-            
-            let errorMessage;
-            switch (error.code) {
-                case 'auth/user-not-found':
-                    errorMessage = "Account not found. Please register again.";
-                    // Clear stored data and reset form
-                    localStorage.removeItem("registrationData");
-                    localStorage.removeItem("emailForVerification");
-                    localStorage.removeItem("awaitingEmailVerification");
-                    setRegistrationSuccess(false);
-                    break;
-                case 'auth/wrong-password':
-                case 'auth/invalid-credential':
-                    errorMessage = "Unable to verify account credentials. Please register again.";
-                    break;
-                case 'auth/too-many-requests':
-                    errorMessage = "Too many requests. Please wait a few minutes before trying again.";
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage = "Network error. Please check your connection and try again.";
-                    break;
-                default:
-                    errorMessage = getFirebaseErrorMessage(error) || "Failed to resend verification email. Please try again.";
-            }
-
-            toast.error(errorMessage, {
-                duration: 6000,
-                position: "top-center"
-            });
-        } finally {
-            setResendLoading(false);
-        }
-    };
-
-    const handleRegister = async (e) => {
-        e.preventDefault();
-
-        const validationErrors = validateRegistration(formData);
-        if (Object.keys(validationErrors).length > 0) {
-            setErrors(validationErrors);
-            return;
-        }
-
-        setLoading(true);
-
-        try {
-            console.log('Starting email registration...');
-
-            // Step 1: Create Firebase Auth user
-            const userCredential = await createUserWithEmailAndPassword(
-                auth,
-                formData.email,
-                formData.password
-            );
-
-            const user = userCredential.user;
-            console.log('Firebase Auth user created:', user.uid);
-
-            // Step 2: Send email verification
-            try {
-                await sendEmailVerification(user);
-                console.log('Verification email sent successfully');
-            } catch (emailError) {
-                console.error('Email verification failed:', emailError);
-                toast.error("Account created but verification email failed to send. You can resend it later.", {
-                    duration: 6000,
-                    position: "top-center"
-                });
-            }
-
-            // Step 3: Prepare user data
-            const userData = {
-                firstName: formData.firstName.trim(),
-                lastName: formData.lastName.trim(),
-                email: formData.email.toLowerCase().trim(),
-                userType: formData.userType,
-                setupCompleted: false,
-                setupStep: "email_verification"
-            };
-
-            // Step 4: Create user document
-            try {
-                await createUserDocument(user, userData, 'email');
-                console.log('User document created successfully');
-            } catch (firestoreError) {
-                console.error('Firestore document creation failed:', firestoreError);
-                try {
-                    await user.delete();
-                    console.log('Auth user deleted due to Firestore failure');
-                } catch (deleteError) {
-                    console.error('Failed to delete auth user:', deleteError);
-                }
-                throw new Error(`Database error: ${firestoreError.message}`);
-            }
-
-            // Step 5: Store registration data
-            const registrationData = {
-                firstName: formData.firstName.trim(),
-                lastName: formData.lastName.trim(),
-                email: formData.email,
-                password: formData.password, // Store temporarily for resend functionality
-                userType: formData.userType,
-                accountType: formData.userType === "organization" ? "business" : "personal",
-                registrationMethod: 'email',
-                needsOnboarding: true,
-                needsEmailVerification: true,
-                registrationTimestamp: Date.now()
-            };
-
-            localStorage.setItem("registrationData", JSON.stringify(registrationData));
-            localStorage.setItem("emailForVerification", formData.email);
-            localStorage.setItem("awaitingEmailVerification", "true");
-
-            // Step 6: Sign out user until they verify email
-            await auth.signOut();
-            console.log('User signed out - email verification required');
-
-            // Step 7: Show success state
-            setRegistrationSuccess(true);
-            toast.success(
-                "Account created successfully!",
-                {
-                    duration: 10000,
-                    position: "top-center"
-                }
-            );
-
-            // Clear form but keep email for resend functionality
-            const currentEmail = formData.email;
-            setFormData({
-                firstName: "",
-                lastName: "",
-                email: currentEmail,
-                userType: "individual",
-                password: "",
-                confirmPassword: "",
-                termsAccepted: false
-            });
-
-        } catch (error) {
-            console.error("Registration error:", error);
-
-            let errorMessage;
-            if (error.message.includes('Database error:')) {
-                errorMessage = "Failed to create user profile. Please check your internet connection and try again.";
-            } else {
-                switch (error.code) {
-                    case 'auth/email-already-in-use':
-                        errorMessage = "An account with this email already exists. Try signing in instead, or check your email for a verification link.";
-                        toast.error(errorMessage, {
-                            duration: 8000,
-                            position: "top-center",
-                            action: {
-                                label: "Go to Sign In",
-                                onClick: () => window.location.href = '/login'
-                            }
-                        });
-                        return;
-                    case 'auth/weak-password':
-                        errorMessage = "Password is too weak. Please choose a stronger password.";
-                        break;
-                    case 'auth/invalid-email':
-                        errorMessage = "Please enter a valid email address.";
-                        break;
-                    case 'auth/operation-not-allowed':
-                        errorMessage = "Email/password registration is not enabled. Please contact support.";
-                        break;
-                    case 'auth/network-request-failed':
-                        errorMessage = "Network error. Please check your internet connection and try again.";
-                        break;
-                    case 'permission-denied':
-                        errorMessage = "Database permission denied. Please check your Firestore security rules.";
-                        break;
-                    default:
-                        errorMessage = getFirebaseErrorMessage(error) || `Registration failed: ${error.message}`;
-                }
-            }
-
-            toast.error(errorMessage, {
-                duration: 6000,
-                position: "top-center"
-            });
-        } finally {
-            setLoading(false);
+            setErrors(prev => ({ ...prev, [field]: '' }));
         }
     };
 
     const handleGoogleRegister = async () => {
-        setGoogleLoading(true);
-
+        setIsGoogleLoading(true);
+        
         try {
-            console.log('Starting Google registration...');
-
-            googleProvider.setCustomParameters({
-                prompt: 'select_account'
-            });
-
-            const result = await signInWithPopup(auth, googleProvider);
+            const provider = new GoogleAuthProvider();
+            provider.addScope('email');
+            provider.addScope('profile');
+            
+            const result = await signInWithPopup(auth, provider);
             const user = result.user;
-
-            console.log('Google sign-in successful:', user.uid);
-
-            // Check if this is a new user
-            const isNewUser = result._tokenResponse?.isNewUser || false;
-
-            if (!isNewUser) {
-                toast.success("Welcome back! Signed in with Google.", {
-                    duration: 4000,
-                    position: "top-center"
-                });
+            
+            // Check if user already exists in Firestore
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            
+            if (userDocSnap.exists()) {
+                // User already exists, redirect to dashboard
+                toast.success("Welcome back!");
+                router.push('/dashboard');
                 return;
             }
-
-            // New user - automatically determine account type from email domain
-            const userData = {
-                firstName: user.displayName?.split(' ')[0] || "",
-                lastName: user.displayName?.split(' ').slice(1).join(' ') || "",
-                email: user.email,
-                photoURL: user.photoURL || ""
-            };
-
-            // Determine account type based on email domain
-            const accountType = determineAccountTypeFromEmail(user.email);
             
-            console.log('Google registration - Auto-detected account type:', {
-                email: user.email,
-                domain: user.email?.split('@')[1],
-                accountType
-            });
-
-            // Show user what account type was detected
-            const domainType = accountType === 'organization' ? 'custom domain' : 'public email provider';
-            toast.info(`Detected ${domainType} - setting up ${accountType} account`, {
-                duration: 4000,
-                position: "top-center"
-            });
-
-            // Prepare user data
-            const userDocData = {
-                firstName: userData.firstName,
-                lastName: userData.lastName,
-                email: userData.email,
-                avatarURL: userData.photoURL,
-                userType: accountType,
-                setupCompleted: false,
-                setupStep: accountType === "organization" ? "organization_info" : "project_creation"
+            // Create user document aligned with security rules
+            const userData = {
+                user_id: user.uid,
+                primary_email: user.email,
+                profile_info: {
+                    name: user.displayName || '',
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    photo_url: user.photoURL || ''
+                },
+                account_memberships: [], // Always include as empty array
+                session_context: {
+                    provider: 'google',
+                    email_verified: user.emailVerified,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }
             };
 
-            // Create user document
-            await createUserDocument(user, userDocData, 'google');
-            console.log('Google user document created successfully');
-
-            // Store registration data for onboarding
-            storeRegistrationData(userData, 'google', accountType);
-            localStorage.setItem("needsOnboarding", "true");
-            localStorage.removeItem("awaitingEmailVerification");
-
-            const accountTypeText = accountType === 'organization' ? 'organization' : 'individual';
-            toast.success(`Google registration successful! Setting up your ${accountTypeText} account...`, {
-                duration: 3000,
-                position: "top-center"
-            });
-
-            // Redirect to onboarding
-            setTimeout(() => {
-                window.location.href = '/onboarding';
-            }, 1500);
-
+            await setDoc(userDocRef, userData);
+            
+            toast.success("Account created successfully with Google!");
+            router.push('/dashboard');
+            
         } catch (error) {
-            console.error("Google registration error:", error);
-
-            let errorMessage;
-            switch (error.code) {
-                case 'auth/popup-closed-by-user':
-                    errorMessage = "Sign-in was cancelled. Please try again.";
-                    break;
-                case 'auth/popup-blocked':
-                    errorMessage = "Pop-up was blocked by your browser. Please allow pop-ups and try again.";
-                    break;
-                case 'auth/account-exists-with-different-credential':
-                    errorMessage = "An account already exists with this email using a different sign-in method.";
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage = "Network error. Please check your connection and try again.";
-                    break;
-                default:
-                    errorMessage = getFirebaseErrorMessage(error) || "Google sign-in failed. Please try again.";
+            console.error('Error with Google registration:', error);
+            let errorMessage = "Failed to sign up with Google. Please try again.";
+            
+            if (error.code === 'auth/popup-closed-by-user') {
+                errorMessage = "Sign-up was cancelled.";
+            } else if (error.code === 'auth/popup-blocked') {
+                errorMessage = "Popup was blocked. Please allow popups and try again.";
+            } else if (error.code === 'auth/account-exists-with-different-credential') {
+                errorMessage = "An account already exists with this email using a different sign-in method.";
             }
-
-            toast.error(errorMessage, {
-                duration: 5000,
-                position: "top-center"
-            });
+            
+            toast.error(errorMessage);
         } finally {
-            setGoogleLoading(false);
+            setIsGoogleLoading(false);
         }
     };
 
-    const handleGoToLogin = () => {
-        window.location.href = '/login';
+    const validateStep = (step) => {
+        const newErrors = {};
+
+        if (step === 1) {
+            // Account type is always selected, no validation needed
+        }
+
+        if (step === 2) {
+            if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
+            
+            if (!formData.email.trim()) {
+                newErrors.email = 'Email is required';
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                newErrors.email = 'Please enter a valid email address';
+            } else if (accountType === 'organization') {
+                // For organization accounts, validate custom domain
+                const domain = formData.email.split('@')[1];
+                if (['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com'].includes(domain.toLowerCase())) {
+                    newErrors.email = 'Organization accounts require a custom company domain email';
+                }
+            }
+            
+            if (!formData.password) {
+                newErrors.password = 'Password is required';
+            } else if (formData.password.length < 8) {
+                newErrors.password = 'Password must be at least 8 characters';
+            }
+            if (formData.password !== formData.confirmPassword) {
+                newErrors.confirmPassword = 'Passwords do not match';
+            }
+        }
+
+        if (step === 3) {
+            if (accountType === 'organization') {
+                if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
+                if (!formData.companyType) newErrors.companyType = 'Company type is required';
+            }
+            if (!formData.agreeToTerms) newErrors.agreeToTerms = 'You must agree to the terms and conditions';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const nextStep = () => {
+        if (validateStep(currentStep)) {
+            setCurrentStep(prev => prev + 1);
+        }
+    };
+
+    const prevStep = () => {
+        setCurrentStep(prev => prev - 1);
+    };
+
+    const handleCreateAccount = async () => {
+        if (!validateStep(3)) return;
+
+        setIsCreatingAccount(true);
+
+        try {
+            // Create user with Firebase Auth
+            const userCredential = await createUserWithEmailAndPassword(
+                auth, 
+                formData.email, 
+                formData.password
+            );
+            
+            const user = userCredential.user;
+
+            // Create user document aligned with security rules FIRST
+            const userData = {
+                user_id: user.uid,
+                primary_email: formData.email,
+                profile_info: {
+                    name: formData.fullName,
+                    timezone: formData.timezone
+                },
+                account_memberships: [], // Always include as empty array initially
+                session_context: {
+                    provider: 'email',
+                    email_verified: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }
+            };
+
+            await setDoc(doc(db, 'users', user.uid), userData);
+
+            if (accountType === 'individual') {
+                // For individual accounts, user document is sufficient
+                // The rules check for individual account through account_memberships
+                console.log('Individual account created - user document only');
+            } else {
+                // Create organization
+                const orgId = `org_${user.uid}_${Date.now()}`;
+                const organizationData = {
+                    org_id: orgId,
+                    organization_profile: {
+                        name: formData.companyName,
+                        type: formData.companyType,
+                        domain: formData.email.split('@')[1],
+                        created_at: new Date().toISOString()
+                    },
+                    members: [user.uid],
+                    admins: [user.uid],
+                    settings: {
+                        allow_member_invites: true,
+                        require_domain_verification: true
+                    }
+                };
+
+                await setDoc(doc(db, 'organizations', orgId), organizationData);
+
+                // Add organization member record
+                await setDoc(doc(db, 'organizations', orgId, 'members', user.uid), {
+                    user_id: user.uid,
+                    org_email: formData.email,
+                    role: 'Admin', // Capital 'A' to match rules
+                    join_date: new Date().toISOString(),
+                    status: 'active'
+                });
+
+                // Update user's account memberships with proper structure
+                const updatedUserData = {
+                    ...userData,
+                    account_memberships: [{ 
+                        org_id: orgId, // This is what the rules check for
+                        role: 'Admin',
+                        status: 'active'
+                    }]
+                };
+
+                await setDoc(doc(db, 'users', user.uid), updatedUserData);
+            }
+
+            // Send email verification after user document is created
+            try {
+                await sendEmailVerification(user, {
+                    url: `${window.location.origin}/verify-email`,
+                    handleCodeInApp: false,
+                });
+                toast.success("Account created successfully! Please check your email.");
+            } catch (emailError) {
+                console.error('Error sending verification email:', emailError);
+                toast.success("Account created successfully! Verification email will be sent shortly.");
+            }
+            
+            // Store the email for display and sign out the user
+            setRegisteredUserEmail(formData.email);
+            
+            // Sign out the user after successful registration
+            // This prevents issues when they navigate to login page
+            await signOut(auth);
+            
+            setCurrentStep(4);
+            
+        } catch (error) {
+            console.error('Error creating account:', error);
+            let errorMessage = "Failed to create account. Please try again.";
+            
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = "An account with this email already exists.";
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = "Password should be at least 6 characters.";
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = "Please enter a valid email address.";
+            } else if (error.code === 'permission-denied') {
+                errorMessage = "Permission denied. Please check your account settings.";
+            }
+            
+            toast.error(errorMessage);
+        } finally {
+            setIsCreatingAccount(false);
+        }
+    };
+
+    const handleResendEmail = async () => {
+        // Since we signed out the user, we need to show a message instead
+        toast.info("Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.");
+        
+        // Navigate to login page
+        router.push('/login');
+    };
+
+    const handleSignInRedirect = () => {
+        router.push('/login');
+    };
+
+    const renderStepContent = () => {
+        switch (currentStep) {
+            case 1:
+                return (
+                    <>
+                        <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">Create Your Account</h1>
+                        <p className="text-slate-600 mb-6 text-center">Get started with QAID today</p>
+
+                        {/* Google Sign Up */}
+                        <div className="mb-6">
+                            <GoogleSignUp 
+                                onGoogleRegister={handleGoogleRegister}
+                                loading={isGoogleLoading}
+                            />
+                        </div>
+
+                        {/* Divider */}
+                        <div className="relative mb-6">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-slate-200"></div>
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="px-4 bg-white text-slate-500">or continue with email</span>
+                            </div>
+                        </div>
+
+                        <AccountTypeStep
+                            accountType={accountType}
+                            setAccountType={setAccountType}
+                            onNext={nextStep}
+                            currentStep={currentStep}
+                        />
+                    </>
+                );
+            case 2:
+                return (
+                    <PersonalInfoStep
+                        formData={formData}
+                        errors={errors}
+                        onInputChange={handleInputChange}
+                        onNext={nextStep}
+                        onPrev={prevStep}
+                        currentStep={currentStep}
+                        accountType={accountType}
+                    />
+                );
+            case 3:
+                return (
+                    <ReviewStep
+                        formData={formData}
+                        errors={errors}
+                        accountType={accountType}
+                        onInputChange={handleInputChange}
+                        onPrev={prevStep}
+                        onCreateAccount={handleCreateAccount}
+                        isCreatingAccount={isCreatingAccount}
+                        currentStep={currentStep}
+                    />
+                );
+            case 4:
+                return (
+                    <div className="text-center">
+                        <div className="mb-6">
+                            <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Mail className="w-8 h-8 text-teal-600" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h1>
+                            <p className="text-slate-600 mb-4">
+                                We&apos;ve sent a verification email to <strong>{registeredUserEmail || formData.email}</strong>
+                            </p>
+                            <p className="text-sm text-slate-500">
+                                Please check your inbox and spam folder, then click the verification link to continue.
+                            </p>
+                        </div>
+
+                        <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-teal-800">
+                                <strong>What happens next:</strong>
+                            </p>
+                            <ol className="text-sm text-teal-700 mt-2 space-y-1 text-left">
+                                <li>1. Check your email inbox (and spam folder)</li>
+                                <li>2. Click the verification link in the email</li>
+                                <li>3. Return to the sign-in page to access your account</li>
+                            </ol>
+                        </div>
+
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleResendEmail}
+                                disabled={isResendingEmail}
+                                className="w-full text-teal-600 py-2 px-4 text-sm hover:bg-teal-50 rounded transition-colors border border-teal-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                Didn&apos;t receive the email? Go to Sign In
+                            </button>
+                            
+                            <button
+                                onClick={() => router.push('/login')}
+                                className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2 px-4 text-sm rounded transition-colors font-medium"
+                            >
+                                Go to Sign In
+                            </button>
+                        </div>
+                    </div>
+                );
+            default:
+                return null;
+        }
     };
 
     return (
@@ -486,7 +436,7 @@ const Register = () => {
                     }
                 }}
             />
-
+            
             <BackgroundDecorations />
 
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
@@ -500,49 +450,28 @@ const Register = () => {
                         </div>
                     </div>
 
-                    {/* Registration Card */}
-                    <div className="bg-white rounded-2xl shadow-xl border border-white/20 p-8 relative">
+                    {/* Single Form Container */}
+                    <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
 
-                        {registrationSuccess ? (
-                            <RegistrationSuccess
-                                email={formData.email || localStorage.getItem("emailForVerification")}
-                                onResendVerification={handleResendVerification}
-                                onGoToLogin={handleGoToLogin}
-                                resendLoading={resendLoading}
-                                resendCountdown={resendCountdown}
-                            />
-                        ) : (
-                            <>
-                                <div className="text-center mb-8">
-                                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
-                                    <p className="text-base sm:text-lg text-slate-600">Streamline your testing workflow</p>
-                                </div>
-
-                                <div className="space-y-6">
-                                    <GoogleSignUp
-                                        onGoogleRegister={handleGoogleRegister}
-                                        loading={googleLoading}
-                                    />
-
-                                    {/* Divider */}
-                                    <div className="flex items-center my-8">
-                                        <div className="flex-grow border-t border-slate-300"></div>
-                                        <span className="px-4 text-sm text-slate-500 font-medium bg-white">or register with email</span>
-                                        <div className="flex-grow border-t border-slate-300"></div>
-                                    </div>
-
-                                    <RegistrationForm
-                                        formData={formData}
-                                        errors={errors}
-                                        loading={loading}
-                                        onInputChange={handleInputChange}
-                                        onSubmit={handleRegister}
-                                    />
-                                </div>
-                            </>
-                        )}
+                        {/* Step Content */}
+                        {renderStepContent()}
                     </div>
+
+                    {/* Sign In Link - Only show on steps 1-3 */}
+                    {currentStep <= 3 && (
+                        <div className="text-center mt-6">
+                            <p className="text-sm text-slate-600">
+                                Already have an account?{' '}
+                                <button
+                                    onClick={handleSignInRedirect}
+                                    className="text-teal-600 hover:text-teal-700 font-medium hover:underline transition-colors"
+                                >
+                                    Sign In
+                                </button>
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

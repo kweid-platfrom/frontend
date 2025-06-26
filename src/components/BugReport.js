@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Bug } from "lucide-react";
 import { collection, getDocs, query, where, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { useProject } from "../context/ProjectContext";
+import { useProject } from "../context/SuiteContext";
 import BugReportForm from "../components/create-bug/BugReportForm";
 import BugReportSuccess from "../components/create-bug/BugReportSuccess";
 import { toast } from "sonner";

@@ -1,6 +1,6 @@
 // components/layout/UserProfile.js
 'use client'
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import SignOutButton from '../auth/SignOutButton';
 
 const UserAvatarClip = ({ isCollapsed }) => {

@@ -11,7 +11,7 @@ import {
     deleteDoc,
     serverTimestamp
 } from 'firebase/firestore';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { CheckSquare, Square  } from 'lucide-react';
 import BugTableRow from './BugTableRow';

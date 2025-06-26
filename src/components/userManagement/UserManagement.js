@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Lock, Crown, AlertTriangle } from 'lucide-react';
 import UserTable from './UserTable';
 import UserStats from './UserStats';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 
 // Mock data for demonstration - replace with your actual data fetching

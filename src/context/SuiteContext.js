@@ -1,4 +1,5 @@
-// contexts/ProjectContext.js
+/* eslint-disable react-hooks/exhaustive-deps */
+// contexts/SuiteContext.js
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -14,34 +15,35 @@ import {
     setDoc,
     orderBy,
     limit,
-    serverTimestamp
+    serverTimestamp,
+    addDoc
 } from 'firebase/firestore';
 import { accountService } from '../services/accountService';
 
-const ProjectContext = createContext();
+const SuiteContext = createContext();
 
-export const useProject = () => {
-    const context = useContext(ProjectContext);
+export const useSuite = () => {
+    const context = useContext(SuiteContext);
     if (!context) {
-        throw new Error('useProject must be used within a ProjectProvider');
+        throw new Error('useSuite must be used within a SuiteProvider');
     }
     return context;
 };
 
-export const ProjectProvider = ({ children }) => {
+export const SuiteProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
-    const [projects, setProjects] = useState([]);
-    const [activeProject, setActiveProject] = useState(null);
+    const [suites, setSuites] = useState([]);
+    const [activeSuite, setActiveSuite] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isUserLoading, setIsUserLoading] = useState(true);
-    const [isProjectsLoading, setIsProjectsLoading] = useState(true);
+    const [isSuitesLoading, setIsSuitesLoading] = useState(true);
     const [isProfileUpdating, setIsProfileUpdating] = useState(false);
 
     // Cache for reducing Firebase calls
     const [cache, setCache] = useState({
         userProfile: null,
-        projects: null,
+        suites: null,
         timestamp: null
     });
 
@@ -80,37 +82,37 @@ export const ProjectProvider = ({ children }) => {
 
     // Memoized values for better performance with trial logic
     const needsOnboarding = useMemo(() => {
-        return !isUserLoading && !isProjectsLoading && projects.length === 0;
-    }, [isUserLoading, isProjectsLoading, projects.length]);
+        return !isUserLoading && !isSuitesLoading && suites.length === 0;
+    }, [isUserLoading, isSuitesLoading, suites.length]);
 
-    // Updated canCreateProject with trial logic and proper error handling
-    const canCreateProject = useMemo(() => {
+    // Updated canCreateSuite with trial logic and proper error handling
+    const canCreateSuite = useMemo(() => {
         if (!userProfile) return false;
         
         try {
             const capabilities = accountService.getUserCapabilities(userProfile);
             
             // Check if capabilities and limits exist
-            if (!capabilities || !capabilities.limits || typeof capabilities.limits.projects === 'undefined') {
+            if (!capabilities || !capabilities.limits || typeof capabilities.limits.testSuites === 'undefined') {
                 console.warn('AccountService capabilities or limits not properly configured');
                 return false;
             }
             
-            const projectCount = projects.length;
+            const suiteCount = suites.length;
             
             // During trial or if user has premium subscription
             if (capabilities.isTrialActive || capabilities.subscriptionType !== 'free') {
-                return projectCount < capabilities.limits.projects;
+                return suiteCount < capabilities.limits.testSuites;
             }
             
-            // Free tier - only 1 project
-            return projectCount < 1;
+            // Free tier - only 1 suite
+            return suiteCount < 1;
         } catch (error) {
-            console.error('Error checking canCreateProject:', error);
+            console.error('Error checking canCreateSuite:', error);
             // Fallback to basic logic if accountService fails
-            return projects.length < 1;
+            return suites.length < 1;
         }
-    }, [userProfile, projects.length]);
+    }, [userProfile, suites.length]);
 
     // New function to check specific feature access
     const hasFeatureAccess = useCallback((featureName) => {
@@ -126,8 +128,8 @@ export const ProjectProvider = ({ children }) => {
             }
             
             switch (featureName) {
-                case 'multipleProjects':
-                    return capabilities.canCreateMultipleProjects;
+                case 'multipleSuites':
+                    return capabilities.canCreateMultipleSuites;
                 case 'advancedReports':
                     return capabilities.canAccessAdvancedReports;
                 case 'teamCollaboration':
@@ -156,10 +158,10 @@ export const ProjectProvider = ({ children }) => {
                 console.warn('AccountService limits not available');
                 // Return default limits as fallback
                 return {
-                    projects: 1,
-                    testScripts: 10,
+                    testSuites: 2,
+                    testCases: 10,
                     recordings: 3,
-                    teamMembers: 1
+                    teamMembers: 2
                 };
             }
             
@@ -168,8 +170,8 @@ export const ProjectProvider = ({ children }) => {
             console.error('Error getting feature limits:', error);
             // Return default limits as fallback
             return {
-                projects: 1,
-                testScripts: 10,
+                testSuites: 1,
+                testCases: 10,
                 recordings: 3,
                 teamMembers: 1
             };
@@ -257,7 +259,7 @@ export const ProjectProvider = ({ children }) => {
 
             const userDoc = await getDoc(doc(db, 'users', uid));
             if (userDoc.exists()) {
-                const originalProfile = { uid, ...userDoc.data() };
+                const originalProfile = { user_id: uid, ...userDoc.data() };
                 
                 // Check if trial status needs to be updated
                 const updatedProfile = accountService.checkAndUpdateTrialStatus(originalProfile);
@@ -294,8 +296,14 @@ export const ProjectProvider = ({ children }) => {
             const trialConfig = accountService.createFreemiumSubscription(accountType);
             
             const newProfile = {
-                uid,
-                email: userEmail,
+                user_id: uid,
+                primary_email: userEmail,
+                profile_info: {
+                    name: '',
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+                },
+                account_memberships: [], // Initialize as empty array
+                session_context: {},
                 accountType,
                 role: accountType === 'organization' ? 'admin' : 'user',
                 createdAt: new Date(),
@@ -379,8 +387,8 @@ export const ProjectProvider = ({ children }) => {
             
             let profileWithTimestamps = {
                 ...profileData,
-                uid: user.uid,
-                email: user.email,
+                user_id: user.uid,
+                primary_email: user.email,
                 updatedAt: serverTimestamp()
             };
 
@@ -393,7 +401,13 @@ export const ProjectProvider = ({ children }) => {
                     ...profileWithTimestamps,
                     ...trialConfig,
                     createdAt: serverTimestamp(),
-                    accountCreatedAt: serverTimestamp()
+                    accountCreatedAt: serverTimestamp(),
+                    profile_info: {
+                        name: profileData.profile_info?.name || '',
+                        timezone: profileData.profile_info?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+                    },
+                    account_memberships: profileData.account_memberships || [],
+                    session_context: profileData.session_context || {}
                 };
             }
 
@@ -480,68 +494,164 @@ export const ProjectProvider = ({ children }) => {
         }
     }, [user]);
 
-    // Optimized project fetching with pagination and caching
-    const fetchUserProjects = useCallback(async (uid, organizationId = null) => {
+    // Optimized suite fetching with pagination and caching
+    const fetchUserSuites = useCallback(async (uid = null) => {
         try {
             // Return cached data if valid
-            if (isCacheValid() && cache.projects) {
-                return cache.projects;
+            if (isCacheValid() && cache.suites) {
+                return cache.suites;
             }
 
-            let q;
-            if (organizationId) {
-                q = query(
-                    collection(db, 'projects'),
-                    where('organizationId', '==', organizationId),
-                    orderBy('createdAt', 'desc'),
-                    limit(50) // Limit initial load
-                );
-            } else {
-                q = query(
-                    collection(db, 'projects'),
-                    where('createdBy', '==', uid),
-                    where('organizationId', '==', null),
-                    orderBy('createdAt', 'desc'),
-                    limit(50) // Limit initial load
-                );
-            }
+            let suiteList = [];
 
-            const querySnapshot = await getDocs(q);
-            const projectList = querySnapshot.docs.map(doc => ({
-                id: doc.id,
+            // Fetch individual suites (owned by user)
+            const individualSuitesQuery = query(
+                collection(db, 'testSuites'),
+                where('access_control.owner_id', '==', uid),
+                orderBy('metadata.created_date', 'desc'),
+                limit(50)
+            );
+
+            const individualSuitesSnapshot = await getDocs(individualSuitesQuery);
+            const individualSuites = individualSuitesSnapshot.docs.map(doc => ({
+                suite_id: doc.id,
                 ...doc.data()
             }));
 
+            suiteList = [...individualSuites];
+
+            // If user has organization memberships, fetch organization suites
+            if (userProfile?.account_memberships?.length > 0) {
+                for (const membership of userProfile.account_memberships) {
+                    if (membership.org_id && membership.status === 'active') {
+                        try {
+                            const orgSuitesQuery = query(
+                                collection(db, 'testSuites'),
+                                where('access_control.owner_id', '==', membership.org_id),
+                                orderBy('metadata.created_date', 'desc'),
+                                limit(50)
+                            );
+
+                            const orgSuitesSnapshot = await getDocs(orgSuitesQuery);
+                            const orgSuites = orgSuitesSnapshot.docs.map(doc => ({
+                                suite_id: doc.id,
+                                ...doc.data(),
+                                isOrganizationSuite: true,
+                                organizationId: membership.org_id
+                            }));
+
+                            suiteList = [...suiteList, ...orgSuites];
+                        } catch (error) {
+                            console.warn(`Error fetching suites for org ${membership.org_id}:`, error);
+                        }
+                    }
+                }
+            }
+
+            // Remove duplicates and sort by creation date
+            const uniqueSuites = suiteList.reduce((acc, suite) => {
+                const existingIndex = acc.findIndex(s => s.suite_id === suite.suite_id);
+                if (existingIndex === -1) {
+                    acc.push(suite);
+                }
+                return acc;
+            }, []);
+
+            uniqueSuites.sort((a, b) => {
+                const dateA = a.metadata?.created_date?.toDate?.() || new Date(a.metadata?.created_date);
+                const dateB = b.metadata?.created_date?.toDate?.() || new Date(b.metadata?.created_date);
+                return dateB - dateA;
+            });
+
             setCache(prev => ({
                 ...prev,
-                projects: projectList,
+                suites: uniqueSuites,
                 timestamp: Date.now()
             }));
 
-            return projectList;
+            return uniqueSuites;
         } catch (error) {
-            console.error('Error fetching projects:', error);
+            console.error('Error fetching suites:', error);
             // Return cached data as fallback
-            return cache.projects || [];
+            return cache.suites || [];
         }
-    }, [cache.projects, isCacheValid]);
+    }, [cache.suites, isCacheValid, userProfile]);
 
-    // Set active project with localStorage sync
-    const setActiveProjectWithStorage = useCallback((project) => {
-        setActiveProject(project);
-        if (project?.id) {
-            localStorage.setItem('activeProjectId', project.id);
+    // Set active suite with localStorage sync
+    const setActiveSuiteWithStorage = useCallback((suite) => {
+        setActiveSuite(suite);
+        if (suite?.suite_id) {
+            localStorage.setItem('activeSuiteId', suite.suite_id);
         } else {
-            localStorage.removeItem('activeProjectId');
+            localStorage.removeItem('activeSuiteId');
         }
     }, []);
+
+    // Create new test suite
+    const createTestSuite = useCallback(async (suiteData) => {
+        if (!user || !userProfile) {
+            throw new Error('User not authenticated or profile not loaded');
+        }
+
+        if (!canCreateSuite) {
+            throw new Error('Suite creation limit reached');
+        }
+
+        try {
+            const suiteId = `suite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            const newSuite = {
+                suite_id: suiteId,
+                metadata: {
+                    name: suiteData.name,
+                    description: suiteData.description || '',
+                    created_by: user.uid,
+                    created_date: serverTimestamp(),
+                    updated_date: serverTimestamp(),
+                    tags: suiteData.tags || [],
+                    version: '1.0.0'
+                },
+                access_control: {
+                    owner_id: suiteData.organizationId || user.uid,
+                    members: suiteData.members || [],
+                    admins: suiteData.admins || [],
+                    visibility: suiteData.visibility || 'private'
+                },
+                testing_assets: {
+                    test_cases: [],
+                    recordings: [],
+                    automated_scripts: [],
+                    reports: []
+                },
+                settings: {
+                    notifications: true,
+                    auto_execution: false,
+                    retention_days: 30
+                }
+            };
+
+            // Add to Firestore
+            const docRef = await addDoc(collection(db, 'testSuites'), newSuite);
+            
+            // Update the suite with the actual document ID
+            await updateDoc(docRef, { suite_id: docRef.id });
+
+            // Refetch suites to update local state
+            await refetchSuites();
+
+            return { ...newSuite, suite_id: docRef.id };
+        } catch (error) {
+            console.error('Error creating test suite:', error);
+            throw error;
+        }
+    }, [user, userProfile, canCreateSuite]);
 
     // Enhanced data loading with better error handling and new user setup
     const loadUserData = useCallback(async (currentUser) => {
         if (!currentUser) return;
 
         try {
-            // Load user profile first (needed for project query)
+            // Load user profile first (needed for suite query)
             setIsUserLoading(true);
             let profile = await fetchUserProfile(currentUser.uid);
             
@@ -554,43 +664,43 @@ export const ProjectProvider = ({ children }) => {
             setUserProfile(profile);
             setIsUserLoading(false);
 
-            // Load projects in parallel if we have profile
+            // Load suites in parallel if we have profile
             if (profile) {
-                setIsProjectsLoading(true);
-                const userProjects = await fetchUserProjects(
+                setIsSuitesLoading(true);
+                const userSuites = await fetchUserSuites(
                     currentUser.uid,
                     profile.organizationId
                 );
-                setProjects(userProjects);
+                setSuites(userSuites);
 
-                // Set active project logic
-                if (userProjects.length > 0) {
-                    const savedProjectId = localStorage.getItem('activeProjectId');
-                    let activeProj = null;
+                // Set active suite logic
+                if (userSuites.length > 0) {
+                    const savedSuiteId = localStorage.getItem('activeSuiteId');
+                    let activeSuiteItem = null;
                     
-                    // Try to find the saved project first
-                    if (savedProjectId) {
-                        activeProj = userProjects.find(p => p.id === savedProjectId);
+                    // Try to find the saved suite first
+                    if (savedSuiteId) {
+                        activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId);
                     }
                     
-                    // If no saved project or saved project not found, use the first (most recent)
-                    if (!activeProj) {
-                        activeProj = userProjects[0];
+                    // If no saved suite or saved suite not found, use the first (most recent)
+                    if (!activeSuiteItem) {
+                        activeSuiteItem = userSuites[0];
                     }
                     
-                    setActiveProjectWithStorage(activeProj);
+                    setActiveSuiteWithStorage(activeSuiteItem);
                 } else {
-                    // No projects found, clear active project
-                    setActiveProjectWithStorage(null);
+                    // No suites found, clear active suite
+                    setActiveSuiteWithStorage(null);
                 }
-                setIsProjectsLoading(false);
+                setIsSuitesLoading(false);
             }
         } catch (error) {
             console.error('Error loading user data:', error);
             setIsUserLoading(false);
-            setIsProjectsLoading(false);
+            setIsSuitesLoading(false);
         }
-    }, [fetchUserProfile, setupNewUserProfile, fetchUserProjects, setActiveProjectWithStorage]);
+    }, [fetchUserProfile, setupNewUserProfile, fetchUserSuites, setActiveSuiteWithStorage]);
 
     // Optimized auth state listener
     useEffect(() => {
@@ -611,15 +721,15 @@ export const ProjectProvider = ({ children }) => {
                 // Clear all user data
                 setUser(null);
                 setUserProfile(null);
-                setProjects([]);
-                setActiveProject(null);
+                setSuites([]);
+                setActiveSuite(null);
                 setIsUserLoading(false);
-                setIsProjectsLoading(false);
+                setIsSuitesLoading(false);
                 setTrialStatusUpdated(false);
                 // Clear cache
-                setCache({ userProfile: null, projects: null, timestamp: null });
+                setCache({ userProfile: null, suites: null, timestamp: null });
                 // Clear localStorage
-                localStorage.removeItem('activeProjectId');
+                localStorage.removeItem('activeSuiteId');
             }
 
             if (mounted) {
@@ -633,44 +743,44 @@ export const ProjectProvider = ({ children }) => {
         };
     }, [loadUserData]);
 
-    // Optimized refetch function with better active project handling
-    const refetchProjects = useCallback(async () => {
+    // Optimized refetch function with better active suite handling
+    const refetchSuites = useCallback(async () => {
         if (!user || !userProfile) return;
 
-        setIsProjectsLoading(true);
+        setIsSuitesLoading(true);
         // Clear cache to force fresh data
-        setCache(prev => ({ ...prev, projects: null, timestamp: null }));
+        setCache(prev => ({ ...prev, suites: null, timestamp: null }));
         
         try {
-            const userProjects = await fetchUserProjects(
+            const userSuites = await fetchUserSuites(
                 user.uid,
                 userProfile.organizationId
             );
-            setProjects(userProjects);
+            setSuites(userSuites);
 
-            // Handle active project after refetch
-            if (userProjects.length > 0) {
-                const savedProjectId = localStorage.getItem('activeProjectId');
-                let activeProj = null;
+            // Handle active suite after refetch
+            if (userSuites.length > 0) {
+                const savedSuiteId = localStorage.getItem('activeSuiteId');
+                let activeSuiteItem = null;
                 
-                // Try to find the saved project first
-                if (savedProjectId) {
-                    activeProj = userProjects.find(p => p.id === savedProjectId);
+                // Try to find the saved suite first
+                if (savedSuiteId) {
+                    activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId);
                 }
                 
-                // If no saved project or saved project not found, use the first (most recent)
-                if (!activeProj) {
-                    activeProj = userProjects[0];
+                // If no saved suite or saved suite not found, use the first (most recent)
+                if (!activeSuiteItem) {
+                    activeSuiteItem = userSuites[0];
                 }
                 
-                setActiveProjectWithStorage(activeProj);
+                setActiveSuiteWithStorage(activeSuiteItem);
             } else {
-                setActiveProjectWithStorage(null);
+                setActiveSuiteWithStorage(null);
             }
         } finally {
-            setIsProjectsLoading(false);
+            setIsSuitesLoading(false);
         }
-    }, [user, userProfile, fetchUserProjects, setActiveProjectWithStorage]);
+    }, [user, userProfile, fetchUserSuites, setActiveSuiteWithStorage]);
 
     // Force trial status check and update
     const forceTrialStatusUpdate = useCallback(async () => {
@@ -696,15 +806,15 @@ export const ProjectProvider = ({ children }) => {
         user,
         userProfile,
         
-        // Projects data
-        projects,
-        activeProject,
-        setActiveProject: setActiveProjectWithStorage,
+        // Suites data
+        suites,
+        activeSuite,
+        setActiveSuite: setActiveSuiteWithStorage,
         
         // Loading states
         isLoading: isLoading || isUserLoading,
         isUserLoading,
-        isProjectsLoading,
+        isSuitesLoading,
         isProfileUpdating,
         
         // Profile methods
@@ -714,12 +824,13 @@ export const ProjectProvider = ({ children }) => {
         updateProfileField,
         forceTrialStatusUpdate,
         
-        // Project methods
-        refetchProjects,
+        // Suite methods
+        refetchSuites,
+        createTestSuite,
         
         // Computed values
         needsOnboarding,
-        canCreateProject,
+        canCreateSuite,
         checkSubscriptionStatus: () => subscriptionStatus,
         
         // New freemium trial methods
@@ -729,29 +840,30 @@ export const ProjectProvider = ({ children }) => {
     }), [
         user,
         userProfile,
-        projects,
-        activeProject,
-        setActiveProjectWithStorage,
+        suites,
+        activeSuite,
+        setActiveSuiteWithStorage,
         isLoading,
         isUserLoading,
-        isProjectsLoading,
+        isSuitesLoading,
         isProfileUpdating,
         updateUserProfile,
         createOrUpdateUserProfile,
         refreshUserProfile,
         updateProfileField,
         forceTrialStatusUpdate,
-        refetchProjects,
+        refetchSuites,
+        createTestSuite,
         needsOnboarding,
-        canCreateProject,
+        canCreateSuite,
         subscriptionStatus,
         hasFeatureAccess,
         getFeatureLimits
     ]);
 
     return (
-        <ProjectContext.Provider value={value}>
+        <SuiteContext.Provider value={value}>
             {children}
-        </ProjectContext.Provider>
+        </SuiteContext.Provider>
     );
 };

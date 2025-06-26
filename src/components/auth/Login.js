@@ -10,7 +10,6 @@ import { FcGoogle } from "react-icons/fc";
 import { toast, Toaster } from "sonner";
 import { sendEmailVerification } from "firebase/auth";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
-import { isOnboardingComplete } from "../../utils/onboardingUtils";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import BackgroundDecorations from "../BackgroundDecorations";
@@ -253,6 +252,8 @@ const Login = () => {
             setLoadingEmailLogin(false);
         }
     };
+
+    
 
     const handleGoogleLogin = async (e) => {
         e.preventDefault();

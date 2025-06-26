@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { collection, onSnapshot, query, orderBy, where, doc, updateDoc, addDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { toast } from "sonner";
-import { useProject } from "../context/ProjectContext";
+import { useProject } from "../context/SuiteContext";
 import {
     getTeamMemberName,
     getPriorityFromSeverity,

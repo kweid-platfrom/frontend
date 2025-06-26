@@ -5,7 +5,7 @@
     import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
     import { toast } from 'sonner';
     import { db } from '../../config/firebase';
-    import { useProject } from '../../context/ProjectContext';
+    import { useProject } from '../../context/SuiteContext';
 
     export default function TestCaseModal({ testCase, onClose, onSave, projectId }) {
         // Use useProject instead of useAuth

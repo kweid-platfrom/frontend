@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { AuthProvider } from "../context/AuthProvider";
-import { ProjectProvider } from "../context/ProjectContext";
+import { SuiteProvider } from "../context/SuiteContext";
 import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
 import { Toaster } from "sonner";
 
@@ -15,7 +15,7 @@ export default function RootLayout({ children }) {
         <html lang="en">
             <body className={`${poppins.className} ${montserrat.className} ${sansHebrew.className}`}>
                 <AuthProvider>
-                    <ProjectProvider>
+                    <SuiteProvider>
                         {children}
                         <div id="modal-root"></div>
                         <Toaster
@@ -41,7 +41,7 @@ export default function RootLayout({ children }) {
                             }}
                             theme="light"
                         />
-                    </ProjectProvider>
+                    </SuiteProvider>
                 </AuthProvider>
             </body>
         </html>

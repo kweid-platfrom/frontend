@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { doc, updateDoc, arrayUnion, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { toast } from "sonner";
 import BugComments from "../bug-report/BugComments";

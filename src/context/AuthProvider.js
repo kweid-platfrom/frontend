@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import {
     fetchUserData
 } from "../services/userService";
-import { createUserIfNotExists, completeUserSetup } from "../services/onboardingService";
 import { updateUserProfile as updateUserProfileService } from "../services/userService";
 
 import {
@@ -198,7 +197,7 @@ export const AuthProvider = ({ children }) => {
                     return;
                 }
             }
-            const result = await createUserIfNotExists(user, {}, authSource);
+
             if (result.error) {
                 setAuthError(result.error);
                 setUserPermissions({
@@ -544,8 +543,6 @@ export const AuthProvider = ({ children }) => {
         updateUserProfile,
         refreshUserData,
         clearAuthError,
-        createUserIfNotExists,
-        completeUserSetup,
         markEmailVerified,
         redirectToEmailVerification,
         user: currentUser,

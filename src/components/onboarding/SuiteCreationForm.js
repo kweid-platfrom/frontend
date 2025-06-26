@@ -1,62 +1,75 @@
 'use client'
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthProvider';
-import { useProject } from '../../context/ProjectContext';
+import { useSuite } from '../../context/SuiteContext';
 import { useRouter } from 'next/navigation';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { toast } from 'sonner';
-import { createProject } from '../../services/projectService';
-import { validateProjectName } from '../../utils/onboardingUtils';
 import { PlusIcon } from '@heroicons/react/24/outline';
+import '../../app/globals.css'; 
 
-const ProjectCreationForm = ({
+
+const SuiteCreationForm = ({
     onComplete,
     isLoading: externalLoading = false,
     userProfile: externalUserProfile = null
 }) => {
-    const { currentUser, userProfile: contextUserProfile, refreshUserData, isLoading: authLoading } = useAuth();
+    const { currentUser, refreshUserData, isLoading: authLoading } = useAuth();
+    
+    // Use SuiteContext instead of mixed auth/suite logic
+    const { 
+        userProfile: contextUserProfile, 
+        createTestSuite,
+        canCreateSuite,
+        subscriptionStatus,
+        getFeatureLimits,
+        isUserLoading,
+        isLoading: suiteContextLoading
+    } = useSuite();
 
     // Use external userProfile if provided (for onboarding), otherwise use context
     const userProfile = externalUserProfile || contextUserProfile;
-    const { refetchProjects } = useProject();
     const router = useRouter();
-    const [projectName, setProjectName] = useState('');
+    
+    const [suiteName, setSuiteName] = useState('');
     const [description, setDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState({});
     const [componentReady, setComponentReady] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
 
-    // Determine account type
-    const isOrganizationAccount = userProfile?.accountType === 'organization' || userProfile?.organizationId;
+    // Determine account type using userProfile
+    const isOrganizationAccount = userProfile?.accountType === 'organization';
 
     // Debug logging
     useEffect(() => {
-        console.log('ProjectCreationForm Debug:', {
+        console.log('SuiteCreationForm Debug:', {
             isOrganizationAccount,
+            canCreateSuite,
+            subscriptionStatus,
             userProfile: userProfile ? {
                 accountType: userProfile.accountType,
                 organizationId: userProfile.organizationId,
-                subscriptionType: userProfile.subscriptionType
+                subscriptionType: userProfile.subscriptionType,
+                isTrialActive: userProfile.isTrialActive
             } : null
         });
-    }, [isOrganizationAccount, userProfile]);
+    }, [isOrganizationAccount, userProfile, canCreateSuite, subscriptionStatus]);
 
     // Ensure component is ready and auth state is stable
     useEffect(() => {
-        // Add a small delay to ensure auth state is stable
         const timer = setTimeout(() => {
-            if (!authLoading && currentUser) {
+            if (!authLoading && !suiteContextLoading && !isUserLoading && currentUser && userProfile) {
                 setComponentReady(true);
             }
         }, 100);
 
         return () => clearTimeout(timer);
-    }, [authLoading, currentUser]);
+    }, [authLoading, suiteContextLoading, isUserLoading, currentUser, userProfile]);
 
-    // Early return if auth is loading or user is not authenticated
-    if ((authLoading || externalLoading) || !currentUser || !componentReady) {
+    // Early return if loading or user is not authenticated
+    if ((authLoading || externalLoading || suiteContextLoading || isUserLoading) || !currentUser || !userProfile || !componentReady) {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
                 <div className="flex items-center space-x-2">
@@ -67,7 +80,37 @@ const ProjectCreationForm = ({
         );
     }
 
-    // If project creation is completed, show success state
+    // Check if user can create suite before showing form
+    if (!canCreateSuite) {
+        const limits = getFeatureLimits();
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center p-6">
+                <div className="w-full max-w-md text-center">
+                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                    </div>
+                    <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+                        Suite Creation Limit Reached
+                    </h1>
+                    <p className="text-gray-600 mb-4">
+                        You&apos;ve reached the maximum number of test suites ({limits?.testSuites || 1}) for your current plan.
+                    </p>
+                    {subscriptionStatus?.showUpgradePrompt && (
+                        <button
+                            onClick={() => router.push('/pricing')}
+                            className="bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
+                        >
+                            Upgrade Plan
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // If suite creation is completed, show success state
     if (isCompleted) {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center p-6">
@@ -97,7 +140,7 @@ const ProjectCreationForm = ({
             const userRef = doc(db, 'users', currentUser.uid);
             const updateData = {
                 'onboardingStatus.onboardingComplete': true,
-                'onboardingStatus.projectCreated': true,
+                'onboardingStatus.suiteCreated': true,
                 'onboardingStatus.completedAt': serverTimestamp(),
                 setupCompleted: true,
                 setupStep: 'completed',
@@ -120,38 +163,44 @@ const ProjectCreationForm = ({
         }
     };
 
-    const handleCreateProject = async (e) => {
+    const handleCreateSuite = async (e) => {
         e.preventDefault();
 
         setErrors({});
 
-        const validation = validateProjectName(projectName);
+        // Validate suite name
+        const validation = validateSuiteName(suiteName);
         if (!validation.isValid) {
-            setErrors({ projectName: validation.errors[0] });
+            setErrors({ suiteName: validation.errors[0] });
+            return;
+        }
+
+        // Double-check creation limits
+        if (!canCreateSuite) {
+            setErrors({ suiteName: 'Suite creation limit reached for your current plan.' });
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const result = await createProject(
-                { name: projectName, description },
-                currentUser.uid,
-                userProfile?.organizationId
-            );
+            // Use SuiteContext's createTestSuite method
+            const suiteData = {
+                name: suiteName,
+                description: description.trim() || '',
+                organizationId: isOrganizationAccount ? userProfile.organizationId : null,
+                visibility: isOrganizationAccount ? 'organization' : 'private',
+                tags: [],
+                members: [],
+                admins: isOrganizationAccount ? [currentUser.uid] : []
+            };
 
-            if (!result.success) {
-                setErrors({ projectName: result.error });
-                return;
-            }
-
-            console.log('Suite created successfully with ID:', result.projectId);
+            const newSuite = await createTestSuite(suiteData);
+            
+            console.log('Suite created successfully:', newSuite);
 
             // Mark as completed to prevent re-rendering
             setIsCompleted(true);
-
-            // Store the new project ID for the dashboard
-            localStorage.setItem('activeProjectId', result.projectId);
 
             // Complete onboarding in Firestore
             const onboardingCompleted = await completeOnboarding();
@@ -168,12 +217,7 @@ const ProjectCreationForm = ({
 
             // Call the onComplete callback if provided
             if (typeof onComplete === 'function') {
-                await onComplete(result.projectId);
-            }
-
-            // Refresh projects to include the new one
-            if (refetchProjects) {
-                await refetchProjects();
+                await onComplete(newSuite.suite_id);
             }
 
             // Navigate to dashboard with a delay
@@ -182,25 +226,35 @@ const ProjectCreationForm = ({
             }, 1500); // 1.5 second delay to show success state
 
         } catch (error) {
-            console.error('Error creating project:', error);
+            console.error('Error creating suite:', error);
             setIsCompleted(false); // Reset completion state on error
-            if (error.message.includes('Failed to complete onboarding')) {
+            
+            // Handle specific error messages
+            if (error.message.includes('Suite creation limit reached')) {
+                setErrors({ suiteName: 'You have reached the maximum number of suites for your plan.' });
+            } else if (error.message.includes('Failed to complete onboarding')) {
                 setErrors({ general: 'Suite created but failed to complete setup. Please try refreshing the page.' });
             } else {
                 setErrors({ general: 'Failed to create suite. Please try again.' });
             }
+            
             toast.error('Failed to create suite. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Get plan information with better organization account handling
+    // Get plan information using subscriptionStatus from context
     const getPlanInfo = () => {
-        const subscription = userProfile?.subscriptionType;
-        const isTrial = subscription === 'trial';
-        const isFree = subscription === 'free';
-        const isUpgraded = !isTrial && !isFree;
+        if (!subscriptionStatus) {
+            return {
+                type: 'Free',
+                limit: 'Limited access',
+                showWarning: false
+            };
+        }
+
+        const { isTrial, subscriptionType, trialDaysRemaining, showTrialBanner, showUpgradePrompt } = subscriptionStatus;
 
         let planType = 'Free';
         let limit = 'Limited access';
@@ -208,25 +262,28 @@ const ProjectCreationForm = ({
 
         if (isTrial) {
             planType = 'Trial';
-            limit = '30 days free trial - Full access';
-            showWarning = true;
-        } else if (isUpgraded) {
-            planType = subscription;
+            limit = `${trialDaysRemaining} days remaining - Full access`;
+            showWarning = showTrialBanner;
+        } else if (subscriptionType !== 'free') {
+            planType = subscriptionType.charAt(0).toUpperCase() + subscriptionType.slice(1);
             limit = 'Full access';
             showWarning = false;
+        } else {
+            showWarning = showUpgradePrompt;
         }
 
         return {
             type: planType,
             limit,
-            showWarning
+            showWarning,
+            showUpgradePrompt: subscriptionStatus.showUpgradePrompt
         };
     };
 
-
     const planInfo = getPlanInfo();
+    const limits = getFeatureLimits();
 
-    // Render onboarding form (full screen only)
+    // Render onboarding form
     return (
         <div className="bg-white flex items-center justify-center p-6">
             <div className="w-full max-w-xs">
@@ -236,8 +293,8 @@ const ProjectCreationForm = ({
                     </div>
                     <h1 className="text-2xl font-semibold text-gray-900 mb-2">
                         {isOrganizationAccount
-                            ? 'Create Another Test Suite'
-                            : 'Add Another Test Suite'
+                            ? 'Create Organization Test Suite'
+                            : 'Create Your First Test Suite'
                         }
                     </h1>
                     <p className="text-gray-600">
@@ -248,20 +305,21 @@ const ProjectCreationForm = ({
                     </p>
                 </div>
 
-                <form onSubmit={handleCreateProject} className="space-y-6">
+                <form onSubmit={handleCreateSuite} className="space-y-6">
                     <div>
                         <input
                             type="text"
-                            value={projectName}
-                            onChange={(e) => setProjectName(e.target.value)}
-                            placeholder="Project name"
-                            className={`w-full px-4 py-3 border rounded text-gray-900 placeholder-gray-500 focus:border-teal-600 focus:outline-none transition-colors ${errors.projectName ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                                }`}
+                            value={suiteName}
+                            onChange={(e) => setSuiteName(e.target.value)}
+                            placeholder="Suite name"
+                            className={`w-full px-4 py-3 border rounded text-gray-900 placeholder-gray-500 focus:border-teal-600 focus:outline-none transition-colors ${
+                                errors.suiteName ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                            }`}
                             disabled={isLoading}
                             autoFocus
                         />
-                        {errors.projectName && (
-                            <p className="mt-2 text-sm text-red-600">{errors.projectName}</p>
+                        {errors.suiteName && (
+                            <p className="mt-2 text-sm text-red-600">{errors.suiteName}</p>
                         )}
                     </div>
 
@@ -284,7 +342,7 @@ const ProjectCreationForm = ({
 
                     <button
                         type="submit"
-                        disabled={isLoading || !projectName.trim()}
+                        disabled={isLoading || !suiteName.trim() || !canCreateSuite}
                         className="w-full bg-teal-600 text-white py-3 px-6 rounded font-medium hover:bg-teal-700 focus:ring-4 focus:ring-teal-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                     >
                         {isLoading ? (
@@ -293,22 +351,44 @@ const ProjectCreationForm = ({
                                 Creating...
                             </div>
                         ) : (
-                            'Create suite'
+                            'Create Suite'
                         )}
                     </button>
                 </form>
 
-                {/* Plan info for onboarding */}
-                {planInfo.showWarning && (
-                    <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
-                        <p className="text-sm text-amber-800 text-center">
-                            {isOrganizationAccount ? 'Organization free Trial' : 'Free trial'}: {planInfo.limit}
-                        </p>
-                    </div>
-                )}
+                {/* Plan info and limits */}
+                <div className="mt-6 space-y-3">
+                    {planInfo.showWarning && (
+                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                            <p className="text-sm text-amber-800 text-center">
+                                {planInfo.type}: {planInfo.limit}
+                            </p>
+                        </div>
+                    )}
+
+                    {limits && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                            <p className="text-xs text-gray-600 text-center">
+                                Current plan allows {limits.testSuites} suite{limits.testSuites === 1 ? '' : 's'}, 
+                                {' '}{limits.testCases} test cases per suite
+                            </p>
+                        </div>
+                    )}
+
+                    {planInfo.showUpgradePrompt && (
+                        <div className="text-center">
+                            <button
+                                onClick={() => router.push('/pricing')}
+                                className="text-sm text-teal-600 hover:text-teal-700 underline"
+                            >
+                                Upgrade for more features
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
 };
 
-export default ProjectCreationForm;
+export default SuiteCreationForm;
