@@ -6,7 +6,8 @@ import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
 
 import {
-    fetchUserData
+    fetchUserData,
+    updateOnboardingStep
 } from "../services/userService";
 import { updateUserProfile as updateUserProfileService } from "../services/userService";
 
@@ -17,7 +18,14 @@ import {
     registerWithEmail as authRegisterWithEmail,
     registerWithEmailLink as authRegisterWithEmailLink,
     completeEmailLinkSignIn as authCompleteEmailLinkSignIn,
-    setUserPassword as authSetUserPassword
+    setUserPassword as authSetUserPassword,
+    resetPassword as authResetPassword,
+    confirmPasswordReset as authConfirmPasswordReset,
+    resendVerificationEmail as authResendVerificationEmail,
+    deleteUserAccount as authDeleteUserAccount,
+    linkAuthProvider as authLinkProvider,
+    unlinkAuthProvider as authUnlinkProvider,
+    refreshAuthSession as authRefreshSession
 } from "../services/authService";
 
 const AuthContext = createContext();
@@ -311,7 +319,7 @@ export const AuthProvider = ({ children }) => {
                     !result.userData.setupCompleted ||
                     result.userData.setupStep !== 'completed' ||
                     !result.userData.onboardingStatus?.onboardingComplete ||
-                    !result.userData.onboardingStatus?.testSuiteCreated // Changed from projectCreated
+                    !result.userData.onboardingStatus?.testSuiteCreated
                 );
                 
                 if (needsOnboarding) {
@@ -472,6 +480,110 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // NEW: Password Reset Functions
+    const resetPassword = async (email) => {
+        setAuthError(null);
+        try {
+            await authResetPassword(email);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const confirmPasswordReset = async (code, newPassword) => {
+        setAuthError(null);
+        try {
+            await authConfirmPasswordReset(code, newPassword);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    // NEW: Email Verification Functions
+    const resendVerificationEmail = async () => {
+        setAuthError(null);
+        try {
+            if (!currentUser) {
+                throw new Error('No user is currently signed in');
+            }
+            await authResendVerificationEmail(currentUser);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    // NEW: Account Management Functions
+    const deleteAccount = async () => {
+        setAuthError(null);
+        try {
+            if (!currentUser) {
+                throw new Error('No user is currently signed in');
+            }
+            await authDeleteUserAccount(currentUser);
+            
+            // Clear local storage
+            if (typeof window !== 'undefined') {
+                localStorage.clear();
+            }
+            
+            router.push("/login");
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    // NEW: Provider Linking Functions
+    const linkProvider = async (provider) => {
+        setAuthError(null);
+        try {
+            if (!currentUser) {
+                throw new Error('No user is currently signed in');
+            }
+            await authLinkProvider(currentUser, provider);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    const unlinkProvider = async (providerId) => {
+        setAuthError(null);
+        try {
+            if (!currentUser) {
+                throw new Error('No user is currently signed in');
+            }
+            await authUnlinkProvider(currentUser, providerId);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
+    // NEW: Session Management
+    const refreshSession = async () => {
+        setAuthError(null);
+        try {
+            if (!currentUser) {
+                throw new Error('No user is currently signed in');
+            }
+            await authRefreshSession(currentUser);
+            return { success: true };
+        } catch (error) {
+            setAuthError(error.message);
+            return { success: false, error: error.message };
+        }
+    };
+
     const signOut = async () => {
         try {
             await authLogout();
@@ -600,6 +712,18 @@ export const AuthProvider = ({ children }) => {
         setAuthError(null);
     };
 
+    // NEW: Helper function to get linked providers
+    const getLinkedProviders = useCallback(() => {
+        if (!currentUser?.providerData) return [];
+        return currentUser.providerData.map(provider => provider.providerId);
+    }, [currentUser]);
+
+    // NEW: Check if specific provider is linked
+    const isProviderLinked = useCallback((providerId) => {
+        const linkedProviders = getLinkedProviders();
+        return linkedProviders.includes(providerId);
+    }, [getLinkedProviders]);
+
     const value = {
         currentUser,
         userPermissions,
@@ -614,13 +738,27 @@ export const AuthProvider = ({ children }) => {
         registerWithEmailLink,
         completeEmailLinkSignIn,
         setUserPassword,
+        // NEW: Password Reset
+        resetPassword,
+        confirmPasswordReset,
+        // NEW: Email Verification
+        resendVerificationEmail,
+        // NEW: Account Management
+        deleteAccount,
+        // NEW: Provider Management
+        linkProvider,
+        unlinkProvider,
+        getLinkedProviders,
+        isProviderLinked,
+        // NEW: Session Management
+        refreshSession,
         signOut,
         hasPermission,
         hasRole,
         hasAnyRole,
         isAdmin,
         getPrimaryUserRole,
-        // Test Suite specific permissions (replacing project permissions)
+        // Test Suite specific permissions
         canManageUsers: userPermissions?.canManageUsers || false,
         canManageTestSuites: userPermissions?.canManageTestSuites || false,
         canCreateTestSuites: userPermissions?.canCreateTestSuites || false,

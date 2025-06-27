@@ -74,48 +74,36 @@ const Login = () => {
         }
     }, []);
 
-    // Simplified function to check user's onboarding status and route appropriately
-    const checkOnboardingAndRoute = async (user) => {
+    // Simplified routing logic - only route verified users to dashboard
+    const routeUserAfterLogin = async (user) => {
         try {
-            // Get user document from Firestore
+            // Only check if user is email verified
+            if (!user.emailVerified) {
+                console.log("User email not verified, staying on login page");
+                return;
+            }
+
+            // Check if user document exists in Firestore (optional - for profile completion)
             const userDocRef = doc(db, 'users', user.uid);
             const userDoc = await getDoc(userDocRef);
             
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const { accountType, onboardingProgress, onboardingStatus, setupCompleted } = userData;
-                
-                // Check if onboarding is complete using the utility function correctly
-                if (isOnboardingComplete(accountType, onboardingProgress, onboardingStatus) || setupCompleted) {
-                    // Onboarding complete - go to dashboard
-                    router.push("/dashboard");
-                } else {
-                    // Onboarding incomplete - go to main onboarding page
-                    // The onboarding page will handle the specific steps based on account type and progress
-                    router.push("/onboarding");
-                    
-                    toast.info("Please complete your setup to continue.", {
-                        duration: 4000,
-                        position: "top-center"
-                    });
-                }
-            } else {
-                // User document doesn't exist - this shouldn't happen for existing users
-                console.error("User document not found for authenticated user");
-                toast.error("Account setup incomplete. Please complete registration.");
-                
-                // Route to onboarding to handle missing user data
-                router.push("/onboarding");
+            if (!userDoc.exists()) {
+                console.log("User document doesn't exist, but proceeding to dashboard");
             }
+
+            // Route verified users directly to dashboard
+            // Dashboard will handle the empty state with create suite modal
+            router.push("/dashboard");
+
         } catch (error) {
-            console.error("Error checking onboarding status:", error);
+            console.error("Error routing user after login:", error);
             toast.error("Failed to load account information. Please try again.");
-            // Fallback to onboarding instead of dashboard
-            router.push("/onboarding");
+            // Fallback to dashboard on error since user is verified
+            router.push("/dashboard");
         }
     };
 
-    // Clean redirect logic - authenticated users go through onboarding check
+    // Handle authenticated user routing
     useEffect(() => {
         if (currentUser && !loading) {
             // Clear any stale registration data
@@ -123,8 +111,8 @@ const Login = () => {
             localStorage.removeItem("needsOnboarding");
             localStorage.removeItem("awaitingEmailVerification");
             
-            // Check onboarding status and route appropriately
-            checkOnboardingAndRoute(currentUser);
+            // Route user based on simplified flow
+            routeUserAfterLogin(currentUser);
         }
     }, [currentUser, loading, router]);
 
@@ -226,7 +214,7 @@ const Login = () => {
                 
                 toast.success("Login successful!");
                 
-                // Don't navigate here - let the useEffect handle routing based on onboarding status
+                // Don't navigate here - let the useEffect handle routing
                 // The useEffect will trigger since currentUser will be set
                 
             } else {
@@ -253,8 +241,6 @@ const Login = () => {
         }
     };
 
-    
-
     const handleGoogleLogin = async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -272,7 +258,7 @@ const Login = () => {
                 
                 toast.success("Login successful!");
                 
-                // Don't navigate here - let the useEffect handle routing based on onboarding status
+                // Don't navigate here - let the useEffect handle routing
                 // The useEffect will trigger since currentUser will be set
                 
             } else {

@@ -1,8 +1,7 @@
 "use client";
 import React from "react";
-import { AuthProvider } from "../context/AuthProvider";
-import { SuiteProvider } from "../context/SuiteContext";
-import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
+import { AppProvider } from "../contexts/AppProvider"; // Updated import path
+import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next.font/google";
 import { Toaster } from "sonner";
 
 // Load fonts
@@ -14,35 +13,33 @@ export default function RootLayout({ children }) {
     return (
         <html lang="en">
             <body className={`${poppins.className} ${montserrat.className} ${sansHebrew.className}`}>
-                <AuthProvider>
-                    <SuiteProvider>
-                        {children}
-                        <div id="modal-root"></div>
-                        <Toaster
-                            richColors
-                            closeButton={false}
-                            position="top-center"
-                            expand={true}
-                            visibleToasts={4}
-                            toastOptions={{
-                                style: {
-                                    background: "rgba(255, 255, 255, 0.95)",
-                                    backdropFilter: "blur(12px)",
-                                    border: "1px solid rgba(148, 163, 184, 0.2)",
-                                    borderRadius: "5px",
-                                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-                                    fontFamily: "inherit",
-                                },
-                                className: "font-medium",
-                                duration: 4000,
-                                error: {
-                                    icon: null,
-                                },
-                            }}
-                            theme="light"
-                        />
-                    </SuiteProvider>
-                </AuthProvider>
+                <AppProvider>
+                    {children}
+                    <div id="modal-root"></div>
+                    <Toaster
+                        richColors
+                        closeButton={false}
+                        position="top-center"
+                        expand={true}
+                        visibleToasts={4}
+                        toastOptions={{
+                            style: {
+                                background: "rgba(255, 255, 255, 0.95)",
+                                backdropFilter: "blur(12px)",
+                                border: "1px solid rgba(148, 163, 184, 0.2)",
+                                borderRadius: "5px",
+                                boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                                fontFamily: "inherit",
+                            },
+                            className: "font-medium",
+                            duration: 4000,
+                            error: {
+                                icon: null,
+                            },
+                        }}
+                        theme="light"
+                    />
+                </AppProvider>
             </body>
         </html>
     );

@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import '../../app/globals.css';
 import { useSuite } from '../../context/SuiteContext';
-import SuiteCreationForm from '../onboarding/SuiteCreationForm';
+import CreateTestSuiteModal from '../modals/CreateTestSuiteModal';
 import UserAvatarClip from '../side-pane/UserAvatarClip'
 import TrialBanner from '../side-pane/TrialBanner';
 import SuiteSelector from '../side-pane/SuiteSelector';
@@ -23,54 +23,6 @@ import {
     LockClosedIcon
 } from '@heroicons/react/24/outline';
 
-// Enhanced Suite Creation Drawer - content-based height instead of full height
-const SuiteCreationDrawer = ({ isOpen, onClose }) => {
-    const { currentOrganization } = useSuite();
-
-    if (!isOpen) return null;
-
-    return (
-        <>
-
-            {/* Drawer with content-based height and proper spacing */}
-            <div className="absolute left-72 top-24 max-w-2xl w-auto bg-white shadow-2xl border border-gray-200 rounded-lg z-50 overflow-hidden">
-                <div className="flex flex-col">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50/50 to-white">
-                        <div className="flex-1">
-                            <h2 className="text-lg font-semibold text-gray-900">Create New Suite</h2>
-                            {currentOrganization && (
-                                <p className="text-sm text-gray-500 truncate">in {currentOrganization.name}</p>
-                            )}
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="p-2 rounded-lg hover:bg-gray-100 transition-colors ml-4"
-                        >
-                            <XMarkIcon className="h-5 w-5 text-gray-500" />
-                        </button>
-                    </div>
-
-                    {/* Content (form + optional footer) */}
-                    <div className="px-6 py-4">
-                        <SuiteCreationForm
-                            isOnboarding={false}
-                            onComplete={(suiteId) => {
-                                console.log('Suite created:', suiteId);
-                                onClose();
-                            }}
-                            onCancel={onClose}
-                            organizationId={currentOrganization?.id}
-                        />
-                    </div>
-                </div>
-            </div>
-
-
-        </>
-    );
-};
-
 const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
     const {
         userProfile,
@@ -81,8 +33,8 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
 
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [mounted, setMounted] = useState(false);
-    const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [actualSubscriptionState, setActualSubscriptionState] = useState(null);
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     // Handle mounting and localStorage
     useEffect(() => {
@@ -305,6 +257,12 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         }
     };
 
+    const handleCreateSuiteSuccess = () => {
+        setShowCreateModal(false);
+        // Optionally refresh the suite list or perform other actions
+        // You can add additional logic here if needed
+    };
+
     if (!mounted) {
         return null;
     }
@@ -375,7 +333,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 {/* Suite Selector */}
                 <SuiteSelector
                     isCollapsed={isCollapsed}
-                    setShowCreateModal={setShowCreateDrawer} 
+                    setShowCreateModal={setShowCreateModal}
                     trialStatus={actualSubscriptionState || subscriptionStatus}
                     onUpgradeClick={handleUpgradeClick}
                 />
@@ -458,13 +416,13 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 )}
             </div>
 
-            {/* Suite Creation Drawer - Fixed positioning and sizing */}
-            {showCreateDrawer && (
-                <SuiteCreationDrawer
-                    isOpen={showCreateDrawer}
-                    onClose={() => setShowCreateDrawer(false)}
-                />
-            )}
+            {/* Create Test Suite Modal */}
+            <CreateTestSuiteModal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                onSuccess={handleCreateSuiteSuccess}
+                isFirstSuite={false}
+            />
         </>
     );
 };

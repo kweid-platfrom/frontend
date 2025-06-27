@@ -1,15 +1,14 @@
-// userService.js - Core user CRUD operations aligned with Register component
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+// services/userService.js - Core user CRUD operations
+import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db, environment } from "../config/firebase";
 import {
     extractNameFromEmail,
     parseDisplayName,
 } from "../utils/userUtils";
 
-
 /**
  * Create a new user document in Firestore
- * Aligned with the Register component's data structure
+ * Supports both new format (from Register component) and legacy format conversion
  */
 export const createUserDocument = async (firebaseUser, userData = {}, source = 'unknown') => {
     if (!firebaseUser?.uid) {
@@ -23,7 +22,6 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
         if (userData.user_id && userData.profile_info) {
             console.log('Using new format user data from Register component');
 
-            // Ensure timestamps are set
             const finalUserData = {
                 ...userData,
                 profile_info: {
@@ -44,13 +42,11 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
             return finalUserData;
         }
 
-        // Legacy format - convert to new format for backward compatibility
-        console.log('Converting legacy format to new format');
+        // Legacy format or minimal data - convert to new format
+        console.log('Converting to new format or creating from minimal data');
 
-        // Parse display name for Google users or fallback
         const { firstName: parsedFirstName, lastName: parsedLastName } = parseDisplayName(firebaseUser.displayName);
 
-        // Use userData or parsed names, fallback to email extraction
         let firstName = (userData.firstName?.trim() || parsedFirstName || "").trim();
         let lastName = (userData.lastName?.trim() || parsedLastName || "").trim();
 
@@ -61,30 +57,9 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
             lastName = nameParts.slice(1).join(' ') || "";
         }
 
-        // Normalize userType/accountType - default to 'individual'
-        const userTypeRaw = userData.userType || userData.accountType || 'individual';
-        const userType = ['individual', 'organization'].includes(userTypeRaw) ? userTypeRaw : 'individual';
-
-        // Determine initial setup step based on account type and source
-        let initialSetupStep = 'email_verification';
-        if (source === 'google') {
-            // Google users skip email verification
-            initialSetupStep = userType === 'organization' ? 'organization_info' : 'profile_setup';
-        }
-
-        // Set role - first organization user becomes admin, individuals are members
+        const userType = ['individual', 'organization'].includes(userData.userType) ? userData.userType : 'individual';
         const initialRole = userType === 'organization' ? ['admin'] : ['member'];
 
-        // Initialize consistent onboarding structures
-        const onboardingProgress = initializeOnboardingProgress(userType);
-        const onboardingStatus = initializeOnboardingStatus(userType);
-
-        // Update progress based on source and email verification
-        if (firebaseUser.emailVerified) {
-            onboardingProgress.emailVerified = true;
-        }
-
-        // Build user data in new format
         const newFormatUserData = {
             user_id: firebaseUser.uid,
             primary_email: firebaseUser.email?.toLowerCase().trim() || "",
@@ -107,6 +82,7 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                 updated_at: serverTimestamp()
             },
 
+            // Initialize as empty array for security rules
             account_memberships: userData.account_memberships || [],
 
             session_context: {
@@ -132,29 +108,8 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                 })
             },
 
-            // Onboarding and setup fields (essential for user flow)
-            setupCompleted: Boolean(userData.setupCompleted) || false,
-            setupStep: userData.setupStep || initialSetupStep,
             role: userData.role || initialRole,
 
-            // Use consistent onboarding progress structure
-            onboardingProgress: {
-                ...onboardingProgress,
-                ...(userData.onboardingProgress || {})
-            },
-
-            // Use consistent onboarding status structure  
-            onboardingStatus: {
-                ...onboardingStatus,
-                ...(userData.onboardingStatus || {})
-            },
-
-            // Additional legacy fields for backward compatibility
-            ...(userData.organizationId && { organizationId: userData.organizationId }),
-            ...(userData.lastPasswordChange && { lastPasswordChange: userData.lastPasswordChange }),
-            ...(userData.deviceHistory && { deviceHistory: userData.deviceHistory }),
-
-            // Preferences (maintain structure for notifications)
             preferences: {
                 notifications: {
                     newMessages: true,
@@ -170,14 +125,18 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                 ...(userData.preferences || {})
             },
 
-            // Metadata
             environment: environment || 'development',
-            source
+            source,
+
+            // Legacy compatibility fields
+            ...(userData.organizationId && { organizationId: userData.organizationId }),
+            ...(userData.lastPasswordChange && { lastPasswordChange: userData.lastPasswordChange }),
+            ...(userData.deviceHistory && { deviceHistory: userData.deviceHistory }),
         };
 
         const userRef = doc(db, 'users', firebaseUser.uid);
         await setDoc(userRef, newFormatUserData);
-        console.log('User document created successfully (converted from legacy format)');
+        console.log('User document created successfully (converted to new format)');
         return newFormatUserData;
 
     } catch (error) {
@@ -188,90 +147,62 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
 
 /**
  * Fetch user data from Firestore
- * Handles both new and legacy formats
+ * Returns consistent format: { userData, error, isNewUser }
  */
 export const fetchUserData = async (userId) => {
-    if (!userId) return null;
+    if (!userId) {
+        console.error('fetchUserData: No userId provided');
+        return { 
+            userData: null, 
+            error: 'No user ID provided', 
+            isNewUser: false
+        };
+    }
 
     try {
+        console.log('Fetching user data for userId:', userId);
         const userRef = doc(db, "users", userId);
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
             const userData = userSnap.data();
+            console.log('User document exists');
 
-            // Check if it's new format
+            // Normalize to new format if it's legacy data
+            let normalizedData;
             if (userData.user_id && userData.profile_info) {
-                console.log('Fetched user data in new format');
-                return userData;
+                normalizedData = userData;
+            } else {
+                normalizedData = normalizeLegacyUserData(userData, userId);
             }
 
-            // Convert legacy data to new format for consistency
-            console.log('Converting legacy user data to new format');
-
-            // Normalize onboarding progress for legacy data
-            const normalizedOnboardingProgress = normalizeOnboardingProgress(userData.onboardingProgress);
-
-            const convertedData = {
-                user_id: userData.uid || userId,
-                primary_email: userData.email || "",
-
-                profile_info: {
-                    name: {
-                        first: userData.firstName || "",
-                        last: userData.lastName || "",
-                        display: userData.displayName || ""
-                    },
-                    timezone: userData.timezone || 'UTC',
-                    avatar_url: userData.avatarURL || null,
-                    bio: userData.bio || "",
-                    location: userData.location || "",
-                    phone: userData.phone || "",
-                    created_at: userData.createdAt,
-                    updated_at: userData.updatedAt
-                },
-
-                account_memberships: userData.account_memberships || [],
-
-                session_context: {
-                    current_account_id: userData.organizationId || null,
-                    current_account_type: userData.accountType || userData.userType || 'individual',
-                    preferences: userData.preferences || {
-                        theme: 'light',
-                        notifications: true
-                    }
-                },
-
-                auth_metadata: {
-                    registration_method: userData.registrationMethod || 'email',
-                    email_verified: userData.emailVerified || false,
-                    registration_date: userData.createdAt,
-                    last_login: userData.lastLogin,
-                    ...(userData.registrationMethod === 'google' && {
-                        google_profile: {
-                            id: userData.uid,
-                            photo_url: userData.avatarURL
-                        }
-                    })
-                },
-
-                // Keep all legacy fields for backward compatibility including onboarding
-                ...userData,
-
-                // Include normalized onboarding progress for consistent access
-                onboardingProgress: normalizedOnboardingProgress
+            return {
+                userData: normalizedData,
+                error: null,
+                isNewUser: false
             };
 
-            return convertedData;
+        } else {
+            console.log('User document does not exist');
+            return {
+                userData: null,
+                error: null,
+                isNewUser: true
+            };
         }
-
-        return null;
     } catch (error) {
         console.error('Error fetching user data:', error);
+        
+        let errorMessage = 'Failed to fetch user data';
         if (error.code === 'permission-denied') {
-            console.error('Permission denied: User may not have access to this profile');
+            errorMessage = 'Permission denied: User may not have access to this profile';
         }
-        return null;
+
+        return {
+            userData: null,
+            error: errorMessage,
+            isNewUser: false
+        };
     }
 };
 
@@ -283,103 +214,33 @@ export const updateUserProfile = async (userId, updateData, currentUserUid) => {
     if (currentUserUid !== userId) throw new Error('You can only update your own profile');
 
     try {
+        console.log('Updating user profile:', userId, updateData);
+        
         const userRef = doc(db, 'users', userId);
         const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) throw new Error('User profile not found');
-
-        const existingData = userSnap.data();
-
-        // Check if existing data is in new format
-        const isNewFormat = existingData.user_id && existingData.profile_info;
-
-        let safeUpdateData;
-
-        if (isNewFormat) {
-            // Update new format
-            safeUpdateData = {
-                user_id: existingData.user_id, // immutable
-
-                // Update primary email if provided
-                ...(updateData.email && updateData.email !== existingData.primary_email && {
-                    primary_email: updateData.email.toLowerCase().trim()
-                }),
-
-                // Update profile info
-                profile_info: {
-                    ...existingData.profile_info,
-                    ...(updateData.firstName && {
-                        name: {
-                            ...existingData.profile_info.name,
-                            first: updateData.firstName.trim(),
-                            display: `${updateData.firstName.trim()} ${existingData.profile_info.name.last}`.trim()
-                        }
-                    }),
-                    ...(updateData.lastName && {
-                        name: {
-                            ...existingData.profile_info.name,
-                            last: updateData.lastName.trim(),
-                            display: `${existingData.profile_info.name.first} ${updateData.lastName.trim()}`.trim()
-                        }
-                    }),
-                    ...(updateData.displayName && {
-                        name: {
-                            ...existingData.profile_info.name,
-                            display: updateData.displayName.trim()
-                        }
-                    }),
-                    ...(updateData.avatarURL !== undefined && { avatar_url: updateData.avatarURL }),
-                    ...(updateData.bio !== undefined && { bio: updateData.bio?.trim() || "" }),
-                    ...(updateData.location !== undefined && { location: updateData.location?.trim() || "" }),
-                    ...(updateData.phone !== undefined && { phone: updateData.phone?.trim() || "" }),
-                    ...(updateData.timezone && { timezone: updateData.timezone }),
-                    updated_at: serverTimestamp()
-                },
-
-                // Update auth metadata if email verification status changes
-                ...(typeof updateData.emailVerified === 'boolean' && {
-                    auth_metadata: {
-                        ...existingData.auth_metadata,
-                        email_verified: updateData.emailVerified
-                    }
-                }),
-
-                // Update session context preferences
-                ...(updateData.preferences && {
-                    session_context: {
-                        ...existingData.session_context,
-                        preferences: {
-                            ...existingData.session_context.preferences,
-                            ...updateData.preferences
-                        }
-                    }
-                })
-            };
-        } else {
-            // Update legacy format
-            safeUpdateData = {
-                uid: existingData.uid, // immutable
-
-                ...(updateData.email && updateData.email !== existingData.email && {
-                    email: updateData.email.toLowerCase().trim()
-                }),
-                ...(updateData.firstName && { firstName: updateData.firstName.trim() }),
-                ...(updateData.lastName && { lastName: updateData.lastName.trim() }),
-                ...(typeof updateData.emailVerified === 'boolean' && { emailVerified: updateData.emailVerified }),
-                ...(updateData.displayName && { displayName: updateData.displayName.trim() }),
-                ...(updateData.avatarURL !== undefined && { avatarURL: updateData.avatarURL }),
-                ...(updateData.bio !== undefined && { bio: updateData.bio?.trim() || "" }),
-                ...(updateData.location !== undefined && { location: updateData.location?.trim() || "" }),
-                ...(updateData.phone !== undefined && { phone: updateData.phone?.trim() || "" }),
-                ...(updateData.preferences && { preferences: updateData.preferences }),
-
-                updatedAt: serverTimestamp()
-            };
+        
+        if (!userSnap.exists()) {
+            throw new Error('User profile not found');
         }
 
-        await setDoc(userRef, safeUpdateData, { merge: true });
+        const existingData = userSnap.data();
+        const isNewFormat = existingData.user_id && existingData.profile_info;
 
-        const updatedDoc = await getDoc(userRef);
-        return updatedDoc.data();
+        let updatePayload;
+
+        if (isNewFormat) {
+            updatePayload = buildNewFormatUpdate(existingData, updateData);
+        } else {
+            updatePayload = buildLegacyFormatUpdate(existingData, updateData);
+        }
+
+        await updateDoc(userRef, updatePayload);
+        
+        // Return fresh data
+        const updatedSnap = await getDoc(userRef);
+        const updatedData = updatedSnap.data();
+        
+        return isNewFormat ? updatedData : normalizeLegacyUserData(updatedData, userId);
 
     } catch (error) {
         console.error('Error updating user profile:', error);
@@ -391,9 +252,263 @@ export const updateUserProfile = async (userId, updateData, currentUserUid) => {
 };
 
 /**
- * Helper function to create individual account document
- * Called from Register component
+ * Helper function to build update payload for new format
  */
+const buildNewFormatUpdate = (existingData, updateData) => {
+    const updatePayload = {};
+
+    // Handle email updates
+    if (updateData.email && updateData.email !== existingData.primary_email) {
+        updatePayload.primary_email = updateData.email.toLowerCase().trim();
+    }
+
+    // Handle profile info updates
+    const profileUpdates = {};
+    const nameUpdates = { ...existingData.profile_info.name };
+
+    if (updateData.firstName) {
+        nameUpdates.first = updateData.firstName.trim();
+        nameUpdates.display = `${nameUpdates.first} ${nameUpdates.last}`.trim();
+        profileUpdates.name = nameUpdates;
+    }
+
+    if (updateData.lastName) {
+        nameUpdates.last = updateData.lastName.trim();
+        nameUpdates.display = `${nameUpdates.first} ${nameUpdates.last}`.trim();
+        profileUpdates.name = nameUpdates;
+    }
+
+    if (updateData.displayName) {
+        nameUpdates.display = updateData.displayName.trim();
+        profileUpdates.name = nameUpdates;
+    }
+
+    // Handle other profile fields
+    if (updateData.avatarURL !== undefined) profileUpdates.avatar_url = updateData.avatarURL;
+    if (updateData.bio !== undefined) profileUpdates.bio = updateData.bio?.trim() || "";
+    if (updateData.location !== undefined) profileUpdates.location = updateData.location?.trim() || "";
+    if (updateData.phone !== undefined) profileUpdates.phone = updateData.phone?.trim() || "";
+    if (updateData.timezone) profileUpdates.timezone = updateData.timezone;
+
+    if (Object.keys(profileUpdates).length > 0) {
+        profileUpdates.updated_at = serverTimestamp();
+        updatePayload.profile_info = {
+            ...existingData.profile_info,
+            ...profileUpdates
+        };
+    }
+
+    // Handle auth metadata updates
+    if (typeof updateData.emailVerified === 'boolean') {
+        updatePayload.auth_metadata = {
+            ...existingData.auth_metadata,
+            email_verified: updateData.emailVerified
+        };
+    }
+
+    // Handle preferences updates
+    if (updateData.preferences) {
+        updatePayload.session_context = {
+            ...existingData.session_context,
+            preferences: {
+                ...existingData.session_context.preferences,
+                ...updateData.preferences
+            }
+        };
+    }
+
+    return updatePayload;
+};
+
+/**
+ * Helper function to build update payload for legacy format
+ */
+const buildLegacyFormatUpdate = (existingData, updateData) => {
+    const updatePayload = {};
+
+    if (updateData.email && updateData.email !== existingData.email) {
+        updatePayload.email = updateData.email.toLowerCase().trim();
+    }
+    if (updateData.firstName) updatePayload.firstName = updateData.firstName.trim();
+    if (updateData.lastName) updatePayload.lastName = updateData.lastName.trim();
+    if (updateData.displayName) updatePayload.displayName = updateData.displayName.trim();
+    if (updateData.avatarURL !== undefined) updatePayload.avatarURL = updateData.avatarURL;
+    if (updateData.bio !== undefined) updatePayload.bio = updateData.bio?.trim() || "";
+    if (updateData.location !== undefined) updatePayload.location = updateData.location?.trim() || "";
+    if (updateData.phone !== undefined) updatePayload.phone = updateData.phone?.trim() || "";
+    if (typeof updateData.emailVerified === 'boolean') updatePayload.emailVerified = updateData.emailVerified;
+    if (updateData.preferences) updatePayload.preferences = updateData.preferences;
+
+    updatePayload.updatedAt = serverTimestamp();
+    return updatePayload;
+};
+
+/**
+ * Helper function to normalize legacy user data to new format
+ */
+const normalizeLegacyUserData = (userData, userId) => {
+    return {
+        user_id: userData.uid || userId,
+        primary_email: userData.email || "",
+
+        profile_info: {
+            name: {
+                first: userData.firstName || "",
+                last: userData.lastName || "",
+                display: userData.displayName || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || ""
+            },
+            timezone: userData.timezone || 'UTC',
+            avatar_url: userData.avatarURL || null,
+            bio: userData.bio || "",
+            location: userData.location || "",
+            phone: userData.phone || "",
+            created_at: userData.createdAt,
+            updated_at: userData.updatedAt
+        },
+
+        account_memberships: Array.isArray(userData.account_memberships) ? userData.account_memberships : [],
+
+        session_context: {
+            current_account_id: userData.organizationId || null,
+            current_account_type: userData.accountType || userData.userType || 'individual',
+            preferences: userData.preferences || {
+                theme: 'light',
+                notifications: true
+            }
+        },
+
+        auth_metadata: {
+            registration_method: userData.registrationMethod || 'email',
+            email_verified: userData.emailVerified || false,
+            registration_date: userData.createdAt,
+            last_login: userData.lastLogin,
+            ...(userData.registrationMethod === 'google' && {
+                google_profile: {
+                    id: userData.uid,
+                    photo_url: userData.avatarURL
+                }
+            })
+        },
+
+        // Keep all legacy fields for backward compatibility
+        ...userData
+    };
+};
+
+// =====================================
+// HELPER FUNCTIONS FOR CONTEXT TO USE
+// =====================================
+
+export const getUserDisplayName = (userData) => {
+    if (!userData) return '';
+    
+    if (userData.profile_info?.name?.display) {
+        return userData.profile_info.name.display;
+    }
+    
+    return userData.displayName ||
+        `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+        'User';
+};
+
+export const getUserEmail = (userData) => {
+    if (!userData) return '';
+    return userData.primary_email || userData.email || '';
+};
+
+export const getUserAccountType = (userData) => {
+    if (!userData) return 'individual';
+    
+    if (userData.session_context?.current_account_type) {
+        return userData.session_context.current_account_type;
+    }
+    
+    return userData.accountType || userData.userType || 'individual';
+};
+
+export const isUserAdmin = (userData) => {
+    if (!userData) return false;
+
+    // Check role field (legacy)
+    if (userData.role && Array.isArray(userData.role) && userData.role.includes('admin')) {
+        return true;
+    }
+
+    // Check account memberships for admin role
+    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
+        return userData.account_memberships.some(membership => 
+            membership.role === 'Admin' && membership.status === 'active'
+        );
+    }
+
+    return false;
+};
+
+export const isUserAdminOfAccount = (userData, accountId) => {
+    if (!userData || !accountId) return false;
+
+    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
+        return userData.account_memberships.some(membership => 
+            membership.account_id === accountId && 
+            membership.role === 'Admin' && 
+            membership.status === 'active'
+        );
+    }
+
+    return false;
+};
+
+export const getCurrentAccountInfo = (userData) => {
+    if (!userData) return null;
+
+    // New format
+    if (userData.session_context?.current_account_id) {
+        const accountId = userData.session_context.current_account_id;
+        const accountType = userData.session_context.current_account_type;
+        
+        const membership = userData.account_memberships?.find(
+            m => m.account_id === accountId
+        );
+
+        return {
+            account_id: accountId,
+            account_type: accountType,
+            role: membership?.role || 'Member',
+            is_admin: membership?.role === 'Admin'
+        };
+    }
+
+    // Legacy format fallback
+    return {
+        account_id: userData.organizationId || userData.user_id,
+        account_type: userData.accountType || userData.userType || 'individual',
+        role: userData.role?.includes('admin') ? 'Admin' : 'Member',
+        is_admin: userData.role?.includes('admin') || false
+    };
+};
+
+export const hasPermission = (userData) => {
+    if (!userData) return false;
+
+    if (isUserAdmin(userData)) {
+        return true;
+    }
+
+    const currentAccount = getCurrentAccountInfo(userData);
+    if (!currentAccount) return false;
+
+    if (currentAccount.account_type === 'individual' && currentAccount.is_admin) {
+        return true;
+    }
+
+    if (currentAccount.account_type === 'organization' && currentAccount.is_admin) {
+        return true;
+    }
+
+    return false;
+};
+
+// Account creation helper
 export const createIndividualAccount = async (userId, accountData) => {
     try {
         const accountRef = doc(db, "individualAccounts", userId);
@@ -417,205 +532,4 @@ export const createIndividualAccount = async (userId, accountData) => {
         console.error('Error creating individual account:', error);
         throw new Error(`Failed to create individual account: ${error.message}`);
     }
-};
-
-/**
- * Helper function to get user's current account type
- */
-export const getUserAccountType = (userData) => {
-    if (!userData) return 'individual';
-
-    // New format
-    if (userData.session_context?.current_account_type) {
-        return userData.session_context.current_account_type;
-    }
-
-    // Legacy format
-    return userData.accountType || userData.userType || 'individual';
-};
-
-/**
- * Helper function to get user's display name
- */
-export const getUserDisplayName = (userData) => {
-    if (!userData) return '';
-
-    // New format
-    if (userData.profile_info?.name?.display) {
-        return userData.profile_info.name.display;
-    }
-
-    // Legacy format
-    return userData.displayName ||
-        `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
-        'User';
-};
-
-/**
- * Helper function to get user's email
- */
-export const getUserEmail = (userData) => {
-    if (!userData) return '';
-
-    // New format
-    if (userData.primary_email) {
-        return userData.primary_email;
-    }
-
-    // Legacy format
-    return userData.email || '';
-};
-
-/**
- * Check if user is admin of any account
- */
-export const isUserAdmin = (userData) => {
-    if (!userData) return false;
-
-    // Check role field (legacy)
-    if (userData.role && Array.isArray(userData.role) && userData.role.includes('admin')) {
-        return true;
-    }
-
-    // Check account memberships for admin role
-    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
-        return userData.account_memberships.some(membership => 
-            membership.role === 'Admin' && membership.status === 'active'
-        );
-    }
-
-    return false;
-};
-
-/**
- * Check if user is admin of specific account
- */
-export const isUserAdminOfAccount = (userData, accountId) => {
-    if (!userData || !accountId) return false;
-
-    // Check account memberships for specific account admin role
-    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
-        return userData.account_memberships.some(membership => 
-            membership.account_id === accountId && 
-            membership.role === 'Admin' && 
-            membership.status === 'active'
-        );
-    }
-
-    return false;
-};
-
-/**
- * Get user's current account information
- */
-export const getCurrentAccountInfo = (userData) => {
-    if (!userData) return null;
-
-    // New format
-    if (userData.session_context?.current_account_id) {
-        const accountId = userData.session_context.current_account_id;
-        const accountType = userData.session_context.current_account_type;
-        
-        // Find the membership info for current account
-        const membership = userData.account_memberships?.find(
-            m => m.account_id === accountId
-        );
-
-        return {
-            account_id: accountId,
-            account_type: accountType,
-            role: membership?.role || 'Member',
-            is_admin: membership?.role === 'Admin'
-        };
-    }
-
-    // Legacy format fallback
-    return {
-        account_id: userData.organizationId || userData.user_id,
-        account_type: userData.accountType || userData.userType || 'individual',
-        role: userData.role?.includes('admin') ? 'Admin' : 'Member',
-        is_admin: userData.role?.includes('admin') || false
-    };
-};
-
-/**
- * Check if user has specific permission
- */
-export const hasPermission = (userData) => {
-    if (!userData) return false;
-
-    // Admins have all permissions
-    if (isUserAdmin(userData)) {
-        return true;
-    }
-
-    // Check specific permissions based on account type and role
-    const currentAccount = getCurrentAccountInfo(userData);
-    if (!currentAccount) return false;
-
-    // Individual account owners have all permissions for their account
-    if (currentAccount.account_type === 'individual' && currentAccount.is_admin) {
-        return true;
-    }
-
-    // Organization admins have all organization permissions
-    if (currentAccount.account_type === 'organization' && currentAccount.is_admin) {
-        return true;
-    }
-
-    // Add more granular permission checking here if needed
-    return false;
-};
-
-/**
- * Initialize onboarding progress for consistent structure
- */
-export const initializeOnboardingProgress = (userType) => {
-    const baseProgress = {
-        emailVerified: false,
-        profileCompleted: false,
-        accountSetupCompleted: false,
-        welcomeShown: false
-    };
-
-    if (userType === 'organization') {
-        return {
-            ...baseProgress,
-            organizationInfoCompleted: false,
-            teamMembersInvited: false
-        };
-    }
-
-    return baseProgress;
-};
-
-/**
- * Initialize onboarding status for consistent structure
- */
-export const initializeOnboardingStatus = (userType) => {
-    return {
-        isOnboardingComplete: false,
-        currentStep: userType === 'organization' ? 'organization_info' : 'profile_setup',
-        completedSteps: [],
-        skippedSteps: []
-    };
-};
-
-/**
- * Normalize onboarding progress from legacy data
- */
-export const normalizeOnboardingProgress = (existingProgress) => {
-    if (!existingProgress || typeof existingProgress !== 'object') {
-        return initializeOnboardingProgress('individual');
-    }
-
-    return {
-        emailVerified: Boolean(existingProgress.emailVerified),
-        profileCompleted: Boolean(existingProgress.profileCompleted),
-        accountSetupCompleted: Boolean(existingProgress.accountSetupCompleted),
-        welcomeShown: Boolean(existingProgress.welcomeShown),
-        organizationInfoCompleted: Boolean(existingProgress.organizationInfoCompleted),
-        teamMembersInvited: Boolean(existingProgress.teamMembersInvited),
-        ...existingProgress
-    };
 };

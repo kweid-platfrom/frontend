@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube } from 'lucide-react';
+import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube, Plus } from 'lucide-react';
 
 // Import QAID-specific components
 import QAIDMetricsOverview from '../stats/QAIDMetricsOverview';
@@ -12,11 +12,16 @@ import TeamProductivity from '../stats/TeamProductivity';
 import QAIDCharts from '../stats/QAIDCharts';
 import QuickActions from '../stats/QuickActions';
 
+// Import the CreateTestSuiteModal
+import CreateTestSuiteModal from '../modals/CreateTestSuiteModal';
 
-// Import services - Only bug tracking is active
+// Import context and services
+import { useSuite } from '../../context/SuiteContext';
 import { useBugTrackingMetrics } from '../../services/bugTrackingService';
 
 const Dashboard = () => {
+    const { userTestSuites, loading: suiteLoading } = useSuite();
+    
     const [filters, setFilters] = useState({
         timeRange: '7d',
         component: 'all',
@@ -33,12 +38,24 @@ const Dashboard = () => {
     const [isConnected, setIsConnected] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [autoRefresh, setAutoRefresh] = useState(true);
+    
+    // Modal states
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [showFirstSuiteModal, setShowFirstSuiteModal] = useState(false);
 
     // Use bug tracking metrics service
     const { metrics: bugMetrics, loading: bugLoading, error: bugError, refetch: bugRefetch } = useBugTrackingMetrics(filters);
 
-    const loading = bugLoading;
+    const loading = bugLoading || suiteLoading;
     const error = bugError;
+
+    // Check if user has test suites and show first suite modal if needed
+    useEffect(() => {
+        if (!suiteLoading && userTestSuites !== null) {
+            const hasTestSuites = Array.isArray(userTestSuites) && userTestSuites.length > 0;
+            setShowFirstSuiteModal(!hasTestSuites);
+        }
+    }, [userTestSuites, suiteLoading]);
 
     // Auto-refresh timer
     useEffect(() => {
@@ -142,7 +159,6 @@ const Dashboard = () => {
         };
     }, [enhancedMetrics]);
 
-
     const FilterButton = ({ active, onClick, children, disabled = false }) => (
         <button
             onClick={onClick}
@@ -183,8 +199,26 @@ const Dashboard = () => {
         setCurrentTime(new Date());
     };
 
+    const handleCreateNewSuite = () => {
+        setIsCreateModalOpen(true);
+    };
+
+    const handleCreateModalClose = () => {
+        setIsCreateModalOpen(false);
+    };
+
+    const handleFirstSuiteSuccess = () => {
+        setShowFirstSuiteModal(false);
+        // The modal will handle navigation and context updates
+    };
+
+    const handleNewSuiteSuccess = () => {
+        setIsCreateModalOpen(false);
+        // Optionally refresh data or show success message
+    };
+
     // Loading state
-    if (loading && !bugMetrics) {
+    if (loading && !bugMetrics && suiteLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="text-center">
@@ -244,6 +278,15 @@ const Dashboard = () => {
                             </div>
                         </div>
                         <div className="flex items-center space-x-3">
+                            {/* New Suite Button */}
+                            <button
+                                onClick={handleCreateNewSuite}
+                                className="bg-gradient-to-r from-teal-600 to-blue-600 text-white px-4 py-2 rounded-md hover:from-teal-700 hover:to-blue-700 transition-all duration-200 flex items-center shadow-md hover:shadow-lg"
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                New Suite
+                            </button>
+                            
                             <label className="flex items-center text-sm text-gray-600">
                                 <input
                                     type="checkbox"
@@ -489,6 +532,22 @@ const Dashboard = () => {
                     onRefresh={handleRefresh}
                 />
             </div>
+
+            {/* First Test Suite Modal - Shows when user has no test suites */}
+            <CreateTestSuiteModal
+                isOpen={showFirstSuiteModal}
+                onClose={() => {}} // Prevent closing for first suite
+                isFirstSuite={true}
+                onSuccess={handleFirstSuiteSuccess}
+            />
+
+            {/* Regular Create Test Suite Modal - Shows when user clicks "New Suite" */}
+            <CreateTestSuiteModal
+                isOpen={isCreateModalOpen}
+                onClose={handleCreateModalClose}
+                isFirstSuite={false}
+                onSuccess={handleNewSuiteSuccess}
+            />
         </div>
     );
 };

@@ -5,8 +5,6 @@ import Header from './header';
 import Sidebar from './sidebar';
 import '../../app/globals.css';
 
-// Lazy load onboarding
-const CreateSuiteForm = lazy(() => import('../onboarding/SuiteCreationForm'));
 
 // Lazy load page components
 const Dashboard = lazy(() => import('../pages/Dashboard'));
@@ -45,7 +43,7 @@ PageLoadingFallback.displayName = 'PageLoadingFallback';
 const DashboardLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activePage, setActivePage] = useState('dashboard');
-    const { needsOnboarding, isLoading } = useSuite();
+    const { isLoading } = useSuite();
 
     // Load saved active page from localStorage on mount
     useEffect(() => {
@@ -90,15 +88,6 @@ const DashboardLayout = ({ children }) => {
     // Show loading state immediately
     if (isLoading) {
         return <LoadingSkeleton />;
-    }
-
-    // Handle onboarding with lazy loading
-    if (needsOnboarding) {
-        return (
-            <Suspense fallback={<LoadingSkeleton />}>
-                <CreateSuiteForm />
-            </Suspense>
-        );
     }
 
     return (

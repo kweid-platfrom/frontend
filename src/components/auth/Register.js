@@ -84,67 +84,18 @@ const Register = () => {
                 return;
             }
 
-            // Create new Google user with individual account and admin role
-            const individualAccountId = `ind_${user.uid}_${Date.now()}`;
-
-            // Create user document with proper admin role for individual account
+            // Create user document first (required by security rules)
             const userData = {
-                user_id: user.uid,
-                primary_email: user.email,
-                profile_info: {
-                    name: user.displayName || '',
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                    photo_url: user.photoURL || ''
-                },
-                account_memberships: [{
-                    account_id: individualAccountId,
-                    account_type: 'individual',
-                    role: 'Admin', // Google user becomes admin of their individual account
-                    status: 'active'
-                }],
-                session_context: {
-                    current_account_id: individualAccountId,
-                    current_account_type: 'individual',
-                    provider: 'google',
-                    email_verified: user.emailVerified,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                },
-                role: ['admin'], // Individual account owner is admin
-                setupCompleted: true, // Google users can skip some setup steps
-                setupStep: 'completed'
+                user_id: user.uid, // Required by security rules
+                primary_email: user.email, // Required by security rules
+                profile_info: { // Required by security rules
+                    name: user.displayName || 'Google User', // Required by security rules
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Required by security rules
+                }
+                // account_memberships and session_context are optional according to rules
             };
 
             await setDoc(userDocRef, userData);
-
-            // Create individual account document for Google user
-            const individualAccountData = {
-                account_id: individualAccountId,
-                account_type: 'individual',
-                owner_id: user.uid,
-                account_profile: {
-                    name: user.displayName || 'Google User',
-                    email: user.email,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                },
-                members: [user.uid],
-                admins: [user.uid], // Google user is admin of their individual account
-                settings: {
-                    trial_active: true,
-                    trial_start_date: new Date().toISOString(),
-                    trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
-                    subscription_status: 'trial'
-                },
-                permissions: {
-                    can_manage_users: true,
-                    can_manage_billing: true,
-                    can_manage_settings: true,
-                    can_access_admin_features: true
-                }
-            };
-
-            await setDoc(doc(db, 'individualAccounts', individualAccountId), individualAccountData);
 
             toast.success("Account created successfully with Google!");
             router.push('/dashboard');
@@ -237,138 +188,71 @@ const Register = () => {
             const user = userCredential.user;
 
             if (accountType === 'individual') {
-                // Create individual account document with admin role
-                const individualAccountId = `ind_${user.uid}_${Date.now()}`;
-
-                // Create user document with proper admin role
+                // Create user document ONLY with required fields from security rules
                 const userData = {
-                    user_id: user.uid,
-                    primary_email: formData.email,
-                    profile_info: {
-                        name: formData.fullName,
-                        timezone: formData.timezone
-                    },
-                    account_memberships: [{
-                        account_id: individualAccountId,
-                        account_type: 'individual',
-                        role: 'Admin', // Make user admin of their individual account
-                        status: 'active'
-                    }],
-                    session_context: {
-                        current_account_id: individualAccountId,
-                        current_account_type: 'individual',
-                        provider: 'email',
-                        email_verified: false,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    },
-                    // Add role field for backward compatibility
-                    role: ['admin'], // Individual account owner is admin
-                    setupCompleted: false,
-                    setupStep: 'email_verification'
+                    user_id: user.uid, // Required by security rules
+                    primary_email: formData.email, // Required by security rules
+                    profile_info: { // Required by security rules
+                        name: formData.fullName, // Required by security rules
+                        timezone: formData.timezone // Required by security rules
+                    }
+                    // Don't include account_memberships or session_context as they're optional
+                    // and may be causing permission issues
                 };
 
                 await setDoc(doc(db, 'users', user.uid), userData);
 
-                // Create individual account document
-                const individualAccountData = {
-                    account_id: individualAccountId,
-                    account_type: 'individual',
-                    owner_id: user.uid,
-                    account_profile: {
-                        name: formData.fullName,
-                        email: formData.email,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    },
-                    members: [user.uid],
-                    admins: [user.uid], // User is admin of their individual account
-                    settings: {
-                        trial_active: true,
-                        trial_start_date: new Date().toISOString(),
-                        trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
-                        subscription_status: 'trial'
-                    },
-                    permissions: {
-                        can_manage_users: true,
-                        can_manage_billing: true,
-                        can_manage_settings: true,
-                        can_access_admin_features: true
+                console.log('Individual user created successfully');
+
+            } else {
+                // Organization account creation
+                const orgId = `org_${user.uid}_${Date.now()}`;
+
+                // Step 1: Create user document with required fields ONLY
+                const userData = {
+                    user_id: user.uid, // Required by security rules
+                    primary_email: formData.email, // Required by security rules
+                    profile_info: { // Required by security rules
+                        name: formData.fullName, // Required by security rules
+                        timezone: formData.timezone // Required by security rules
                     }
                 };
 
-                await setDoc(doc(db, 'individualAccounts', individualAccountId), individualAccountData);
-
-                console.log('Individual account created with admin privileges');
-
-            } else {
-                // Organization account creation (your existing code)
-                const orgId = `org_${user.uid}_${Date.now()}`;
-
-                const userData = {
-                    user_id: user.uid,
-                    primary_email: formData.email,
-                    profile_info: {
-                        name: formData.fullName,
-                        timezone: formData.timezone
-                    },
-                    account_memberships: [{
-                        account_id: orgId,
-                        account_type: 'organization',
-                        role: 'Admin',
-                        status: 'active'
-                    }],
-                    session_context: {
-                        current_account_id: orgId,
-                        current_account_type: 'organization',
-                        provider: 'email',
-                        email_verified: false,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    },
-                    role: ['admin'], // Organization founder is admin
-                    setupCompleted: false,
-                    setupStep: 'email_verification'
-                };
-
                 await setDoc(doc(db, 'users', user.uid), userData);
 
+                // Step 2: Create organization document with required fields from security rules
                 const organizationData = {
-                    org_id: orgId,
-                    organization_profile: {
+                    org_id: orgId, // Required by security rules
+                    organization_profile: { // Required by security rules
                         name: formData.companyName,
                         type: formData.companyType,
                         domain: formData.email.split('@')[1],
                         created_at: new Date().toISOString()
-                    },
-                    members: [user.uid],
-                    admins: [user.uid],
-                    settings: {
-                        allow_member_invites: true,
-                        require_domain_verification: true,
-                        trial_active: true,
-                        trial_start_date: new Date().toISOString(),
-                        trial_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                        subscription_status: 'trial'
-                    },
-                    permissions: {
-                        can_manage_users: true,
-                        can_manage_billing: true,
-                        can_manage_settings: true,
-                        can_access_admin_features: true
                     }
                 };
 
                 await setDoc(doc(db, 'organizations', orgId), organizationData);
 
-                // Add organization member record
+                // Step 3: Add organization member record with required fields from security rules
                 await setDoc(doc(db, 'organizations', orgId, 'members', user.uid), {
-                    user_id: user.uid,
-                    org_email: formData.email,
-                    role: 'Admin',
-                    join_date: new Date().toISOString(),
-                    status: 'active'
+                    user_id: user.uid, // Required by security rules
+                    org_email: formData.email, // Required by security rules
+                    role: 'Admin', // Required by security rules - must be 'Admin' or 'Member'
+                    join_date: new Date().toISOString(), // Required by security rules
+                    status: 'active' // Required by security rules - must be 'active', 'invited', or 'suspended'
                 });
+
+                // Step 4: Now update user document with organization membership
+                await setDoc(doc(db, 'users', user.uid), {
+                    ...userData,
+                    account_memberships: [{
+                        org_id: orgId, // This is what the security rules check for
+                        role: 'Admin',
+                        status: 'active'
+                    }]
+                });
+
+                console.log('Organization account created successfully');
             }
 
             // Send email verification after user document is created
@@ -403,6 +287,8 @@ const Register = () => {
                 errorMessage = "Please enter a valid email address.";
             } else if (error.code === 'permission-denied') {
                 errorMessage = "Permission denied. Please check your account settings.";
+            } else if (error.message && error.message.includes('permission-denied')) {
+                errorMessage = "Permission denied while creating account. Please try again.";
             }
 
             toast.error(errorMessage);
