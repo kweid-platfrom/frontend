@@ -2,7 +2,7 @@
 'use client'
 import { createContext, useContext, useMemo, useCallback, useState, useEffect } from 'react';
 import { useUserProfile } from './userProfileContext';
-import { useAuth } from './AuthContext';
+import { useAuth } from './AuthProvider';
 import { accountService } from '../services/accountService';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -96,28 +96,62 @@ export const SubscriptionProvider = ({ children }) => {
             const originalProfile = userProfile;
             const updatedProfile = accountService.checkAndUpdateTrialStatus(originalProfile);
 
+            // Check if profile actually needs updating
             const needsUpdate = (
                 originalProfile.isTrialActive !== updatedProfile.isTrialActive ||
                 originalProfile.subscriptionStatus !== updatedProfile.subscriptionStatus ||
-                originalProfile.trialDaysRemaining !== updatedProfile.trialDaysRemaining
+                originalProfile.trialDaysRemaining !== updatedProfile.trialDaysRemaining ||
+                originalProfile.subscriptionType !== updatedProfile.subscriptionType
             );
 
-            if (!needsUpdate) return updatedProfile;
+            if (!needsUpdate) {
+                setTrialStatusUpdated(true);
+                return updatedProfile;
+            }
 
-            const updateData = {
-                subscriptionType: updatedProfile.subscriptionType,
-                subscriptionStatus: updatedProfile.subscriptionStatus,
-                isTrialActive: updatedProfile.isTrialActive,
-                trialDaysRemaining: updatedProfile.trialDaysRemaining,
-                updatedAt: serverTimestamp()
-            };
-
-            await updateDoc(doc(db, 'users', user.uid), updateData);
-            setTrialStatusUpdated(true);
+            // Ensure all required fields have valid values before updating
+            const updateData = {};
             
+            // Only add fields that are not undefined
+            if (updatedProfile.subscriptionType !== undefined && updatedProfile.subscriptionType !== null) {
+                updateData.subscriptionType = updatedProfile.subscriptionType;
+            }
+            
+            if (updatedProfile.subscriptionStatus !== undefined && updatedProfile.subscriptionStatus !== null) {
+                updateData.subscriptionStatus = updatedProfile.subscriptionStatus;
+            }
+            
+            if (updatedProfile.isTrialActive !== undefined && updatedProfile.isTrialActive !== null) {
+                updateData.isTrialActive = updatedProfile.isTrialActive;
+            }
+            
+            if (updatedProfile.trialDaysRemaining !== undefined && updatedProfile.trialDaysRemaining !== null) {
+                updateData.trialDaysRemaining = updatedProfile.trialDaysRemaining;
+            }
+
+            // Always add timestamp
+            updateData.updatedAt = serverTimestamp();
+
+            // Only proceed with update if we have data to update
+            if (Object.keys(updateData).length > 1) { // More than just updatedAt
+                console.log('Updating user document with:', updateData);
+                await updateDoc(doc(db, 'users', user.uid), updateData);
+            }
+            
+            setTrialStatusUpdated(true);
             return updatedProfile;
+            
         } catch (error) {
             console.error('Error updating trial status:', error);
+            
+            // Log the specific error for debugging
+            if (error.code === 'invalid-argument') {
+                console.error('Invalid data provided to updateDoc:', {
+                    userProfile,
+                    updatedProfileKeys: updatedProfile ? Object.keys(updatedProfile) : 'undefined'
+                });
+            }
+            
             return userProfile;
         }
     }, [user, userProfile, trialStatusUpdated]);
@@ -128,6 +162,11 @@ export const SubscriptionProvider = ({ children }) => {
             updateTrialStatusInDatabase();
         }
     }, [userProfile, updateTrialStatusInDatabase, trialStatusUpdated]);
+
+    // Reset trialStatusUpdated when user changes
+    useEffect(() => {
+        setTrialStatusUpdated(false);
+    }, [user?.uid]);
 
     const value = {
         subscriptionStatus,

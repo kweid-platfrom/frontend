@@ -48,14 +48,45 @@ export const SuiteProvider = ({ children }) => {
         return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
     }, [cache.timestamp]);
 
+    // Add the missing getFeatureLimits function
+    const getFeatureLimits = useCallback(() => {
+        if (!subscriptionStatus) {
+            // Default limits for free tier
+            return {
+                suites: 1,
+                testCases: 10,
+                recordings: 5,
+                automatedScripts: 0
+            };
+        }
+
+        const limits = subscriptionStatus.capabilities?.limits;
+        if (!limits) {
+            // Fallback default limits
+            return {
+                suites: 1,
+                testCases: 10,
+                recordings: 5,
+                automatedScripts: 0
+            };
+        }
+
+        return {
+            suites: limits.testSuites || 1,
+            testCases: limits.testCases || 10,
+            recordings: limits.recordings || 5,
+            automatedScripts: limits.automatedScripts || 0
+        };
+    }, [subscriptionStatus]);
+
     const canCreateSuite = useMemo(() => {
         if (!userProfile || !subscriptionStatus) return false;
 
-        const limits = subscriptionStatus.capabilities?.limits;
-        if (!limits) return suites.length < 1; // Default fallback
-
-        return suites.length < limits.testSuites;
-    }, [userProfile, subscriptionStatus, suites.length]);
+        const limits = getFeatureLimits();
+        if (limits.suites === -1) return true; // Unlimited
+        
+        return suites.length < limits.suites;
+    }, [userProfile, subscriptionStatus, suites.length, getFeatureLimits]);
 
     const fetchUserSuites = useCallback(async (userId = null) => {
         if (!userId || !userProfile) return [];
@@ -155,6 +186,32 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [cache.suites, isCacheValid, userProfile]);
 
+    const setActiveSuiteWithStorage = useCallback((suite) => {
+        setActiveSuite(suite);
+        if (suite?.suite_id) {
+            localStorage.setItem('activeSuiteId', suite.suite_id);
+        } else {
+            localStorage.removeItem('activeSuiteId');
+        }
+    }, []);
+
+    const refetchSuites = useCallback(async () => {
+        if (!user || !userProfile) return;
+
+        setCache({ suites: null, timestamp: null });
+        const userSuites = await fetchUserSuites(user.uid);
+        setSuites(userSuites);
+
+        // Handle active suite
+        if (userSuites.length > 0) {
+            const savedSuiteId = localStorage.getItem('activeSuiteId');
+            const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
+            setActiveSuiteWithStorage(activeSuiteItem);
+        } else {
+            setActiveSuiteWithStorage(null);
+        }
+    }, [user, userProfile, fetchUserSuites, setActiveSuiteWithStorage]);
+
     const createTestSuite = useCallback(async (suiteData) => {
         if (!user || !userProfile) {
             throw new Error('User not authenticated or profile not loaded');
@@ -227,32 +284,6 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user, userProfile, canCreateSuite, refetchSuites]);
 
-    const setActiveSuiteWithStorage = useCallback((suite) => {
-        setActiveSuite(suite);
-        if (suite?.suite_id) {
-            localStorage.setItem('activeSuiteId', suite.suite_id);
-        } else {
-            localStorage.removeItem('activeSuiteId');
-        }
-    }, []);
-
-    const refetchSuites = useCallback(async () => {
-        if (!user || !userProfile) return;
-
-        setCache({ suites: null, timestamp: null });
-        const userSuites = await fetchUserSuites(user.uid);
-        setSuites(userSuites);
-
-        // Handle active suite
-        if (userSuites.length > 0) {
-            const savedSuiteId = localStorage.getItem('activeSuiteId');
-            const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
-            setActiveSuiteWithStorage(activeSuiteItem);
-        } else {
-            setActiveSuiteWithStorage(null);
-        }
-    }, [user, userProfile, fetchUserSuites, setActiveSuiteWithStorage]);
-
     // Load suites when user/profile changes
     useEffect(() => {
         if (user && userProfile) {
@@ -271,7 +302,9 @@ export const SuiteProvider = ({ children }) => {
         canCreateSuite,
         createTestSuite,
         refetchSuites,
-        fetchUserSuites
+        fetchUserSuites,
+        subscriptionStatus, // Make sure this is available
+        getFeatureLimits // Add the missing function to the context value
     };
 
     return <SuiteContext.Provider value={value}>{children}</SuiteContext.Provider>;

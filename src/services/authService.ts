@@ -8,9 +8,16 @@ import {
     isSignInWithEmailLink,
     signInWithEmailLink,
     updatePassword,
+    sendPasswordResetEmail,
+    confirmPasswordReset as firebaseConfirmPasswordReset,
     EmailAuthProvider,
+    GoogleAuthProvider,
     linkWithCredential,
-    UserCredential
+    unlink,
+    reload,
+    deleteUser,
+    UserCredential,
+    User
 } from "firebase/auth";
 import { auth, googleProvider } from "../config/firebase";
 
@@ -80,9 +87,11 @@ const registerWithEmailLink = async (email: string, name: string): Promise<{ suc
         await sendSignInLinkToEmail(auth, email, actionCodeSettings);
         
         // Store data for account setup
-        localStorage.setItem('emailForSignIn', email);
-        localStorage.setItem('registeredUserName', name);
-        localStorage.setItem('emailSentTimestamp', Date.now().toString());
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('emailForSignIn', email);
+            localStorage.setItem('registeredUserName', name);
+            localStorage.setItem('emailSentTimestamp', Date.now().toString());
+        }
         
         return { success: true };
     } catch (error) {
@@ -176,6 +185,132 @@ const setUserPassword = async (password: string): Promise<{ success: boolean }> 
 };
 
 /**
+ * Send password reset email
+ * @param {string} email 
+ * @returns {Promise<void>}
+ */
+const resetPassword = async (email: string): Promise<void> => {
+    try {
+        await sendPasswordResetEmail(auth, email);
+        console.log("Password reset email sent!");
+    } catch (error) {
+        console.error("Password reset error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Confirm password reset with code
+ * @param {string} code 
+ * @param {string} newPassword 
+ * @returns {Promise<void>}
+ */
+const confirmPasswordReset = async (code: string, newPassword: string): Promise<void> => {
+    try {
+        await firebaseConfirmPasswordReset(auth, code, newPassword);
+        console.log("Password reset successfully!");
+    } catch (error) {
+        console.error("Password reset confirmation error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Resend email verification to current user
+ * @param {User} user 
+ * @returns {Promise<void>}
+ */
+const resendVerificationEmail = async (user: User): Promise<void> => {
+    try {
+        await sendEmailVerification(user);
+        console.log("Verification email resent!");
+    } catch (error) {
+        console.error("Resend verification email error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Delete current user account
+ * @param {User} user 
+ * @returns {Promise<void>}
+ */
+const deleteUserAccount = async (user: User): Promise<void> => {
+    try {
+        await deleteUser(user);
+        console.log("User account deleted successfully!");
+    } catch (error) {
+        console.error("Delete account error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Link authentication provider to current user
+ * @param {User} user 
+ * @param {string} provider - 'google.com' or 'password'
+ * @returns {Promise<UserCredential>}
+ */
+const linkAuthProvider = async (user: User, provider: string): Promise<UserCredential> => {
+    try {
+        let credential;
+        
+        if (provider === 'google.com') {
+            const googleProvider = new GoogleAuthProvider();
+            googleProvider.setCustomParameters({
+                prompt: 'select_account'
+            });
+            
+            const result = await signInWithPopup(auth, googleProvider);
+            credential = GoogleAuthProvider.credentialFromResult(result);
+            
+            if (!credential) {
+                throw new Error('Failed to get Google credential');
+            }
+            
+            return await linkWithCredential(user, credential);
+        } else {
+            throw new Error('Unsupported provider for linking');
+        }
+    } catch (error) {
+        console.error("Link provider error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Unlink authentication provider from current user
+ * @param {User} user 
+ * @param {string} providerId - 'google.com' or 'password'
+ * @returns {Promise<User>}
+ */
+const unlinkAuthProvider = async (user: User, providerId: string): Promise<User> => {
+    try {
+        const result = await unlink(user, providerId);
+        console.log(`Provider ${providerId} unlinked successfully!`);
+        return result;
+    } catch (error) {
+        console.error("Unlink provider error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Refresh current user's authentication session
+ * @param {User} user 
+ * @returns {Promise<void>}
+ */
+const refreshAuthSession = async (user: User): Promise<void> => {
+    try {
+        await reload(user);
+        console.log("Auth session refreshed!");
+    } catch (error) {
+        console.error("Refresh session error:", error);
+        throw error;
+    }
+};
+
+/**
  * Check if current URL is a sign-in link
  * @param {string} url 
  * @returns {boolean}
@@ -192,5 +327,12 @@ export {
     registerWithEmailLink,
     completeEmailLinkSignIn,
     setUserPassword,
+    resetPassword,
+    confirmPasswordReset,
+    resendVerificationEmail,
+    deleteUserAccount,
+    linkAuthProvider,
+    unlinkAuthProvider,
+    refreshAuthSession,
     isEmailSignInLink
 };

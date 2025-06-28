@@ -106,6 +106,9 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
     // Use trialStatus prop if available, otherwise fall back to subscriptionStatus
     const currentStatus = trialStatus || subscriptionStatus;
 
+    // Ensure suites is an array and filter out any invalid entries
+    const validSuites = Array.isArray(suites) ? suites.filter(suite => suite && (suite.id || suite._id)) : [];
+
     return (
         <div className={`p-4 border-b border-gray-200/50 transition-all duration-300 ${isCollapsed ? 'lg:px-2' : 'px-4'}`}>
             <div className="relative group">
@@ -178,25 +181,31 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
                         </div>
 
                         <div className="space-y-1">
-                            {suites.map((suite) => (
-                                <button
-                                    key={suite.id}
-                                    onClick={() => handleSuiteSwitch(suite)}
-                                    className={`w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 transition-all duration-200 hover:scale-[1.01] ${activeSuite?.id === suite.id ? 'bg-blue-50 text-teal-700 ring-1 ring-blue-200' : 'text-gray-900'
-                                        }`}
-                                >
-                                    <FolderIcon className="h-4 w-4 mr-3 flex-shrink-0" />
-                                    <div className="min-w-0 flex-1">
-                                        <span className="text-sm font-medium truncate block">{suite.name}</span>
-                                        {suite.description && (
-                                            <span className="text-xs text-gray-500 truncate block mt-0.5">{suite.description}</span>
+                            {validSuites.map((suite, index) => {
+                                // Use suite.id, suite._id, or fall back to index for key
+                                const suiteKey = suite.id || suite._id || `suite-${index}`;
+                                const suiteId = suite.id || suite._id;
+                                
+                                return (
+                                    <button
+                                        key={suiteKey}
+                                        onClick={() => handleSuiteSwitch(suite)}
+                                        className={`w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 transition-all duration-200 hover:scale-[1.01] ${activeSuite?.id === suiteId || activeSuite?._id === suiteId ? 'bg-blue-50 text-teal-700 ring-1 ring-blue-200' : 'text-gray-900'
+                                            }`}
+                                    >
+                                        <FolderIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                            <span className="text-sm font-medium truncate block">{suite.name || 'Unnamed Suite'}</span>
+                                            {suite.description && (
+                                                <span className="text-xs text-gray-500 truncate block mt-0.5">{suite.description}</span>
+                                            )}
+                                        </div>
+                                        {(activeSuite?.id === suiteId || activeSuite?._id === suiteId) && (
+                                            <CheckCircleIcon className="h-4 w-4 ml-2 text-teal-700 flex-shrink-0" />
                                         )}
-                                    </div>
-                                    {activeSuite?.id === suite.id && (
-                                        <CheckCircleIcon className="h-4 w-4 ml-2 text-teal-700 flex-shrink-0" />
-                                    )}
-                                </button>
-                            ))}
+                                    </button>
+                                );
+                            })}
                         </div>
 
                         {/* Create Suite Button */}

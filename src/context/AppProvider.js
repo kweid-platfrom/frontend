@@ -1,6 +1,6 @@
 // contexts/AppProvider.js - Main provider that combines all contexts
 'use client'
-import { AuthProvider } from './AuthContext';
+import { AuthProvider } from './AuthProvider';
 import { UserProfileProvider } from './userProfileContext';
 import { SubscriptionProvider } from './subscriptionContext';
 import { SuiteProvider } from './SuiteContext';

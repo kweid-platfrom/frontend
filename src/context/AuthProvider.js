@@ -6,10 +6,17 @@ import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
 
 import {
-    fetchUserData,
-    updateOnboardingStep
+    fetchUserData
 } from "../services/userService";
 import { updateUserProfile as updateUserProfileService } from "../services/userService";
+
+// Import permissions service
+import { 
+    getUserPermissions, 
+    createPermissionChecker,
+    isOrganizationAccount,
+    isIndividualAccount
+} from "../services/permissionService";
 
 import {
     signInWithGoogle as authSignInWithGoogle,
@@ -38,167 +45,6 @@ export const useAuth = () => {
     return context;
 };
 
-const normalizeRoles = (roleData) => {
-    if (!roleData) return ['member'];
-    if (typeof roleData === 'string') {
-        return [roleData];
-    }
-    if (Array.isArray(roleData)) {
-        return roleData.length > 0 ? roleData : ['member'];
-    }
-    return ['member'];
-};
-
-const getPrimaryRole = (roles) => {
-    if (!roles || roles.length === 0) return 'member';
-    const rolePriority = [
-        'super_admin',
-        'admin', 
-        'organization_admin', 
-        'suite_manager', 
-        'lead', 
-        'tester', 
-        'developer', 
-        'member', 
-        'viewer'
-    ];
-    for (const role of rolePriority) {
-        if (roles.includes(role)) {
-            return role;
-        }
-    }
-    return roles[0];
-};
-
-const getRoleCapabilities = (roles) => {
-    const capabilities = new Set(['read_tests']);
-    roles.forEach(role => {
-        switch (role) {
-            case 'super_admin':
-            case 'admin':
-                capabilities.add('write_tests');
-                capabilities.add('admin');
-                capabilities.add('manage_test_suites');
-                capabilities.add('manage_users');
-                capabilities.add('manage_organizations');
-                capabilities.add('view_analytics');
-                capabilities.add('manage_bugs');
-                capabilities.add('assign_bugs');
-                capabilities.add('manage_billing');
-                capabilities.add('system_settings');
-                capabilities.add('create_test_suites');
-                capabilities.add('delete_test_suites');
-                break;
-            case 'organization_admin':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('assign_bugs');
-                capabilities.add('manage_test_suites');
-                capabilities.add('manage_users');
-                capabilities.add('view_analytics');
-                capabilities.add('manage_billing');
-                capabilities.add('create_test_suites');
-                capabilities.add('delete_test_suites');
-                break;
-            case 'suite_manager':
-            case 'lead':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('assign_bugs');
-                capabilities.add('manage_test_suites');
-                capabilities.add('view_analytics');
-                capabilities.add('create_test_suites');
-                break;
-            case 'developer':
-            case 'tester':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('create_bugs');
-                capabilities.add('create_test_cases');
-                capabilities.add('run_tests');
-                break;
-            case 'member':
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('create_bugs');
-                capabilities.add('create_test_cases');
-                capabilities.add('run_tests');
-                break;
-            case 'viewer':
-                // Only has read_tests from default
-                break;
-            default:
-                capabilities.add('write_tests');
-                capabilities.add('manage_bugs');
-                capabilities.add('create_bugs');
-                capabilities.add('create_test_cases');
-                break;
-        }
-    });
-    return Array.from(capabilities);
-};
-
-const determineUserPermissions = (userData, explicitAdmin = false) => {
-    const normalizedRoles = normalizeRoles(userData.role);
-    const primaryRole = getPrimaryRole(normalizedRoles);
-    const isAdminByRole = normalizedRoles.some(role => 
-        ['admin', 'super_admin', 'organization_admin'].includes(role)
-    );
-    const isAdmin = explicitAdmin || isAdminByRole || userData.isAdmin === true;
-    let capabilities = getRoleCapabilities(normalizedRoles);
-    
-    if (isAdmin) {
-        capabilities = [
-            'read_tests',
-            'write_tests',
-            'admin',
-            'manage_test_suites',
-            'manage_users',
-            'manage_organizations',
-            'view_analytics',
-            'manage_bugs',
-            'assign_bugs',
-            'manage_billing',
-            'system_settings',
-            'create_test_suites',
-            'delete_test_suites',
-            'create_test_cases',
-            'run_tests'
-        ];
-    }
-    
-    if (userData.permissions?.capabilities) {
-        capabilities = [
-            ...new Set([...capabilities, ...userData.permissions.capabilities])
-        ];
-    }
-    
-    let finalIsAdmin = isAdmin;
-    if (userData.permissions?.isAdmin !== undefined) {
-        finalIsAdmin = userData.permissions.isAdmin;
-    }
-    
-    const permissions = {
-        isAdmin: finalIsAdmin,
-        roles: normalizedRoles,
-        primaryRole: primaryRole,
-        capabilities: capabilities,
-        canManageUsers: finalIsAdmin || capabilities.includes('manage_users'),
-        canManageTestSuites: finalIsAdmin || capabilities.includes('manage_test_suites'),
-        canCreateTestSuites: finalIsAdmin || capabilities.includes('create_test_suites'),
-        canDeleteTestSuites: finalIsAdmin || capabilities.includes('delete_test_suites'),
-        canViewAnalytics: finalIsAdmin || capabilities.includes('view_analytics'),
-        canManageBilling: finalIsAdmin || capabilities.includes('manage_billing'),
-        canManageBugs: capabilities.includes('manage_bugs'),
-        canAssignBugs: capabilities.includes('assign_bugs'),
-        canCreateBugs: capabilities.includes('create_bugs'),
-        canCreateTestCases: capabilities.includes('create_test_cases'),
-        canRunTests: capabilities.includes('run_tests'),
-    };
-    
-    return permissions;
-};
-
 export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
     const [userPermissions, setUserPermissions] = useState(null);
@@ -207,6 +53,7 @@ export const AuthProvider = ({ children }) => {
     const [authError, setAuthError] = useState(null);
     const [initialized, setInitialized] = useState(false);
     const [skipEmailVerificationRedirect, setSkipEmailVerificationRedirect] = useState(false);
+    const [permissionChecker, setPermissionChecker] = useState(null);
     const router = useRouter();
 
     const processUserAuthentication = useCallback(async (user) => {
@@ -214,6 +61,7 @@ export const AuthProvider = ({ children }) => {
             setCurrentUser(null);
             setUserPermissions(null);
             setUserProfile(null);
+            setPermissionChecker(null);
             return;
         }
         
@@ -241,65 +89,35 @@ export const AuthProvider = ({ children }) => {
 
             if (result.error) {
                 setAuthError(result.error);
-                setUserPermissions({
-                    isAdmin: false,
-                    roles: ["member"],
-                    primaryRole: "member",
-                    capabilities: ["read_tests"],
-                    canManageUsers: false,
-                    canManageTestSuites: false,
-                    canCreateTestSuites: false,
-                    canDeleteTestSuites: false,
-                    canViewAnalytics: false,
-                    canManageBilling: false,
-                    canManageBugs: false,
-                    canAssignBugs: false,
-                    canCreateBugs: false,
-                    canCreateTestCases: false,
-                    canRunTests: false
-                });
+                setUserPermissions(null);
                 setUserProfile({});
+                setPermissionChecker(null);
                 return;
             }
             
             if (!result.userData) {
                 setAuthError('Failed to load user data');
-                setUserPermissions({
-                    isAdmin: false,
-                    roles: ["member"],
-                    primaryRole: "member",
-                    capabilities: ["read_tests"],
-                    canManageUsers: false,
-                    canManageTestSuites: false,
-                    canCreateTestSuites: false,
-                    canDeleteTestSuites: false,
-                    canViewAnalytics: false,
-                    canManageBilling: false,
-                    canManageBugs: false,
-                    canAssignBugs: false,
-                    canCreateBugs: false,
-                    canCreateTestCases: false,
-                    canRunTests: false
-                });
+                setUserPermissions(null);
                 setUserProfile({});
+                setPermissionChecker(null);
                 return;
             }
             
-            const normalizedUserData = {
-                ...result.userData,
-                role: normalizeRoles(result.userData.role),
-                primaryRole: getPrimaryRole(normalizeRoles(result.userData.role))
-            };
-            
-            const permissions = determineUserPermissions(result.userData);
+            // Get comprehensive user permissions using the permissions service
+            const permissions = getUserPermissions(result.userData);
             setUserPermissions(permissions);
-            setUserProfile(normalizedUserData);
+            
+            // Create permission checker utility
+            const checker = createPermissionChecker(result.userData);
+            setPermissionChecker(checker);
+            
+            setUserProfile(result.userData);
             
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 
+                // Skip redirects for these paths
                 if (currentPath === "/verify-email" ||
-                    currentPath.startsWith("/onboarding") ||
                     currentPath.startsWith("/handle-email-verification") ||
                     skipEmailVerificationRedirect) {
                     return;
@@ -307,59 +125,26 @@ export const AuthProvider = ({ children }) => {
                 
                 const needsEmailVerification = authSource === 'email' && !user.emailVerified;
                 const isOnAuthPage = ["/login", "/register"].includes(currentPath);
-                const isNewUser = result.isNewUser;
                 
-                if (needsEmailVerification && !isOnAuthPage && !isNewUser) {
+                // Redirect to email verification if needed
+                if (needsEmailVerification && !isOnAuthPage) {
                     router.push("/verify-email");
                     return;
                 }
                 
-                const needsOnboarding = !isNewUser && (
-                    result.needsSetup ||
-                    !result.userData.setupCompleted ||
-                    result.userData.setupStep !== 'completed' ||
-                    !result.userData.onboardingStatus?.onboardingComplete ||
-                    !result.userData.onboardingStatus?.testSuiteCreated
-                );
-                
-                if (needsOnboarding) {
-                    const shouldRedirectToOnboarding = [
-                        "/login", "/", "/dashboard"
-                    ].includes(currentPath);
-                    
-                    if (shouldRedirectToOnboarding) {
-                        router.push("/onboarding");
-                    }
-                    return;
-                }
-                
+                // Redirect to dashboard after successful verification or login
                 const shouldRedirectToDashboard = [
                     "/login", "/", "/verify-email"
                 ].includes(currentPath);
                 
-                if (shouldRedirectToDashboard && !isNewUser) {
+                if (shouldRedirectToDashboard && user.emailVerified) {
                     router.push("/dashboard");
                 }
             }
         } catch (error) {
-            setUserPermissions({
-                isAdmin: false,
-                roles: ["member"],
-                primaryRole: "member",
-                capabilities: ["read_tests", "manage_bugs"],
-                canManageUsers: false,
-                canManageTestSuites: false,
-                canCreateTestSuites: false,
-                canDeleteTestSuites: false,
-                canViewAnalytics: false,
-                canManageBilling: false,
-                canManageBugs: true,
-                canAssignBugs: false,
-                canCreateBugs: true,
-                canCreateTestCases: true,
-                canRunTests: true
-            });
+            setUserPermissions(null);
             setUserProfile({});
+            setPermissionChecker(null);
             setAuthError(error.message);
         }
     }, [router, skipEmailVerificationRedirect]);
@@ -480,7 +265,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // NEW: Password Reset Functions
     const resetPassword = async (email) => {
         setAuthError(null);
         try {
@@ -503,7 +287,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // NEW: Email Verification Functions
     const resendVerificationEmail = async () => {
         setAuthError(null);
         try {
@@ -518,7 +301,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // NEW: Account Management Functions
     const deleteAccount = async () => {
         setAuthError(null);
         try {
@@ -540,7 +322,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // NEW: Provider Linking Functions
     const linkProvider = async (provider) => {
         setAuthError(null);
         try {
@@ -569,7 +350,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // NEW: Session Management
     const refreshSession = async () => {
         setAuthError(null);
         try {
@@ -589,12 +369,11 @@ export const AuthProvider = ({ children }) => {
             await authLogout();
             
             if (typeof window !== 'undefined') {
-                localStorage.removeItem("needsAccountSetup");
-                localStorage.removeItem("awaitingEmailVerification");
-                localStorage.removeItem("emailVerificationComplete");
-                localStorage.removeItem("needsOnboarding");
-                localStorage.removeItem("registrationData");
                 localStorage.removeItem("emailForVerification");
+                localStorage.removeItem("registrationData");
+                localStorage.removeItem("emailForSignIn");
+                localStorage.removeItem("registeredUserName");
+                localStorage.removeItem("emailSentTimestamp");
             }
             
             router.push("/login");
@@ -604,58 +383,64 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Permission checking methods using the permissions service
     const hasPermission = useCallback((capability) => {
-        if (!userPermissions) {
-            return false;
-        }
-        
-        if (userPermissions.isAdmin) {
-            return true;
-        }
-        
-        const hasCapability = userPermissions.capabilities?.includes(capability) || false;
-        return hasCapability;
-    }, [userPermissions]);
+        return permissionChecker ? permissionChecker.can(capability) : false;
+    }, [permissionChecker]);
 
     const hasRole = useCallback((role) => {
-        if (!userPermissions) {
-            return false;
-        }
-        
-        const hasUserRole = userPermissions.roles?.includes(role) || false;
-        return hasUserRole;
-    }, [userPermissions]);
+        if (!userProfile) return false;
+        // Check if user has specific role
+        const userRoles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
+        return userRoles.includes(role);
+    }, [userProfile]);
 
     const hasAnyRole = useCallback((roles) => {
-        if (!userPermissions || !Array.isArray(roles)) return false;
-        return roles.some(role => userPermissions.roles?.includes(role));
-    }, [userPermissions]);
+        if (!userProfile) return false;
+        const userRoles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
+        return roles.some(role => userRoles.includes(role));
+    }, [userProfile]);
 
-    const isAdmin = useCallback(() => {
-        return userPermissions?.isAdmin || false;
-    }, [userPermissions]);
+    const isUserAdmin = useCallback(() => {
+        return permissionChecker ? permissionChecker.isAdmin() : false;
+    }, [permissionChecker]);
 
     const getPrimaryUserRole = useCallback(() => {
-        return userPermissions?.primaryRole || 'member';
-    }, [userPermissions]);
+        if (!userProfile) return 'member';
+        
+        // Get primary role from user profile
+        const roles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
+        
+        // Priority order for roles
+        const rolePriority = ['Admin', 'Manager', 'QA_Tester', 'Developer', 'Member', 'Viewer'];
+        
+        for (const role of rolePriority) {
+            if (roles.includes(role)) {
+                return role;
+            }
+        }
+        
+        return 'Member';
+    }, [userProfile]);
 
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
         
         try {
             setLoading(true);
-            const userData = await fetchUserData(currentUser.uid);
+            const result = await fetchUserData(currentUser.uid);
             
-            if (userData) {
-                const normalizedUserData = {
-                    ...userData,
-                    role: normalizeRoles(userData.role),
-                    primaryRole: getPrimaryRole(normalizeRoles(userData.role))
-                };
+            if (result.userData) {
+                setUserProfile(result.userData);
                 
-                const permissions = determineUserPermissions(userData);
+                // Update permissions with fresh data
+                const permissions = getUserPermissions(result.userData);
                 setUserPermissions(permissions);
-                setUserProfile(normalizedUserData);
+                
+                // Update permission checker
+                const checker = createPermissionChecker(result.userData);
+                setPermissionChecker(checker);
+                
                 return true;
             }
             
@@ -685,22 +470,6 @@ export const AuthProvider = ({ children }) => {
         }
     }, [currentUser, refreshUserData]);
 
-    const markEmailVerified = useCallback(async () => {
-        if (!currentUser?.uid) return false;
-        
-        try {
-            await updateOnboardingStep(currentUser.uid, 'emailVerified', true, {
-                setupStep: userProfile?.accountType === 'organization'
-                    ? 'organization_info'
-                    : 'profile_setup'
-            });
-            await refreshUserData();
-            return true;
-        } catch {
-            return false;
-        }
-    }, [currentUser, userProfile, refreshUserData]);
-
     const redirectToEmailVerification = useCallback(() => {
         if (currentUser && !currentUser.emailVerified) {
             setSkipEmailVerificationRedirect(false);
@@ -712,17 +481,26 @@ export const AuthProvider = ({ children }) => {
         setAuthError(null);
     };
 
-    // NEW: Helper function to get linked providers
     const getLinkedProviders = useCallback(() => {
         if (!currentUser?.providerData) return [];
         return currentUser.providerData.map(provider => provider.providerId);
     }, [currentUser]);
 
-    // NEW: Check if specific provider is linked
     const isProviderLinked = useCallback((providerId) => {
         const linkedProviders = getLinkedProviders();
         return linkedProviders.includes(providerId);
     }, [getLinkedProviders]);
+
+    // Enhanced permission checking methods
+    const canAccessProject = useCallback(async (action = 'read', projectContext = {}) => {
+        if (!userProfile) return { allowed: false, reason: 'no_user' };
+        return await canAccessProject(userProfile, action, projectContext);
+    }, [userProfile]);
+
+    const canAccessBugs = useCallback((action = 'read', context = {}) => {
+        if (!userProfile) return { allowed: false, reason: 'no_user' };
+        return canAccessBugs(userProfile, action, context);
+    }, [userProfile]);
 
     const value = {
         currentUser,
@@ -732,48 +510,73 @@ export const AuthProvider = ({ children }) => {
         authError,
         environment,
         initialized,
+        permissionChecker,
         signIn,
         signInWithGoogle,
         registerWithEmail,
         registerWithEmailLink,
         completeEmailLinkSignIn,
         setUserPassword,
-        // NEW: Password Reset
         resetPassword,
         confirmPasswordReset,
-        // NEW: Email Verification
         resendVerificationEmail,
-        // NEW: Account Management
         deleteAccount,
-        // NEW: Provider Management
         linkProvider,
         unlinkProvider,
         getLinkedProviders,
         isProviderLinked,
-        // NEW: Session Management
         refreshSession,
         signOut,
         hasPermission,
         hasRole,
         hasAnyRole,
-        isAdmin,
+        isAdmin: isUserAdmin,
         getPrimaryUserRole,
-        // Test Suite specific permissions
+        canAccessProject,
+        canAccessBugs,
+        
+        // Convenience flags from permissions service
         canManageUsers: userPermissions?.canManageUsers || false,
-        canManageTestSuites: userPermissions?.canManageTestSuites || false,
+        canManageTestSuites: userPermissions?.canCreateTestSuites || false,
         canCreateTestSuites: userPermissions?.canCreateTestSuites || false,
         canDeleteTestSuites: userPermissions?.canDeleteTestSuites || false,
         canViewAnalytics: userPermissions?.canViewAnalytics || false,
-        canManageBilling: userPermissions?.canManageBilling || false,
-        canManageBugs: userPermissions?.canManageBugs || false,
+        canManageBilling: userPermissions?.canViewBilling || false,
+        canManageBugs: userPermissions?.canWriteBugs || false,
         canAssignBugs: userPermissions?.canAssignBugs || false,
         canCreateBugs: userPermissions?.canCreateBugs || false,
-        canCreateTestCases: userPermissions?.canCreateTestCases || false,
-        canRunTests: userPermissions?.canRunTests || false,
+        canCreateTestCases: userPermissions?.canCreateContent || false,
+        canRunTests: userPermissions?.canReadProjects || false,
+        canViewSubscription: userPermissions?.canViewSubscription || false,
+        canViewDashboard: userPermissions?.canViewDashboard || false,
+        canViewSettings: userPermissions?.canViewSettings || false,
+        canViewAdminPanel: userPermissions?.canViewAdminPanel || false,
+        canViewReports: userPermissions?.canViewReports || false,
+        canInviteUsers: userPermissions?.canInviteUsers || false,
+        canViewTeamMembers: userPermissions?.canViewTeamMembers || false,
+        canManageOrganization: userPermissions?.canManageOrganization || false,
+        canViewOrganizationSettings: userPermissions?.canViewOrganizationSettings || false,
+        canUseAdvancedReports: userPermissions?.canUseAdvancedReports || false,
+        canUseAPIAccess: userPermissions?.canUseAPIAccess || false,
+        canUseAutomation: userPermissions?.canUseAutomation || false,
+        canExportData: userPermissions?.canExportData || false,
+        
+        // Account type helpers
+        isOrganizationAccount: userProfile ? isOrganizationAccount(userProfile) : false,
+        isIndividualAccount: userProfile ? isIndividualAccount(userProfile) : false,
+        
+        // Subscription information
+        subscriptionType: userPermissions?.subscriptionType || 'free',
+        subscriptionStatus: userPermissions?.subscriptionStatus || 'inactive',
+        isTrialActive: userPermissions?.isTrialActive || false,
+        trialDaysRemaining: userPermissions?.trialDaysRemaining || 0,
+        showTrialBanner: userPermissions?.showTrialBanner || false,
+        limits: userPermissions?.limits || {},
+        shouldShowUpgradePrompts: userPermissions?.shouldShowUpgradePrompts || {},
+        
         updateUserProfile,
         refreshUserData,
         clearAuthError,
-        markEmailVerified,
         redirectToEmailVerification,
         user: currentUser,
     };

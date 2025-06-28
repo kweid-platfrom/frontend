@@ -1,15 +1,11 @@
 // components/auth/ProtectedRoute.js
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthProvider';
 import { Loader2 } from 'lucide-react';
 
-const ProtectedRoute = ({
-    children,
-    requireEmailVerified = false,
-    requireOnboardingComplete = false
-}) => {
-    const { currentUser, userProfile, loading } = useAuth();
+const ProtectedRoute = ({ children, requireEmailVerified = false }) => {
+    const { currentUser, loading } = useAuth();
 
     // Show loading spinner while auth state is being determined
     if (loading) {
@@ -30,22 +26,7 @@ const ProtectedRoute = ({
         return <Navigate to="/verify-email" replace />;
     }
 
-    // Check onboarding completion requirement
-    if (requireOnboardingComplete && userProfile) {
-        if (!userProfile.onboardingStatus?.onboardingComplete) {
-            // Simply redirect to /onboarding - let OnboardingRouter handle the routing
-            return <Navigate to="/onboarding" replace />;
-        }
-    }
-
-    // Special case: if user is on login/signup but onboarding is incomplete
-    if (userProfile && !userProfile.onboardingStatus?.onboardingComplete) {
-        const currentPath = window.location.pathname;
-        if (currentPath === '/login' || currentPath === '/signup' || currentPath === '/') {
-            return <Navigate to="/onboarding" replace />;
-        }
-    }
-
+    // ✅ Everything is good, render the protected content
     return children;
 };
 

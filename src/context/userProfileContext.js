@@ -1,7 +1,7 @@
 // contexts/UserProfileContext.js
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useAuth } from './AuthContext';
+import { useAuth } from './AuthProvider';
 import { 
     fetchUserData, 
     updateUserProfile, 

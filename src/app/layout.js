@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
-import { AppProvider } from "../contexts/AppProvider"; // Updated import path
-import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next.font/google";
+import { AppProvider } from "../context/AppProvider";
+import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
 import { Toaster } from "sonner";
 
 // Load fonts
