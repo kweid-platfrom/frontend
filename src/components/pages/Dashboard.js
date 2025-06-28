@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube, Plus } from 'lucide-react';
 
 // Import QAID-specific components
@@ -21,7 +22,7 @@ import { useBugTrackingMetrics } from '../../services/bugTrackingService';
 
 const Dashboard = () => {
     const { userTestSuites, loading: suiteLoading } = useSuite();
-    
+
     const [filters, setFilters] = useState({
         timeRange: '7d',
         component: 'all',
@@ -38,10 +39,14 @@ const Dashboard = () => {
     const [isConnected, setIsConnected] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [autoRefresh, setAutoRefresh] = useState(true);
-    
+
     // Modal states
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [showFirstSuiteModal, setShowFirstSuiteModal] = useState(false);
+
+    // Use refs to prevent infinite loops
+    const timeIntervalRef = useRef(null);
+    const refreshIntervalRef = useRef(null);
 
     // Use bug tracking metrics service
     const { metrics: bugMetrics, loading: bugLoading, error: bugError, refetch: bugRefetch } = useBugTrackingMetrics(filters);
@@ -49,7 +54,7 @@ const Dashboard = () => {
     const loading = bugLoading || suiteLoading;
     const error = bugError;
 
-    // Check if user has test suites and show first suite modal if needed
+    // Check if user has test suites and show first suite modal if needed - FIXED VERSION
     useEffect(() => {
         if (!suiteLoading && userTestSuites !== null) {
             const hasTestSuites = Array.isArray(userTestSuites) && userTestSuites.length > 0;
@@ -57,38 +62,60 @@ const Dashboard = () => {
         }
     }, [userTestSuites, suiteLoading]);
 
-    // Auto-refresh timer
+    // Auto-refresh timer - FIXED VERSION
     useEffect(() => {
-        const timeInterval = setInterval(() => {
+        // Clear any existing intervals
+        if (timeIntervalRef.current) {
+            clearInterval(timeIntervalRef.current);
+        }
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+        }
+
+        // Set up time interval
+        timeIntervalRef.current = setInterval(() => {
             setCurrentTime(new Date());
         }, 1000);
 
-        const refreshInterval = autoRefresh ? setInterval(() => {
-            bugRefetch();
-        }, 30000) : null;
+        // Set up refresh interval only if autoRefresh is enabled
+        if (autoRefresh) {
+            refreshIntervalRef.current = setInterval(() => {
+                bugRefetch();
+            }, 30000);
+        }
 
+        // Cleanup function
         return () => {
-            clearInterval(timeInterval);
-            if (refreshInterval) clearInterval(refreshInterval);
+            if (timeIntervalRef.current) {
+                clearInterval(timeIntervalRef.current);
+            }
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+            }
         };
-    }, [autoRefresh, bugRefetch]);
+    }, [autoRefresh]); // Only depend on autoRefresh, not bugRefetch
 
-    // Connection status simulation
+    // Connection status simulation - FIXED VERSION
     useEffect(() => {
         const checkConnection = () => {
             setIsConnected(navigator.onLine);
         };
 
+        // Set initial state
+        checkConnection();
+
+        // Add event listeners
         window.addEventListener('online', checkConnection);
         window.addEventListener('offline', checkConnection);
 
+        // Cleanup
         return () => {
             window.removeEventListener('online', checkConnection);
             window.removeEventListener('offline', checkConnection);
         };
-    }, []);
+    }, []); // Empty dependency array
 
-    // Enhanced metrics calculation using real bug data
+    // Enhanced metrics calculation using real bug data - MEMOIZED
     const enhancedMetrics = useMemo(() => {
         if (!bugMetrics) {
             return {
@@ -96,7 +123,6 @@ const Dashboard = () => {
                 passRate: 87,
                 activeBugs: 0,
                 criticalIssues: 0,
-                // Default bug metrics structure
                 totalBugs: 0,
                 bugsFromScreenRecording: 0,
                 bugsFromManualTesting: 0,
@@ -119,29 +145,19 @@ const Dashboard = () => {
             };
         }
 
-        // Merge mock test data with real bug data
         return {
-            // Mock test case data (since test service is not active)
             totalTestCases: 245,
             passRate: 87,
-
-            // Real bug data from service
             ...bugMetrics,
-
-            // Ensure we have all required fields with defaults
             activeBugs: Array.isArray(bugMetrics.bugs)
                 ? bugMetrics.bugs.filter(bug => !['Resolved', 'Closed'].includes(bug.status)).length
                 : (bugMetrics.activeBugs ?? 0),
             criticalIssues: bugMetrics.criticalBugs || 0,
-
-            // Calculate derived metrics if not provided
             bugsFromManualTesting: bugMetrics.bugsFromManualTesting ||
                 Math.max(0, (bugMetrics.totalBugs || 0) - (bugMetrics.bugsFromScreenRecording || 0)),
-
             avgBugReportCompleteness: bugMetrics.avgBugReportCompleteness || 75,
             bugReproductionRate: bugMetrics.bugReproductionRate ||
                 (bugMetrics.totalBugs > 0 ? Math.round(((bugMetrics.bugsWithVideoEvidence || 0) / bugMetrics.totalBugs) * 100) : 0),
-
             weeklyReportsGenerated: bugMetrics.weeklyReportsGenerated || 4,
             monthlyReportsGenerated: bugMetrics.monthlyReportsGenerated || 1,
             avgBugsPerReport: bugMetrics.avgBugsPerReport ||
@@ -149,7 +165,7 @@ const Dashboard = () => {
         };
     }, [bugMetrics]);
 
-    // Summary stats for header
+    // Summary stats for header - MEMOIZED
     const summaryStats = useMemo(() => {
         return {
             totalTestCases: enhancedMetrics.totalTestCases,
@@ -159,20 +175,52 @@ const Dashboard = () => {
         };
     }, [enhancedMetrics]);
 
-    const FilterButton = ({ active, onClick, children, disabled = false }) => (
+    // MEMOIZED CALLBACKS
+    const handleFilterChange = useCallback((key, value) => {
+        setFilters(prev => ({ ...prev, [key]: value }));
+    }, []);
+
+    const handleRefresh = useCallback(() => {
+        bugRefetch();
+        setCurrentTime(new Date());
+    }, [bugRefetch]);
+
+    const handleCreateNewSuite = useCallback(() => {
+        setIsCreateModalOpen(true);
+    }, []);
+
+    const handleCreateModalClose = useCallback(() => {
+        setIsCreateModalOpen(false);
+    }, []);
+
+    const handleFirstSuiteSuccess = useCallback(() => {
+        setShowFirstSuiteModal(false);
+        // The useEffect will automatically handle showing/hiding the modal based on userTestSuites
+    }, []);
+
+    const handleNewSuiteSuccess = useCallback(() => {
+        setIsCreateModalOpen(false);
+    }, []);
+
+    const handleAutoRefreshChange = useCallback((e) => {
+        setAutoRefresh(e.target.checked);
+    }, []);
+
+    // MEMOIZED COMPONENTS
+    const FilterButton = useCallback(({ active, onClick, children, disabled = false }) => (
         <button
             onClick={onClick}
             disabled={disabled}
             className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${disabled
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : active
-                        ? 'bg-teal-100 text-teal-700 border border-teal-200'
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : active
+                    ? 'bg-teal-100 text-teal-700 border border-teal-200'
+                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                 }`}
         >
             {children}
         </button>
-    );
+    ), []);
 
     const timeFilterOptions = [
         { value: '1d', label: 'Last 24h' },
@@ -190,35 +238,35 @@ const Dashboard = () => {
         { value: 'automation', label: 'Automation', icon: Settings }
     ];
 
-    const handleFilterChange = (key, value) => {
-        setFilters(prev => ({ ...prev, [key]: value }));
-    };
+    // Show loading screen while checking suite status
+    if (suiteLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="text-center">
+                    <Activity className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4" />
+                    <p className="text-lg text-gray-600 mb-2">Loading QAID Dashboard</p>
+                    <p className="text-sm text-gray-500">Checking your test suites...</p>
+                </div>
+            </div>
+        );
+    }
 
-    const handleRefresh = () => {
-        bugRefetch();
-        setCurrentTime(new Date());
-    };
+    // If showing first suite modal, show it with loading backdrop
+    if (showFirstSuiteModal) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <CreateTestSuiteModal
+                    isOpen={showFirstSuiteModal}
+                    onClose={() => { }} // Prevent closing for first suite
+                    isFirstSuite={true}
+                    onSuccess={handleFirstSuiteSuccess}
+                />
+            </div>
+        );
+    }
 
-    const handleCreateNewSuite = () => {
-        setIsCreateModalOpen(true);
-    };
-
-    const handleCreateModalClose = () => {
-        setIsCreateModalOpen(false);
-    };
-
-    const handleFirstSuiteSuccess = () => {
-        setShowFirstSuiteModal(false);
-        // The modal will handle navigation and context updates
-    };
-
-    const handleNewSuiteSuccess = () => {
-        setIsCreateModalOpen(false);
-        // Optionally refresh data or show success message
-    };
-
-    // Loading state
-    if (loading && !bugMetrics && suiteLoading) {
+    // Loading state for metrics
+    if (loading && !bugMetrics) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="text-center">
@@ -278,7 +326,6 @@ const Dashboard = () => {
                             </div>
                         </div>
                         <div className="flex items-center space-x-3">
-                            {/* New Suite Button */}
                             <button
                                 onClick={handleCreateNewSuite}
                                 className="bg-gradient-to-r from-teal-600 to-blue-600 text-white px-4 py-2 rounded-md hover:from-teal-700 hover:to-blue-700 transition-all duration-200 flex items-center shadow-md hover:shadow-lg"
@@ -286,12 +333,12 @@ const Dashboard = () => {
                                 <Plus className="w-4 h-4 mr-2" />
                                 New Suite
                             </button>
-                            
+
                             <label className="flex items-center text-sm text-gray-600">
                                 <input
                                     type="checkbox"
                                     checked={autoRefresh}
-                                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                                    onChange={handleAutoRefreshChange}
                                     className="mr-2 text-teal-600 focus:ring-teal-500"
                                 />
                                 Auto-refresh
@@ -338,8 +385,8 @@ const Dashboard = () => {
                                     key={tab.value}
                                     onClick={() => setActiveTab(tab.value)}
                                     className={`flex items-center px-4 py-3 text-sm font-medium rounded transition-colors whitespace-nowrap ${activeTab === tab.value
-                                            ? 'bg-teal-100 text-teal-700'
-                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                        ? 'bg-teal-100 text-teal-700'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                         }`}
                                 >
                                     <IconComponent className="w-4 h-4 mr-2" />
@@ -523,7 +570,7 @@ const Dashboard = () => {
                 <QuickActions
                     metrics={{
                         qa: {
-                            testCases: enhancedMetrics.totalTestCases,
+                            testCases: enhancedMetrics.testCases,
                             passRate: enhancedMetrics.passRate
                         },
                         bugs: enhancedMetrics
@@ -532,14 +579,6 @@ const Dashboard = () => {
                     onRefresh={handleRefresh}
                 />
             </div>
-
-            {/* First Test Suite Modal - Shows when user has no test suites */}
-            <CreateTestSuiteModal
-                isOpen={showFirstSuiteModal}
-                onClose={() => {}} // Prevent closing for first suite
-                isFirstSuite={true}
-                onSuccess={handleFirstSuiteSuccess}
-            />
 
             {/* Regular Create Test Suite Modal - Shows when user clicks "New Suite" */}
             <CreateTestSuiteModal

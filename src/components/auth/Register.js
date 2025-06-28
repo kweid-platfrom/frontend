@@ -1,9 +1,11 @@
+// Fixed Register.jsx - Key changes to use accountService properly
+
 'use client';
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../config/firebase';
+import { auth } from '../../config/firebase';
+import { accountService } from '../../services/accountService'; // Import the account service
 import { FcGoogle } from 'react-icons/fc';
 import AccountTypeStep from './reg/AccountTypeStep';
 import PersonalInfoStep from './reg/PersonalInfoStep';
@@ -56,7 +58,6 @@ const Register = () => {
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
-        // Clear error when user starts typing
         if (errors[field]) {
             setErrors(prev => ({ ...prev, [field]: '' }));
         }
@@ -73,32 +74,33 @@ const Register = () => {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            // Check if user already exists in Firestore
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (userDocSnap.exists()) {
-                // User already exists, redirect to dashboard
+            // Check if user already exists using accountService
+            const setupStatus = await accountService.getAccountSetupStatus(user.uid);
+            
+            if (setupStatus.exists) {
                 toast.success("Welcome back!");
                 router.push('/dashboard');
                 return;
             }
 
-            // Create user document first (required by security rules)
-            const userData = {
-                user_id: user.uid, // Required by security rules
-                primary_email: user.email, // Required by security rules
-                profile_info: { // Required by security rules
-                    name: user.displayName || 'Google User', // Required by security rules
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Required by security rules
-                }
-                // account_memberships and session_context are optional according to rules
+            // Determine account type from email
+            const detectedAccountType = accountService.getAccountType(user.email);
+            
+            // Use accountService to create the user profile with proper trial setup
+            const setupData = {
+                firstName: user.displayName?.split(' ')[0] || 'Google',
+                lastName: user.displayName?.split(' ').slice(1).join(' ') || 'User',
+                organizationName: detectedAccountType === 'organization' ? user.email.split('@')[1] : null
             };
 
-            await setDoc(userDocRef, userData);
+            const result_setup = await accountService.setupAccount(setupData);
 
-            toast.success("Account created successfully with Google!");
-            router.push('/dashboard');
+            if (result_setup.success) {
+                toast.success("Account created successfully with Google!");
+                router.push('/dashboard');
+            } else {
+                throw new Error('Failed to setup account');
+            }
 
         } catch (error) {
             console.error('Error with Google registration:', error);
@@ -118,6 +120,8 @@ const Register = () => {
         }
     };
 
+    // ... validateStep and navigation functions remain the same ...
+
     const validateStep = (step) => {
         const newErrors = {};
 
@@ -133,7 +137,6 @@ const Register = () => {
             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
                 newErrors.email = 'Please enter a valid email address';
             } else if (accountType === 'organization') {
-                // For organization accounts, validate custom domain
                 const domain = formData.email.split('@')[1];
                 if (['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com'].includes(domain.toLowerCase())) {
                     newErrors.email = 'Organization accounts require a custom company domain email';
@@ -178,7 +181,7 @@ const Register = () => {
         setIsCreatingAccount(true);
 
         try {
-            // Create user with Firebase Auth
+            // Step 1: Create Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 formData.email,
@@ -187,75 +190,23 @@ const Register = () => {
 
             const user = userCredential.user;
 
-            if (accountType === 'individual') {
-                // Create user document ONLY with required fields from security rules
-                const userData = {
-                    user_id: user.uid, // Required by security rules
-                    primary_email: formData.email, // Required by security rules
-                    profile_info: { // Required by security rules
-                        name: formData.fullName, // Required by security rules
-                        timezone: formData.timezone // Required by security rules
-                    }
-                    // Don't include account_memberships or session_context as they're optional
-                    // and may be causing permission issues
-                };
+            // Step 2: Use accountService to create user profile with proper trial setup
+            const [firstName, ...lastNameParts] = formData.fullName.trim().split(' ');
+            const lastName = lastNameParts.join(' ');
 
-                await setDoc(doc(db, 'users', user.uid), userData);
+            const setupData = {
+                firstName: firstName || '',
+                lastName: lastName || '',
+                organizationName: accountType === 'organization' ? formData.companyName : null
+            };
 
-                console.log('Individual user created successfully');
+            const setupResult = await accountService.setupAccount(setupData);
 
-            } else {
-                // Organization account creation
-                const orgId = `org_${user.uid}_${Date.now()}`;
-
-                // Step 1: Create user document with required fields ONLY
-                const userData = {
-                    user_id: user.uid, // Required by security rules
-                    primary_email: formData.email, // Required by security rules
-                    profile_info: { // Required by security rules
-                        name: formData.fullName, // Required by security rules
-                        timezone: formData.timezone // Required by security rules
-                    }
-                };
-
-                await setDoc(doc(db, 'users', user.uid), userData);
-
-                // Step 2: Create organization document with required fields from security rules
-                const organizationData = {
-                    org_id: orgId, // Required by security rules
-                    organization_profile: { // Required by security rules
-                        name: formData.companyName,
-                        type: formData.companyType,
-                        domain: formData.email.split('@')[1],
-                        created_at: new Date().toISOString()
-                    }
-                };
-
-                await setDoc(doc(db, 'organizations', orgId), organizationData);
-
-                // Step 3: Add organization member record with required fields from security rules
-                await setDoc(doc(db, 'organizations', orgId, 'members', user.uid), {
-                    user_id: user.uid, // Required by security rules
-                    org_email: formData.email, // Required by security rules
-                    role: 'Admin', // Required by security rules - must be 'Admin' or 'Member'
-                    join_date: new Date().toISOString(), // Required by security rules
-                    status: 'active' // Required by security rules - must be 'active', 'invited', or 'suspended'
-                });
-
-                // Step 4: Now update user document with organization membership
-                await setDoc(doc(db, 'users', user.uid), {
-                    ...userData,
-                    account_memberships: [{
-                        org_id: orgId, // This is what the security rules check for
-                        role: 'Admin',
-                        status: 'active'
-                    }]
-                });
-
-                console.log('Organization account created successfully');
+            if (!setupResult.success) {
+                throw new Error('Failed to setup account properly');
             }
 
-            // Send email verification after user document is created
+            // Step 3: Send email verification
             try {
                 await sendEmailVerification(user, {
                     url: `${window.location.origin}/verify-email`,
@@ -267,12 +218,9 @@ const Register = () => {
                 toast.success("Account created successfully! Verification email will be sent shortly.");
             }
 
-            // Store the email for display and sign out the user
+            // Store email and sign out user
             setRegisteredUserEmail(formData.email);
-
-            // Sign out the user after successful registration
             await signOut(auth);
-
             setCurrentStep(4);
 
         } catch (error) {
@@ -285,10 +233,6 @@ const Register = () => {
                 errorMessage = "Password should be at least 6 characters.";
             } else if (error.code === 'auth/invalid-email') {
                 errorMessage = "Please enter a valid email address.";
-            } else if (error.code === 'permission-denied') {
-                errorMessage = "Permission denied. Please check your account settings.";
-            } else if (error.message && error.message.includes('permission-denied')) {
-                errorMessage = "Permission denied while creating account. Please try again.";
             }
 
             toast.error(errorMessage);
@@ -298,16 +242,15 @@ const Register = () => {
     };
 
     const handleResendEmail = async () => {
-        // Since we signed out the user, we need to show a message instead
         toast.info("Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.");
-
-        // Navigate to login page
         router.push('/login');
     };
 
     const handleSignInRedirect = () => {
         router.push('/login');
     };
+
+    // ... rest of the component remains the same (renderStepContent, return statement) ...
 
     const renderStepContent = () => {
         switch (currentStep) {
@@ -317,7 +260,6 @@ const Register = () => {
                         <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">Create Your Account</h1>
                         <p className="text-slate-600 mb-6 text-center">Get started with QAID today</p>
 
-                        {/* Google Sign Up */}
                         <div className="mb-6">
                             <GoogleSignUp
                                 onGoogleRegister={handleGoogleRegister}
@@ -325,7 +267,6 @@ const Register = () => {
                             />
                         </div>
 
-                        {/* Divider */}
                         <div className="relative mb-6">
                             <div className="absolute inset-0 flex items-center">
                                 <div className="w-full border-t border-slate-200"></div>
@@ -437,7 +378,6 @@ const Register = () => {
 
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
-                    {/* Logo */}
                     <div className="text-center mb-8">
                         <div className="inline-block">
                             <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
@@ -446,15 +386,11 @@ const Register = () => {
                         </div>
                     </div>
 
-                    {/* Single Form Container */}
                     <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
-
-                        {/* Step Content */}
                         {renderStepContent()}
                     </div>
 
-                    {/* Sign In Link - Only show on steps 1-3 */}
                     {currentStep <= 3 && (
                         <div className="text-center mt-6">
                             <p className="text-sm text-slate-600">

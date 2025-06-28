@@ -22,6 +22,14 @@ export const SubscriptionProvider = ({ children }) => {
     const { userProfile } = useUserProfile();
     const [trialStatusUpdated, setTrialStatusUpdated] = useState(false);
 
+    // Helper function to validate values before database update
+    const validateValue = (value, defaultValue = null) => {
+        if (value === undefined || value === null || (typeof value === 'number' && isNaN(value))) {
+            return defaultValue;
+        }
+        return value;
+    };
+
     // Memoized subscription status with trial logic
     const subscriptionStatus = useMemo(() => {
         if (!userProfile) return {
@@ -40,7 +48,7 @@ export const SubscriptionProvider = ({ children }) => {
             isValid: capabilities.isTrialActive || updatedProfile.subscriptionType !== 'free',
             isExpired: !capabilities.isTrialActive && updatedProfile.subscriptionType === 'free',
             isTrial: capabilities.isTrialActive,
-            trialDaysRemaining: capabilities.trialDaysRemaining,
+            trialDaysRemaining: capabilities.trialDaysRemaining || 0,
             subscriptionType: capabilities.subscriptionType,
             subscriptionStatus: capabilities.subscriptionStatus,
             capabilities: capabilities,
@@ -109,32 +117,56 @@ export const SubscriptionProvider = ({ children }) => {
                 return updatedProfile;
             }
 
-            // Ensure all required fields have valid values before updating
+            // Validate and prepare update data
             const updateData = {};
             
-            // Only add fields that are not undefined
-            if (updatedProfile.subscriptionType !== undefined && updatedProfile.subscriptionType !== null) {
-                updateData.subscriptionType = updatedProfile.subscriptionType;
+            // Validate subscription type
+            const subscriptionType = validateValue(updatedProfile.subscriptionType, 'free');
+            if (['free', 'trial', 'premium', 'pro'].includes(subscriptionType)) {
+                updateData.subscriptionType = subscriptionType;
             }
             
-            if (updatedProfile.subscriptionStatus !== undefined && updatedProfile.subscriptionStatus !== null) {
-                updateData.subscriptionStatus = updatedProfile.subscriptionStatus;
+            // Validate subscription status
+            const subscriptionStatus = validateValue(updatedProfile.subscriptionStatus, 'active');
+            if (['active', 'inactive', 'cancelled', 'trial'].includes(subscriptionStatus)) {
+                updateData.subscriptionStatus = subscriptionStatus;
             }
             
-            if (updatedProfile.isTrialActive !== undefined && updatedProfile.isTrialActive !== null) {
-                updateData.isTrialActive = updatedProfile.isTrialActive;
+            // Validate isTrialActive (boolean)
+            const isTrialActive = validateValue(updatedProfile.isTrialActive, false);
+            if (typeof isTrialActive === 'boolean') {
+                updateData.isTrialActive = isTrialActive;
             }
             
-            if (updatedProfile.trialDaysRemaining !== undefined && updatedProfile.trialDaysRemaining !== null) {
-                updateData.trialDaysRemaining = updatedProfile.trialDaysRemaining;
+            // Validate trialDaysRemaining (number, not NaN)
+            const trialDaysRemaining = validateValue(updatedProfile.trialDaysRemaining, 0);
+            if (typeof trialDaysRemaining === 'number' && !isNaN(trialDaysRemaining) && trialDaysRemaining >= 0) {
+                updateData.trialDaysRemaining = Math.floor(trialDaysRemaining); // Ensure integer
+            } else {
+                updateData.trialDaysRemaining = 0; // Default to 0 if invalid
+            }
+
+            // Add trial dates if they exist and are valid
+            if (updatedProfile.trialStartDate) {
+                const trialStartDate = new Date(updatedProfile.trialStartDate);
+                if (!isNaN(trialStartDate.getTime())) {
+                    updateData.trialStartDate = trialStartDate;
+                }
+            }
+
+            if (updatedProfile.trialEndDate) {
+                const trialEndDate = new Date(updatedProfile.trialEndDate);
+                if (!isNaN(trialEndDate.getTime())) {
+                    updateData.trialEndDate = trialEndDate;
+                }
             }
 
             // Always add timestamp
             updateData.updatedAt = serverTimestamp();
 
-            // Only proceed with update if we have data to update
+            // Only proceed with update if we have meaningful data to update
             if (Object.keys(updateData).length > 1) { // More than just updatedAt
-                console.log('Updating user document with:', updateData);
+                console.log('Updating user document with validated data:', updateData);
                 await updateDoc(doc(db, 'users', user.uid), updateData);
             }
             
@@ -146,9 +178,10 @@ export const SubscriptionProvider = ({ children }) => {
             
             // Log the specific error for debugging
             if (error.code === 'invalid-argument') {
-                console.error('Invalid data provided to updateDoc:', {
-                    userProfile,
-                    updatedProfileKeys: updatedProfile ? Object.keys(updatedProfile) : 'undefined'
+                console.error('Invalid data provided to updateDoc. Original error:', error);
+                console.error('User profile data:', {
+                    userProfileKeys: userProfile ? Object.keys(userProfile) : 'undefined',
+                    userProfile: userProfile
                 });
             }
             

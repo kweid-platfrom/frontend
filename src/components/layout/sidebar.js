@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // components/layout/Sidebar.js
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import '../../app/globals.css';
 import { useSuite } from '../../context/SuiteContext';
 import CreateTestSuiteModal from '../modals/CreateTestSuiteModal';
@@ -35,25 +35,13 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
     const [mounted, setMounted] = useState(false);
     const [actualSubscriptionState, setActualSubscriptionState] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
-
-    // Handle mounting and localStorage
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const storedCollapsed = localStorage.getItem("sidebarCollapsed");
-            if (storedCollapsed !== null) {
-                setIsCollapsed(JSON.parse(storedCollapsed));
-            }
-
-            const storedPage = localStorage.getItem("activePage");
-            if (storedPage && setActivePage) {
-                setActivePage(storedPage);
-            }
-        }
-        setMounted(true);
-    }, []);
+    
+    // Refs to prevent infinite loops
+    const lastUpdateRef = useRef(null);
+    const isUpdatingProfile = useRef(false);
 
     // Helper function to safely parse date
-    const parseDate = (dateValue) => {
+    const parseDate = useCallback((dateValue) => {
         if (!dateValue) return null;
 
         // Handle Firestore Timestamp objects
@@ -73,49 +61,52 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         }
 
         return null;
-    };
+    }, []);
 
-    // Calculate actual subscription state based on 30-day trial from registration - Fixed display text
+    // Memoized subscription state calculation
+    const calculateActualSubscriptionState = useCallback(() => {
+        if (!userProfile) return null;
+
+        const now = new Date();
+        const registrationDate = parseDate(userProfile.createdAt) || now;
+        const daysSinceRegistration = Math.floor((now - registrationDate) / (1000 * 60 * 60 * 24));
+        const trialDaysRemaining = Math.max(0, 30 - daysSinceRegistration);
+
+        return {
+            isTrialActive: trialDaysRemaining > 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
+            trialDaysRemaining,
+            trialExpired: trialDaysRemaining === 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
+            subscriptionType: userProfile.subscriptionType || 'free',
+            isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
+            registrationDate: registrationDate.toISOString(),
+            daysSinceRegistration,
+        };
+    }, [userProfile?.createdAt, userProfile?.subscriptionType, parseDate]);
+
+    // Handle mounting and localStorage - separate from profile updates
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const storedCollapsed = localStorage.getItem("sidebarCollapsed");
+            if (storedCollapsed !== null) {
+                setIsCollapsed(JSON.parse(storedCollapsed));
+            }
+
+            const storedPage = localStorage.getItem("activePage");
+            if (storedPage && setActivePage) {
+                setActivePage(storedPage);
+            }
+        }
+        setMounted(true);
+    }, []); // Empty dependency array - only run once
+
+    // Calculate subscription state - separated from profile updates
     useEffect(() => {
         if (!userProfile || !mounted) return;
 
-        const calculateActualSubscriptionState = () => {
-            const now = new Date();
-            const registrationDate = parseDate(userProfile.createdAt) || now;
-            const daysSinceRegistration = Math.floor((now - registrationDate) / (1000 * 60 * 60 * 24));
-            const trialDaysRemaining = Math.max(0, 30 - daysSinceRegistration);
-
-            const actualState = {
-                isTrialActive: trialDaysRemaining > 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
-                trialDaysRemaining,
-                trialExpired: trialDaysRemaining === 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
-                subscriptionType: userProfile.subscriptionType || 'free',
-                isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
-                registrationDate: registrationDate.toISOString(),
-                daysSinceRegistration,
-                // // Fixed: Remove days completely from display text
-                // displayText: trialDaysRemaining > 0 ? 'Trial' : 'Free',
-                // planDisplayName: trialDaysRemaining > 0 ? 'Trial' : 'Free',
-                // // Don't include trialDaysRemaining in the display logic
-                // showTrialDays: false
-            };
-
-            return actualState;
-        };
-
         try {
             const newState = calculateActualSubscriptionState();
-            setActualSubscriptionState(newState);
-
-            // Update user profile if trial status has significantly changed
-            if (userProfile.isTrialActive !== newState.isTrialActive ||
-                Math.abs((userProfile.trialDaysRemaining || 0) - newState.trialDaysRemaining) > 1) {
-                updateUserProfile({
-                    ...userProfile,
-                    isTrialActive: newState.isTrialActive,
-                    trialDaysRemaining: newState.trialDaysRemaining,
-                    trialExpired: newState.trialExpired
-                });
+            if (newState) {
+                setActualSubscriptionState(newState);
             }
         } catch (error) {
             console.error('Error calculating subscription state:', error);
@@ -128,12 +119,48 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
                 registrationDate: new Date().toISOString(),
                 daysSinceRegistration: 0,
-                displayText: 'Free',
-                planDisplayName: 'Free',
-                showTrialDays: false
             });
         }
-    }, [userProfile?.createdAt, userProfile?.subscriptionType, mounted, updateUserProfile]);
+    }, [userProfile?.createdAt, userProfile?.subscriptionType, mounted, calculateActualSubscriptionState]);
+
+    // Separate effect for profile updates - with debouncing
+    useEffect(() => {
+        if (!actualSubscriptionState || !userProfile || !mounted || isUpdatingProfile.current) {
+            return;
+        }
+
+        // Create a unique key for this state to prevent duplicate updates
+        const stateKey = `${actualSubscriptionState.isTrialActive}-${actualSubscriptionState.trialDaysRemaining}-${actualSubscriptionState.trialExpired}`;
+        
+        // Check if we need to update and haven't just updated
+        const needsUpdate = (
+            userProfile.isTrialActive !== actualSubscriptionState.isTrialActive ||
+            Math.abs((userProfile.trialDaysRemaining || 0) - actualSubscriptionState.trialDaysRemaining) > 1 ||
+            userProfile.trialExpired !== actualSubscriptionState.trialExpired
+        );
+
+        if (needsUpdate && lastUpdateRef.current !== stateKey) {
+            lastUpdateRef.current = stateKey;
+            isUpdatingProfile.current = true;
+
+            // Use a timeout to debounce updates
+            const timeoutId = setTimeout(() => {
+                updateUserProfile(prevProfile => ({
+                    ...prevProfile,
+                    isTrialActive: actualSubscriptionState.isTrialActive,
+                    trialDaysRemaining: actualSubscriptionState.trialDaysRemaining,
+                    trialExpired: actualSubscriptionState.trialExpired
+                }));
+                
+                // Reset the updating flag after a delay
+                setTimeout(() => {
+                    isUpdatingProfile.current = false;
+                }, 100);
+            }, 100);
+
+            return () => clearTimeout(timeoutId);
+        }
+    }, [actualSubscriptionState, userProfile?.isTrialActive, userProfile?.trialDaysRemaining, userProfile?.trialExpired, mounted, updateUserProfile]);
 
     // Save collapsed state to localStorage
     useEffect(() => {
@@ -149,8 +176,11 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         }
     }, [activePage, mounted]);
 
-    // Get user permissions using the permission service
-    const userPermissions = getUserPermissions(userProfile);
+    // Memoize user permissions to prevent recalculation
+    const userPermissions = useRef(null);
+    useEffect(() => {
+        userPermissions.current = getUserPermissions(userProfile);
+    }, [userProfile]);
 
     const navigation = [
         {
@@ -199,16 +229,16 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         },
     ];
 
-    // Enhanced premium access check using actual subscription state
-    const hasPremiumAccess = () => {
+    // Memoized premium access check
+    const hasPremiumAccess = useCallback(() => {
         if (!actualSubscriptionState) return false;
         return actualSubscriptionState.isTrialActive || actualSubscriptionState.isPaid;
-    };
+    }, [actualSubscriptionState]);
 
-    // Check if feature is accessible - Fixed permission logic
-    const isFeatureAccessible = (item) => {
+    // Memoized feature accessibility check
+    const isFeatureAccessible = useCallback((item) => {
         // First check if user has the required permission
-        if (item.permission && !userPermissions[item.permission]) {
+        if (item.permission && userPermissions.current && !userPermissions.current[item.permission]) {
             return false;
         }
 
@@ -224,9 +254,9 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
 
         // If no specific feature requirement, just check the permission
         return true;
-    };
+    }, [hasPremiumAccess, hasFeatureAccess]);
 
-    const handlePageChange = (item) => {
+    const handlePageChange = useCallback((item) => {
         // Check if feature is accessible before allowing navigation
         if (!isFeatureAccessible(item)) {
             if (setActivePage) {
@@ -242,26 +272,24 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
         if (onClose) {
             onClose();
         }
-    };
+    }, [isFeatureAccessible, setActivePage, onClose]);
 
-    const toggleCollapse = () => {
+    const toggleCollapse = useCallback(() => {
         setIsCollapsed(prev => !prev);
-    };
+    }, []);
 
-    const handleUpgradeClick = () => {
+    const handleUpgradeClick = useCallback(() => {
         if (setActivePage) {
             setActivePage('upgrade');
         }
         if (onClose) {
             onClose();
         }
-    };
+    }, [setActivePage, onClose]);
 
-    const handleCreateSuiteSuccess = () => {
+    const handleCreateSuiteSuccess = useCallback(() => {
         setShowCreateModal(false);
-        // Optionally refresh the suite list or perform other actions
-        // You can add additional logic here if needed
-    };
+    }, []);
 
     if (!mounted) {
         return null;
@@ -323,7 +351,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                     </div>
                 </div>
 
-                {/* Trial Banner - using actual subscription state with fixed display */}
+                {/* Trial Banner */}
                 <TrialBanner
                     isCollapsed={isCollapsed}
                     trialStatus={actualSubscriptionState || userProfile}

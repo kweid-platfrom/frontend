@@ -1,10 +1,10 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client'
-import { useState, Suspense, lazy, memo, useCallback, useEffect } from 'react';
+import { useState, Suspense, lazy, memo, useCallback, useEffect, useRef } from 'react';
 import { useSuite } from '../../context/SuiteContext';
 import Header from './header';
 import Sidebar from './sidebar';
 import '../../app/globals.css';
-
 
 // Lazy load page components
 const Dashboard = lazy(() => import('../pages/Dashboard'));
@@ -44,20 +44,48 @@ const DashboardLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activePage, setActivePage] = useState('dashboard');
     const { isLoading } = useSuite();
+    
+    // Use ref to track if we've loaded from storage to prevent infinite loops
+    const hasLoadedFromStorage = useRef(false);
+    const isInitialized = useRef(false);
 
-    // Load saved active page from localStorage on mount
+    // Load saved active page from localStorage on mount - FIXED VERSION
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const savedPage = localStorage.getItem('activePage');
-            if (savedPage) {
-                setActivePage(savedPage);
+        // Only run once when component mounts
+        if (!isInitialized.current && typeof window !== 'undefined') {
+            try {
+                const savedPage = localStorage.getItem('activePage');
+                if (savedPage && savedPage !== activePage) {
+                    setActivePage(savedPage);
+                }
+                hasLoadedFromStorage.current = true;
+            } catch (error) {
+                console.warn('Failed to load saved page from localStorage:', error);
+                // Fallback to default page if localStorage fails
+            }
+            isInitialized.current = true;
+        }
+    }, []); // Empty dependency array - only run once
+
+    // Save to localStorage when activePage changes (but not on initial load)
+    useEffect(() => {
+        if (hasLoadedFromStorage.current && typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('activePage', activePage);
+            } catch (error) {
+                console.warn('Failed to save page to localStorage:', error);
             }
         }
-    }, []);
+    }, [activePage]); // Only depend on activePage
 
     // Memoize callbacks to prevent unnecessary re-renders
     const handleMenuClick = useCallback(() => setSidebarOpen(true), []);
     const handleSidebarClose = useCallback(() => setSidebarOpen(false), []);
+    
+    // Memoize setActivePage to prevent child re-renders
+    const handleSetActivePage = useCallback((page) => {
+        setActivePage(page);
+    }, []);
 
     // Render the appropriate page component based on activePage
     const renderPageContent = () => {
@@ -76,8 +104,6 @@ const DashboardLayout = ({ children }) => {
                 return <Recordings />;
             case 'settings':
                 return <UserProfile />;
-            // case 'create-project':
-            //     return <CreateProject />;
             case 'upgrade':
                 return <Upgrade />;
             default:
@@ -96,7 +122,7 @@ const DashboardLayout = ({ children }) => {
             <Sidebar
                 isOpen={sidebarOpen}
                 onClose={handleSidebarClose}
-                setActivePage={setActivePage}
+                setActivePage={handleSetActivePage}
                 activePage={activePage}
             />
 
@@ -105,7 +131,7 @@ const DashboardLayout = ({ children }) => {
                 {/* Header - Keep immediate loading for critical UI */}
                 <Header
                     onMenuClick={handleMenuClick}
-                    setActivePage={setActivePage}
+                    setActivePage={handleSetActivePage}
                 />
 
                 {/* Main Content Area with optimized rendering */}

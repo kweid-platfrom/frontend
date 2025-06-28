@@ -533,3 +533,20 @@ export const createIndividualAccount = async (userId, accountData) => {
         throw new Error(`Failed to create individual account: ${error.message}`);
     }
 };
+
+// Export as userService object for backward compatibility
+export const userService = {
+    createUserDocument,
+    fetchUserData,
+    updateUserProfile,
+    getUserDisplayName,
+    getUserEmail,
+    getUserAccountType,
+    isUserAdmin,
+    isUserAdminOfAccount,
+    getCurrentAccountInfo,
+    hasPermission,
+    createIndividualAccount,
+    // Add a getUserProfile method that your hook is expecting
+    getUserProfile: fetchUserData
+};

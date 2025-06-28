@@ -1,6 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+// Fixed AuthProvider.js
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
 import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
@@ -54,18 +56,37 @@ export const AuthProvider = ({ children }) => {
     const [initialized, setInitialized] = useState(false);
     const [skipEmailVerificationRedirect, setSkipEmailVerificationRedirect] = useState(false);
     const [permissionChecker, setPermissionChecker] = useState(null);
+    
+    // Add ref to track if we're already processing authentication
+    const processingAuth = useRef(false);
+    const lastProcessedUserId = useRef(null);
+    
     const router = useRouter();
 
     const processUserAuthentication = useCallback(async (user) => {
-        if (!user) {
-            setCurrentUser(null);
-            setUserPermissions(null);
-            setUserProfile(null);
-            setPermissionChecker(null);
+        // Prevent multiple simultaneous processing
+        if (processingAuth.current) {
             return;
         }
         
+        // Skip if we just processed this user
+        if (user?.uid === lastProcessedUserId.current) {
+            return;
+        }
+        
+        processingAuth.current = true;
+        
         try {
+            if (!user) {
+                setCurrentUser(null);
+                setUserPermissions(null);
+                setUserProfile(null);
+                setPermissionChecker(null);
+                lastProcessedUserId.current = null;
+                return;
+            }
+            
+            lastProcessedUserId.current = user.uid;
             setCurrentUser(user);
             let authSource = 'email';
             
@@ -74,6 +95,7 @@ export const AuthProvider = ({ children }) => {
                 if (provider === 'google.com') authSource = 'google';
             }
             
+            // Handle verification callback early
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 const searchParams = new URLSearchParams(window.location.search);
@@ -113,12 +135,24 @@ export const AuthProvider = ({ children }) => {
             
             setUserProfile(result.userData);
             
+            // Handle redirects with better logic
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 
-                // Skip redirects for these paths
-                if (currentPath === "/verify-email" ||
-                    currentPath.startsWith("/handle-email-verification") ||
+                // Paths that should never redirect
+                const noRedirectPaths = [
+                    "/verify-email",
+                    "/handle-email-verification",
+                    "/dashboard", // IMPORTANT: Don't redirect if already on dashboard
+                    "/settings",
+                    "/profile",
+                    "/projects",
+                    "/bugs",
+                    "/admin"
+                ];
+                
+                // Skip redirects for these paths or if flag is set
+                if (noRedirectPaths.some(path => currentPath.startsWith(path)) || 
                     skipEmailVerificationRedirect) {
                     return;
                 }
@@ -126,15 +160,17 @@ export const AuthProvider = ({ children }) => {
                 const needsEmailVerification = authSource === 'email' && !user.emailVerified;
                 const isOnAuthPage = ["/login", "/register"].includes(currentPath);
                 
-                // Redirect to email verification if needed
+                // Only redirect to email verification if needed and not already handled
                 if (needsEmailVerification && !isOnAuthPage) {
                     router.push("/verify-email");
                     return;
                 }
                 
-                // Redirect to dashboard after successful verification or login
+                // Only redirect to dashboard from specific entry points
                 const shouldRedirectToDashboard = [
-                    "/login", "/", "/verify-email"
+                    "/login", 
+                    "/", 
+                    "/register"
                 ].includes(currentPath);
                 
                 if (shouldRedirectToDashboard && user.emailVerified) {
@@ -142,14 +178,20 @@ export const AuthProvider = ({ children }) => {
                 }
             }
         } catch (error) {
+            console.error('Error in processUserAuthentication:', error);
             setUserPermissions(null);
             setUserProfile({});
             setPermissionChecker(null);
             setAuthError(error.message);
+        } finally {
+            processingAuth.current = false;
         }
     }, [router, skipEmailVerificationRedirect]);
 
+    // Handle redirect result - only once
     useEffect(() => {
+        let mounted = true;
+        
         const handleRedirectResult = async () => {
             if (initialized) return;
             
@@ -157,25 +199,36 @@ export const AuthProvider = ({ children }) => {
                 setLoading(true);
                 const result = await getRedirectResult(auth);
                 
-                if (result?.user) {
+                if (result?.user && mounted) {
                     await processUserAuthentication(result.user);
                 }
             } catch (error) {
-                setAuthError(error.message);
+                if (mounted) {
+                    console.error('Redirect result error:', error);
+                    setAuthError(error.message);
+                }
             } finally {
-                setLoading(false);
-                setInitialized(true);
+                if (mounted) {
+                    setLoading(false);
+                    setInitialized(true);
+                }
             }
         };
         
         handleRedirectResult();
-    }, [processUserAuthentication, initialized]);
+        
+        return () => {
+            mounted = false;
+        };
+    }, []); // Remove dependencies to prevent re-runs
 
+    // Handle auth state changes
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             try {
                 await processUserAuthentication(user);
             } catch (error) {
+                console.error('Auth state change error:', error);
                 setAuthError(error.message);
             } finally {
                 if (!initialized) {
@@ -366,6 +419,10 @@ export const AuthProvider = ({ children }) => {
 
     const signOut = async () => {
         try {
+            // Reset tracking variables
+            processingAuth.current = false;
+            lastProcessedUserId.current = null;
+            
             await authLogout();
             
             if (typeof window !== 'undefined') {

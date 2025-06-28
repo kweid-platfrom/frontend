@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../context/AuthProvider";
@@ -27,6 +27,9 @@ const Login = () => {
     const [unverifiedUser, setUnverifiedUser] = useState(null);
     const router = useRouter();
     const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
+    
+    // Prevent multiple navigation attempts
+    const hasNavigated = useRef(false);
 
     // Handle email verification success and other URL parameters
     useEffect(() => {
@@ -103,9 +106,11 @@ const Login = () => {
         }
     };
 
-    // Handle authenticated user routing
+    // FIXED: Handle authenticated user routing - removed router from dependencies
     useEffect(() => {
-        if (currentUser && !loading) {
+        if (currentUser && !loading && !hasNavigated.current) {
+            hasNavigated.current = true; // Prevent multiple navigation attempts
+            
             // Clear any stale registration data
             localStorage.removeItem("registrationData");
             localStorage.removeItem("needsOnboarding");
@@ -114,7 +119,14 @@ const Login = () => {
             // Route user based on simplified flow
             routeUserAfterLogin(currentUser);
         }
-    }, [currentUser, loading, router]);
+    }, [currentUser, loading]); // FIXED: Removed router from dependencies
+
+    // Reset navigation flag when user changes (logout/login)
+    useEffect(() => {
+        if (!currentUser) {
+            hasNavigated.current = false;
+        }
+    }, [currentUser]);
 
     const validateForm = () => {
         let isValid = true;

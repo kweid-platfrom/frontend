@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 // contexts/UserProfileContext.js
 'use client'
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { 
     fetchUserData, 
@@ -32,6 +33,9 @@ export const UserProfileProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [error, setError] = useState(null);
+    
+    // Ref to track the current user ID to prevent unnecessary fetches
+    const currentUserIdRef = useRef(null);
 
     // Fetch user profile using the service
     const fetchUserProfile = useCallback(async (userId, forceRefresh = false) => {
@@ -81,7 +85,7 @@ export const UserProfileProvider = ({ children }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [userProfile]);
+    }, []); // Remove userProfile from dependencies to prevent infinite loop
 
     // Setup new user profile using the service
     const setupNewUserProfile = useCallback(async (firebaseUser, userData = {}, source = 'unknown') => {
@@ -154,16 +158,72 @@ export const UserProfileProvider = ({ children }) => {
         setIsUpdating(false);
     }, []);
 
-    // Load profile when user changes
+    // Load profile when user changes - FIXED: Remove function dependencies
     useEffect(() => {
-        if (user?.uid) {
-            console.log('User changed, loading profile for:', user.uid);
-            fetchUserProfile(user.uid);
-        } else {
+        const userId = user?.uid;
+        
+        // Only fetch if user ID actually changed
+        if (userId && userId !== currentUserIdRef.current) {
+            console.log('User changed, loading profile for:', userId);
+            currentUserIdRef.current = userId;
+            
+            // Call fetchUserProfile directly to avoid dependency issues
+            const loadProfile = async () => {
+                if (!userId) {
+                    setUserProfile(null);
+                    setError('No user ID provided');
+                    return;
+                }
+
+                // Don't refetch if we already have data for this user
+                if (userProfile && userProfile.user_id === userId) {
+                    return;
+                }
+
+                try {
+                    setIsLoading(true);
+                    setError(null);
+                    
+                    console.log('Fetching user profile for:', userId);
+                    const { userData, error: fetchError, isNewUser } = await fetchUserData(userId);
+                    
+                    if (fetchError) {
+                        setError(fetchError);
+                        setUserProfile(null);
+                        return;
+                    }
+
+                    if (userData) {
+                        setUserProfile(userData);
+                        console.log('User profile loaded successfully');
+                        return;
+                    }
+
+                    // Handle new user case
+                    if (isNewUser) {
+                        console.log('New user detected, profile will be created on first update');
+                        setUserProfile(null);
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error loading user profile:', error);
+                    setError(error.message);
+                    setUserProfile(null);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            
+            loadProfile();
+        } else if (!userId && currentUserIdRef.current) {
             console.log('No user, clearing profile');
-            clearProfile();
+            currentUserIdRef.current = null;
+            setUserProfile(null);
+            setError(null);
+            setIsLoading(false);
+            setIsUpdating(false);
         }
-    }, [user, fetchUserProfile, clearProfile]);
+    }, [user?.uid]); // Only depend on user.uid, not the functions
 
     // Computed values using helper functions from service
     const displayName = userProfile ? getUserDisplayName(userProfile) : '';

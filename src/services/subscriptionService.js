@@ -6,15 +6,17 @@ export const subscriptionService = {
 
         return {
             plan_type: 'freemium',
-            subscriptionType: 'trial', // Use consistent field name
+            subscriptionType: 'trial',
             status: 'trial',
-            subscriptionStatus: 'active', // Use consistent field name
+            subscriptionStatus: 'active',
             trial_start_date: now,
             trial_end_date: trialEnd,
+            trialStartDate: now, // Add consistent field names
+            trialEndDate: trialEnd,
             is_trial_active: true,
-            isTrialActive: true, // Use consistent field name
+            isTrialActive: true,
             trial_days_remaining: 30,
-            trialDaysRemaining: 30, // Use consistent field name
+            trialDaysRemaining: 30,
             features: this.getTrialFeatures(),
             limits: this.getTrialLimits(accountType),
             createdAt: now,
@@ -34,6 +36,10 @@ export const subscriptionService = {
             isTrialActive: false,
             trial_days_remaining: 0,
             trialDaysRemaining: 0,
+            trial_start_date: null,
+            trial_end_date: null,
+            trialStartDate: null,
+            trialEndDate: null,
             features: this.getFreeFeatures(),
             limits: this.getFreeTierLimits(accountType),
             createdAt: now,
@@ -96,9 +102,20 @@ export const subscriptionService = {
         
         if (!trialEndDate || isTrialActive === false) return false;
         
-        const trialEnd = new Date(trialEndDate);
-        const now = new Date();
-        return now < trialEnd;
+        try {
+            const trialEnd = new Date(trialEndDate);
+            // Check if date is valid
+            if (isNaN(trialEnd.getTime())) {
+                console.warn('Invalid trial end date:', trialEndDate);
+                return false;
+            }
+            
+            const now = new Date();
+            return now < trialEnd;
+        } catch (error) {
+            console.error('Error checking trial status:', error);
+            return false;
+        }
     },
 
     calculateTrialDaysRemaining(subscription) {
@@ -107,10 +124,27 @@ export const subscriptionService = {
         const trialEndDate = subscription.trial_end_date || subscription.trialEndDate;
         if (!trialEndDate) return 0;
         
-        const trialEnd = new Date(trialEndDate);
-        const now = new Date();
-        const daysRemaining = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
-        return Math.max(0, daysRemaining);
+        try {
+            const trialEnd = new Date(trialEndDate);
+            
+            // Check if date is valid
+            if (isNaN(trialEnd.getTime())) {
+                console.warn('Invalid trial end date for calculation:', trialEndDate);
+                return 0;
+            }
+            
+            const now = new Date();
+            const diffTime = trialEnd - now;
+            
+            // If trial has already ended, return 0
+            if (diffTime <= 0) return 0;
+            
+            const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return Math.max(0, daysRemaining);
+        } catch (error) {
+            console.error('Error calculating trial days remaining:', error);
+            return 0;
+        }
     },
 
     updateTrialStatus(subscription) {
@@ -119,12 +153,15 @@ export const subscriptionService = {
         const isTrialStillActive = this.checkTrialStatus(subscription);
         const daysRemaining = this.calculateTrialDaysRemaining(subscription);
 
+        // Ensure we don't return NaN values
+        const safeDaysRemaining = isNaN(daysRemaining) ? 0 : daysRemaining;
+
         return {
             ...subscription,
             is_trial_active: isTrialStillActive,
             isTrialActive: isTrialStillActive,
-            trial_days_remaining: daysRemaining,
-            trialDaysRemaining: daysRemaining,
+            trial_days_remaining: safeDaysRemaining,
+            trialDaysRemaining: safeDaysRemaining,
             subscriptionType: isTrialStillActive ? 'trial' : 'free',
             subscriptionStatus: 'active',
             status: isTrialStillActive ? 'trial' : 'active',
@@ -155,12 +192,16 @@ export const subscriptionService = {
         const subscriptionType = updatedSubscription.subscriptionType || 'free';
         const isTrialActive = updatedSubscription.isTrialActive || false;
         const isPaidPlan = subscriptionType === 'premium' || subscriptionType === 'pro';
+        const trialDaysRemaining = updatedSubscription.trialDaysRemaining || 0;
+
+        // Ensure no NaN values are returned
+        const safeDaysRemaining = isNaN(trialDaysRemaining) ? 0 : trialDaysRemaining;
 
         return {
             subscriptionType,
             subscriptionStatus: updatedSubscription.subscriptionStatus || 'active',
             isTrialActive,
-            trialDaysRemaining: updatedSubscription.trialDaysRemaining || 0,
+            trialDaysRemaining: safeDaysRemaining,
             canCreateMultipleSuites: isTrialActive || isPaidPlan,
             canAccessAdvancedReports: isTrialActive || isPaidPlan,
             canInviteTeamMembers: isTrialActive || isPaidPlan,
