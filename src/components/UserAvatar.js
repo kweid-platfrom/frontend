@@ -4,9 +4,10 @@ import React from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useAuth } from '../context/AuthProvider';
+import { getUserDisplayName } from '../services/userService';
 
 const UserAvatar = ({ size = 'md', className }) => {
-    const { userProfile } = useAuth(); // ✅ Get authenticated user profile
+    const { userProfile } = useAuth();
 
     const getInitials = (name) => {
         if (!name) return 'U';
@@ -23,10 +24,23 @@ const UserAvatar = ({ size = 'md', className }) => {
         lg: 'w-12 h-12 text-base',
     };
 
-    const fullName =
-        userProfile?.firstName && userProfile?.lastName
-            ? `${userProfile.firstName} ${userProfile.lastName}`
-            : userProfile?.displayName || 'User';
+    // Use the helper function from userService to get display name
+    const fullName = getUserDisplayName(userProfile);
+
+    // Get avatar URL - handle both new and legacy formats
+    const getAvatarUrl = () => {
+        if (!userProfile) return null;
+        
+        // New format
+        if (userProfile.profile_info?.avatar_url) {
+            return userProfile.profile_info.avatar_url;
+        }
+        
+        // Legacy format
+        return userProfile.avatarURL || null;
+    };
+
+    const avatarUrl = getAvatarUrl();
 
     return (
         <div
@@ -36,9 +50,9 @@ const UserAvatar = ({ size = 'md', className }) => {
                 className
             )}
         >
-            {userProfile?.avatarURL ? (
+            {avatarUrl ? (
                 <Image
-                    src={userProfile.avatarURL}
+                    src={avatarUrl}
                     alt={`${fullName}'s avatar`}
                     width={45}
                     height={45}

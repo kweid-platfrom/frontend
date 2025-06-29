@@ -1,9 +1,11 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// components/layout/Sidebar.js
+// components/layout/Sidebar.js - CLEANED: Simplified subscription logic and better permission handling
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react';
 import '../../app/globals.css';
 import { useSuite } from '../../context/SuiteContext';
+import { useUserProfile } from '../../context/userProfileContext';
+import { useSuiteActionGuard } from '../../hooks/useSuiteActionGuard';
 import CreateTestSuiteModal from '../modals/CreateTestSuiteModal';
 import UserAvatarClip from '../side-pane/UserAvatarClip'
 import TrialBanner from '../side-pane/TrialBanner';
@@ -24,66 +26,90 @@ import {
 } from '@heroicons/react/24/outline';
 
 const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
-    const {
-        userProfile,
-        hasFeatureAccess,
-        updateUserProfile,
-        subscriptionStatus
-    } = useSuite();
+    const suiteContext = useSuite();
+    const { userProfile, updateProfile, isLoading: isProfileLoading, error: profileError } = useUserProfile();
+    const { guardAction } = useSuiteActionGuard();
 
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [mounted, setMounted] = useState(false);
-    const [actualSubscriptionState, setActualSubscriptionState] = useState(null);
+    const [subscriptionState, setSubscriptionState] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
-    
-    // Refs to prevent infinite loops
-    const lastUpdateRef = useRef(null);
-    const isUpdatingProfile = useRef(false);
 
-    // Helper function to safely parse date
-    const parseDate = useCallback((dateValue) => {
-        if (!dateValue) return null;
+    // Prevent update loops
+    const updateTimeoutRef = useRef(null);
+    const lastUpdateKeyRef = useRef(null);
 
-        // Handle Firestore Timestamp objects
-        if (dateValue && typeof dateValue.toDate === 'function') {
-            return dateValue.toDate();
-        }
-
-        // Handle string dates
-        if (typeof dateValue === 'string') {
-            const parsed = new Date(dateValue);
-            return isNaN(parsed.getTime()) ? null : parsed;
-        }
-
-        // Handle Date objects
-        if (dateValue instanceof Date) {
-            return isNaN(dateValue.getTime()) ? null : dateValue;
-        }
-
-        return null;
-    }, []);
-
-    // Memoized subscription state calculation
-    const calculateActualSubscriptionState = useCallback(() => {
+    // Simplified subscription calculation
+    const calculateSubscriptionState = useCallback(() => {
         if (!userProfile) return null;
 
         const now = new Date();
-        const registrationDate = parseDate(userProfile.createdAt) || now;
+        let registrationDate = now;
+
+        // Parse registration date
+        if (userProfile.createdAt) {
+            if (typeof userProfile.createdAt.toDate === 'function') {
+                registrationDate = userProfile.createdAt.toDate();
+            } else if (userProfile.createdAt instanceof Date) {
+                registrationDate = userProfile.createdAt;
+            } else if (typeof userProfile.createdAt === 'string') {
+                const parsed = new Date(userProfile.createdAt);
+                if (!isNaN(parsed.getTime())) {
+                    registrationDate = parsed;
+                }
+            }
+        }
+
         const daysSinceRegistration = Math.floor((now - registrationDate) / (1000 * 60 * 60 * 24));
         const trialDaysRemaining = Math.max(0, 30 - daysSinceRegistration);
 
-        return {
-            isTrialActive: trialDaysRemaining > 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
-            trialDaysRemaining,
-            trialExpired: trialDaysRemaining === 0 && (!userProfile.subscriptionType || userProfile.subscriptionType === 'free'),
-            subscriptionType: userProfile.subscriptionType || 'free',
-            isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
-            registrationDate: registrationDate.toISOString(),
-            daysSinceRegistration,
-        };
-    }, [userProfile?.createdAt, userProfile?.subscriptionType, parseDate]);
+        // Simplified trial logic
+        const hasActivePaidPlan = userProfile.subscriptionStatus === 'active' &&
+            userProfile.subscriptionPlan &&
+            !userProfile.subscriptionPlan.includes('free');
 
-    // Handle mounting and localStorage - separate from profile updates
+        const isInTrialPeriod = (userProfile.subscriptionStatus === 'trial' ||
+            userProfile.subscriptionPlan?.includes('trial') ||
+            daysSinceRegistration <= 30) &&
+            trialDaysRemaining > 0;
+
+        const isTrialActive = isInTrialPeriod && !hasActivePaidPlan;
+
+        return {
+            isTrialActive,
+            trialDaysRemaining,
+            trialExpired: trialDaysRemaining === 0 && !hasActivePaidPlan,
+            isPaid: hasActivePaidPlan,
+            hasPremiumAccess: isTrialActive || hasActivePaidPlan,
+            subscriptionType: userProfile.subscriptionPlan || 'individual_free',
+            daysSinceRegistration
+        };
+    }, [userProfile?.createdAt, userProfile?.subscriptionStatus, userProfile?.subscriptionPlan]);
+
+    // Check premium feature access
+    const checkPremiumAccess = useCallback((feature) => {
+        if (!subscriptionState) return false;
+
+        // Premium features
+        const premiumFeatures = ['automation', 'advancedReports', 'apiTesting', 'cicdIntegration'];
+
+        if (premiumFeatures.includes(feature)) {
+            return subscriptionState.hasPremiumAccess;
+        }
+
+        // Free features available to everyone
+        return true;
+    }, [subscriptionState]);
+
+    // Check user permissions
+    const checkPermission = useCallback((permission) => {
+        if (!userProfile) return true; // Default allow if no profile
+
+        const permissions = getUserPermissions(userProfile);
+        return permissions[permission] ?? true;
+    }, [userProfile]);
+
+    // Handle mounting and localStorage
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const storedCollapsed = localStorage.getItem("sidebarCollapsed");
@@ -97,199 +123,226 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
             }
         }
         setMounted(true);
-    }, []); // Empty dependency array - only run once
+    }, []);
 
-    // Calculate subscription state - separated from profile updates
+    // Calculate subscription state
     useEffect(() => {
         if (!userProfile || !mounted) return;
 
         try {
-            const newState = calculateActualSubscriptionState();
+            const newState = calculateSubscriptionState();
             if (newState) {
-                setActualSubscriptionState(newState);
+                setSubscriptionState(newState);
             }
         } catch (error) {
             console.error('Error calculating subscription state:', error);
-            // Set a fallback state
-            setActualSubscriptionState({
+            setSubscriptionState({
                 isTrialActive: false,
                 trialDaysRemaining: 0,
                 trialExpired: true,
-                subscriptionType: userProfile.subscriptionType || 'free',
-                isPaid: userProfile.subscriptionType && userProfile.subscriptionType !== 'free',
-                registrationDate: new Date().toISOString(),
-                daysSinceRegistration: 0,
+                isPaid: false,
+                hasPremiumAccess: false,
+                subscriptionType: 'individual_free'
             });
         }
-    }, [userProfile?.createdAt, userProfile?.subscriptionType, mounted, calculateActualSubscriptionState]);
+    }, [userProfile?.createdAt, userProfile?.subscriptionStatus, userProfile?.subscriptionPlan, mounted, calculateSubscriptionState]);
 
-    // Separate effect for profile updates - with debouncing
+    // Update profile with debounced approach
     useEffect(() => {
-        if (!actualSubscriptionState || !userProfile || !mounted || isUpdatingProfile.current) {
+        if (!subscriptionState || !userProfile || !mounted || !updateProfile) {
             return;
         }
 
-        // Create a unique key for this state to prevent duplicate updates
-        const stateKey = `${actualSubscriptionState.isTrialActive}-${actualSubscriptionState.trialDaysRemaining}-${actualSubscriptionState.trialExpired}`;
-        
-        // Check if we need to update and haven't just updated
+        const updateKey = `${subscriptionState.isTrialActive}-${subscriptionState.trialDaysRemaining}-${subscriptionState.trialExpired}`;
+
+        // Check if update is needed
         const needsUpdate = (
-            userProfile.isTrialActive !== actualSubscriptionState.isTrialActive ||
-            Math.abs((userProfile.trialDaysRemaining || 0) - actualSubscriptionState.trialDaysRemaining) > 1 ||
-            userProfile.trialExpired !== actualSubscriptionState.trialExpired
+            userProfile.isTrialActive !== subscriptionState.isTrialActive ||
+            Math.abs((userProfile.trialDaysRemaining || 0) - subscriptionState.trialDaysRemaining) > 1 ||
+            userProfile.trialExpired !== subscriptionState.trialExpired
         );
 
-        if (needsUpdate && lastUpdateRef.current !== stateKey) {
-            lastUpdateRef.current = stateKey;
-            isUpdatingProfile.current = true;
+        if (needsUpdate && lastUpdateKeyRef.current !== updateKey) {
+            lastUpdateKeyRef.current = updateKey;
 
-            // Use a timeout to debounce updates
-            const timeoutId = setTimeout(() => {
-                updateUserProfile(prevProfile => ({
-                    ...prevProfile,
-                    isTrialActive: actualSubscriptionState.isTrialActive,
-                    trialDaysRemaining: actualSubscriptionState.trialDaysRemaining,
-                    trialExpired: actualSubscriptionState.trialExpired
-                }));
-                
-                // Reset the updating flag after a delay
-                setTimeout(() => {
-                    isUpdatingProfile.current = false;
-                }, 100);
-            }, 100);
+            // Clear existing timeout
+            if (updateTimeoutRef.current) {
+                clearTimeout(updateTimeoutRef.current);
+            }
 
-            return () => clearTimeout(timeoutId);
+            // Debounce updates with 500ms delay
+            updateTimeoutRef.current = setTimeout(async () => {
+                try {
+                    await updateProfile({
+                        isTrialActive: subscriptionState.isTrialActive,
+                        trialDaysRemaining: subscriptionState.trialDaysRemaining,
+                        trialExpired: subscriptionState.trialExpired
+                    });
+                } catch (error) {
+                    console.error('Failed to update profile trial status:', error);
+                }
+            }, 500);
         }
-    }, [actualSubscriptionState, userProfile?.isTrialActive, userProfile?.trialDaysRemaining, userProfile?.trialExpired, mounted, updateUserProfile]);
 
-    // Save collapsed state to localStorage
+        return () => {
+            if (updateTimeoutRef.current) {
+                clearTimeout(updateTimeoutRef.current);
+            }
+        };
+    }, [subscriptionState, userProfile?.isTrialActive, userProfile?.trialDaysRemaining, userProfile?.trialExpired, mounted, updateProfile]);
+
+    // Save states to localStorage
     useEffect(() => {
         if (mounted) {
             localStorage.setItem("sidebarCollapsed", JSON.stringify(isCollapsed));
         }
     }, [isCollapsed, mounted]);
 
-    // Save active page to localStorage
     useEffect(() => {
         if (mounted && activePage) {
             localStorage.setItem("activePage", activePage);
         }
     }, [activePage, mounted]);
 
-    // Memoize user permissions to prevent recalculation
-    const userPermissions = useRef(null);
-    useEffect(() => {
-        userPermissions.current = getUserPermissions(userProfile);
-    }, [userProfile]);
-
     const navigation = [
         {
             name: 'Dashboard',
             icon: HomeIcon,
             page: 'dashboard',
-            permission: 'canViewDashboard'
+            permission: 'canViewDashboard',
+            requiresSuite: false
         },
         {
             name: 'Bug Tracker',
             icon: BugAntIcon,
             page: 'bug-tracker',
-            permission: 'canReadBugs'
+            permission: 'canReadBugs',
+            requiresSuite: true,
+            action: 'view'
         },
         {
             name: 'Test Scripts',
             icon: DocumentTextIcon,
             page: 'test-scripts',
-            permission: 'canReadSuites'
+            permission: 'canReadSuites',
+            requiresSuite: true,
+            action: 'view'
         },
         {
             name: 'Automated Scripts',
             icon: BeakerIcon,
             page: 'auto-scripts',
+            permission: 'canReadSuites',
             requiresFeature: 'automation',
-            permission: 'canReadSuites'
+            requiresSuite: true,
+            action: 'view'
         },
         {
             name: 'Reports',
             icon: ChartBarIcon,
             page: 'reports',
+            permission: 'canViewReports',
             requiresFeature: 'advancedReports',
-            permission: 'canViewReports'
+            requiresSuite: true,
+            action: 'view'
         },
         {
             name: 'Recordings',
             icon: VideoCameraIcon,
             page: 'recordings',
-            permission: 'canReadSuites'
+            permission: 'canReadSuites',
+            requiresSuite: true,
+            action: 'view'
         },
         {
             name: 'Settings',
             icon: CogIcon,
             page: 'settings',
-            permission: 'canViewSettings'
+            permission: 'canViewSettings',
+            requiresSuite: false
         },
     ];
 
-    // Memoized premium access check
-    const hasPremiumAccess = useCallback(() => {
-        if (!actualSubscriptionState) return false;
-        return actualSubscriptionState.isTrialActive || actualSubscriptionState.isPaid;
-    }, [actualSubscriptionState]);
-
-    // Memoized feature accessibility check
-    const isFeatureAccessible = useCallback((item) => {
-        // First check if user has the required permission
-        if (item.permission && userPermissions.current && !userPermissions.current[item.permission]) {
-            return false;
+    // Check if navigation item is accessible
+    const isNavItemAccessible = useCallback((item) => {
+        // Check user permission
+        if (item.permission && !checkPermission(item.permission)) {
+            return { accessible: false, reason: 'permission' };
         }
 
-        // If there's a specific feature requirement, check it
-        if (item.requiresFeature) {
-            // During trial or paid subscription, all features are accessible
-            if (hasPremiumAccess()) {
-                return true;
+        // Check premium feature access
+        if (item.requiresFeature && !checkPremiumAccess(item.requiresFeature)) {
+            return { accessible: false, reason: 'premium' };
+        }
+
+        // Check suite requirement and action permission
+        if (item.requiresSuite && item.action) {
+            const actionResult = guardAction(item.action, { silent: true, returnValidation: true });
+            if (!actionResult.allowed) {
+                return { accessible: false, reason: 'suite', details: actionResult };
             }
-            // For free tier users, check specific feature access
-            return hasFeatureAccess(item.requiresFeature);
         }
 
-        // If no specific feature requirement, just check the permission
-        return true;
-    }, [hasPremiumAccess, hasFeatureAccess]);
+        return { accessible: true };
+    }, [checkPermission, checkPremiumAccess, guardAction]);
 
     const handlePageChange = useCallback((item) => {
-        // Check if feature is accessible before allowing navigation
-        if (!isFeatureAccessible(item)) {
-            if (setActivePage) {
-                setActivePage('upgrade');
+        const accessCheck = isNavItemAccessible(item);
+
+        if (!accessCheck.accessible) {
+            console.log(`Access denied for ${item.name}:`, accessCheck.reason);
+
+            // Redirect to appropriate page based on reason
+            if (accessCheck.reason === 'premium') {
+                setActivePage?.('upgrade');
+            } else if (accessCheck.reason === 'suite') {
+                // Could redirect to suite selection or show message
+                console.warn('Suite required for this action');
             }
         } else {
-            if (setActivePage) {
-                setActivePage(item.page);
-            }
+            setActivePage?.(item.page);
         }
 
-        // Close mobile sidebar on page change
-        if (onClose) {
-            onClose();
-        }
-    }, [isFeatureAccessible, setActivePage, onClose]);
+        onClose?.();
+    }, [isNavItemAccessible, setActivePage, onClose]);
 
     const toggleCollapse = useCallback(() => {
         setIsCollapsed(prev => !prev);
     }, []);
 
     const handleUpgradeClick = useCallback(() => {
-        if (setActivePage) {
-            setActivePage('upgrade');
-        }
-        if (onClose) {
-            onClose();
-        }
+        setActivePage?.('upgrade');
+        onClose?.();
     }, [setActivePage, onClose]);
 
     const handleCreateSuiteSuccess = useCallback(() => {
         setShowCreateModal(false);
     }, []);
+
+    // Loading state
+    if (isProfileLoading && !userProfile) {
+        return (
+            <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-700 mx-auto mb-2"></div>
+                    <div className="text-sm text-gray-600">Loading profile...</div>
+                </div>
+            </div>
+        );
+    }
+
+    // Error state
+    if (profileError) {
+        return (
+            <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-red-500 mb-2">⚠️</div>
+                    <div className="text-sm text-gray-600">Profile Error</div>
+                    <div className="text-xs text-red-500 mt-1">{profileError}</div>
+                </div>
+            </div>
+        );
+    }
 
     if (!mounted) {
         return null;
@@ -354,7 +407,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 {/* Trial Banner */}
                 <TrialBanner
                     isCollapsed={isCollapsed}
-                    trialStatus={actualSubscriptionState || userProfile}
+                    trialStatus={subscriptionState || userProfile}
                     onUpgradeClick={handleUpgradeClick}
                 />
 
@@ -362,7 +415,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 <SuiteSelector
                     isCollapsed={isCollapsed}
                     setShowCreateModal={setShowCreateModal}
-                    trialStatus={actualSubscriptionState || subscriptionStatus}
+                    trialStatus={subscriptionState || suiteContext?.subscriptionStatus}
                     onUpgradeClick={handleUpgradeClick}
                 />
 
@@ -370,7 +423,8 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 <nav className="flex-1 py-4 space-y-2 px-4">
                     {navigation.map((item) => {
                         const isActive = activePage === item.page;
-                        const isAccessible = isFeatureAccessible(item);
+                        const accessCheck = isNavItemAccessible(item);
+                        const isAccessible = accessCheck.accessible;
                         const showLock = !isAccessible;
 
                         return (
@@ -422,7 +476,9 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                                             {item.name}
                                             {showLock && (
                                                 <span className="block text-xs opacity-75 mt-1">
-                                                    Upgrade Required
+                                                    {accessCheck.reason === 'premium' ? 'Upgrade Required' :
+                                                        accessCheck.reason === 'suite' ? 'Suite Required' :
+                                                            'Access Denied'}
                                                 </span>
                                             )}
                                             {/* Tooltip arrow */}
@@ -439,7 +495,7 @@ const Sidebar = ({ isOpen, onClose, setActivePage, activePage }) => {
                 {userProfile && (
                     <UserAvatarClip
                         isCollapsed={isCollapsed}
-                        trialStatus={actualSubscriptionState || userProfile}
+                        trialStatus={subscriptionState || userProfile}
                     />
                 )}
             </div>

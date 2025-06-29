@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 // components/layout/SuiteSelector.js
 'use client'
 import { useState, useEffect } from 'react';
@@ -13,7 +14,7 @@ import {
 
 const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgradeClick }) => {
     const {
-        suites,
+        suites: suitesData,
         activeSuite,
         setActiveSuite,
         canCreateSuite,
@@ -31,6 +32,13 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
             setShowSuiteList(false);
         }
     }, [isCollapsed]);
+
+    // Extract suites array from the service response
+    // Handle both direct array and object with suites property
+    const suites = Array.isArray(suitesData) ? suitesData : (suitesData?.suites || []);
+    
+    // Get metadata if available
+    const suitesMetadata = suitesData?.metadata || null;
 
     const handleSuiteSwitch = (suite) => {
         setActiveSuite(suite);
@@ -55,8 +63,13 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
 
     const handleRefreshSuites = async () => {
         setIsRefreshing(true);
-        await refetchSuites();
-        setIsRefreshing(false);
+        try {
+            await refetchSuites();
+        } catch (error) {
+            console.error('Error refreshing suites:', error);
+        } finally {
+            setIsRefreshing(false);
+        }
     };
 
     const getSubscriptionBadge = () => {
@@ -96,18 +109,40 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
     };
 
     const getSuiteLimitInfo = () => {
+        // Try to get limit info from metadata first, then fall back to getFeatureLimits
+        if (suitesMetadata) {
+            const maxSuites = suitesMetadata.limit === -1 ? '∞' : suitesMetadata.limit;
+            return `${suitesMetadata.totalCount}/${maxSuites}`;
+        }
+        
         const limits = getFeatureLimits();
-        if (!limits) return '0/1';
+        if (!limits) return `${suites.length}/1`;
 
         const maxSuites = limits.suites === -1 ? '∞' : limits.suites;
         return `${suites.length}/${maxSuites}`;
+    };
+
+    // Helper function to get suite ID consistently
+    const getSuiteId = (suite) => {
+        return suite?.suite_id || suite?.id || suite?._id;
     };
 
     // Use trialStatus prop if available, otherwise fall back to subscriptionStatus
     const currentStatus = trialStatus || subscriptionStatus;
 
     // Ensure suites is an array and filter out any invalid entries
-    const validSuites = Array.isArray(suites) ? suites.filter(suite => suite && (suite.id || suite._id)) : [];
+    const validSuites = Array.isArray(suites) ? suites.filter(suite => suite && getSuiteId(suite)) : [];
+
+    // Debug logging
+    useEffect(() => {
+        console.log('SuiteSelector Debug:', {
+            suitesData,
+            suites,
+            validSuites: validSuites.length,
+            activeSuite,
+            suitesMetadata
+        });
+    }, [suitesData, suites, validSuites.length, activeSuite, suitesMetadata]);
 
     return (
         <div className={`p-4 border-b border-gray-200/50 transition-all duration-300 ${isCollapsed ? 'lg:px-2' : 'px-4'}`}>
@@ -116,13 +151,13 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
                     onClick={() => !isCollapsed && setShowSuiteList(!showSuiteList)}
                     disabled={isCollapsed}
                     className={`w-full flex items-center p-3 text-left bg-gray-50/80 backdrop-blur-sm rounded-xl hover:bg-gray-100/80 hover:shadow-sm transition-all duration-200 hover:scale-[1.02] ${isCollapsed ? 'lg:justify-center lg:px-2 lg:cursor-default' : 'justify-between'}`}
-                    title={isCollapsed ? activeSuite?.name || 'Select Suite' : ''}
+                    title={isCollapsed ? activeSuite?.metadata?.name || activeSuite?.name || 'Select Suite' : ''}
                 >
                     <div className="min-w-0 flex-1 flex items-center">
                         <FolderIcon className="h-5 w-5 text-teal-500 flex-shrink-0" />
                         <div className={`ml-3 min-w-0 transition-all duration-300 ease-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
                             <span className="text-sm font-semibold text-gray-900 truncate block">
-                                {activeSuite?.name || 'My Suite'}
+                                {activeSuite?.metadata?.name || activeSuite?.name || 'My Suite'}
                             </span>
                             <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
                                 <span>{getSuiteLimitInfo()} suites</span>
@@ -181,31 +216,46 @@ const SuiteSelector = ({ isCollapsed, setShowCreateModal, trialStatus, onUpgrade
                         </div>
 
                         <div className="space-y-1">
-                            {validSuites.map((suite, index) => {
-                                // Use suite.id, suite._id, or fall back to index for key
-                                const suiteKey = suite.id || suite._id || `suite-${index}`;
-                                const suiteId = suite.id || suite._id;
-                                
-                                return (
-                                    <button
-                                        key={suiteKey}
-                                        onClick={() => handleSuiteSwitch(suite)}
-                                        className={`w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 transition-all duration-200 hover:scale-[1.01] ${activeSuite?.id === suiteId || activeSuite?._id === suiteId ? 'bg-blue-50 text-teal-700 ring-1 ring-blue-200' : 'text-gray-900'
+                            {validSuites.length > 0 ? (
+                                validSuites.map((suite, index) => {
+                                    const suiteId = getSuiteId(suite);
+                                    const activeSuiteId = getSuiteId(activeSuite);
+                                    const isActive = suiteId === activeSuiteId;
+                                    
+                                    return (
+                                        <button
+                                            key={suiteId || `suite-${index}`}
+                                            onClick={() => handleSuiteSwitch(suite)}
+                                            className={`w-full flex items-center p-2.5 text-left rounded-lg hover:bg-gray-50 transition-all duration-200 hover:scale-[1.01] ${
+                                                isActive 
+                                                    ? 'bg-blue-50 text-teal-700 ring-1 ring-blue-200' 
+                                                    : 'text-gray-900'
                                             }`}
-                                    >
-                                        <FolderIcon className="h-4 w-4 mr-3 flex-shrink-0" />
-                                        <div className="min-w-0 flex-1">
-                                            <span className="text-sm font-medium truncate block">{suite.name || 'Unnamed Suite'}</span>
-                                            {suite.description && (
-                                                <span className="text-xs text-gray-500 truncate block mt-0.5">{suite.description}</span>
+                                        >
+                                            <FolderIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                            <div className="min-w-0 flex-1">
+                                                <span className="text-sm font-medium truncate block">
+                                                    {suite.metadata?.name || suite.name || 'Unnamed Suite'}
+                                                </span>
+                                                {(suite.metadata?.description || suite.description) && (
+                                                    <span className="text-xs text-gray-500 truncate block mt-0.5">
+                                                        {suite.metadata?.description || suite.description}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {isActive && (
+                                                <CheckCircleIcon className="h-4 w-4 ml-2 text-teal-700 flex-shrink-0" />
                                             )}
-                                        </div>
-                                        {(activeSuite?.id === suiteId || activeSuite?._id === suiteId) && (
-                                            <CheckCircleIcon className="h-4 w-4 ml-2 text-teal-700 flex-shrink-0" />
-                                        )}
-                                    </button>
-                                );
-                            })}
+                                        </button>
+                                    );
+                                })
+                            ) : (
+                                <div className="text-center py-4 text-gray-500">
+                                    <FolderIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                    <p className="text-sm">No suites found</p>
+                                    <p className="text-xs">Create your first suite to get started</p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Create Suite Button */}
