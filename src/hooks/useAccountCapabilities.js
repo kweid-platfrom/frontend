@@ -34,17 +34,13 @@ export const useAccountCapabilities = (userId) => {
                     return;
                 }
 
-                console.log('User data fetched:', userData);
-
                 // Transform userData to format expected by accountService
                 const transformedUserProfile = transformUserDataForAccountService(userData);
 
-                console.log('Transformed user profile:', transformedUserProfile);
 
                 // Get capabilities using accountService
                 const userCapabilities = accountService.getUserCapabilities(transformedUserProfile);
 
-                console.log('User capabilities:', userCapabilities);
 
                 setCapabilities(userCapabilities);
 

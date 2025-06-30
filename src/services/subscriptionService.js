@@ -1,215 +1,433 @@
-// services/subscriptionService.js - Handle ONLY subscription logic
+// services/subscriptionService.js - Handle ONLY billing and payment logic
+import { doc, updateDoc, getDoc, collection, addDoc } from "firebase/firestore";
+import { db } from "../config/firebase";
+
+/**
+ * Billing and payment-focused subscription service
+ * This service handles only billing, payments, and plan upgrades/downgrades
+ * All subscription plan logic, features, and capabilities are handled by accountService
+ */
 export const subscriptionService = {
-    createTrialSubscription(accountType = 'individual') {
-        const now = new Date();
-        const trialEnd = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000));
-
-        return {
-            plan_type: 'freemium',
-            subscriptionType: 'trial',
-            status: 'trial',
-            subscriptionStatus: 'active',
-            trial_start_date: now,
-            trial_end_date: trialEnd,
-            trialStartDate: now, // Add consistent field names
-            trialEndDate: trialEnd,
-            is_trial_active: true,
-            isTrialActive: true,
-            trial_days_remaining: 30,
-            trialDaysRemaining: 30,
-            features: this.getTrialFeatures(),
-            limits: this.getTrialLimits(accountType),
-            createdAt: now,
-            updatedAt: now
-        };
-    },
-
-    createFreeSubscription(accountType = 'individual') {
-        const now = new Date();
+    
+    /**
+     * Payment and billing configuration
+     */
+    BILLING_CONFIG: {
+        // Stripe price IDs (these would be actual Stripe price IDs in production)
+        priceIds: {
+            individual_pro_monthly: 'price_individual_pro_monthly',
+            individual_pro_yearly: 'price_individual_pro_yearly',
+            organization_starter_monthly: 'price_org_starter_monthly',
+            organization_starter_yearly: 'price_org_starter_yearly',
+            organization_professional_monthly: 'price_org_pro_monthly',
+            organization_professional_yearly: 'price_org_pro_yearly',
+            organization_enterprise_monthly: 'price_org_enterprise_monthly',
+            organization_enterprise_yearly: 'price_org_enterprise_yearly'
+        },
         
-        return {
-            plan_type: 'free',
-            subscriptionType: 'free',
-            status: 'active',
-            subscriptionStatus: 'active',
-            is_trial_active: false,
-            isTrialActive: false,
-            trial_days_remaining: 0,
-            trialDaysRemaining: 0,
-            trial_start_date: null,
-            trial_end_date: null,
-            trialStartDate: null,
-            trialEndDate: null,
-            features: this.getFreeFeatures(),
-            limits: this.getFreeTierLimits(accountType),
-            createdAt: now,
-            updatedAt: now
-        };
-    },
-
-    getTrialFeatures() {
-        return {
-            multiple_suites: true,
-            advanced_reports: true,
-            team_collaboration: true,
-            api_access: true,
-            priority_support: true,
-            custom_integrations: true,
-            advanced_automation: true
-        };
-    },
-
-    getFreeFeatures() {
-        return {
-            multiple_suites: false,
-            advanced_reports: false,
-            team_collaboration: false,
-            api_access: false,
-            priority_support: false,
-            custom_integrations: false,
-            advanced_automation: false
-        };
-    },
-
-    getTrialLimits(accountType = 'individual') {
-        return {
-            suites: accountType === 'organization' ? 15 : 5,
-            test_scripts: 1000,
-            automated_tests: 500,
-            recordings: 100,
-            report_exports: 50,
-            team_members: accountType === 'organization' ? 25 : 5
-        };
-    },
-
-    getFreeTierLimits(accountType = 'individual') {
-        return {
-            suites: accountType === 'organization' ? 5 : 1,
-            test_scripts: accountType === 'organization' ? 50 : 25,
-            automated_tests: accountType === 'organization' ? 25 : 10,
-            recordings: accountType === 'organization' ? 10 : 5,
-            report_exports: accountType === 'organization' ? 5 : 2,
-            team_members: 1
-        };
-    },
-
-    checkTrialStatus(subscription) {
-        if (!subscription) return false;
+        // Billing cycles
+        billingCycles: {
+            monthly: 'monthly',
+            yearly: 'yearly'
+        },
         
-        // Handle both field name variations
-        const trialEndDate = subscription.trial_end_date || subscription.trialEndDate;
-        const isTrialActive = subscription.is_trial_active ?? subscription.isTrialActive;
-        
-        if (!trialEndDate || isTrialActive === false) return false;
-        
-        try {
-            const trialEnd = new Date(trialEndDate);
-            // Check if date is valid
-            if (isNaN(trialEnd.getTime())) {
-                console.warn('Invalid trial end date:', trialEndDate);
-                return false;
-            }
-            
-            const now = new Date();
-            return now < trialEnd;
-        } catch (error) {
-            console.error('Error checking trial status:', error);
-            return false;
+        // Payment methods
+        paymentMethods: {
+            stripe: 'stripe',
+            paypal: 'paypal'
         }
     },
 
-    calculateTrialDaysRemaining(subscription) {
-        if (!subscription) return 0;
-        
-        const trialEndDate = subscription.trial_end_date || subscription.trialEndDate;
-        if (!trialEndDate) return 0;
-        
+    /**
+     * Create a Stripe checkout session for plan upgrade
+     * @param {string} userId - User ID
+     * @param {string} planId - Target subscription plan
+     * @param {string} billingCycle - 'monthly' or 'yearly'
+     * @param {string} successUrl - Redirect URL on success
+     * @param {string} cancelUrl - Redirect URL on cancel
+     * @returns {Promise<Object>} Stripe checkout session
+     */
+    async createCheckoutSession(userId, planId, billingCycle = 'monthly', successUrl, cancelUrl) {
         try {
-            const trialEnd = new Date(trialEndDate);
+            // This would integrate with Stripe API in production
+            const priceId = this.BILLING_CONFIG.priceIds[`${planId}_${billingCycle}`];
             
-            // Check if date is valid
-            if (isNaN(trialEnd.getTime())) {
-                console.warn('Invalid trial end date for calculation:', trialEndDate);
-                return 0;
+            if (!priceId) {
+                throw new Error(`No price ID found for plan: ${planId}_${billingCycle}`);
             }
-            
-            const now = new Date();
-            const diffTime = trialEnd - now;
-            
-            // If trial has already ended, return 0
-            if (diffTime <= 0) return 0;
-            
-            const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return Math.max(0, daysRemaining);
-        } catch (error) {
-            console.error('Error calculating trial days remaining:', error);
-            return 0;
-        }
-    },
 
-    updateTrialStatus(subscription) {
-        if (!subscription) return this.createFreeSubscription();
+            // In production, this would call Stripe API
+            const checkoutSession = {
+                id: `cs_${Date.now()}_${userId}`,
+                url: `https://checkout.stripe.com/pay/${Date.now()}`, // Mock URL
+                priceId,
+                planId,
+                billingCycle,
+                userId,
+                successUrl,
+                cancelUrl,
+                createdAt: new Date()
+            };
 
-        const isTrialStillActive = this.checkTrialStatus(subscription);
-        const daysRemaining = this.calculateTrialDaysRemaining(subscription);
+            // Save checkout session to database for tracking
+            await this.saveCheckoutSession(checkoutSession);
 
-        // Ensure we don't return NaN values
-        const safeDaysRemaining = isNaN(daysRemaining) ? 0 : daysRemaining;
-
-        return {
-            ...subscription,
-            is_trial_active: isTrialStillActive,
-            isTrialActive: isTrialStillActive,
-            trial_days_remaining: safeDaysRemaining,
-            trialDaysRemaining: safeDaysRemaining,
-            subscriptionType: isTrialStillActive ? 'trial' : 'free',
-            subscriptionStatus: 'active',
-            status: isTrialStillActive ? 'trial' : 'active',
-            updatedAt: new Date()
-        };
-    },
-
-    getUserCapabilities(userProfile) {
-        if (!userProfile) {
             return {
-                subscriptionType: 'free',
-                subscriptionStatus: 'active',
-                isTrialActive: false,
-                trialDaysRemaining: 0,
-                canCreateMultipleSuites: false,
-                canAccessAdvancedReports: false,
-                canInviteTeamMembers: false,
-                canUseAPI: false,
-                canUseAutomation: false,
-                limits: this.getFreeTierLimits('individual')
+                success: true,
+                checkoutUrl: checkoutSession.url,
+                sessionId: checkoutSession.id
+            };
+
+        } catch (error) {
+            console.error('Error creating checkout session:', error);
+            return {
+                success: false,
+                error: error.message
             };
         }
+    },
 
-        // Handle both subscription object and direct profile properties
-        const subscription = userProfile.subscription || userProfile;
-        const updatedSubscription = this.updateTrialStatus(subscription);
+    /**
+     * Handle successful payment and upgrade user subscription
+     * @param {string} sessionId - Stripe session ID
+     * @param {Object} paymentData - Payment completion data
+     * @returns {Promise<Object>} Upgrade result
+     */
+    async handleSuccessfulPayment(sessionId, paymentData) {
+        try {
+            // Get checkout session data
+            const session = await this.getCheckoutSession(sessionId);
+            if (!session) {
+                throw new Error('Checkout session not found');
+            }
 
-        const subscriptionType = updatedSubscription.subscriptionType || 'free';
-        const isTrialActive = updatedSubscription.isTrialActive || false;
-        const isPaidPlan = subscriptionType === 'premium' || subscriptionType === 'pro';
-        const trialDaysRemaining = updatedSubscription.trialDaysRemaining || 0;
+            const { userId, planId, billingCycle } = session;
 
-        // Ensure no NaN values are returned
-        const safeDaysRemaining = isNaN(trialDaysRemaining) ? 0 : trialDaysRemaining;
+            // Calculate subscription dates
+            const now = new Date();
+            const subscriptionEnd = new Date();
+            
+            if (billingCycle === 'yearly') {
+                subscriptionEnd.setFullYear(subscriptionEnd.getFullYear() + 1);
+            } else {
+                subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 1);
+            }
 
-        return {
-            subscriptionType,
-            subscriptionStatus: updatedSubscription.subscriptionStatus || 'active',
-            isTrialActive,
-            trialDaysRemaining: safeDaysRemaining,
-            canCreateMultipleSuites: isTrialActive || isPaidPlan,
-            canAccessAdvancedReports: isTrialActive || isPaidPlan,
-            canInviteTeamMembers: isTrialActive || isPaidPlan,
-            canUseAPI: isTrialActive || isPaidPlan,
-            canUseAutomation: isTrialActive || isPaidPlan,
-            limits: isTrialActive || isPaidPlan 
-                ? this.getTrialLimits(userProfile.accountType)
-                : this.getFreeTierLimits(userProfile.accountType)
-        };
+            // Update user subscription in database
+            const userDocRef = doc(db, 'users', userId);
+            const subscriptionUpdate = {
+                subscriptionPlan: planId,
+                subscriptionStatus: 'active',
+                subscriptionStartDate: now,
+                subscriptionEndDate: subscriptionEnd,
+                billingCycle: billingCycle,
+                isTrialActive: false,
+                trialDaysRemaining: 0,
+                
+                // Billing information
+                stripeCustomerId: paymentData.customerId,
+                stripeSubscriptionId: paymentData.subscriptionId,
+                lastPaymentDate: now,
+                nextBillingDate: subscriptionEnd,
+                
+                updatedAt: now
+            };
+
+            await updateDoc(userDocRef, subscriptionUpdate);
+
+            // Record payment transaction
+            await this.recordPaymentTransaction({
+                userId,
+                sessionId,
+                planId,
+                billingCycle,
+                amount: paymentData.amount,
+                currency: paymentData.currency,
+                stripePaymentIntentId: paymentData.paymentIntentId,
+                status: 'completed',
+                transactionDate: now
+            });
+
+            return {
+                success: true,
+                userId,
+                planId,
+                subscriptionEnd,
+                billingCycle,
+                nextBillingDate: subscriptionEnd
+            };
+
+        } catch (error) {
+            console.error('Error handling successful payment:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Handle subscription renewal billing
+     * @param {string} userId - User ID
+     * @returns {Promise<Object>} Renewal result
+     */
+    async handleSubscriptionRenewal(userId) {
+        try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (!userDoc.exists()) {
+                throw new Error('User not found');
+            }
+
+            const userData = userDoc.data();
+            const { billingCycle, subscriptionPlan } = userData;
+
+            // Calculate next billing period
+            const now = new Date();
+            const nextBillingDate = new Date();
+            
+            if (billingCycle === 'yearly') {
+                nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
+            } else {
+                nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+            }
+
+            // Update subscription dates
+            await updateDoc(userDocRef, {
+                subscriptionStartDate: now,
+                subscriptionEndDate: nextBillingDate,
+                lastPaymentDate: now,
+                nextBillingDate: nextBillingDate,
+                updatedAt: now
+            });
+
+            return {
+                success: true,
+                nextBillingDate,
+                subscriptionPlan
+            };
+
+        } catch (error) {
+            console.error('Error handling subscription renewal:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Cancel user subscription (immediate or at period end)
+     * @param {string} userId - User ID
+     * @param {boolean} immediate - Cancel immediately or at period end
+     * @returns {Promise<Object>} Cancellation result
+     */
+    async cancelSubscription(userId, immediate = false) {
+        try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (!userDoc.exists()) {
+                throw new Error('User not found');
+            }
+
+            const userData = userDoc.data();
+            const now = new Date();
+
+            let updateData = {
+                subscriptionStatus: immediate ? 'cancelled' : 'active',
+                cancelledAt: now,
+                updatedAt: now
+            };
+
+            if (immediate) {
+                // Immediate cancellation - downgrade to free plan
+                const accountType = userData.accountType || 'individual';
+                const freePlan = accountType === 'organization' ? 'organization_free' : 'individual_free';
+                
+                updateData = {
+                    ...updateData,
+                    subscriptionPlan: freePlan,
+                    subscriptionEndDate: now,
+                    nextBillingDate: null
+                };
+            } else {
+                // Cancel at period end
+                updateData.willCancelAt = userData.subscriptionEndDate || userData.nextBillingDate;
+            }
+
+            await updateDoc(userDocRef, updateData);
+
+            // Record cancellation
+            await this.recordCancellation({
+                userId,
+                reason: 'user_requested',
+                immediate,
+                cancelledAt: now,
+                willCancelAt: updateData.willCancelAt
+            });
+
+            return {
+                success: true,
+                immediate,
+                cancelledAt: now,
+                willCancelAt: updateData.willCancelAt
+            };
+
+        } catch (error) {
+            console.error('Error cancelling subscription:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Reactivate a cancelled subscription
+     * @param {string} userId - User ID
+     * @returns {Promise<Object>} Reactivation result
+     */
+    async reactivateSubscription(userId) {
+        try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (!userDoc.exists()) {
+                throw new Error('User not found');
+            }
+
+            const userData = userDoc.data();
+            
+            if (userData.subscriptionStatus !== 'cancelled' && !userData.willCancelAt) {
+                throw new Error('Subscription is not cancelled');
+            }
+
+            const now = new Date();
+            const updateData = {
+                subscriptionStatus: 'active',
+                cancelledAt: null,
+                willCancelAt: null,
+                updatedAt: now
+            };
+
+            await updateDoc(userDocRef, updateData);
+
+            return {
+                success: true,
+                reactivatedAt: now
+            };
+
+        } catch (error) {
+            console.error('Error reactivating subscription:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Get billing history for user
+     * @param {string} userId - User ID
+     * @returns {Promise<Array>} Billing history
+     */
+    async getBillingHistory() {
+        try {
+            // This would query payment transactions from database
+            // For now, returning mock data structure
+            return {
+                success: true,
+                transactions: [], // Would contain actual transaction records
+                totalSpent: 0,
+                nextBillingDate: null
+            };
+
+        } catch (error) {
+            console.error('Error getting billing history:', error);
+            return {
+                success: false,
+                error: error.message,
+                transactions: []
+            };
+        }
+    },
+
+    /**
+     * Update payment method
+     * @param {string} userId - User ID
+     * @param {Object} paymentMethodData - New payment method data
+     * @returns {Promise<Object>} Update result
+     */
+    async updatePaymentMethod(userId, paymentMethodData) {
+        try {
+            const userDocRef = doc(db, 'users', userId);
+            
+            await updateDoc(userDocRef, {
+                paymentMethod: paymentMethodData,
+                updatedAt: new Date()
+            });
+
+            return {
+                success: true,
+                paymentMethod: paymentMethodData
+            };
+
+        } catch (error) {
+            console.error('Error updating payment method:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Private helper methods for database operations
+     */
+
+    async saveCheckoutSession(session) {
+        try {
+            const sessionsRef = collection(db, 'checkout_sessions');
+            await addDoc(sessionsRef, session);
+        } catch (error) {
+            console.error('Error saving checkout session:', error);
+        }
+    },
+
+    async getCheckoutSession() {
+        try {
+            // Implementation would query checkout_sessions collection
+            // For now, returning null as this would need proper database query
+            return null;
+        } catch (error) {
+            console.error('Error getting checkout session:', error);
+            return null;
+        }
+    },
+
+    async recordPaymentTransaction(transaction) {
+        try {
+            const transactionsRef = collection(db, 'payment_transactions');
+            await addDoc(transactionsRef, {
+                ...transaction,
+                createdAt: new Date()
+            });
+        } catch (error) {
+            console.error('Error recording payment transaction:', error);
+        }
+    },
+
+    async recordCancellation(cancellation) {
+        try {
+            const cancellationsRef = collection(db, 'subscription_cancellations');
+            await addDoc(cancellationsRef, {
+                ...cancellation,
+                createdAt: new Date()
+            });
+        } catch (error) {
+            console.error('Error recording cancellation:', error);
+        }
     }
 };

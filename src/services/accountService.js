@@ -295,13 +295,6 @@ const setupAccount = async (setupData) => {
             await setDoc(orgDocRef, orgData);
         }
 
-        console.log('Account setup completed successfully:', {
-            userId,
-            accountType,
-            subscriptionPlan,
-            organizationName: setupData.organizationName
-        });
-
         return {
             success: true,
             userId: userId,
@@ -351,10 +344,6 @@ const getUserCapabilities = (userProfile) => {
     const planFeatures = SUBSCRIPTION_PLANS[effectiveSubscriptionPlan]?.features || SUBSCRIPTION_PLANS.individual_free.features;
     const planInfo = SUBSCRIPTION_PLANS[effectiveSubscriptionPlan] || SUBSCRIPTION_PLANS.individual_free;
 
-    console.log('Trial Status:', trialStatus);
-    console.log('Effective Plan:', effectiveSubscriptionPlan);
-    console.log('Plan Features:', planFeatures);
-
     // Build capabilities object
     const capabilities = {
         // Account information
@@ -398,7 +387,6 @@ const getUserCapabilities = (userProfile) => {
         }
     };
 
-    console.log('Final Capabilities:', capabilities);
     return capabilities;
 };
 
@@ -508,7 +496,7 @@ const calculateTrialStatus = (userProfile) => {
         daysRemaining,
         startDate: trialStart,
         endDate: trialEnd,
-        showBanner: isActive && daysRemaining <= 7, // Show banner in last 7 days
+        showBanner: isActive && daysRemaining <= 7,
         isNewUser,
         accountAgeInDays: Math.floor(accountAgeInDays),
         hasTrialPlan,
@@ -516,8 +504,6 @@ const calculateTrialStatus = (userProfile) => {
         hasPaidSubscription,
         isWithinTrialPeriod
     };
-
-    console.log('Trial calculation details:', trialInfo);
     return trialInfo;
 };
 
@@ -529,7 +515,6 @@ const calculateTrialStatus = (userProfile) => {
 const checkAndUpdateTrialStatus = async (userProfile) => {
     try {
         if (!userProfile || !userProfile.uid) {
-            console.warn('No user profile or uid provided for trial status check');
             return {
                 trialStatus: calculateTrialStatus(userProfile),
                 userProfile,
@@ -544,7 +529,6 @@ const checkAndUpdateTrialStatus = async (userProfile) => {
         const needsUpdate = await shouldUpdateTrialStatus(userProfile, currentTrialStatus);
 
         if (needsUpdate) {
-            console.log('Updating trial status for user:', userId);
 
             const updates = {};
 
@@ -598,7 +582,6 @@ const checkAndUpdateTrialStatus = async (userProfile) => {
         };
 
     } catch (error) {
-        console.error('Error checking and updating trial status:', error);
         return {
             trialStatus: calculateTrialStatus(userProfile),
             userProfile,

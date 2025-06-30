@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { db } from '../../config/firebase';
-import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, where, doc } from 'firebase/firestore';
 import { useSuite } from '../../context/SuiteContext';
 import { useAuth } from '../../context/AuthProvider';
 import { BugAntIcon } from '@heroicons/react/24/outline';
@@ -16,7 +16,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
     const { activeSuite } = useSuite();
     const { hasPermission, user } = useAuth();
 
-    // Memoize the fetch function to prevent infinite re-renders
+    // Enhanced fetch function that follows the new security rules structure
     const fetchBugsDirectly = useCallback(async () => {
         if (!activeSuite?.id || !user || !hasPermission('read_bugs') || hasFetched) {
             return;
@@ -26,22 +26,35 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
         setFetchError(null);
 
         try {
-            // Try subcollection first
-            const bugsRef = collection(db, 'suites', activeSuite.id, 'bugs');
+            let bugsRef;
             let querySnapshot;
 
+            // Determine the correct path based on suite type and structure
+            if (activeSuite.type === 'individual' || activeSuite.ownerId) {
+                // Individual account structure: /individualAccounts/{userId}/testSuites/{suiteId}/bugs
+                const userId = activeSuite.ownerId || user.uid;
+                bugsRef = collection(db, 'individualAccounts', userId, 'testSuites', activeSuite.id, 'bugs');
+            } else if (activeSuite.organizationId) {
+                // Organization structure: /organizations/{orgId}/testSuites/{suiteId}/bugs
+                bugsRef = collection(db, 'organizations', activeSuite.organizationId, 'testSuites', activeSuite.id, 'bugs');
+            } else {
+                // Fallback to legacy structure if suite structure is unclear
+                bugsRef = collection(db, 'suites', activeSuite.id, 'bugs');
+            }
+
+            // Try to fetch with ordering first
             try {
                 const q = query(bugsRef, orderBy('createdAt', 'desc'));
                 querySnapshot = await getDocs(q);
             } catch (orderError) {
+                console.log('Ordering failed, fetching without order:', orderError);
                 querySnapshot = await getDocs(bugsRef);
             }
 
-            // If subcollection is empty, try main collection with suiteId filter
-            if (querySnapshot.size === 0) {
-                const mainBugsRef = collection(db, 'bugs');
-                const mainQuery = query(mainBugsRef, where('suiteId', '==', activeSuite.id));
-                querySnapshot = await getDocs(mainQuery);
+            // If no bugs found and we're dealing with organization suite, check if we have the right permissions
+            if (querySnapshot.size === 0 && activeSuite.organizationId) {
+                console.log('No bugs found in organization suite, checking permissions...');
+                // This might indicate a permission issue or the collection doesn't exist yet
             }
 
             const bugList = querySnapshot.docs.map(doc => {
@@ -61,18 +74,63 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                     hasConsoleLogs: data.hasConsoleLogs || false,
                     hasAttachments: data.hasAttachments || false,
                     isReproducible: data.isReproducible !== false, // Default to true
-                    resolutionTime: data.resolutionTime || 0
+                    resolutionTime: data.resolutionTime || 0,
+                    // Additional fields for better tracking
+                    created_by: data.created_by || data.createdBy,
+                    assigned_to: data.assigned_to || data.assignedTo,
+                    resolved_at: data.resolved_at?.toDate?.() || (data.resolvedAt ? new Date(data.resolvedAt) : null),
+                    suiteId: activeSuite.id // Ensure we track which suite this belongs to
                 };
             });
 
+            console.log(`Fetched ${bugList.length} bugs from ${activeSuite.type || 'unknown'} suite`);
             setFetchedBugs(bugList);
             setHasFetched(true);
         } catch (error) {
-            setFetchError(error.message);
+            console.error('Error fetching bugs:', error);
+            setFetchError(`Failed to fetch bugs: ${error.message}`);
+
+            // If it's a permission error, provide more helpful message
+            if (error.code === 'permission-denied') {
+                setFetchError('Permission denied. You may not have access to view bugs in this suite.');
+            }
         } finally {
             setFetchingBugs(false);
         }
-    }, [activeSuite?.id, user, hasPermission, hasFetched]);
+    }, [activeSuite, user, hasPermission, hasFetched]);
+
+    // Fetch metrics from Firestore if available
+    const fetchMetricsFromFirestore = useCallback(async () => {
+        if (!activeSuite?.id || !user) {
+            return null;
+        }
+
+        try {
+            let metricsRef;
+
+            // Determine the correct path for metrics based on suite type
+            if (activeSuite.type === 'individual' || activeSuite.ownerId) {
+                const userId = activeSuite.ownerId || user.uid;
+                metricsRef = collection(db, 'individualAccounts', userId, 'testSuites', activeSuite.id, 'metrics');
+            } else if (activeSuite.organizationId) {
+                metricsRef = collection(db, 'organizations', activeSuite.organizationId, 'testSuites', activeSuite.id, 'metrics');
+            } else {
+                metricsRef = collection(db, 'suites', activeSuite.id, 'metrics');
+            }
+
+            const metricsSnapshot = await getDocs(metricsRef);
+
+            if (!metricsSnapshot.empty) {
+                // Get the most recent metrics document
+                const metricsDoc = metricsSnapshot.docs[0];
+                return metricsDoc.data();
+            }
+        } catch (error) {
+            console.error('Error fetching metrics from Firestore:', error);
+        }
+
+        return null;
+    }, [activeSuite, user]);
 
     // Fetch bugs when component mounts if no bugs provided
     useEffect(() => {
@@ -162,6 +220,16 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
             return source === 'manual' || source === 'testing' || source === '';
         }).length;
 
+        // Calculate average resolution time for resolved bugs
+        const resolvedBugsWithTime = bugsData.filter(bug => {
+            const status = (bug.status || '').toLowerCase();
+            return (status === 'resolved' || status === 'closed' || status === 'fixed') && bug.resolutionTime > 0;
+        });
+
+        const avgResTime = resolvedBugsWithTime.length > 0
+            ? Math.round(resolvedBugsWithTime.reduce((acc, bug) => acc + bug.resolutionTime, 0) / resolvedBugsWithTime.length)
+            : 0;
+
         return {
             totalBugs: total,
             bugsFromScreenRecording: screenRecordingBugs,
@@ -174,7 +242,7 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
             mediumPriorityBugs: medium,
             lowPriorityBugs: low,
             resolvedBugs: resolved,
-            avgResolutionTime: Math.round(bugsData.reduce((acc, bug) => acc + (bug.resolutionTime || 0), 0) / total) || 0,
+            avgResolutionTime: avgResTime,
             bugResolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0,
             avgBugReportCompleteness: 85,
             bugReportsWithAttachments: bugsData.filter(bug =>
@@ -349,7 +417,14 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                     <div className="flex items-center justify-between">
                         <div className="flex items-center">
                             <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
-                            <span className="text-red-800">{error || fetchError}</span>
+                            <div>
+                                <p className="text-red-800 font-medium">{error || fetchError}</p>
+                                {fetchError && fetchError.includes('Permission denied') && (
+                                    <p className="text-red-600 text-sm mt-1">
+                                        Make sure you have the correct permissions for this {activeSuite?.type || 'test'} suite.
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         {fetchError && (
                             <button
@@ -379,6 +454,11 @@ const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error 
                     {effectiveBugs.length !== totalBugs && (
                         <span className="ml-2 text-xs text-orange-600">
                             ({effectiveBugs.length} loaded)
+                        </span>
+                    )}
+                    {activeSuite && (
+                        <span className="ml-2 text-xs text-blue-600">
+                            {activeSuite.type || 'unknown'} suite
                         </span>
                     )}
                 </div>
