@@ -1,32 +1,33 @@
-// components/auth/ProtectedRoute.js
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthProvider';
 import { Loader2 } from 'lucide-react';
 
 const ProtectedRoute = ({ children, requireEmailVerified = false }) => {
     const { currentUser, loading } = useAuth();
+    const router = useRouter();
 
-    // Show loading spinner while auth state is being determined
-    if (loading) {
+    useEffect(() => {
+        if (!loading) {
+            if (!currentUser) {
+                router.replace('/login');
+            } else if (requireEmailVerified && !currentUser.emailVerified) {
+                router.replace('/verify-email');
+            }
+        }
+    }, [loading, currentUser, requireEmailVerified, router]);
+
+    // Show loading until auth is resolved or redirect occurs
+    if (loading || !currentUser || (requireEmailVerified && !currentUser.emailVerified)) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            <div className="min-h-screen flex items-center justify-center bg-gray-100">
+                <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
             </div>
         );
     }
 
-    // Redirect to login if not authenticated
-    if (!currentUser) {
-        return <Navigate to="/login" replace />;
-    }
-
-    // Check email verification requirement
-    if (requireEmailVerified && !currentUser.emailVerified) {
-        return <Navigate to="/verify-email" replace />;
-    }
-
-    // ✅ Everything is good, render the protected content
     return children;
 };
 

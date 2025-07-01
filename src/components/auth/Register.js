@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import { accountService } from '../../services/accountService'; // Import the account service
+import { accountService } from '../../services/accountService';
 import { FcGoogle } from 'react-icons/fc';
 import AccountTypeStep from './reg/AccountTypeStep';
 import PersonalInfoStep from './reg/PersonalInfoStep';
@@ -119,8 +119,6 @@ const Register = () => {
             setIsGoogleLoading(false);
         }
     };
-
-    // ... validateStep and navigation functions remain the same ...
 
     const validateStep = (step) => {
         const newErrors = {};

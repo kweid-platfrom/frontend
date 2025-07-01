@@ -146,7 +146,7 @@ export const AuthProvider = ({ children }) => {
                     "/dashboard", // IMPORTANT: Don't redirect if already on dashboard
                     "/settings",
                     "/profile",
-                    "/projects",
+                    "/suites",
                     "/bugs",
                     "/admin"
                 ];
@@ -549,9 +549,9 @@ export const AuthProvider = ({ children }) => {
     }, [getLinkedProviders]);
 
     // Enhanced permission checking methods
-    const canAccessProject = useCallback(async (action = 'read', projectContext = {}) => {
+    const canAccessProject = useCallback(async (action = 'read', suiteContext = {}) => {
         if (!userProfile) return { allowed: false, reason: 'no_user' };
-        return await canAccessProject(userProfile, action, projectContext);
+        return await canAccessProject(userProfile, action, suiteContext);
     }, [userProfile]);
 
     const canAccessBugs = useCallback((action = 'read', context = {}) => {
