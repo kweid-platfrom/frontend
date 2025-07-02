@@ -11,11 +11,12 @@ import {
     query, 
     where, 
     orderBy,
+    limit,
     onSnapshot,
-    serverTimestamp
+    serverTimestamp,
+    setDoc
 } from 'firebase/firestore';
 import { validateSuiteName } from '../utils/onboardingUtils';
-import { accountService } from './accountService';
 
 /**
  * Error classes for better error handling
@@ -45,7 +46,7 @@ class SuiteLimitError extends Error {
 }
 
 /**
- * ALIGNED: Get user profile using accountService architecture
+ * ALIGNED: Get user profile to determine capabilities
  */
 const getUserProfile = async (userId) => {
     try {
@@ -53,15 +54,18 @@ const getUserProfile = async (userId) => {
         const userDoc = await getDoc(userRef);
         
         if (!userDoc.exists()) {
-            throw new Error('User not found');
+            // Ensure user document exists
+            await setDoc(userRef, {
+                user_id: userId,
+                created_at: serverTimestamp(),
+                preferences: {},
+                contact_info: {}
+            }, { merge: true });
+            
+            return { user_id: userId, account_memberships: [] };
         }
         
-        const userData = userDoc.data();
-        
-        // Process with accountService to get current capabilities
-        const processedProfile = accountService.checkAndUpdateTrialStatus(userData);
-        
-        return processedProfile;
+        return userDoc.data();
     } catch (error) {
         console.error('Error fetching user profile:', error);
         throw error;
@@ -69,58 +73,116 @@ const getUserProfile = async (userId) => {
 };
 
 /**
- * ALIGNED: Get user capabilities and check suite limits
+ * ALIGNED: Get feature limits based on subscription context
  */
-const getUserCapabilitiesAndLimits = async (userId) => {
-    try {
-        const userProfile = await getUserProfile(userId);
-        const capabilities = accountService.getUserCapabilities(userProfile);
-        
+const getFeatureLimits = (subscriptionStatus, userProfile) => {
+    if (!subscriptionStatus) {
         return {
-            userProfile,
-            capabilities,
-            canCreateSuites: capabilities.canCreateMultipleSuites || capabilities.limits.suites > 0,
-            suitesLimit: capabilities.limits.suites,
-            isTrialActive: capabilities.isTrialActive,
-            accountType: capabilities.accountType
+            suites: 1,
+            testCases: 10,
+            recordings: 5,
+            automatedScripts: 0
         };
-    } catch (error) {
-        console.error('Error getting user capabilities:', error);
-        throw error;
     }
+
+    // Check if user is on trial
+    const isTrialActive = subscriptionStatus.isTrialActive ||
+        subscriptionStatus.subscriptionStatus === 'trial';
+
+    if (isTrialActive) {
+        const accountType = userProfile?.accountType || 'individual';
+        
+        if (accountType === 'organization') {
+            const orgType = subscriptionStatus.subscriptionType || 'organization_trial';
+            if (orgType.includes('enterprise')) {
+                return {
+                    suites: -1, // unlimited
+                    testCases: -1,
+                    recordings: -1,
+                    automatedScripts: -1
+                };
+            } else {
+                return {
+                    suites: 10, // team level
+                    testCases: -1,
+                    recordings: -1,
+                    automatedScripts: -1
+                };
+            }
+        } else {
+            return {
+                suites: 5, // individual trial
+                testCases: -1,
+                recordings: -1,
+                automatedScripts: -1
+            };
+        }
+    }
+
+    // Non-trial limits
+    const limits = subscriptionStatus.capabilities?.limits;
+    if (!limits) {
+        const accountType = userProfile?.accountType || 'individual';
+        if (accountType === 'organization') {
+            return {
+                suites: 5,
+                testCases: 50,
+                recordings: 25,
+                automatedScripts: 10
+            };
+        }
+        return {
+            suites: 1,
+            testCases: 10,
+            recordings: 5,
+            automatedScripts: 0
+        };
+    }
+
+    return {
+        suites: limits.testSuites || 1,
+        testCases: limits.testCases || 10,
+        recordings: limits.recordings || 5,
+        automatedScripts: limits.automatedScripts || 0
+    };
 };
 
 /**
- * ALIGNED: Count user's current suites across all memberships
+ * ALIGNED: Count user's current suites from testSuites collection
  */
 const getCurrentSuiteCount = async (userId, userProfile = null) => {
     try {
         const profile = userProfile || await getUserProfile(userId);
         let totalSuites = 0;
 
-        if (!profile.account_memberships || !Array.isArray(profile.account_memberships)) {
-            return 0;
-        }
-
-        // Count suites from individual accounts
-        for (const membership of profile.account_memberships) {
-            if (membership.account_type === 'individual' && membership.owned_test_suites) {
-                totalSuites += Array.isArray(membership.owned_test_suites) ? 
-                    membership.owned_test_suites.length : 0;
-            }
-        }
-
-        // Count suites from organization memberships
-        const orgMemberships = profile.account_memberships.filter(m => m.org_id);
+        // Count individual suites
+        const individualQuery = query(
+            collection(db, 'testSuites'),
+            where('ownerType', '==', 'individual'),
+            where('ownerId', '==', userId)
+        );
         
-        for (const membership of orgMemberships) {
-            try {
-                const orgSuites = await getOrganizationSuites(membership.org_id, userId, false);
-                // Only count suites created by this user
-                const userCreatedSuites = orgSuites.filter(suite => suite.createdBy === userId);
-                totalSuites += userCreatedSuites.length;
-            } catch (error) {
-                console.warn(`Error counting suites for org ${membership.org_id}:`, error);
+        const individualSnapshot = await getDocs(individualQuery);
+        totalSuites += individualSnapshot.size;
+
+        // Count organization suites where user is creator
+        if (profile.account_memberships?.length > 0) {
+            for (const membership of profile.account_memberships) {
+                if (membership.org_id && membership.status === 'active') {
+                    try {
+                        const orgQuery = query(
+                            collection(db, 'testSuites'),
+                            where('ownerType', '==', 'organization'),
+                            where('ownerId', '==', membership.org_id),
+                            where('createdBy', '==', userId)
+                        );
+                        
+                        const orgSnapshot = await getDocs(orgQuery);
+                        totalSuites += orgSnapshot.size;
+                    } catch (error) {
+                        console.warn(`Error counting suites for org ${membership.org_id}:`, error);
+                    }
+                }
             }
         }
 
@@ -132,98 +194,80 @@ const getCurrentSuiteCount = async (userId, userProfile = null) => {
 };
 
 /**
- * ALIGNED: Validate user permissions for suite operations with subscription checks
+ * ALIGNED: Validate user permissions with new structure
  */
 const validateSuitePermissions = async (userId, operation, context = {}) => {
     try {
-        const { capabilities, userProfile, canCreateSuites, suitesLimit } = 
-            await getUserCapabilitiesAndLimits(userId);
-        
+        const userProfile = await getUserProfile(userId);
         const { organizationId, suiteId } = context;
 
         switch (operation) {
             case 'create':
-                // Check if user can create suites based on subscription
-                if (!canCreateSuites) {
-                    throw new SuitePermissionError(
-                        'Your current plan does not support creating multiple suites. Please upgrade to create more projects.',
-                        'UPGRADE_REQUIRED'
-                    );
-                }
-
-                // Check suite limits
-                if (suitesLimit > 0) { // -1 means unlimited
-                    const currentCount = await getCurrentSuiteCount(userId, userProfile);
-                    if (currentCount >= suitesLimit) {
-                        const trialMessage = capabilities.isTrialActive ? 
-                            ` You have ${capabilities.trialDaysRemaining} days remaining in your trial.` : '';
-                        
-                        throw new SuiteLimitError(
-                            `You've reached your suite limit of ${suitesLimit}.${trialMessage} Please upgrade your plan to create more projects.`,
-                            'LIMIT_EXCEEDED'
-                        );
-                    }
-                }
-
-                // Organization-specific validations
+                // For organization suites, verify admin permissions
                 if (organizationId) {
-                    const hasOrgMembership = userProfile.account_memberships?.some(
-                        m => m.org_id === organizationId && m.status === 'active'
+                    const isOrgAdmin = userProfile.account_memberships?.some(
+                        membership => membership.org_id === organizationId &&
+                            membership.status === 'active' &&
+                            membership.role === 'Admin'
                     );
-                    
-                    if (!hasOrgMembership) {
-                        throw new SuitePermissionError(
-                            'You are not a member of this organization',
-                            'NOT_ORGANIZATION_MEMBER'
-                        );
-                    }
 
-                    // Check if organization allows team collaboration
-                    if (!capabilities.canInviteTeamMembers && capabilities.accountType === 'individual') {
+                    if (!isOrgAdmin) {
                         throw new SuitePermissionError(
-                            'Team collaboration is not available on your current plan. Please upgrade to access organization features.',
-                            'UPGRADE_REQUIRED'
+                            'Only organization administrators can create test suites for the organization',
+                            'NOT_ORGANIZATION_ADMIN'
                         );
                     }
                 }
                 break;
 
             case 'read':
-                // Basic read permission - most users can read their own suites
+                // Basic read permission validation
                 break;
 
             case 'update':
-                // Check if user can write to projects
-                if (suiteId) {
-                    const suite = await getSuiteById(suiteId, organizationId);
-                    if (!suite) {
-                        throw new SuiteValidationError('Suite not found');
-                    }
-
-                    // Check ownership or membership
-                    if (suite.createdBy !== userId && 
-                        (!suite.members || !suite.members.includes(userId))) {
-                        throw new SuitePermissionError(
-                            'You do not have permission to update this suite',
-                            'NOT_SUITE_MEMBER'
-                        );
-                    }
-                }
-                break;
-
             case 'delete':
                 if (suiteId) {
-                    const suite = await getSuiteById(suiteId, organizationId);
+                    const suite = await getSuiteById(suiteId);
                     if (!suite) {
                         throw new SuiteValidationError('Suite not found');
                     }
 
-                    // Only suite creator can delete (stricter than update)
-                    if (suite.createdBy !== userId) {
+                    // Check if user has permission
+                    const hasPermission = suite.createdBy === userId ||
+                        suite.permissions?.[userId] ||
+                        (suite.ownerType === 'organization' && 
+                         userProfile.account_memberships?.some(
+                             m => m.org_id === suite.ownerId && m.status === 'active'
+                         ));
+
+                    if (!hasPermission) {
                         throw new SuitePermissionError(
-                            'Only the suite creator can delete this suite',
-                            'NOT_SUITE_OWNER'
+                            `You do not have permission to ${operation} this suite`,
+                            'INSUFFICIENT_PERMISSION'
                         );
+                    }
+
+                    // For delete, require creator or admin
+                    if (operation === 'delete' && suite.createdBy !== userId) {
+                        if (suite.ownerType === 'organization') {
+                            const isOrgAdmin = userProfile.account_memberships?.some(
+                                m => m.org_id === suite.ownerId && 
+                                     m.status === 'active' && 
+                                     m.role === 'Admin'
+                            );
+                            
+                            if (!isOrgAdmin) {
+                                throw new SuitePermissionError(
+                                    'Only the suite creator or organization admin can delete this suite',
+                                    'NOT_SUITE_OWNER'
+                                );
+                            }
+                        } else {
+                            throw new SuitePermissionError(
+                                'Only the suite creator can delete this suite',
+                                'NOT_SUITE_OWNER'
+                            );
+                        }
                     }
                 }
                 break;
@@ -232,7 +276,7 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
                 throw new SuiteValidationError(`Invalid operation: ${operation}`);
         }
 
-        return { userProfile, capabilities };
+        return { userProfile };
     } catch (error) {
         if (error instanceof SuitePermissionError || 
             error instanceof SuiteValidationError || 
@@ -245,19 +289,13 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
 };
 
 /**
- * Helper function to get suite by ID
+ * ALIGNED: Get suite by ID from testSuites collection
  */
-const getSuiteById = async (suiteId, organizationId = null) => {
+const getSuiteById = async (suiteId) => {
     try {
-        let suiteRef;
-        if (organizationId) {
-            suiteRef = doc(db, 'organizations', organizationId, 'suites', suiteId);
-        } else {
-            suiteRef = doc(db, 'suites', suiteId);
-        }
-
+        const suiteRef = doc(db, 'testSuites', suiteId);
         const suiteDoc = await getDoc(suiteRef);
-        return suiteDoc.exists() ? { id: suiteDoc.id, ...suiteDoc.data() } : null;
+        return suiteDoc.exists() ? { suite_id: suiteDoc.id, ...suiteDoc.data() } : null;
     } catch (error) {
         console.error('Error getting suite by ID:', error);
         return null;
@@ -265,11 +303,10 @@ const getSuiteById = async (suiteId, organizationId = null) => {
 };
 
 /**
- * ALIGNED: Check if suite name exists (case-insensitive)
+ * ALIGNED: Check if suite name exists
  */
 export const checkSuiteNameExists = async (name, userId, organizationId = null) => {
     try {
-        // Validate permissions first
         await validateSuitePermissions(userId, 'read', { organizationId });
 
         const validation = validateSuiteName(name);
@@ -277,23 +314,15 @@ export const checkSuiteNameExists = async (name, userId, organizationId = null) 
             throw new SuiteValidationError(validation.errors[0]);
         }
 
-        let q;
-        if (organizationId) {
-            // Check in organization's subcollection
-            const suitesRef = collection(db, 'organizations', organizationId, 'suites');
-            q = query(
-                suitesRef,
-                where('normalizedName', '==', validation.normalizedName)
-            );
-        } else {
-            // Check in flat suites collection
-            q = query(
-                collection(db, 'suites'),
-                where('normalizedName', '==', validation.normalizedName),
-                where('createdBy', '==', userId),
-                where('organizationId', '==', null)
-            );
-        }
+        const ownerType = organizationId ? 'organization' : 'individual';
+        const ownerId = organizationId || userId;
+
+        const q = query(
+            collection(db, 'testSuites'),
+            where('ownerType', '==', ownerType),
+            where('ownerId', '==', ownerId),
+            where('name', '==', name.trim())
+        );
 
         const querySnapshot = await getDocs(q);
         return !querySnapshot.empty;
@@ -304,11 +333,11 @@ export const checkSuiteNameExists = async (name, userId, organizationId = null) 
 };
 
 /**
- * ALIGNED: Create a new suite with subscription limit validation
+ * ALIGNED: Create a new suite using testSuites collection
  */
-export const createSuite = async (suiteData, userId, organizationId = null) => {
+export const createSuite = async (suiteData, userId, subscriptionStatus = null, organizationId = null) => {
     try {
-        const { name, description = '' } = suiteData;
+        const { name, description = '', tags = [] } = suiteData;
         
         // Validate suite name
         const validation = validateSuiteName(name);
@@ -316,11 +345,23 @@ export const createSuite = async (suiteData, userId, organizationId = null) => {
             throw new SuiteValidationError(validation.errors[0]);
         }
 
-        // ALIGNED: Validate permissions and limits
-        const { userProfile, capabilities } = await validateSuitePermissions(userId, 'create', { 
+        // Validate permissions
+        const { userProfile } = await validateSuitePermissions(userId, 'create', { 
             organizationId, 
             suiteData 
         });
+
+        // Check limits
+        const limits = getFeatureLimits(subscriptionStatus, userProfile);
+        if (limits.suites > 0) {
+            const currentCount = await getCurrentSuiteCount(userId, userProfile);
+            if (currentCount >= limits.suites) {
+                throw new SuiteLimitError(
+                    `You've reached your suite limit of ${limits.suites}. Please upgrade your plan to create more projects.`,
+                    'LIMIT_EXCEEDED'
+                );
+            }
+        }
 
         // Check if name already exists
         const nameExists = await checkSuiteNameExists(name, userId, organizationId);
@@ -330,77 +371,74 @@ export const createSuite = async (suiteData, userId, organizationId = null) => {
             );
         }
 
-        const baseSuiteData = {
+        // ALIGNED: Create suite with new structure
+        const ownerType = organizationId ? 'organization' : 'individual';
+        const ownerId = organizationId || userId;
+
+        const newSuite = {
+            // Core identification
+            ownerType,
+            ownerId,
+            
+            // Metadata
             name: name.trim(),
-            normalizedName: validation.normalizedName,
             description: description.trim(),
+            status: 'active',
+            tags: tags || [],
+            
+            // Audit fields
             createdBy: userId,
-            organizationId: organizationId || null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
-            members: [userId], // Creator is automatically a member
-            status: 'active',
-            settings: {
-                defaultAssignee: userId,
-                testCasePrefix: 'TC',
-                bugReportPrefix: 'BUG',
-                enableAIGeneration: capabilities.canUseAutomation || false,
-                enableScreenRecording: true
+            
+            // Access control
+            permissions: {
+                [userId]: 'admin'
             },
-            stats: {
-                totalTestCases: 0,
-                totalBugReports: 0,
-                automatedTests: 0,
-                lastActivity: serverTimestamp()
+            
+            // Testing assets structure
+            testingAssets: {
+                bugs: [],
+                testCases: [],
+                recordings: [],
+                automatedScripts: [],
+                dashboardMetrics: {},
+                reports: [],
+                settings: {}
             },
-            // ALIGNED: Add subscription context
-            createdUnderPlan: capabilities.subscriptionType,
-            createdDuringTrial: capabilities.isTrialActive
+            
+            // Collaboration
+            collaboration: {
+                activityLog: [],
+                comments: [],
+                notifications: []
+            }
         };
 
-        let docRef;
-        if (organizationId) {
-            // Create in organization's subcollection
-            const suitesRef = collection(db, 'organizations', organizationId, 'suites');
-            docRef = await addDoc(suitesRef, baseSuiteData);
-            
-            // Update organization's suite count
-            const orgRef = doc(db, 'organizations', organizationId);
-            const orgDoc = await getDoc(orgRef);
-            
-            if (orgDoc.exists()) {
-                const currentSuiteCount = orgDoc.data().suiteCount || 0;
-                await updateDoc(orgRef, {
-                    suiteCount: currentSuiteCount + 1,
-                    updatedAt: serverTimestamp()
-                });
-            }
-        } else {
-            // Create in flat suites collection
-            docRef = await addDoc(collection(db, 'suites'), baseSuiteData);
-            
-            // ALIGNED: Update user's owned_test_suites array
-            await updateUserOwnedSuites(userId, docRef.id, 'add');
-        }
+        // Create in testSuites collection
+        const collectionRef = collection(db, 'testSuites');
+        const docRef = await addDoc(collectionRef, newSuite);
+        
+        // Update with document ID
+        await updateDoc(docRef, {
+            suite_id: docRef.id,
+            updatedAt: serverTimestamp()
+        });
+
+        const createdSuite = { ...newSuite, suite_id: docRef.id };
 
         console.log('Suite created successfully:', {
             suiteId: docRef.id,
             userId,
             organizationId,
-            subscriptionType: capabilities.subscriptionType,
-            isTrialActive: capabilities.isTrialActive
+            ownerType,
+            ownerId
         });
 
         return {
             success: true,
             suiteId: docRef.id,
-            suite: { id: docRef.id, ...baseSuiteData },
-            subscriptionInfo: {
-                type: capabilities.subscriptionType,
-                isTrialActive: capabilities.isTrialActive,
-                remainingSlots: capabilities.limits.suites > 0 ? 
-                    capabilities.limits.suites - (await getCurrentSuiteCount(userId, userProfile) + 1) : -1
-            }
+            suite: createdSuite
         };
     } catch (error) {
         console.error('Error creating suite:', error);
@@ -424,134 +462,60 @@ export const createSuite = async (suiteData, userId, organizationId = null) => {
 };
 
 /**
- * ALIGNED: Update user's owned_test_suites array in account_memberships
- */
-const updateUserOwnedSuites = async (userId, suiteId, operation = 'add') => {
-    try {
-        const userProfile = await getUserProfile(userId);
-        
-        if (!userProfile.account_memberships || !Array.isArray(userProfile.account_memberships)) {
-            return;
-        }
-
-        const updatedMemberships = userProfile.account_memberships.map(membership => {
-            if (membership.account_type === 'individual') {
-                const ownedSuites = Array.isArray(membership.owned_test_suites) ? 
-                    membership.owned_test_suites : [];
-                
-                if (operation === 'add' && !ownedSuites.includes(suiteId)) {
-                    return {
-                        ...membership,
-                        owned_test_suites: [...ownedSuites, suiteId]
-                    };
-                } else if (operation === 'remove') {
-                    return {
-                        ...membership,
-                        owned_test_suites: ownedSuites.filter(id => id !== suiteId)
-                    };
-                }
-            }
-            return membership;
-        });
-
-        await updateDoc(doc(db, 'users', userId), {
-            account_memberships: updatedMemberships,
-            updated_at: new Date()
-        });
-    } catch (error) {
-        console.error('Error updating user owned suites:', error);
-        // Don't throw - this is a secondary operation
-    }
-};
-
-/**
- * ALIGNED: Get all suites for a specific organization
- */
-export const getOrganizationSuites = async (organizationId, userId, validatePermissions = true) => {
-    try {
-        if (!organizationId) {
-            throw new SuiteValidationError('Organization ID is required');
-        }
-
-        // Validate permissions if requested
-        if (validatePermissions) {
-            await validateSuitePermissions(userId, 'read', { organizationId });
-        }
-
-        const suitesRef = collection(db, 'organizations', organizationId, 'suites');
-        const q = query(suitesRef, orderBy('createdAt', 'desc'));
-        
-        const querySnapshot = await getDocs(q);
-        const suites = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-
-        return suites;
-    } catch (error) {
-        console.error('Error fetching organization suites:', error);
-        throw error;
-    }
-};
-
-/**
- * ALIGNED: Get all suites for a user across all organizations and personal suites
+ * ALIGNED: Get all suites for a user using testSuites collection
  */
 export const getUserSuites = async (userId) => {
     try {
-        // Get user capabilities to determine what they can access
-        const { userProfile, capabilities } = await getUserCapabilitiesAndLimits(userId);
+        const userProfile = await getUserProfile(userId);
         const userSuites = [];
 
-        // Get personal suites (flat structure) - for individual accounts
-        if (userProfile.account_memberships) {
-            for (const membership of userProfile.account_memberships) {
-                if (membership.account_type === 'individual' && membership.owned_test_suites) {
-                    try {
-                        // Fetch actual suite documents
-                        for (const suiteId of membership.owned_test_suites) {
-                            const suiteRef = doc(db, 'suites', suiteId);
-                            const suiteDoc = await getDoc(suiteRef);
-                            
-                            if (suiteDoc.exists()) {
-                                userSuites.push({
-                                    id: suiteDoc.id,
-                                    ...suiteDoc.data(),
-                                    organizationName: null,
-                                    organizationId: null,
-                                    membershipType: 'individual'
-                                });
-                            }
-                        }
-                    } catch (error) {
-                        console.warn('Error fetching personal suites:', error);
-                    }
-                }
+        // Get individual suites
+        try {
+            const individualQuery = query(
+                collection(db, 'testSuites'),
+                where('ownerType', '==', 'individual'),
+                where('ownerId', '==', userId),
+                orderBy('createdAt', 'desc'),
+                limit(50)
+            );
 
-                // Get organization suites
+            const individualSnapshot = await getDocs(individualQuery);
+            const individualSuites = individualSnapshot.docs.map(doc => ({
+                suite_id: doc.id,
+                ...doc.data(),
+                accountType: 'individual',
+                membershipType: 'individual'
+            }));
+
+            userSuites.push(...individualSuites);
+        } catch (error) {
+            console.error('Error fetching individual suites:', error);
+        }
+
+        // Get organization suites
+        if (userProfile.account_memberships?.length > 0) {
+            for (const membership of userProfile.account_memberships) {
                 if (membership.org_id && membership.status === 'active') {
                     try {
-                        const orgSuites = await getOrganizationSuites(membership.org_id, userId, false);
-                        
-                        // Get organization details
-                        const orgRef = doc(db, 'organizations', membership.org_id);
-                        const orgDoc = await getDoc(orgRef);
-                        const orgName = orgDoc.exists() ? orgDoc.data().organization_profile?.name : 'Unknown Organization';
-                        
-                        // Filter suites user has access to
-                        const accessibleSuites = orgSuites.filter(suite => 
-                            suite.members && suite.members.includes(userId)
+                        const orgQuery = query(
+                            collection(db, 'testSuites'),
+                            where('ownerType', '==', 'organization'),
+                            where('ownerId', '==', membership.org_id),
+                            orderBy('createdAt', 'desc'),
+                            limit(25)
                         );
-                        
-                        accessibleSuites.forEach(suite => {
-                            userSuites.push({
-                                ...suite,
-                                organizationName: orgName,
-                                organizationId: membership.org_id,
-                                membershipType: 'organization',
-                                userRole: membership.role
-                            });
-                        });
+
+                        const orgSnapshot = await getDocs(orgQuery);
+                        const orgSuites = orgSnapshot.docs.map(doc => ({
+                            suite_id: doc.id,
+                            ...doc.data(),
+                            accountType: 'organization',
+                            organizationId: membership.org_id,
+                            membershipType: 'organization',
+                            userRole: membership.role
+                        }));
+
+                        userSuites.push(...orgSuites);
                     } catch (error) {
                         console.warn(`Error fetching suites for org ${membership.org_id}:`, error);
                     }
@@ -559,26 +523,25 @@ export const getUserSuites = async (userId) => {
             }
         }
 
-        // Sort all suites by creation date
-        const sortedSuites = userSuites.sort((a, b) => {
-            const aDate = a.createdAt?.toDate?.() || new Date(a.createdAt);
-            const bDate = b.createdAt?.toDate?.() || new Date(b.createdAt);
-            return bDate - aDate;
+        // Remove duplicates and sort
+        const uniqueSuites = userSuites.reduce((acc, suite) => {
+            const existingIndex = acc.findIndex(s => s.suite_id === suite.suite_id);
+            if (existingIndex === -1) {
+                acc.push(suite);
+            }
+            return acc;
+        }, []);
+
+        uniqueSuites.sort((a, b) => {
+            const dateA = a.createdAt?.toDate?.() || new Date(0);
+            const dateB = b.createdAt?.toDate?.() || new Date(0);
+            return dateB - dateA;
         });
 
-        // Add metadata about user's subscription
         return {
-            suites: sortedSuites,
+            suites: uniqueSuites,
             metadata: {
-                totalCount: sortedSuites.length,
-                limit: capabilities.limits.suites,
-                remaining: capabilities.limits.suites > 0 ? 
-                    Math.max(0, capabilities.limits.suites - sortedSuites.length) : -1,
-                isTrialActive: capabilities.isTrialActive,
-                trialDaysRemaining: capabilities.trialDaysRemaining,
-                subscriptionType: capabilities.subscriptionType,
-                canCreateMore: capabilities.limits.suites === -1 || 
-                    sortedSuites.length < capabilities.limits.suites
+                totalCount: uniqueSuites.length
             }
         };
     } catch (error) {
@@ -590,13 +553,13 @@ export const getUserSuites = async (userId) => {
 /**
  * Get a specific suite
  */
-export const getSuite = async (suiteId, organizationId = null, userId = null) => {
+export const getSuite = async (suiteId, userId = null) => {
     try {
         if (!suiteId) {
             throw new SuiteValidationError('Suite ID is required');
         }
 
-        const suite = await getSuiteById(suiteId, organizationId);
+        const suite = await getSuiteById(suiteId);
         
         if (!suite) {
             throw new SuiteValidationError('Suite not found');
@@ -605,10 +568,7 @@ export const getSuite = async (suiteId, organizationId = null, userId = null) =>
         // Validate permissions if userId is provided
         if (userId) {
             await validateSuitePermissions(userId, 'read', {
-                suiteId,
-                organizationId,
-                suiteOwnerId: suite.createdBy,
-                isPublic: suite.isPublic || false
+                suiteId
             });
         }
 
@@ -620,26 +580,18 @@ export const getSuite = async (suiteId, organizationId = null, userId = null) =>
 };
 
 /**
- * Update suite
+ * ALIGNED: Update suite in testSuites collection
  */
-export const updateSuite = async (suiteId, updates, userId, organizationId = null) => {
+export const updateSuite = async (suiteId, updates, userId) => {
     try {
         if (!suiteId) {
             throw new SuiteValidationError('Suite ID is required');
         }
 
         // Validate permissions
-        await validateSuitePermissions(userId, 'update', {
-            suiteId,
-            organizationId
-        });
+        await validateSuitePermissions(userId, 'update', { suiteId });
 
-        let suiteRef;
-        if (organizationId) {
-            suiteRef = doc(db, 'organizations', organizationId, 'suites', suiteId);
-        } else {
-            suiteRef = doc(db, 'suites', suiteId);
-        }
+        const suiteRef = doc(db, 'testSuites', suiteId);
 
         const updateData = {
             ...updates,
@@ -648,7 +600,7 @@ export const updateSuite = async (suiteId, updates, userId, organizationId = nul
 
         await updateDoc(suiteRef, updateData);
         
-        const updatedSuite = await getSuiteById(suiteId, organizationId);
+        const updatedSuite = await getSuiteById(suiteId);
         
         return {
             success: true,
@@ -674,49 +626,21 @@ export const updateSuite = async (suiteId, updates, userId, organizationId = nul
 };
 
 /**
- * ALIGNED: Delete suite with proper cleanup
+ * ALIGNED: Delete suite from testSuites collection
  */
-export const deleteSuite = async (suiteId, userId, organizationId = null) => {
+export const deleteSuite = async (suiteId, userId) => {
     try {
         if (!suiteId) {
             throw new SuiteValidationError('Suite ID is required');
         }
 
         // Validate permissions
-        await validateSuitePermissions(userId, 'delete', {
-            suiteId,
-            organizationId
-        });
+        await validateSuitePermissions(userId, 'delete', { suiteId });
 
-        let suiteRef;
-        if (organizationId) {
-            suiteRef = doc(db, 'organizations', organizationId, 'suites', suiteId);
-            
-            // Update organization's suite count
-            const orgRef = doc(db, 'organizations', organizationId);
-            const orgDoc = await getDoc(orgRef);
-            
-            if (orgDoc.exists()) {
-                const currentSuiteCount = orgDoc.data().suiteCount || 0;
-                await updateDoc(orgRef, {
-                    suiteCount: Math.max(0, currentSuiteCount - 1),
-                    updatedAt: serverTimestamp()
-                });
-            }
-        } else {
-            suiteRef = doc(db, 'suites', suiteId);
-            
-            // ALIGNED: Remove from user's owned_test_suites array
-            await updateUserOwnedSuites(userId, suiteId, 'remove');
-        }
-
+        const suiteRef = doc(db, 'testSuites', suiteId);
         await deleteDoc(suiteRef);
         
-        console.log('Suite deleted successfully:', {
-            suiteId,
-            userId,
-            organizationId
-        });
+        console.log('Suite deleted successfully:', { suiteId, userId });
         
         return {
             success: true,
@@ -742,41 +666,33 @@ export const deleteSuite = async (suiteId, userId, organizationId = null) => {
 };
 
 /**
- * Listen to suite changes
+ * ALIGNED: Listen to suite changes in testSuites collection
  */
-export const subscribeToSuites = (callback, organizationId = null, userId = null) => {
+export const subscribeToSuites = (callback, userId) => {
     try {
         if (!userId) {
             throw new SuiteValidationError('User ID is required for subscription');
         }
 
-        let q;
+        // Subscribe to individual suites
+        const individualQuery = query(
+            collection(db, 'testSuites'),
+            where('ownerType', '==', 'individual'),
+            where('ownerId', '==', userId),
+            orderBy('createdAt', 'desc')
+        );
         
-        if (organizationId) {
-            // Subscribe to organization suites
-            const suitesRef = collection(db, 'organizations', organizationId, 'suites');
-            q = query(suitesRef, orderBy('createdAt', 'desc'));
-        } else {
-            // Subscribe to personal suites
-            q = query(
-                collection(db, 'suites'),
-                where('createdBy', '==', userId),
-                where('organizationId', '==', null),
-                orderBy('createdAt', 'desc')
-            );
-        }
-        
-        return onSnapshot(q, 
+        return onSnapshot(individualQuery, 
             (querySnapshot) => {
                 const suites = querySnapshot.docs.map(doc => ({
-                    id: doc.id,
+                    suite_id: doc.id,
                     ...doc.data()
                 }));
                 callback(suites);
             },
             (error) => {
                 console.error('Error in suite subscription:', error);
-                callback([]); // Return empty array on error
+                callback([]);
             }
         );
     } catch (error) {
@@ -786,22 +702,25 @@ export const subscribeToSuites = (callback, organizationId = null, userId = null
 };
 
 /**
- * ALIGNED: Check if user can create a new suite
+ * Check if user can create a new suite
  */
-export const canCreateNewSuite = async () => {
+export const canCreateNewSuite = async (userId, subscriptionStatus = null) => {
     try {
-        const result = await accountService.canCreateNewProject(null);
+        const userProfile = await getUserProfile(userId);
+        const limits = getFeatureLimits(subscriptionStatus, userProfile);
+        const currentCount = await getCurrentSuiteCount(userId, userProfile);
+        
+        const canCreate = limits.suites === -1 || currentCount < limits.suites;
+        const remaining = limits.suites === -1 ? -1 : Math.max(0, limits.suites - currentCount);
         
         return {
-            canCreate: result.canCreate,
-            currentCount: result.currentCount,
-            maxAllowed: result.maxAllowed,
-            remaining: result.remaining,
-            isTrialActive: result.isTrialActive,
-            subscriptionType: result.subscriptionType,
-            message: result.canCreate ? 
-                `You can create ${result.remaining} more suite${result.remaining !== 1 ? 's' : ''}` :
-                `You've reached your limit of ${result.maxAllowed} suite${result.maxAllowed !== 1 ? 's' : ''}. Please upgrade to create more.`
+            canCreate,
+            currentCount,
+            maxAllowed: limits.suites,
+            remaining,
+            message: canCreate ? 
+                `You can create ${remaining === -1 ? 'unlimited' : remaining} more suite${remaining !== 1 ? 's' : ''}` :
+                `You've reached your limit of ${limits.suites} suite${limits.suites !== 1 ? 's' : ''}. Please upgrade to create more.`
         };
     } catch (error) {
         console.error('Error checking suite creation capability:', error);
@@ -810,37 +729,31 @@ export const canCreateNewSuite = async () => {
             currentCount: 0,
             maxAllowed: 0,
             remaining: 0,
-            isTrialActive: false,
-            subscriptionType: 'free',
             message: 'Unable to check suite creation limits'
         };
     }
 };
 
-/**
- * Switch user's active suite (memory-based for Claude.ai compatibility)
- */
+// Memory-based suite switching for Claude.ai compatibility
 let currentSuiteData = {};
 
-export const switchSuite = async (userId, suiteId, organizationId = null) => {
+export const switchSuite = async (userId, suiteId) => {
     try {
         // Validate that user can access this suite
-        await getSuite(suiteId, organizationId, userId);
+        await getSuite(suiteId, userId);
 
         const suiteData = {
-            organizationId,
             suiteId,
             timestamp: new Date().toISOString()
         };
 
-        // Store in memory instead of localStorage
+        // Store in memory
         currentSuiteData[userId] = suiteData;
 
         // Update user's profile with last accessed suite
         const userRef = doc(db, 'users', userId);
         await updateDoc(userRef, {
             lastAccessedSuite: {
-                organizationId,
                 suiteId,
                 accessedAt: serverTimestamp()
             },
@@ -861,9 +774,6 @@ export const switchSuite = async (userId, suiteId, organizationId = null) => {
     }
 };
 
-/**
- * Get user's current suite selection
- */
 export const getCurrentSuite = (userId) => {
     try {
         return currentSuiteData[userId] || null;
@@ -873,11 +783,10 @@ export const getCurrentSuite = (userId) => {
     }
 };
 
-// Export all functions in an object for backward compatibility
+// Export service object
 export const suiteService = {
     createSuite,
     checkSuiteNameExists,
-    getOrganizationSuites,
     getUserSuites,
     getSuite,
     updateSuite,
@@ -888,5 +797,4 @@ export const suiteService = {
     canCreateNewSuite
 };
 
-// Default export for backward compatibility
 export default suiteService;

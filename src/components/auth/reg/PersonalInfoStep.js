@@ -1,57 +1,141 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Eye, EyeOff, ArrowRight, X, Building } from 'lucide-react';
+import { shouldShowOrganizationPrompt, getEmailDomainInfo } from '../../../utils/emailDomainValidator';
 
-const StepIndicator = ({ currentStep, accountType }) => {
-    const steps = [
-        { num: 1, title: 'Account Type', active: currentStep >= 1, completed: currentStep > 1 },
-        { num: 2, title: 'Personal Info', active: currentStep >= 2, completed: currentStep > 2 },
-        { num: 3, title: accountType === 'organization' ? 'Company Info' : 'Review', active: currentStep >= 3, completed: currentStep > 3 },
-        { num: 4, title: 'Verify Email', active: currentStep >= 4, completed: currentStep > 4 },
-        { num: 5, title: 'Create Suite', active: currentStep >= 5, completed: currentStep > 5 },
-    ];
-
-    return (
-        <div className="flex items-center justify-center mb-8">
-            {steps.map((step, index) => (
-                <React.Fragment key={step.num}>
-                    <div className="flex flex-col items-center">
-                        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium ${
-                            step.completed
-                                ? 'bg-teal-500 text-white'
-                                : step.active
-                                ? 'bg-teal-500 text-white'
-                                : 'bg-slate-200 text-slate-600'
-                        }`}>
-                            {step.completed ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /> : step.num}
-                        </div>
-                        <div className={`mt-1 sm:mt-2 text-xs font-medium text-center ${
-                            step.active ? 'text-teal-600' : 'text-slate-500'
-                        }`}>
-                            {step.title}
-                        </div>
-                    </div>
-                    {index < steps.length - 1 && (
-                        <div className={`w-8 sm:w-12 h-0.5 mx-1 sm:mx-2 ${
-                            step.completed ? 'bg-teal-500' : 'bg-slate-200'
-                        }`} />
-                    )}
-                </React.Fragment>
-            ))}
-        </div>
-    );
-};
-
-const PersonalInfoStep = ({ formData, errors, onInputChange, onNext, onPrev, currentStep, accountType }) => {
+const PersonalInfoStep = ({ 
+    formData, 
+    errors, 
+    onInputChange, 
+    onNext, 
+    onPrev,
+    accountType,
+    setAccountType,
+    emailValidation
+}) => {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [showDomainBubble, setShowDomainBubble] = useState(false);
+    const [emailValidationTimer, setEmailValidationTimer] = useState(null);
+
+    // Debounced email validation function
+    const validateEmailWithDelay = useCallback((email) => {
+        // Clear existing timer
+        if (emailValidationTimer) {
+            clearTimeout(emailValidationTimer);
+        }
+
+        // Set new timer with longer delay for more accurate validation
+        const timer = setTimeout(() => {
+            if (email && shouldShowOrganizationPrompt(email, accountType)) {
+                setShowDomainBubble(true);
+            } else {
+                setShowDomainBubble(false);
+            }
+        }, 1000); // Increased delay to 1 second for more reliable validation
+
+        setEmailValidationTimer(timer);
+    }, [emailValidationTimer, accountType]);
+
+    const handleEmailChange = (value) => {
+        onInputChange('email', value);
+        
+        // Show organization prompt for custom domains on individual accounts
+        if (value && value.includes('@')) {
+            validateEmailWithDelay(value);
+        } else {
+            setShowDomainBubble(false);
+            // Clear timer if email is incomplete
+            if (emailValidationTimer) {
+                clearTimeout(emailValidationTimer);
+                setEmailValidationTimer(null);
+            }
+        }
+    };
+
+    const handleSwitchToOrganization = () => {
+        // Add safety check for setAccountType function
+        if (typeof setAccountType === 'function') {
+            setAccountType('organization');
+            setShowDomainBubble(false);
+        } else {
+            console.error('setAccountType is not a function. Please check the parent component.');
+        }
+    };
+
+    const handleDismissBubble = () => {
+        setShowDomainBubble(false);
+        // Clear timer when bubble is dismissed
+        if (emailValidationTimer) {
+            clearTimeout(emailValidationTimer);
+            setEmailValidationTimer(null);
+        }
+    };
+
+    // Get domain for display in prompt
+    const getDomain = () => {
+        if (formData.email && formData.email.includes('@')) {
+            const domainInfo = getEmailDomainInfo(formData.email);
+            return domainInfo.domain || '';
+        }
+        return '';
+    };
+
+    const renderEmailValidationFeedback = () => {
+        if (!emailValidation || !formData.email || showDomainBubble) return null;
+
+        // Show success message for organization accounts with custom domains
+        if (emailValidation.isValid && 
+            emailValidation.domainInfo?.isCustom && 
+            accountType === 'organization') {
+            return (
+                <div className="mt-2">
+                    <p className="text-sm text-green-700">
+                        Perfect! Custom domain email is ideal for organization accounts.
+                    </p>
+                </div>
+            );
+        }
+        
+        // Show validation messages
+        if (emailValidation.suggestion) {
+            return (
+                <div className="mt-2">
+                    <p className="text-sm text-amber-600">
+                        {emailValidation.suggestion}
+                    </p>
+                </div>
+            );
+        }
+
+        return null;
+    };
+
+    // Close bubble if account type changes or email is cleared
+    useEffect(() => {
+        if (accountType !== 'individual' || !formData.email) {
+            setShowDomainBubble(false);
+            // Clear timer when conditions change
+            if (emailValidationTimer) {
+                clearTimeout(emailValidationTimer);
+                setEmailValidationTimer(null);
+            }
+        }
+    }, [accountType, formData.email, emailValidationTimer]);
+
+    // Cleanup timer on component unmount
+    useEffect(() => {
+        return () => {
+            if (emailValidationTimer) {
+                clearTimeout(emailValidationTimer);
+            }
+        };
+    }, [emailValidationTimer]);
 
     return (
         <div className="bg-white rounded-xl border border-white/20 p-6 sm:p-8 relative">
             {/* Card glow effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
             
-            <StepIndicator currentStep={currentStep} accountType={accountType} />
-
             <div className="text-center mb-6">
                 <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">Personal Information</h1>
                 <p className="text-sm sm:text-base text-slate-600">Tell us about yourself</p>
@@ -78,16 +162,62 @@ const PersonalInfoStep = ({ formData, errors, onInputChange, onNext, onPrev, cur
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Email Address *
                     </label>
-                    <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => onInputChange('email', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base ${
-                            errors.email ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-teal-500'
-                        }`}
-                        placeholder="name@company.com"
-                    />
+                    <div className="relative">
+                        <input
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => handleEmailChange(e.target.value)}
+                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-xs sm:text-base ${
+                                errors.email ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-teal-500'
+                            }`}
+                            placeholder="name@company.com"
+                        />
+                        
+                        {/* Organization prompt bubble */}
+                        {showDomainBubble && (
+                            <div className="fixed z-50" style={{
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)'
+                            }}>
+                                <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-4 max-w-sm mx-4 animate-in fade-in duration-200">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <Building className="w-5 h-5 text-teal-600" />
+                                            <h3 className="font-medium text-gray-900 text-sm">Custom Domain Detected</h3>
+                                        </div>
+                                        <button 
+                                            onClick={handleDismissBubble} 
+                                            className="text-gray-400 hover:text-gray-600 ml-2"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    
+                                    <p className="text-sm text-gray-600 mb-4">
+                                        You&apos;re using <strong>{getDomain()}</strong>. Organization accounts work better with company domains.
+                                    </p>
+                                    
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleSwitchToOrganization}
+                                            className="flex-1 bg-teal-600 text-white text-sm px-3 py-2 rounded hover:bg-teal-700 transition-colors"
+                                        >
+                                            Switch to Organization
+                                        </button>
+                                        <button
+                                            onClick={handleDismissBubble}
+                                            className="flex-1 border border-gray-300 text-gray-700 text-sm px-3 py-2 rounded hover:bg-gray-50 transition-colors"
+                                        >
+                                            Continue Individual
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     {errors.email && <p className="text-red-600 text-xs font-medium mt-2">{errors.email}</p>}
+                    {!showDomainBubble && renderEmailValidationFeedback()}
                 </div>
 
                 <div>
@@ -144,9 +274,8 @@ const PersonalInfoStep = ({ formData, errors, onInputChange, onNext, onPrev, cur
             <div className="flex flex-col sm:flex-row gap-3">
                 <button
                     onClick={onPrev}
-                    className="flex-1 bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 font-medium sm:font-semibold border-2 border-slate-200 rounded px-3 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-sm hover:shadow-md text-sm sm:text-base"
+                    className="flex-1 bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 border-2 border-slate-200 rounded px-3 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-sm hover:shadow-md text-sm sm:text-base"
                 >
-                    <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                     Back
                 </button>
                 <button

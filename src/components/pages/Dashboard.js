@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube, Plus } from 'lucide-react';
 
@@ -21,7 +20,16 @@ import { useSuite } from '../../context/SuiteContext';
 import { useBugTrackingMetrics } from '../../services/bugTrackingService';
 
 const Dashboard = () => {
-    const { userTestSuites, loading: suiteLoading } = useSuite();
+    // ALIGNED: Use the correct properties from SuiteContext
+    const { 
+        suites, 
+        isLoading: suiteLoading, 
+        error: suiteError,
+        refetchSuites,
+        createTestSuite,
+        canCreateSuite,
+        shouldFetchSuites
+    } = useSuite();
 
     const [filters, setFilters] = useState({
         timeRange: '7d',
@@ -40,29 +48,46 @@ const Dashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [autoRefresh, setAutoRefresh] = useState(true);
 
-    // Modal states
+    // Modal states - ALIGNED: Simplified modal state management
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [showFirstSuiteModal, setShowFirstSuiteModal] = useState(false);
 
     // Use refs to prevent infinite loops
     const timeIntervalRef = useRef(null);
     const refreshIntervalRef = useRef(null);
+    const firstSuiteCheckRef = useRef(false);
 
     // Use bug tracking metrics service
     const { metrics: bugMetrics, loading: bugLoading, error: bugError, refetch: bugRefetch } = useBugTrackingMetrics(filters);
 
     const loading = bugLoading || suiteLoading;
-    const error = bugError;
+    const error = bugError || suiteError;
 
-    // Check if user has test suites and show first suite modal if needed - FIXED VERSION
+    // ALIGNED: Determine if we should show the first suite modal
+    const shouldShowFirstSuiteModal = useMemo(() => {
+        // Only show if:
+        // 1. User should have access to fetch suites
+        // 2. Not currently loading
+        // 3. No suites exist
+        // 4. Can create suites
+        // 5. Haven't already checked
+        return shouldFetchSuites && 
+               !suiteLoading && 
+               Array.isArray(suites) && 
+               suites.length === 0 && 
+               canCreateSuite &&
+               !firstSuiteCheckRef.current;
+    }, [shouldFetchSuites, suiteLoading, suites, canCreateSuite]);
+
+    // ALIGNED: Check for first suite modal with proper state management
     useEffect(() => {
-        if (!suiteLoading && userTestSuites !== null) {
-            const hasTestSuites = Array.isArray(userTestSuites) && userTestSuites.length > 0;
-            setShowFirstSuiteModal(!hasTestSuites);
+        if (shouldShowFirstSuiteModal) {
+            setShowFirstSuiteModal(true);
+            firstSuiteCheckRef.current = true;
         }
-    }, [userTestSuites, suiteLoading]);
+    }, [shouldShowFirstSuiteModal]);
 
-    // Auto-refresh timer - FIXED VERSION
+    // Auto-refresh timer - ALIGNED: Cleaner implementation
     useEffect(() => {
         // Clear any existing intervals
         if (timeIntervalRef.current) {
@@ -80,7 +105,9 @@ const Dashboard = () => {
         // Set up refresh interval only if autoRefresh is enabled
         if (autoRefresh) {
             refreshIntervalRef.current = setInterval(() => {
-                bugRefetch();
+                if (bugRefetch) {
+                    bugRefetch();
+                }
             }, 30000);
         }
 
@@ -93,27 +120,23 @@ const Dashboard = () => {
                 clearInterval(refreshIntervalRef.current);
             }
         };
-    }, [autoRefresh]); // Only depend on autoRefresh, not bugRefetch
+    }, [autoRefresh, bugRefetch]);
 
-    // Connection status simulation - FIXED VERSION
+    // Connection status simulation
     useEffect(() => {
         const checkConnection = () => {
             setIsConnected(navigator.onLine);
         };
 
-        // Set initial state
         checkConnection();
-
-        // Add event listeners
         window.addEventListener('online', checkConnection);
         window.addEventListener('offline', checkConnection);
 
-        // Cleanup
         return () => {
             window.removeEventListener('online', checkConnection);
             window.removeEventListener('offline', checkConnection);
         };
-    }, []); // Empty dependency array
+    }, []);
 
     // Enhanced metrics calculation using real bug data - MEMOIZED
     const enhancedMetrics = useMemo(() => {
@@ -181,26 +204,73 @@ const Dashboard = () => {
     }, []);
 
     const handleRefresh = useCallback(() => {
-        bugRefetch();
+        if (bugRefetch) {
+            bugRefetch();
+        }
         setCurrentTime(new Date());
-    }, [bugRefetch]);
+        // ALIGNED: Use refetchSuites instead of refreshTestSuites
+        if (refetchSuites) {
+            refetchSuites(true);
+        }
+    }, [bugRefetch, refetchSuites]);
 
     const handleCreateNewSuite = useCallback(() => {
+        // ALIGNED: Check if user can create suites
+        if (!canCreateSuite) {
+            // Could show a subscription upgrade modal here
+            alert('Suite creation limit reached. Please upgrade your subscription.');
+            return;
+        }
         setIsCreateModalOpen(true);
-    }, []);
+    }, [canCreateSuite]);
 
     const handleCreateModalClose = useCallback(() => {
         setIsCreateModalOpen(false);
     }, []);
 
-    const handleFirstSuiteSuccess = useCallback(() => {
-        setShowFirstSuiteModal(false);
-        // The useEffect will automatically handle showing/hiding the modal based on userTestSuites
-    }, []);
+    // ALIGNED: Handle first suite success with proper state management
+    const handleFirstSuiteSuccess = useCallback(async (suiteData) => {
+        console.log('First suite created successfully');
+        
+        try {
+            // Create the suite using the context method
+            await createTestSuite(suiteData);
+            
+            // Close the modal
+            setShowFirstSuiteModal(false);
+            
+            // Reset the check flag to allow future first suite checks if needed
+            firstSuiteCheckRef.current = false;
+            
+            // Refresh data to ensure consistency
+            if (refetchSuites) {
+                await refetchSuites(true);
+            }
+        } catch (error) {
+            console.error('Error creating first suite:', error);
+            // Handle error appropriately - maybe show error message
+        }
+    }, [createTestSuite, refetchSuites]);
 
-    const handleNewSuiteSuccess = useCallback(() => {
-        setIsCreateModalOpen(false);
-    }, []);
+    const handleNewSuiteSuccess = useCallback(async (suiteData) => {
+        console.log('New suite created successfully');
+        
+        try {
+            // Create the suite using the context method
+            await createTestSuite(suiteData);
+            
+            // Close the modal
+            setIsCreateModalOpen(false);
+            
+            // Refresh data to ensure consistency
+            if (refetchSuites) {
+                await refetchSuites(true);
+            }
+        } catch (error) {
+            console.error('Error creating new suite:', error);
+            // Handle error appropriately
+        }
+    }, [createTestSuite, refetchSuites]);
 
     const handleAutoRefreshChange = useCallback((e) => {
         setAutoRefresh(e.target.checked);
@@ -238,8 +308,9 @@ const Dashboard = () => {
         { value: 'automation', label: 'Automation', icon: Settings }
     ];
 
-    // Show loading screen while checking suite status
-    if (suiteLoading) {
+    // ALIGNED: Show loading screen while checking suite status
+    // Only show loading if we're actually loading and should have access
+    if (suiteLoading && shouldFetchSuites) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="text-center">
@@ -251,7 +322,7 @@ const Dashboard = () => {
         );
     }
 
-    // If showing first suite modal, show it with loading backdrop
+    // ALIGNED: Show first suite modal if conditions are met
     if (showFirstSuiteModal) {
         return (
             <div className="min-h-screen bg-gray-50">
@@ -265,7 +336,22 @@ const Dashboard = () => {
         );
     }
 
-    // Loading state for metrics
+    // ALIGNED: If user shouldn't fetch suites, show appropriate message
+    if (!shouldFetchSuites) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="text-center max-w-md">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
+                        <AlertCircle className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                        <h2 className="text-lg font-semibold text-blue-800 mb-2">Authentication Required</h2>
+                        <p className="text-blue-600 mb-4">Please sign in to access your QAID dashboard.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Loading state for metrics only (after suites are loaded)
     if (loading && !bugMetrics) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -323,12 +409,25 @@ const Dashboard = () => {
                                         <span className="text-teal-600">Refreshing...</span>
                                     </>
                                 )}
+                                {/* ALIGNED: Show suite count */}
+                                {suites && (
+                                    <>
+                                        <span>•</span>
+                                        <span>{suites.length} Test Suite{suites.length !== 1 ? 's' : ''}</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center space-x-3">
                             <button
                                 onClick={handleCreateNewSuite}
-                                className="bg-gradient-to-r from-teal-600 to-blue-600 text-white px-4 py-2 rounded-md hover:from-teal-700 hover:to-blue-700 transition-all duration-200 flex items-center shadow-md hover:shadow-lg"
+                                disabled={!canCreateSuite}
+                                className={`px-4 py-2 rounded-md flex items-center shadow-md hover:shadow-lg transition-all duration-200 ${
+                                    canCreateSuite
+                                        ? 'bg-gradient-to-r from-teal-600 to-blue-600 text-white hover:from-teal-700 hover:to-blue-700'
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title={!canCreateSuite ? 'Suite creation limit reached' : 'Create new test suite'}
                             >
                                 <Plus className="w-4 h-4 mr-2" />
                                 New Suite

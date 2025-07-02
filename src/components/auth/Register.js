@@ -1,11 +1,12 @@
-// Fixed Register.jsx - Key changes to use accountService properly
+// Fixed Register.jsx - Respects user's account type choice
 
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
 import { accountService } from '../../services/accountService';
+import { validateEmailForAccountType, getEmailDomainInfo, suggestAccountType } from '../../utils/emailDomainValidator';
 import { FcGoogle } from 'react-icons/fc';
 import AccountTypeStep from './reg/AccountTypeStep';
 import PersonalInfoStep from './reg/PersonalInfoStep';
@@ -42,6 +43,9 @@ const Register = () => {
     const [isResendingEmail] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const [registeredUserEmail, setRegisteredUserEmail] = useState('');
+    const [emailDomainInfo, setEmailDomainInfo] = useState(null);
+    const [emailValidation, setEmailValidation] = useState(null);
+    const [showAccountTypeSuggestion, setShowAccountTypeSuggestion] = useState(false);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -56,11 +60,62 @@ const Register = () => {
 
     const [errors, setErrors] = useState({});
 
+    // Email validation effect
+    useEffect(() => {
+        if (formData.email) {
+            const domainInfo = getEmailDomainInfo(formData.email);
+            setEmailDomainInfo(domainInfo);
+
+            const validation = validateEmailForAccountType(formData.email, accountType);
+            setEmailValidation(validation);
+
+            // Show suggestion for individual accounts with custom domains
+            if (accountType === 'individual' &&
+                validation.isValid &&
+                validation.recommendAccountType === 'organization' &&
+                !showAccountTypeSuggestion) {
+                setShowAccountTypeSuggestion(true);
+            } else if (accountType === 'organization' ||
+                validation.domainType !== 'custom' ||
+                !validation.isValid) {
+                setShowAccountTypeSuggestion(false);
+            }
+        } else {
+            setEmailDomainInfo(null);
+            setEmailValidation(null);
+            setShowAccountTypeSuggestion(false);
+        }
+    }, [formData.email, accountType, showAccountTypeSuggestion]);
+
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
         if (errors[field]) {
             setErrors(prev => ({ ...prev, [field]: '' }));
         }
+    };
+
+    const handleAccountTypeSwitch = (newAccountType) => {
+        setAccountType(newAccountType);
+        setShowAccountTypeSuggestion(false);
+
+        if (newAccountType === 'organization' && emailDomainInfo?.domain) {
+            // Pre-fill company name with domain
+            const suggestedCompanyName = emailDomainInfo.domain
+                .split('.')[0]
+                .replace(/[-_]/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase());
+
+            setFormData(prev => ({
+                ...prev,
+                companyName: prev.companyName || suggestedCompanyName
+            }));
+        }
+
+        toast.success(`Switched to ${newAccountType} account type`);
+    };
+
+    const dismissAccountTypeSuggestion = () => {
+        setShowAccountTypeSuggestion(false);
     };
 
     const handleGoogleRegister = async () => {
@@ -76,21 +131,21 @@ const Register = () => {
 
             // Check if user already exists using accountService
             const setupStatus = await accountService.getAccountSetupStatus(user.uid);
-            
+
             if (setupStatus.exists) {
                 toast.success("Welcome back!");
                 router.push('/dashboard');
                 return;
             }
 
-            // Determine account type from email
-            const detectedAccountType = accountService.getAccountType(user.email);
-            
+            // For Google sign-up, suggest account type but don't force it
+            const suggestedAccountType = suggestAccountType(user.email);
+
             // Use accountService to create the user profile with proper trial setup
             const setupData = {
                 firstName: user.displayName?.split(' ')[0] || 'Google',
                 lastName: user.displayName?.split(' ').slice(1).join(' ') || 'User',
-                organizationName: detectedAccountType === 'organization' ? user.email.split('@')[1] : null
+                organizationName: suggestedAccountType === 'organization' ? user.email.split('@')[1] : null
             };
 
             const result_setup = await accountService.setupAccount(setupData);
@@ -132,12 +187,11 @@ const Register = () => {
 
             if (!formData.email.trim()) {
                 newErrors.email = 'Email is required';
-            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                newErrors.email = 'Please enter a valid email address';
-            } else if (accountType === 'organization') {
-                const domain = formData.email.split('@')[1];
-                if (['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com'].includes(domain.toLowerCase())) {
-                    newErrors.email = 'Organization accounts require a custom company domain email';
+            } else {
+                // Use enhanced email validation
+                const validation = validateEmailForAccountType(formData.email, accountType);
+                if (!validation.isValid) {
+                    newErrors.email = validation.error;
                 }
             }
 
@@ -188,13 +242,14 @@ const Register = () => {
 
             const user = userCredential.user;
 
-            // Step 2: Use accountService to create user profile with proper trial setup
+            // Step 2: Use accountService to create user profile with RESPECT for user's chosen account type
             const [firstName, ...lastNameParts] = formData.fullName.trim().split(' ');
             const lastName = lastNameParts.join(' ');
 
             const setupData = {
                 firstName: firstName || '',
                 lastName: lastName || '',
+                // Only set organizationName if user explicitly chose organization account type
                 organizationName: accountType === 'organization' ? formData.companyName : null
             };
 
@@ -248,8 +303,6 @@ const Register = () => {
         router.push('/login');
     };
 
-    // ... rest of the component remains the same (renderStepContent, return statement) ...
-
     const renderStepContent = () => {
         switch (currentStep) {
             case 1:
@@ -292,6 +345,12 @@ const Register = () => {
                         onPrev={prevStep}
                         currentStep={currentStep}
                         accountType={accountType}
+                        emailDomainInfo={emailDomainInfo}
+                        emailValidation={emailValidation}
+                        setAccountType={setAccountType} 
+                        onAccountTypeSwitch={handleAccountTypeSwitch}
+                        showAccountTypeSuggestion={showAccountTypeSuggestion}
+                        onDismissAccountTypeSuggestion={dismissAccountTypeSuggestion}
                     />
                 );
             case 3:

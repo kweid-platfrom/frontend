@@ -120,7 +120,7 @@ const ReviewStep = ({
                     <button
                         type="button"
                         onClick={onPrev}
-                        className="flex-1 px-4 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                        className="flex-1 px-4 py-3 text-slate-600 border border-slate-300 rounded hover:bg-slate-50 transition-colors"
                     >
                         Back
                     </button>
@@ -128,7 +128,7 @@ const ReviewStep = ({
                         type="button"
                         onClick={onCreateAccount}
                         disabled={isCreatingAccount}
-                        className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {isCreatingAccount && <Square className="animate-spin h-5 w-5" />}
                         {isCreatingAccount ? 'Signing up...' : 'Sign Up'}

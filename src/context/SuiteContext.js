@@ -16,7 +16,8 @@ import {
     addDoc,
     updateDoc,
     setDoc,
-    doc
+    doc,
+    where
 } from 'firebase/firestore';
 
 const SuiteContext = createContext();
@@ -42,6 +43,7 @@ export const SuiteProvider = ({ children }) => {
     // Use refs to prevent infinite loops
     const fetchingRef = useRef(false);
     const initializedRef = useRef(false);
+    const userDocEnsuredRef = useRef(false); // Track if user doc was ensured
 
     // Cache for reducing Firebase calls
     const [cache, setCache] = useState({
@@ -54,17 +56,14 @@ export const SuiteProvider = ({ children }) => {
         return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
     }, [cache.timestamp]);
 
-    // SIMPLIFIED: Check if user should have access to fetch suites
+    // ALIGNED: Check if user should have access to fetch suites per security rules
     const shouldFetchSuites = useMemo(() => {
-        // Must have authenticated user
+        // Must have authenticated user (isAuthenticated() in rules)
         if (!user) return false;
 
-        // Must have email verified (per Firestore rules)
-        if (!user.emailVerified) return false;
-
-        // Don't need to wait for userProfile for basic fetching
+        // Security rules require authenticated user, email verification is handled at action level
         return true;
-    }, [user?.uid, user?.emailVerified]);
+    }, [user?.uid]);
 
     // Updated getFeatureLimits function with proper trial support
     const getFeatureLimits = useCallback(() => {
@@ -151,24 +150,30 @@ export const SuiteProvider = ({ children }) => {
         return suites.length < limits.suites;
     }, [userProfile, subscriptionStatus, suites.length, getFeatureLimits]);
 
-    // IMPROVED: Initialize individual account document if needed
-    const ensureIndividualAccountExists = useCallback(async (userId) => {
+    // FIXED: Ensure user document exists BEFORE any suite operations
+    const ensureUserDocumentExists = useCallback(async (userId) => {
+        if (userDocEnsuredRef.current) {
+            return; // Already ensured for this session
+        }
+
         try {
-            await setDoc(doc(db, 'individualAccounts', userId), {
-                userId: userId,
-                accountType: 'individual',
-                createdAt: serverTimestamp(),
-                metadata: {
-                    created_date: serverTimestamp(),
-                    last_modified: serverTimestamp()
-                }
+            console.log('Ensuring user document exists for:', userId);
+            await setDoc(doc(db, 'users', userId), {
+                user_id: userId,
+                created_at: serverTimestamp(),
+                preferences: {},
+                contact_info: {}
             }, { merge: true });
-            console.log('Individual account structure ensured');
+            
+            userDocEnsuredRef.current = true;
+            console.log('User document ensured successfully');
         } catch (error) {
-            console.error('Failed to ensure individual account:', error);
+            console.error('Failed to ensure user document:', error);
+            throw error; // Re-throw to handle in calling function
         }
     }, []);
 
+    // FIXED: Updated to ensure user document exists FIRST
     const fetchUserSuites = useCallback(async (userId = null, forceRefresh = false) => {
         if (!userId || !shouldFetchSuites) {
             console.log('Skipping fetch - missing requirements:', { userId: !!userId, shouldFetchSuites });
@@ -191,21 +196,26 @@ export const SuiteProvider = ({ children }) => {
             setIsLoading(true);
             setError(null);
 
+            // FIXED: Ensure user document exists BEFORE attempting to fetch suites
+            await ensureUserDocumentExists(userId);
+
             let suiteList = [];
-            const accountType = userProfile?.accountType || 'individual';
 
-            console.log('Fetching suites for accountType:', accountType, 'userId:', userId);
+            console.log('Fetching suites for userId:', userId);
 
-            // ALWAYS try to fetch individual suites first
+            // ALIGNED: Fetch from top-level testSuites collection with proper filtering
             try {
+                // Query for individual suites (ownerType = 'individual' and ownerId = userId)
                 const individualSuitesQuery = query(
-                    collection(db, 'individualAccounts', userId, 'testSuites'),
-                    orderBy('metadata.created_date', 'desc'),
+                    collection(db, 'testSuites'),
+                    where('ownerType', '==', 'individual'),
+                    where('ownerId', '==', userId),
+                    orderBy('createdAt', 'desc'),
                     limit(50)
                 );
 
-                const snapshot = await getDocs(individualSuitesQuery);
-                const individualSuites = snapshot.docs.map(doc => ({
+                const individualSnapshot = await getDocs(individualSuitesQuery);
+                const individualSuites = individualSnapshot.docs.map(doc => ({
                     suite_id: doc.id,
                     ...doc.data(),
                     accountType: 'individual',
@@ -216,15 +226,16 @@ export const SuiteProvider = ({ children }) => {
                 console.log('Fetched individual suites:', individualSuites.length);
             } catch (error) {
                 console.error('Error fetching individual suites:', error);
-
-                // If permission denied, try to initialize the account structure
+                
+                // If still permission denied after ensuring user document, it's a different issue
                 if (error.code === 'permission-denied') {
-                    console.log('Permission denied - ensuring individual account exists...');
-                    await ensureIndividualAccountExists(userId);
+                    console.error('Permission denied even after ensuring user document exists');
+                    throw new Error('Unable to access test suites. Please check your account permissions.');
                 }
+                throw error;
             }
 
-            // Handle organization suites (only if userProfile is available)
+            // ALIGNED: Handle organization suites using userMemberships collection
             if (userProfile?.account_memberships?.length > 0) {
                 console.log('Checking org memberships:', userProfile.account_memberships.length);
 
@@ -233,9 +244,12 @@ export const SuiteProvider = ({ children }) => {
                         try {
                             console.log('Fetching org suites for:', membership.org_id);
 
+                            // Query for organization suites (ownerType = 'organization' and ownerId = orgId)
                             const orgSuitesQuery = query(
-                                collection(db, 'organizations', membership.org_id, 'testSuites'),
-                                orderBy('metadata.created_date', 'desc'),
+                                collection(db, 'testSuites'),
+                                where('ownerType', '==', 'organization'),
+                                where('ownerId', '==', membership.org_id),
+                                orderBy('createdAt', 'desc'),
                                 limit(25)
                             );
 
@@ -267,8 +281,8 @@ export const SuiteProvider = ({ children }) => {
             }, []);
 
             uniqueSuites.sort((a, b) => {
-                const dateA = a.metadata?.created_date?.toDate?.() || new Date(0);
-                const dateB = b.metadata?.created_date?.toDate?.() || new Date(0);
+                const dateA = a.createdAt?.toDate?.() || new Date(0);
+                const dateB = b.createdAt?.toDate?.() || new Date(0);
                 return dateB - dateA;
             });
 
@@ -288,7 +302,7 @@ export const SuiteProvider = ({ children }) => {
             setIsLoading(false);
             fetchingRef.current = false;
         }
-    }, [cache.suites, isCacheValid, userProfile, shouldFetchSuites, ensureIndividualAccountExists]);
+    }, [cache.suites, isCacheValid, userProfile, shouldFetchSuites, ensureUserDocumentExists]);
 
     const setActiveSuiteWithStorage = useCallback((suite) => {
         setActiveSuite(suite);
@@ -324,6 +338,7 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites]);
 
+    // FIXED: Updated to ensure user document exists before creating suites
     const createTestSuite = useCallback(async (suiteData) => {
         if (!user) {
             throw new Error('User not authenticated');
@@ -334,16 +349,22 @@ export const SuiteProvider = ({ children }) => {
         }
 
         try {
-            // FIXED: Determine if this should be an organization suite based on the passed organizationId
+            // FIXED: Ensure user document exists before creating suite
+            await ensureUserDocumentExists(user.uid);
+
+            // ALIGNED: Determine suite ownership based on organizationId
             const isOrganizationSuite = !!suiteData.organizationId;
+            const ownerType = isOrganizationSuite ? 'organization' : 'individual';
+            const ownerId = isOrganizationSuite ? suiteData.organizationId : user.uid;
 
             console.log('Creating suite:', {
+                ownerType,
+                ownerId,
                 isOrganizationSuite,
-                organizationId: suiteData.organizationId,
                 userProfile: userProfile?.accountType
             });
 
-            // For organization suites, verify admin permissions before attempting creation
+            // For organization suites, verify admin permissions
             if (isOrganizationSuite) {
                 const orgId = suiteData.organizationId;
 
@@ -359,62 +380,66 @@ export const SuiteProvider = ({ children }) => {
                 }
             }
 
+            // FIXED: Ensure required fields are present and properly structured
             const newSuite = {
-                metadata: {
-                    name: suiteData.name,
-                    description: suiteData.description || '',
-                    created_by: user.uid,
-                    created_date: serverTimestamp(),
-                    last_modified: serverTimestamp(),
-                    status: 'active',
-                    tags: suiteData.tags || []
+                // Core identification - MUST be present for security rules
+                ownerType,
+                ownerId,
+
+                // Metadata
+                name: suiteData.name,
+                description: suiteData.description || '',
+                status: 'active',
+                tags: suiteData.tags || [],
+
+                // Audit fields - MUST be present
+                createdBy: user.uid,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+
+                // Access control - simplified for top-level collection
+                permissions: {
+                    [user.uid]: 'admin'
                 },
-                access_control: {
-                    owner_id: isOrganizationSuite ? suiteData.organizationId : user.uid,
-                    admins: [user.uid],
-                    members: [],
-                    permissions_matrix: {
-                        [user.uid]: 'admin'
-                    }
-                },
-                testing_assets: {
+
+                // Testing assets structure
+                testingAssets: {
                     bugs: [],
-                    test_cases: [],
+                    testCases: [],
                     recordings: [],
-                    automated_scripts: [],
-                    dashboard_metrics: {},
+                    automatedScripts: [],
+                    dashboardMetrics: {},
                     reports: [],
                     settings: {}
                 },
+
+                // Collaboration
                 collaboration: {
-                    activity_log: [],
+                    activityLog: [],
                     comments: [],
                     notifications: []
                 }
             };
 
-            let collectionRef;
-            if (isOrganizationSuite) {
-                collectionRef = collection(db, 'organizations', suiteData.organizationId, 'testSuites');
-            } else {
-                // Ensure individual account exists before creating suite
-                await ensureIndividualAccountExists(user.uid);
-                collectionRef = collection(db, 'individualAccounts', user.uid, 'testSuites');
-            }
+            console.log('Creating suite with data:', newSuite);
 
+            // ALIGNED: Create in top-level testSuites collection
+            const collectionRef = collection(db, 'testSuites');
             const docRef = await addDoc(collectionRef, newSuite);
+
+            // Update with document ID
             await updateDoc(docRef, {
                 suite_id: docRef.id,
-                'metadata.last_modified': serverTimestamp()
+                updatedAt: serverTimestamp()
             });
 
             const createdSuite = { ...newSuite, suite_id: docRef.id };
 
-            // IMMEDIATE UPDATE: Add the new suite to the current state right away
+            // IMMEDIATE UPDATE: Add the new suite to the current state
             const newSuiteForState = {
                 ...createdSuite,
-                accountType: isOrganizationSuite ? 'organization' : 'individual',
-                ownerId: isOrganizationSuite ? suiteData.organizationId : user.uid,
+                accountType: ownerType,
+                ownerId,
                 organizationId: isOrganizationSuite ? suiteData.organizationId : undefined
             };
 
@@ -439,16 +464,16 @@ export const SuiteProvider = ({ children }) => {
             console.error('Error creating test suite:', error);
             throw error;
         }
-    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureIndividualAccountExists]);
+    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists]);
 
-    // SIMPLIFIED: Initialize suites when user is ready
+    // Initialize suites when user is ready
     useEffect(() => {
         if (shouldFetchSuites && !initializedRef.current) {
             console.log('Initializing suites...');
             initializedRef.current = true;
             refetchSuites(false); // Don't force refresh on initial load
         } else if (!shouldFetchSuites) {
-            // Clear suites for non-verified users
+            // Clear suites for unauthenticated users
             console.log('Clearing suites - shouldFetchSuites is false');
             setSuites([]);
             setActiveSuite(null);
@@ -457,24 +482,25 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [shouldFetchSuites, refetchSuites]);
 
-    // Reset initialization when user changes
+    // FIXED: Reset initialization and user doc ensured status when user changes
     useEffect(() => {
         initializedRef.current = false;
         fetchingRef.current = false;
+        userDocEnsuredRef.current = false; // Reset user doc ensured status
         setCache({ suites: null, timestamp: null });
         setSuites([]);
         setActiveSuite(null);
         setError(null);
     }, [user?.uid]);
 
-    // FIXED: Return userTestSuites to match dashboard expectations
+    // Return value that matches dashboard expectations
     const value = {
         suites,
-        userTestSuites: suites, // ← This is what Dashboard expects
+        userTestSuites: suites, // Dashboard expects this
         activeSuite,
         setActiveSuite: setActiveSuiteWithStorage,
         isLoading,
-        loading: isLoading, // ← Also provide 'loading' alias for Dashboard
+        loading: isLoading, // Dashboard expects this alias
         error,
         canCreateSuite,
         createTestSuite,

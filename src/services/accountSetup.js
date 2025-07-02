@@ -162,7 +162,7 @@ export const setupAccount = async (setupData) => {
             const membershipData = {
                 userId: userId,
                 email: email,
-                role: 'admin', // Must match security rules expectation
+                role: 'Admin', 
                 status: 'active',
                 joinedAt: now,
                 createdAt: now,
@@ -191,19 +191,9 @@ export const setupAccount = async (setupData) => {
 
             console.log('User profile updated with organization info');
 
-            // STEP 2D: Create user membership document for efficient querying
-            const userMembershipDocRef = doc(db, 'userMemberships', userId, 'organizations', orgId);
-            await setDoc(userMembershipDocRef, {
-                orgId: orgId,
-                organizationName: setupData.organizationName,
-                role: 'Admin',
-                status: 'active',
-                joinedAt: now,
-                createdAt: now,
-                updatedAt: now
-            });
-
-            console.log('User membership document created successfully');
+            // REMOVED: The problematic userMemberships subcollection creation
+            // This was causing the "Missing or insufficient permissions" error
+            // The account_memberships array in the user document serves the same purpose
 
             // Update local profile data for return
             Object.assign(userProfileData, userUpdates);
