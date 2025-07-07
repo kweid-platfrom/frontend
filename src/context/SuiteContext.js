@@ -43,7 +43,7 @@ export const SuiteProvider = ({ children }) => {
     // Use refs to prevent infinite loops
     const fetchingRef = useRef(false);
     const initializedRef = useRef(false);
-    const userDocEnsuredRef = useRef(false); // Track if user doc was ensured
+    const userDocEnsuredRef = useRef(false);
 
     // Cache for reducing Firebase calls
     const [cache, setCache] = useState({
@@ -60,15 +60,13 @@ export const SuiteProvider = ({ children }) => {
     const shouldFetchSuites = useMemo(() => {
         // Must have authenticated user (isAuthenticated() in rules)
         if (!user) return false;
-
-        // Security rules require authenticated user, email verification is handled at action level
+        // Security rules require authenticated user
         return true;
     }, [user?.uid]);
 
     // Updated getFeatureLimits function with proper trial support
     const getFeatureLimits = useCallback(() => {
         if (!subscriptionStatus) {
-            // Default limits for free tier
             return {
                 suites: 1,
                 testCases: 10,
@@ -77,26 +75,24 @@ export const SuiteProvider = ({ children }) => {
             };
         }
 
-        // Check if user is on trial (30 days trial gives full features)
         const isTrialActive = subscriptionStatus.isTrialActive ||
             subscriptionStatus.subscriptionStatus === 'trial';
 
         if (isTrialActive) {
-            // During trial, give full features based on account type
             const accountType = userProfile?.accountType || 'individual';
 
             if (accountType === 'organization') {
                 const orgType = subscriptionStatus.subscriptionType || 'organization_trial';
                 if (orgType.includes('enterprise')) {
                     return {
-                        suites: -1, // unlimited
+                        suites: -1,
                         testCases: -1,
                         recordings: -1,
                         automatedScripts: -1
                     };
                 } else {
                     return {
-                        suites: 10, // team level
+                        suites: 10,
                         testCases: -1,
                         recordings: -1,
                         automatedScripts: -1
@@ -104,7 +100,7 @@ export const SuiteProvider = ({ children }) => {
                 }
             } else {
                 return {
-                    suites: 5, // individual trial
+                    suites: 5,
                     testCases: -1,
                     recordings: -1,
                     automatedScripts: -1
@@ -112,10 +108,8 @@ export const SuiteProvider = ({ children }) => {
             }
         }
 
-        // Non-trial limits
         const limits = subscriptionStatus.capabilities?.limits;
         if (!limits) {
-            // Fallback default limits based on account type
             const accountType = userProfile?.accountType || 'individual';
             if (accountType === 'organization') {
                 return {
@@ -145,15 +139,15 @@ export const SuiteProvider = ({ children }) => {
         if (!userProfile || !subscriptionStatus) return false;
 
         const limits = getFeatureLimits();
-        if (limits.suites === -1) return true; // Unlimited
+        if (limits.suites === -1) return true;
 
         return suites.length < limits.suites;
     }, [userProfile, subscriptionStatus, suites.length, getFeatureLimits]);
 
-    // FIXED: Ensure user document exists BEFORE any suite operations
+    // ALIGNED: Ensure user document exists BEFORE any suite operations
     const ensureUserDocumentExists = useCallback(async (userId) => {
         if (userDocEnsuredRef.current) {
-            return; // Already ensured for this session
+            return;
         }
 
         try {
@@ -169,18 +163,17 @@ export const SuiteProvider = ({ children }) => {
             console.log('User document ensured successfully');
         } catch (error) {
             console.error('Failed to ensure user document:', error);
-            throw error; // Re-throw to handle in calling function
+            throw error;
         }
     }, []);
 
-    // FIXED: Updated to ensure user document exists FIRST
+    // ALIGNED: Fetch suites matching security rules constraints
     const fetchUserSuites = useCallback(async (userId = null, forceRefresh = false) => {
         if (!userId || !shouldFetchSuites) {
             console.log('Skipping fetch - missing requirements:', { userId: !!userId, shouldFetchSuites });
             return [];
         }
 
-        // Prevent concurrent fetches
         if (fetchingRef.current && !forceRefresh) {
             console.log('Already fetching, skipping...');
             return cache.suites || [];
@@ -196,16 +189,17 @@ export const SuiteProvider = ({ children }) => {
             setIsLoading(true);
             setError(null);
 
-            // FIXED: Ensure user document exists BEFORE attempting to fetch suites
+            // ALIGNED: Ensure user document exists BEFORE attempting to fetch suites
             await ensureUserDocumentExists(userId);
 
             let suiteList = [];
 
             console.log('Fetching suites for userId:', userId);
 
-            // ALIGNED: Fetch from top-level testSuites collection with proper filtering
+            // ALIGNED: Fetch individual suites with proper query constraints
             try {
-                // Query for individual suites (ownerType = 'individual' and ownerId = userId)
+                // Query for individual suites where user is the owner
+                // This aligns with security rule: ownerType == 'individual' && ownerId == getUserId()
                 const individualSuitesQuery = query(
                     collection(db, 'testSuites'),
                     where('ownerType', '==', 'individual'),
@@ -227,24 +221,25 @@ export const SuiteProvider = ({ children }) => {
             } catch (error) {
                 console.error('Error fetching individual suites:', error);
                 
-                // If still permission denied after ensuring user document, it's a different issue
                 if (error.code === 'permission-denied') {
-                    console.error('Permission denied even after ensuring user document exists');
+                    console.error('Permission denied - user document may not exist or security rules blocking access');
                     throw new Error('Unable to access test suites. Please check your account permissions.');
                 }
                 throw error;
             }
 
-            // ALIGNED: Handle organization suites using userMemberships collection
+            // ALIGNED: Fetch organization suites for each membership
             if (userProfile?.account_memberships?.length > 0) {
                 console.log('Checking org memberships:', userProfile.account_memberships.length);
 
+                // Process each organization membership separately to align with security rules
                 for (const membership of userProfile.account_memberships) {
                     if (membership.org_id && membership.status === 'active') {
                         try {
                             console.log('Fetching org suites for:', membership.org_id);
 
-                            // Query for organization suites (ownerType = 'organization' and ownerId = orgId)
+                            // Query for organization suites where user's org is the owner
+                            // This aligns with security rule: ownerType == 'organization' && isOrgMember(ownerId)
                             const orgSuitesQuery = query(
                                 collection(db, 'testSuites'),
                                 where('ownerType', '==', 'organization'),
@@ -266,6 +261,7 @@ export const SuiteProvider = ({ children }) => {
                             console.log('Fetched org suites:', orgSuites.length);
                         } catch (error) {
                             console.warn(`Error fetching org suites for ${membership.org_id}:`, error);
+                            // Continue with other organizations even if one fails
                         }
                     }
                 }
@@ -338,18 +334,19 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites]);
 
-    // FIXED: Updated to ensure user document exists before creating suites
+    // ALIGNED: Create test suite with proper security rule compliance
     const createTestSuite = useCallback(async (suiteData) => {
         if (!user) {
             throw new Error('User not authenticated');
         }
 
+        // ALIGNED: Check email verification if required by your business logic
         if (!user.emailVerified) {
             throw new Error('Email verification required to create suites');
         }
 
         try {
-            // FIXED: Ensure user document exists before creating suite
+            // ALIGNED: Ensure user document exists before creating suite
             await ensureUserDocumentExists(user.uid);
 
             // ALIGNED: Determine suite ownership based on organizationId
@@ -364,7 +361,7 @@ export const SuiteProvider = ({ children }) => {
                 userProfile: userProfile?.accountType
             });
 
-            // For organization suites, verify admin permissions
+            // ALIGNED: For organization suites, verify admin permissions
             if (isOrganizationSuite) {
                 const orgId = suiteData.organizationId;
 
@@ -380,29 +377,29 @@ export const SuiteProvider = ({ children }) => {
                 }
             }
 
-            // FIXED: Ensure required fields are present and properly structured
+            // ALIGNED: Create suite data that matches security rule requirements
             const newSuite = {
-                // Core identification - MUST be present for security rules
+                // CRITICAL: Core identification fields required by security rules
                 ownerType,
                 ownerId,
 
-                // Metadata
+                // Suite metadata
                 name: suiteData.name,
                 description: suiteData.description || '',
                 status: 'active',
                 tags: suiteData.tags || [],
 
-                // Audit fields - MUST be present
+                // ALIGNED: Audit fields required by security rules
                 createdBy: user.uid,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
 
-                // Access control - simplified for top-level collection
+                // ALIGNED: Access control structure
                 permissions: {
                     [user.uid]: 'admin'
                 },
 
-                // Testing assets structure
+                // ALIGNED: Testing assets structure (empty initially)
                 testingAssets: {
                     bugs: [],
                     testCases: [],
@@ -413,7 +410,7 @@ export const SuiteProvider = ({ children }) => {
                     settings: {}
                 },
 
-                // Collaboration
+                // ALIGNED: Collaboration structure
                 collaboration: {
                     activityLog: [],
                     comments: [],
@@ -466,14 +463,13 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists]);
 
-    // Initialize suites when user is ready
+    // ALIGNED: Initialize suites when user is ready
     useEffect(() => {
         if (shouldFetchSuites && !initializedRef.current) {
             console.log('Initializing suites...');
             initializedRef.current = true;
-            refetchSuites(false); // Don't force refresh on initial load
+            refetchSuites(false);
         } else if (!shouldFetchSuites) {
-            // Clear suites for unauthenticated users
             console.log('Clearing suites - shouldFetchSuites is false');
             setSuites([]);
             setActiveSuite(null);
@@ -482,25 +478,25 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [shouldFetchSuites, refetchSuites]);
 
-    // FIXED: Reset initialization and user doc ensured status when user changes
+    // ALIGNED: Reset initialization and user doc ensured status when user changes
     useEffect(() => {
         initializedRef.current = false;
         fetchingRef.current = false;
-        userDocEnsuredRef.current = false; // Reset user doc ensured status
+        userDocEnsuredRef.current = false;
         setCache({ suites: null, timestamp: null });
         setSuites([]);
         setActiveSuite(null);
         setError(null);
     }, [user?.uid]);
 
-    // Return value that matches dashboard expectations
+    // ALIGNED: Return value that matches dashboard expectations
     const value = {
         suites,
-        userTestSuites: suites, // Dashboard expects this
+        userTestSuites: suites,
         activeSuite,
         setActiveSuite: setActiveSuiteWithStorage,
         isLoading,
-        loading: isLoading, // Dashboard expects this alias
+        loading: isLoading,
         error,
         canCreateSuite,
         createTestSuite,
@@ -508,7 +504,7 @@ export const SuiteProvider = ({ children }) => {
         fetchUserSuites,
         subscriptionStatus,
         getFeatureLimits,
-        shouldFetchSuites // Expose this for dashboard logic
+        shouldFetchSuites
     };
 
     return <SuiteContext.Provider value={value}>{children}</SuiteContext.Provider>;
