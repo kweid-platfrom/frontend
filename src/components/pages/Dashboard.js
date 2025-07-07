@@ -16,7 +16,7 @@ import QuickActions from '../stats/QuickActions';
 import CreateTestSuiteModal from '../modals/CreateTestSuiteModal';
 
 // Import context and services
-import { useSuite } from '../../context/SuiteContext';
+import { useSuite } from '../../contexts/SuiteContext';
 import { useBugTrackingMetrics } from '../../services/bugTrackingService';
 
 const Dashboard = () => {

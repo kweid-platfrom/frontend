@@ -3,8 +3,8 @@
 import { useState, Fragment, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog, Transition } from '@headlessui/react';
-import { useSuite } from '../../context/SuiteContext';
-import { useAuth } from '../../context/AuthProvider';
+import { useSuite } from '../../contexts/SuiteContext';
+import { useAuth } from '../../contexts/AuthProvider';
 import { useAccountCapabilities } from '../../hooks/useAccountCapabilities';
 import { toast } from 'sonner';
 import {

@@ -4,10 +4,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "../../context/AuthProvider";
+import { useApp, useAppAuth, useAppNotifications } from "../../contexts/AppProvider";
 import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { sendEmailVerification } from "firebase/auth";
 import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
 import { doc, getDoc } from "firebase/firestore";
@@ -25,8 +25,13 @@ const Login = () => {
     const [errors, setErrors] = useState({ email: "", password: "" });
     const [showVerificationHelper, setShowVerificationHelper] = useState(false);
     const [unverifiedUser, setUnverifiedUser] = useState(null);
+    
     const router = useRouter();
-    const { signIn, signInWithGoogle, currentUser, loading } = useAuth();
+    
+    // Use new unified App Provider hooks
+    const { isAuthenticated, isLoading, isInitialized } = useApp();
+    const { user, signIn, signInWithGoogle } = useAppAuth();
+    const { addNotification } = useAppNotifications();
     
     // Prevent multiple navigation attempts
     const hasNavigated = useRef(false);
@@ -94,21 +99,37 @@ const Login = () => {
                 console.log("User document doesn't exist, but proceeding to dashboard");
             }
 
+            // Add success notification via app provider
+            addNotification({
+                type: 'success',
+                title: 'Welcome back!',
+                message: 'You have successfully signed in.',
+                persistent: false
+            });
+
             // Route verified users directly to dashboard
             // Dashboard will handle the empty state with create suite modal
             router.push("/dashboard");
 
         } catch (error) {
             console.error("Error routing user after login:", error);
-            toast.error("Failed to load account information. Please try again.");
+            
+            // Use app provider notification system
+            addNotification({
+                type: 'error',
+                title: 'Login Error',
+                message: 'Failed to load account information. Please try again.',
+                persistent: true
+            });
+            
             // Fallback to dashboard on error since user is verified
             router.push("/dashboard");
         }
     };
 
-    // FIXED: Handle authenticated user routing - removed router from dependencies
+    // Handle authenticated user routing using new app provider
     useEffect(() => {
-        if (currentUser && !loading && !hasNavigated.current) {
+        if (isAuthenticated && isInitialized && !hasNavigated.current) {
             hasNavigated.current = true; // Prevent multiple navigation attempts
             
             // Clear any stale registration data
@@ -117,16 +138,16 @@ const Login = () => {
             localStorage.removeItem("awaitingEmailVerification");
             
             // Route user based on simplified flow
-            routeUserAfterLogin(currentUser);
+            routeUserAfterLogin(user);
         }
-    }, [currentUser, loading]); // FIXED: Removed router from dependencies
+    }, [isAuthenticated, isInitialized, user]);
 
     // Reset navigation flag when user changes (logout/login)
     useEffect(() => {
-        if (!currentUser) {
+        if (!isAuthenticated) {
             hasNavigated.current = false;
         }
-    }, [currentUser]);
+    }, [isAuthenticated]);
 
     const validateForm = () => {
         let isValid = true;
@@ -166,6 +187,14 @@ const Login = () => {
                 position: "top-center"
             });
             
+            // Add notification via app provider
+            addNotification({
+                type: 'success',
+                title: 'Verification Email Sent',
+                message: 'Please check your inbox and spam folder.',
+                persistent: false
+            });
+            
             // Hide the verification helper after successful send
             setShowVerificationHelper(false);
             setUnverifiedUser(null);
@@ -189,6 +218,14 @@ const Login = () => {
                 duration: 6000,
                 position: "top-center"
             });
+
+            // Add error notification via app provider
+            addNotification({
+                type: 'error',
+                title: 'Verification Error',
+                message: errorMessage,
+                persistent: true
+            });
         } finally {
             setLoadingResendVerification(false);
         }
@@ -210,9 +247,19 @@ const Login = () => {
             if (result.success) {
                 // Check if email is verified
                 if (result.user && !result.user.emailVerified) {
-                    toast.error("Please verify your email before signing in. Check your inbox for the verification link.", {
+                    const errorMessage = "Please verify your email before signing in. Check your inbox for the verification link.";
+                    
+                    toast.error(errorMessage, {
                         duration: 6000,
                         position: "top-center"
+                    });
+                    
+                    // Add notification via app provider
+                    addNotification({
+                        type: 'warning',
+                        title: 'Email Verification Required',
+                        message: errorMessage,
+                        persistent: true
                     });
                     
                     // Store the unverified user for resend functionality
@@ -227,7 +274,7 @@ const Login = () => {
                 toast.success("Login successful!");
                 
                 // Don't navigate here - let the useEffect handle routing
-                // The useEffect will trigger since currentUser will be set
+                // The useEffect will trigger since isAuthenticated will be true
                 
             } else {
                 // Handle specific Firebase auth errors
@@ -243,11 +290,27 @@ const Login = () => {
                 }
                 
                 toast.error(friendlyError);
+                
+                // Add error notification via app provider
+                addNotification({
+                    type: 'error',
+                    title: 'Login Failed',
+                    message: friendlyError,
+                    persistent: true
+                });
             }
         } catch (error) {
             console.error('Login error:', error);
             const friendlyError = getFirebaseErrorMessage(error);
             toast.error(friendlyError);
+            
+            // Add error notification via app provider
+            addNotification({
+                type: 'error',
+                title: 'Login Error',
+                message: friendlyError,
+                persistent: true
+            });
         } finally {
             setLoadingEmailLogin(false);
         }
@@ -264,6 +327,14 @@ const Login = () => {
                 // If this is a completely new user (first time using Google), send to register
                 if (result.isNewUser) {
                     toast.info("Please complete your registration first.");
+                    
+                    addNotification({
+                        type: 'info',
+                        title: 'Registration Required',
+                        message: 'Please complete your registration first.',
+                        persistent: false
+                    });
+                    
                     router.push("/register");
                     return;
                 }
@@ -271,16 +342,32 @@ const Login = () => {
                 toast.success("Login successful!");
                 
                 // Don't navigate here - let the useEffect handle routing
-                // The useEffect will trigger since currentUser will be set
+                // The useEffect will trigger since isAuthenticated will be true
                 
             } else {
                 const friendlyError = getFirebaseErrorMessage(result.error || result);
                 toast.error(friendlyError);
+                
+                // Add error notification via app provider
+                addNotification({
+                    type: 'error',
+                    title: 'Google Login Failed',
+                    message: friendlyError,
+                    persistent: true
+                });
             }
         } catch (error) {
             console.error('Google login error:', error);
             const friendlyError = getFirebaseErrorMessage(error);
             toast.error(friendlyError);
+            
+            // Add error notification via app provider
+            addNotification({
+                type: 'error',
+                title: 'Google Login Error',
+                message: friendlyError,
+                persistent: true
+            });
         } finally {
             setLoadingGoogleLogin(false);
         }
@@ -340,39 +427,32 @@ const Login = () => {
         </div>
     );
 
-    // Show loading spinner during auth check
-    if (loading) {
+    // Show loading spinner during auth check or app initialization
+    if (isLoading || !isInitialized) {
         return (
             <div className="min-h-screen flex justify-center items-center bg-gray-50">
-                <Loader2 className="animate-spin h-8 w-8 text-teal-600" />
+                <div className="text-center">
+                    <Loader2 className="animate-spin h-8 w-8 text-teal-600 mx-auto mb-4" />
+                    <p className="text-gray-600">Loading your workspace...</p>
+                </div>
             </div>
         );
     }
 
-    // If already logged in, don't render the login form
-    if (currentUser) {
+    // If already authenticated, show loading while navigation happens
+    if (isAuthenticated) {
         return (
             <div className="min-h-screen flex justify-center items-center bg-gray-50">
-                <Loader2 className="animate-spin h-8 w-8 text-teal-600" />
+                <div className="text-center">
+                    <Loader2 className="animate-spin h-8 w-8 text-teal-600 mx-auto mb-4" />
+                    <p className="text-gray-600">Signing you in...</p>
+                </div>
             </div>
         );
     }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
-            <Toaster
-                richColors
-                position="top-center"
-                toastOptions={{
-                    style: {
-                        background: 'rgba(255, 255, 255, 0.95)',
-                        backdropFilter: 'blur(12px)',
-                        border: '1px solid rgba(148, 163, 184, 0.2)',
-                        borderRadius: '12px'
-                    }
-                }}
-            />
-            
             <BackgroundDecorations />
 
             {/* Main Content */}

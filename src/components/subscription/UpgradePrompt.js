@@ -5,7 +5,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Crown, Check } from 'lucide-react';
 
-export const UpgradePrompt = ({ 
+const UpgradePrompt = ({ 
     isOpen, 
     onClose,
 }) => {
@@ -80,3 +80,5 @@ export const UpgradePrompt = ({
         </div>
     );
 };
+
+export default UpgradePrompt

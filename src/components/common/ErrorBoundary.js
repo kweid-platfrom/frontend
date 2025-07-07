@@ -2,6 +2,7 @@
 'use client';
 
 import React from 'react';
+import '../../app/globals.css';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 class ErrorBoundary extends React.Component {

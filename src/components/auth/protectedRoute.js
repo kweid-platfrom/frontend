@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../../context/AuthProvider';
+import { useAuth } from '../../contexts/AuthProvider';
 import { Loader2 } from 'lucide-react';
 
 const ProtectedRoute = ({ children, requireEmailVerified = false }) => {

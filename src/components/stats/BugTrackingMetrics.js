@@ -3,8 +3,8 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, orderBy, where, doc } from 'firebase/firestore';
-import { useSuite } from '../../context/SuiteContext';
-import { useAuth } from '../../context/AuthProvider';
+import { useSuite } from '../../contexts/SuiteContext';
+import { useAuth } from '../../contexts/AuthProvider';
 import { BugAntIcon } from '@heroicons/react/24/outline';
 
 const BugTrackingMetrics = ({ bugs = [], metrics = null, loading = false, error = null }) => {

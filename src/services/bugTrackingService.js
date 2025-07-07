@@ -9,8 +9,8 @@ import {
     limit
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useAuth } from '../context/AuthProvider';
-import { useSuite } from '../context/SuiteContext';
+import { useAuth } from '../contexts/AuthProvider';
+import { useSuite } from '../contexts/SuiteContext';
 import { 
     canAccessBugs,
     getUserPermissions

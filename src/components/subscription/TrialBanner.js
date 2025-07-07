@@ -5,7 +5,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Crown, X } from 'lucide-react';
 
-export const TrialBanner = ({ daysRemaining, onDismiss }) => {
+const TrialBanner = ({ daysRemaining, onDismiss }) => {
     const router = useRouter();
     
     if (daysRemaining <= 0) return null;
@@ -46,3 +46,5 @@ export const TrialBanner = ({ daysRemaining, onDismiss }) => {
         </div>
     );
 };
+
+export default TrialBanner;

@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
-import { AppProvider } from "../context/AppProvider";
+import { AppProvider } from "../contexts/AppProvider";
+import AppWrapper from "../components/layout/AppWrapper";
 import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
 import { Toaster } from "sonner";
 
@@ -14,7 +15,9 @@ export default function RootLayout({ children }) {
         <html lang="en">
             <body className={`${poppins.className} ${montserrat.className} ${sansHebrew.className}`}>
                 <AppProvider>
-                    {children}
+                    <AppWrapper>
+                        {children}
+                    </AppWrapper>
                     <div id="modal-root"></div>
                     <Toaster
                         richColors

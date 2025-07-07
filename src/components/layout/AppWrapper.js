@@ -3,17 +3,17 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useApp, useAppAuth, useAppSuites, useAppNavigation, useAppNotifications } from '../contexts/AppProvider';
+import { useApp, useAppAuth, useAppSuites, useAppNavigation, useAppNotifications } from '../../contexts/AppProvider';
 
 // Component imports
-import AppHeader from './layout/AppHeader';
-import AppSidebar from './layout/AppSidebar';
-import AppBreadcrumbs from './layout/AppBreadcrumbs';
-import NotificationCenter from './notifications/NotificationCenter';
-import UpgradePrompt from './subscription/UpgradePrompt';
-import LoadingSpinner from './common/LoadingSpinner';
-import ErrorBoundary from './common/ErrorBoundary';
-import TrialBanner from './subscription/TrialBanner';
+import AppHeader from './AppHeader';
+import AppSidebar from './AppSidebar';
+import AppBreadcrumbs from './AppBreadcrumbs';
+import NotificationCenter from '../notifications/NotificationCenter';
+import UpgradePrompt from '../subscription/UpgradePrompt';
+import LoadingSpinner from '../common/LoadingSpinner';
+import ErrorBoundary from '../common/ErrorBoundary';
+import TrialBanner from '../subscription/TrialBanner';
 
 // Main app wrapper component
 const AppWrapper = ({ children }) => {
