@@ -1,12 +1,6 @@
-// services/accountSetup.js - Account setup and management operations
-import {
-    doc,
-    updateDoc,
-    getDoc,
-    setDoc
-} from "firebase/firestore";
-import { db } from "../config/firebase";
-import { auth } from "../config/firebase";
+// services/accountSetup.js - Account setup and management operations using centralized Firestore service
+import { serverTimestamp } from "firebase/firestore";
+import firestoreService from "./firestoreService";
 import {
     getAccountType,
     getDefaultPlan,
@@ -25,14 +19,13 @@ export const getAccountSetupStatus = async (userId) => {
             return { exists: false, needsSetup: true };
         }
 
-        const userDocRef = doc(db, 'users', userId);
-        const userDoc = await getDoc(userDocRef);
+        const result = await firestoreService.getDocument('users', userId);
 
-        if (!userDoc.exists()) {
+        if (!result.success) {
             return { exists: false, needsSetup: true };
         }
 
-        const userData = userDoc.data();
+        const userData = result.data;
 
         // Check if user profile is complete
         const isComplete = userData.firstName && userData.email;
@@ -50,13 +43,13 @@ export const getAccountSetupStatus = async (userId) => {
 };
 
 /**
- * FIXED: Setup user account with proper structure aligned to security rules
+ * Setup user account with proper structure using centralized Firestore service
  * @param {Object} setupData - Account setup data
  * @returns {Promise<Object>} Setup result
  */
 export const setupAccount = async (setupData) => {
     try {
-        const user = auth.currentUser;
+        const user = firestoreService.getCurrentUser();
         if (!user) {
             throw new Error('No authenticated user found');
         }
@@ -68,8 +61,8 @@ export const setupAccount = async (setupData) => {
         const accountType = getAccountType(email);
 
         // Create user profile data
-        const now = new Date();
-        const trialEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+        const now = serverTimestamp();
+        const trialEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
 
         // Determine subscription plan (always start with trial for new users)
         const subscriptionPlan = accountType === 'organization' ? 'organization_trial' : 'individual_trial';
@@ -96,10 +89,6 @@ export const setupAccount = async (setupData) => {
             isActive: true,
             emailVerified: user.emailVerified,
 
-            // Timestamps
-            createdAt: now,
-            updatedAt: now,
-
             // User preferences
             timezone: setupData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
 
@@ -107,15 +96,17 @@ export const setupAccount = async (setupData) => {
             account_memberships: []
         };
 
-        // Create user document first
-        const userDocRef = doc(db, 'users', userId);
-        await setDoc(userDocRef, userProfileData, { merge: true });
+        // Create user document first using centralized service
+        const userResult = await firestoreService.createDocument('users', userProfileData, userId);
+        if (!userResult.success) {
+            throw new Error(userResult.error.message);
+        }
 
         console.log('User profile created successfully');
 
         // STEP 2: Handle account type specific setup
         if (accountType === 'individual') {
-            // FIXED: Create individual account document (required by security rules)
+            // Create individual account document (required by security rules)
             const individualAccountData = {
                 userId: userId,
                 email: email,
@@ -125,78 +116,83 @@ export const setupAccount = async (setupData) => {
                 subscriptionStatus: 'trial',
                 subscriptionStartDate: now,
                 subscriptionEndDate: trialEndDate,
-                createdAt: now,
-                updatedAt: now,
                 isActive: true
             };
 
-            const individualAccountRef = doc(db, 'individualAccounts', userId);
-            await setDoc(individualAccountRef, individualAccountData);
+            const individualResult = await firestoreService.createDocument('individualAccounts', individualAccountData, userId);
+            if (!individualResult.success) {
+                throw new Error(individualResult.error.message);
+            }
 
             console.log('Individual account created successfully');
 
         } else if (accountType === 'organization' && setupData.organizationName) {
-            // STEP 2A: Create organization document first
-            const orgId = `org_${userId}`;
+            // Use transaction for organization setup to ensure data consistency
+            const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
+                const orgId = `org_${userId}`;
 
-            const orgData = {
-                id: orgId,
-                name: setupData.organizationName,
-                ownerId: userId,
-                domain: email.split('@')[1],
-                subscriptionPlan: subscriptionPlan,
-                subscriptionStatus: 'trial',
-                subscriptionStartDate: now,
-                subscriptionEndDate: trialEndDate,
-                createdAt: now,
-                updatedAt: now,
-                isActive: true
-            };
+                // STEP 2A: Create organization document
+                const orgData = {
+                    id: orgId,
+                    name: setupData.organizationName,
+                    ownerId: userId,
+                    domain: email.split('@')[1],
+                    subscriptionPlan: subscriptionPlan,
+                    subscriptionStatus: 'trial',
+                    subscriptionStartDate: now,
+                    subscriptionEndDate: trialEndDate,
+                    isActive: true
+                };
 
-            const orgDocRef = doc(db, 'organizations', orgId);
-            await setDoc(orgDocRef, orgData);
+                const orgRef = firestoreService.createDocRef('organizations', orgId);
+                const orgDataWithTimestamps = firestoreService.addCommonFields(orgData);
+                transaction.set(orgRef, orgDataWithTimestamps);
 
-            console.log('Organization created successfully');
-
-            // STEP 2B: Create organization membership (required by security rules for isOrgAdmin to work)
-            const membershipData = {
-                userId: userId,
-                email: email,
-                role: 'Admin', 
-                status: 'active',
-                joinedAt: now,
-                createdAt: now,
-                updatedAt: now
-            };
-
-            const memberDocRef = doc(db, 'organizations', orgId, 'members', userId);
-            await setDoc(memberDocRef, membershipData);
-
-            console.log('Organization membership created successfully');
-
-            // STEP 2C: Update user profile with organization information
-            const userUpdates = {
-                organizationId: orgId,
-                organizationName: setupData.organizationName,
-                account_memberships: [{
-                    org_id: orgId,
+                // STEP 2B: Create organization membership
+                const membershipData = {
+                    userId: userId,
+                    email: email,
                     role: 'Admin',
                     status: 'active',
-                    joined_at: now
-                }],
-                updatedAt: now
-            };
+                    joinedAt: now
+                };
 
-            await updateDoc(userDocRef, userUpdates);
+                const memberRef = firestoreService.createDocRef('organizations', orgId, 'members', userId);
+                const memberDataWithTimestamps = firestoreService.addCommonFields(membershipData);
+                transaction.set(memberRef, memberDataWithTimestamps);
 
-            console.log('User profile updated with organization info');
+                // STEP 2C: Update user profile with organization information
+                const userUpdates = {
+                    organizationId: orgId,
+                    organizationName: setupData.organizationName,
+                    account_memberships: [{
+                        org_id: orgId,
+                        role: 'Admin',
+                        status: 'active',
+                        joined_at: now
+                    }],
+                    updated_at: now
+                };
 
-            // REMOVED: The problematic userMemberships subcollection creation
-            // This was causing the "Missing or insufficient permissions" error
-            // The account_memberships array in the user document serves the same purpose
+                const userRef = firestoreService.createDocRef('users', userId);
+                transaction.update(userRef, userUpdates);
+
+                return {
+                    orgId,
+                    orgData: orgDataWithTimestamps,
+                    membershipData: memberDataWithTimestamps,
+                    userUpdates
+                };
+            });
+
+            if (!transactionResult.success) {
+                throw new Error(transactionResult.error.message);
+            }
+
+            console.log('Organization setup completed successfully');
 
             // Update local profile data for return
-            Object.assign(userProfileData, userUpdates);
+            Object.assign(userProfileData, transactionResult.data.userUpdates);
         }
 
         return {
@@ -218,7 +214,7 @@ export const setupAccount = async (setupData) => {
 };
 
 /**
- * Check and update trial status in database
+ * Check and update trial status in database using centralized service
  * @param {Object} userProfile 
  * @returns {Promise<Object>} Updated trial status and user profile
  */
@@ -239,7 +235,6 @@ export const checkAndUpdateTrialStatus = async (userProfile) => {
         const needsUpdate = await shouldUpdateTrialStatus(userProfile, currentTrialStatus);
 
         if (needsUpdate) {
-
             const updates = {};
 
             // Update subscription plan if trial should be active
@@ -268,11 +263,11 @@ export const checkAndUpdateTrialStatus = async (userProfile) => {
 
             // Only update if there are changes
             if (Object.keys(updates).length > 0) {
-                const userDocRef = doc(db, 'users', userId);
-                await updateDoc(userDocRef, {
-                    ...updates,
-                    updatedAt: new Date()
-                });
+                const updateResult = await firestoreService.updateDocument('users', userId, updates);
+                
+                if (!updateResult.success) {
+                    throw new Error(updateResult.error.message);
+                }
 
                 // Return updated profile
                 const updatedProfile = { ...userProfile, ...updates };
@@ -292,6 +287,7 @@ export const checkAndUpdateTrialStatus = async (userProfile) => {
         };
 
     } catch (error) {
+        console.error('Error checking/updating trial status:', error);
         return {
             trialStatus: calculateTrialStatus(userProfile),
             userProfile,
@@ -329,5 +325,130 @@ const shouldUpdateTrialStatus = async (userProfile, trialStatus) => {
     } catch (error) {
         console.error('Error checking if trial status needs update:', error);
         return false;
+    }
+};
+
+/**
+ * Get user's complete account information including organization details
+ * @param {string} userId - User ID (optional, defaults to current user)
+ * @returns {Promise<Object>} Complete account information
+ */
+export const getCompleteAccountInfo = async (userId = null) => {
+    try {
+        const targetUserId = userId || firestoreService.getCurrentUserId();
+        if (!targetUserId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        // Get user profile
+        const userResult = await firestoreService.getUserProfile(targetUserId);
+        if (!userResult.success) {
+            return userResult;
+        }
+
+        const userProfile = userResult.data;
+
+        // Get organizations if user is part of any
+        const orgsResult = await firestoreService.getUserOrganizations();
+        const organizations = orgsResult.success ? orgsResult.data : [];
+
+        // Get trial status
+        const trialStatus = calculateTrialStatus(userProfile);
+
+        return {
+            success: true,
+            data: {
+                userProfile,
+                organizations,
+                trialStatus,
+                accountType: userProfile.accountType,
+                subscriptionPlan: userProfile.subscriptionPlan,
+                subscriptionStatus: userProfile.subscriptionStatus
+            }
+        };
+
+    } catch (error) {
+        console.error('Error getting complete account info:', error);
+        return {
+            success: false,
+            error: { message: error.message }
+        };
+    }
+};
+
+/**
+ * Update user profile using centralized service
+ * @param {string} userId - User ID
+ * @param {Object} updates - Profile updates
+ * @returns {Promise<Object>} Update result
+ */
+export const updateUserProfile = async (userId, updates) => {
+    try {
+        const result = await firestoreService.updateDocument('users', userId, updates);
+        return result;
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        return {
+            success: false,
+            error: { message: error.message }
+        };
+    }
+};
+
+/**
+ * Delete user account and all associated data
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Deletion result
+ */
+export const deleteUserAccount = async (userId) => {
+    try {
+        // Use transaction to ensure all data is deleted consistently
+        const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
+            // Get user profile first
+            const userRef = firestoreService.createDocRef('users', userId);
+            const userDoc = await transaction.get(userRef);
+            
+            if (!userDoc.exists()) {
+                throw new Error('User profile not found');
+            }
+
+            const userData = userDoc.data();
+            
+            // Delete user profile
+            transaction.delete(userRef);
+
+            // Delete individual account if exists
+            if (userData.accountType === 'individual') {
+                const individualRef = firestoreService.createDocRef('individualAccounts', userId);
+                transaction.delete(individualRef);
+            }
+
+            // Handle organization cleanup if user is organization owner
+            if (userData.accountType === 'organization' && userData.organizationId) {
+                const orgRef = firestoreService.createDocRef('organizations', userData.organizationId);
+                transaction.delete(orgRef);
+                
+                // Note: Organization members subcollection will be automatically cleaned up
+                // by Firestore security rules or cloud functions
+            }
+
+            return { userId, accountType: userData.accountType };
+        });
+
+        if (!transactionResult.success) {
+            throw new Error(transactionResult.error.message);
+        }
+
+        return {
+            success: true,
+            message: 'Account deleted successfully'
+        };
+
+    } catch (error) {
+        console.error('Error deleting user account:', error);
+        return {
+            success: false,
+            error: { message: error.message }
+        };
     }
 };

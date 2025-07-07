@@ -20,49 +20,74 @@ const AppWrapper = ({ children }) => {
     const router = useRouter();
     const pathname = usePathname();
     const app = useApp();
-    const { isAuthenticated, user } = useAppAuth();
+    const { isAuthenticated, user, loading: authLoading } = useAppAuth();
     const { activeSuite, suites } = useAppSuites();
-    const { 
-        activeModule, 
-        breadcrumbs, 
-        sidebarCollapsed, 
-        setSidebarCollapsed, 
-        navigateToModule 
+    const {
+        activeModule,
+        breadcrumbs,
+        sidebarCollapsed,
+        setSidebarCollapsed,
+        navigateToModule
     } = useAppNavigation();
     const { notifications } = useAppNotifications();
-    
+
     const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
-    
+
     // Calculate unread notifications count
     const unreadCount = notifications.filter(n => !n.read).length;
-    
+
     // Paths that don't need the full app layout
     const publicPaths = ['/login', '/register', '/verify-email', '/reset-password', '/'];
     const isPublicPath = publicPaths.includes(pathname);
-    
+
     // Paths that need minimal layout (no sidebar)
     const minimalLayoutPaths = ['/settings', '/profile'];
     const isMinimalLayout = minimalLayoutPaths.includes(pathname);
-    
+
     // Handle upgrade prompt display
     useEffect(() => {
         if (app.userCapabilities && !app.userCapabilities.hasActiveSubscription) {
             // Show upgrade prompt for certain features
-            const shouldShowUpgrade = app.userCapabilities.isTrialActive && 
-                                    app.userCapabilities.trialDaysRemaining < 7;
+            const shouldShowUpgrade = app.userCapabilities.isTrialActive &&
+                app.userCapabilities.trialDaysRemaining < 7;
             setShowUpgradePrompt(shouldShowUpgrade);
         }
     }, [app.userCapabilities]);
-    
-    // Redirect logic for authenticated users
+
+    // Redirect logic - Fixed to handle authentication states properly
     useEffect(() => {
+        // Don't redirect while auth is loading
+        if (authLoading) return;
+
+        // If user is authenticated and on a public path (except home), redirect to dashboard
         if (isAuthenticated && isPublicPath && pathname !== '/') {
-            router.push('/dashboard');
+            router.replace('/dashboard');
+            return;
         }
-    }, [isAuthenticated, isPublicPath, pathname, router]);
-    
-    // Show loading screen while app is initializing
-    if (!app.isInitialized || app.isLoading) {
+
+        // If user is not authenticated and trying to access protected routes, redirect to login
+        if (!isAuthenticated && !isPublicPath && !authLoading) {
+            router.replace('/login');
+            return;
+        }
+    }, [isAuthenticated, authLoading, isPublicPath, pathname, router]);
+
+    // Show loading screen while auth is loading or app is initializing
+    if (authLoading || (!app.isInitialized && isAuthenticated)) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="text-center">
+                    <LoadingSpinner size="lg" />
+                    <p className="mt-4 text-gray-600">
+                        {authLoading ? 'Checking authentication...' : 'Loading your workspace...'}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Show loading screen while app is initializing for authenticated users
+    if (isAuthenticated && app.isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
@@ -72,8 +97,8 @@ const AppWrapper = ({ children }) => {
             </div>
         );
     }
-    
-    // Show public layout for unauthenticated users
+
+    // Show public layout for unauthenticated users or public paths
     if (!isAuthenticated || isPublicPath) {
         return (
             <div className="min-h-screen bg-gray-50">
@@ -86,7 +111,7 @@ const AppWrapper = ({ children }) => {
             </div>
         );
     }
-    
+
     // Show minimal layout for specific pages
     if (isMinimalLayout) {
         return (
@@ -94,12 +119,12 @@ const AppWrapper = ({ children }) => {
                 <ErrorBoundary>
                     <NotificationCenter />
                     {app.userCapabilities?.isTrialActive && (
-                        <TrialBanner 
+                        <TrialBanner
                             daysRemaining={app.userCapabilities.trialDaysRemaining}
                             subscriptionType={app.subscription?.plan}
                         />
                     )}
-                    <AppHeader 
+                    <AppHeader
                         user={user}
                         activeSuite={activeSuite}
                         notificationCount={unreadCount}
@@ -116,25 +141,25 @@ const AppWrapper = ({ children }) => {
             </div>
         );
     }
-    
+
     // Show full app layout with sidebar
     return (
         <div className="min-h-screen bg-gray-50">
             <ErrorBoundary>
                 <NotificationCenter />
-                
+
                 {/* Trial Banner */}
                 {app.userCapabilities?.isTrialActive && (
-                    <TrialBanner 
+                    <TrialBanner
                         daysRemaining={app.userCapabilities.trialDaysRemaining}
                         subscriptionType={app.subscription?.plan}
                     />
                 )}
-                
+
                 {/* Main App Layout */}
                 <div className="flex h-screen overflow-hidden">
                     {/* Sidebar */}
-                    <AppSidebar 
+                    <AppSidebar
                         open={!sidebarCollapsed}
                         onClose={() => setSidebarCollapsed(true)}
                         user={user}
@@ -146,11 +171,11 @@ const AppWrapper = ({ children }) => {
                         activeModule={activeModule}
                         onNavigate={navigateToModule}
                     />
-                    
+
                     {/* Main Content Area */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Header */}
-                        <AppHeader 
+                        <AppHeader
                             user={user}
                             activeSuite={activeSuite}
                             notificationCount={unreadCount}
@@ -158,14 +183,14 @@ const AppWrapper = ({ children }) => {
                             onSuiteChange={app.setActiveSuite}
                             suites={suites}
                         />
-                        
+
                         {/* Breadcrumbs */}
-                        <AppBreadcrumbs 
+                        <AppBreadcrumbs
                             breadcrumbs={breadcrumbs}
                             canGoBack={breadcrumbs.length > 1}
                             onGoBack={() => window.history.back()}
                         />
-                        
+
                         {/* Main Content */}
                         <main className="flex-1 overflow-y-auto bg-white">
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -176,10 +201,10 @@ const AppWrapper = ({ children }) => {
                         </main>
                     </div>
                 </div>
-                
+
                 {/* Upgrade Prompt Modal */}
                 {showUpgradePrompt && (
-                    <UpgradePrompt 
+                    <UpgradePrompt
                         isOpen={showUpgradePrompt}
                         onClose={() => setShowUpgradePrompt(false)}
                         subscription={app.subscription}

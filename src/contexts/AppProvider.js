@@ -2,6 +2,7 @@
 // contexts/AppProvider.js - Unified provider for QA Test Management Platform
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { UserProfileProvider, useUserProfile } from './userProfileContext';
 import { SubscriptionProvider, useSubscription } from './subscriptionContext';
@@ -30,7 +31,7 @@ const UnifiedAppProvider = ({ children }) => {
     // Application-wide state
     const [notifications, setNotifications] = useState([]);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [globalLoading, setGlobalLoading] = useState(true);
+    const [globalLoading, setGlobalLoading] = useState(false);
     const [error, setError] = useState(null);
     const [appPreferences, setAppPreferences] = useState({
         theme: 'system',
@@ -43,9 +44,14 @@ const UnifiedAppProvider = ({ children }) => {
     });
 
     // Navigation state
-    const [activeModule, setActiveModule] = useState('dashboard');
     const [breadcrumbs, setBreadcrumbs] = useState([]);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const pathname = usePathname();
+    const initialModule = pathname?.split('/')[1] || null;
+    const [activeModule, setActiveModule] = useState(() => {
+        // Prevent setting dashboard when on root path
+        return initialModule && initialModule !== '' ? initialModule : null;
+    });
 
     // Feature flags and capabilities
     const [featureFlags, setFeatureFlags] = useState({
@@ -61,18 +67,20 @@ const UnifiedAppProvider = ({ children }) => {
         return auth.user && auth.user.uid && !auth.loading;
     }, [auth.user, auth.loading]);
 
-    // Combined loading state
+    // Combined loading state - Only show loading when actually needed
     const isLoading = useMemo(() => {
-        return auth.loading ||
-            userProfile.loading ||
+        // Don't show loading if user is not authenticated
+        if (!isAuthenticated) return false;
+        
+        return userProfile.loading ||
             subscription.isLoading ||
             suite.isLoading ||
             globalLoading;
-    }, [auth.loading, userProfile.loading, subscription.isLoading, suite.isLoading, globalLoading]);
+    }, [isAuthenticated, userProfile.loading, subscription.isLoading, suite.isLoading, globalLoading]);
 
     // Combined user capabilities
     const userCapabilities = useMemo(() => {
-        if (!subscription.subscriptionStatus) return {};
+        if (!isAuthenticated || !subscription.subscriptionStatus) return {};
 
         const capabilities = subscription.subscriptionStatus.capabilities || {};
         const limits = subscription.getFeatureLimits();
@@ -85,7 +93,7 @@ const UnifiedAppProvider = ({ children }) => {
             isTrialActive: subscription.subscriptionStatus.isTrial,
             trialDaysRemaining: subscription.subscriptionStatus.trialDaysRemaining
         };
-    }, [subscription.subscriptionStatus, subscription.getFeatureLimits, suite.canCreateSuite]);
+    }, [isAuthenticated, subscription.subscriptionStatus, subscription.getFeatureLimits, suite.canCreateSuite]);
 
     // Account summary
     const accountSummary = useMemo(() => {
@@ -206,24 +214,32 @@ const UnifiedAppProvider = ({ children }) => {
         };
     }, [subscription.getFeatureLimits]);
 
-    // Application initialization
+    // Application initialization - Fixed to handle non-authenticated users
     const initializeApp = useCallback(async () => {
+        // Don't initialize if user is not authenticated
         if (!isAuthenticated) {
+            setIsInitialized(true); // Set to true so non-authenticated users can use the app
             setGlobalLoading(false);
+            return;
+        }
+
+        // If already initialized, don't initialize again
+        if (isInitialized) {
             return;
         }
 
         try {
             setGlobalLoading(true);
 
-            // Wait for all contexts to be ready
+            // Wait for all contexts to be ready with reasonable timeouts
             await Promise.all([
                 // Ensure user profile is loaded
-                userProfile.profile ? Promise.resolve() : new Promise(resolve => {
-                    const timeout = setTimeout(resolve, 3000); // 3 second timeout
+                userProfile.profile ? Promise.resolve() : new Promise((resolve) => {
+                    let attempts = 0;
+                    const maxAttempts = 30; // 3 seconds
                     const checkProfile = () => {
-                        if (userProfile.profile) {
-                            clearTimeout(timeout);
+                        attempts++;
+                        if (userProfile.profile || attempts >= maxAttempts) {
                             resolve();
                         } else {
                             setTimeout(checkProfile, 100);
@@ -233,11 +249,12 @@ const UnifiedAppProvider = ({ children }) => {
                 }),
 
                 // Ensure subscription status is loaded
-                subscription.subscriptionStatus ? Promise.resolve() : new Promise(resolve => {
-                    const timeout = setTimeout(resolve, 3000);
+                subscription.subscriptionStatus ? Promise.resolve() : new Promise((resolve) => {
+                    let attempts = 0;
+                    const maxAttempts = 30; // 3 seconds
                     const checkSubscription = () => {
-                        if (subscription.subscriptionStatus) {
-                            clearTimeout(timeout);
+                        attempts++;
+                        if (subscription.subscriptionStatus || attempts >= maxAttempts) {
                             resolve();
                         } else {
                             setTimeout(checkSubscription, 100);
@@ -286,15 +303,17 @@ const UnifiedAppProvider = ({ children }) => {
         } finally {
             setGlobalLoading(false);
         }
-    }, [isAuthenticated, userProfile.profile, subscription.subscriptionStatus, addNotification]);
+    }, [isAuthenticated, userProfile.profile, subscription.subscriptionStatus, addNotification, isInitialized]);
 
-    // Initialize app when user is authenticated
+    // Initialize app when authentication state changes
     useEffect(() => {
-        if (isAuthenticated && !isInitialized) {
-            initializeApp();
-        } else if (!isAuthenticated) {
-            setIsInitialized(false);
+        // Reset initialization state when authentication changes
+        if (!isAuthenticated) {
+            setIsInitialized(true); // Allow non-authenticated users to use the app
             setGlobalLoading(false);
+            setError(null);
+        } else if (isAuthenticated && !isInitialized) {
+            initializeApp();
         }
     }, [isAuthenticated, isInitialized, initializeApp]);
 
@@ -373,7 +392,7 @@ const UnifiedAppProvider = ({ children }) => {
                 await auth.signOut();
                 setNotifications([]);
                 setIsInitialized(false);
-                setActiveModule('dashboard');
+                setActiveModule(null);
                 setBreadcrumbs([]);
                 localStorage.removeItem('appPreferences');
             } catch (error) {

@@ -23,7 +23,7 @@ export const SUBSCRIPTION_PLANS = {
     individual_trial: {
         type: 'individual',
         name: 'Trial',
-        displayName: 'Individual Trial',
+        displayName: 'Trial',
         features: {
             suites: 5,
             test_scripts: 100,
@@ -40,7 +40,7 @@ export const SUBSCRIPTION_PLANS = {
     individual_pro: {
         type: 'individual',
         name: 'Pro',
-        displayName: 'Individual Pro',
+        displayName: 'Pro',
         features: {
             suites: 10,
             test_scripts: 500,
@@ -59,7 +59,7 @@ export const SUBSCRIPTION_PLANS = {
     organization_free: {
         type: 'organization',
         name: 'Free',
-        displayName: 'Organization Free',
+        displayName: 'Free',
         features: {
             suites: 3,
             test_scripts: 100,
@@ -76,7 +76,7 @@ export const SUBSCRIPTION_PLANS = {
     organization_trial: {
         type: 'organization',
         name: 'Trial',
-        displayName: 'Organization Trial',
+        displayName: 'Trial',
         features: {
             suites: 25,
             test_scripts: 1000,
@@ -93,7 +93,7 @@ export const SUBSCRIPTION_PLANS = {
     organization_starter: {
         type: 'organization',
         name: 'Starter',
-        displayName: 'Organization Starter',
+        displayName: 'Starter',
         features: {
             suites: 10,
             test_scripts: 500,
@@ -110,7 +110,7 @@ export const SUBSCRIPTION_PLANS = {
     organization_professional: {
         type: 'organization',
         name: 'Professional',
-        displayName: 'Organization Professional',
+        displayName: 'Professional',
         features: {
             suites: 50,
             test_scripts: 2500,
@@ -127,7 +127,7 @@ export const SUBSCRIPTION_PLANS = {
     organization_enterprise: {
         type: 'organization',
         name: 'Enterprise',
-        displayName: 'Organization Enterprise',
+        displayName: 'Enterprise',
         features: {
             suites: -1, // Unlimited
             test_scripts: -1, // Unlimited
@@ -262,10 +262,6 @@ export const calculateTrialStatus = (userProfile) => {
         trialEnd = new Date(trialStart.getTime() + 30 * 24 * 60 * 60 * 1000);
     }
 
-    // Trial is active if:
-    // 1. User has trial plan OR trial status, AND
-    // 2. Current date is within trial period, AND
-    // 3. No paid subscription is active
     const hasPaidSubscription = userProfile.subscriptionStatus === 'active' &&
         !userProfile.subscriptionPlan?.includes('free') &&
         !userProfile.subscriptionPlan?.includes('trial');

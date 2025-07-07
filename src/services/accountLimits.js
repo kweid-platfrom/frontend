@@ -1,11 +1,6 @@
 // services/accountLimits.js - Account limits and usage checking operations
-import {
-    collection,
-    query,
-    where,
-    getDocs
-} from "firebase/firestore";
-import { db } from "../config/firebase";
+import { where } from "firebase/firestore";
+import firestoreService from "./firestoreService";
 import { getUserCapabilities } from "../config/subscriptionPlans";
 
 /**
@@ -37,7 +32,7 @@ export const canCreateNewSuite = async (userProfile) => {
             };
         }
 
-        // Count user's current suites - FIXED: Use correct collection name from security rules
+        // Count user's current suites using centralized service
         const currentCount = await getUserSuiteCount(userProfile.uid || userProfile.user_id);
 
         return {
@@ -64,7 +59,7 @@ export const canCreateNewSuite = async (userProfile) => {
 };
 
 /**
- * Get current suite count for user - FIXED: Use correct collection name
+ * Get current suite count for user using centralized service
  * @param {string} userId 
  * @returns {Promise<number>}
  */
@@ -72,16 +67,15 @@ export const getUserSuiteCount = async (userId) => {
     try {
         if (!userId) return 0;
 
-        // FIXED: Use 'testSuites' collection name as expected by security rules
-        const suitesRef = collection(db, 'testSuites');
-        const q = query(
-            suitesRef,
-            where('ownerId', '==', userId),
-            where('isDeleted', '!=', true)
+        const result = await firestoreService.queryDocuments(
+            'testSuites',
+            [
+                where('ownerId', '==', userId),
+                where('isDeleted', '!=', true)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 0;
 
     } catch (error) {
         console.error('Error getting user suite count:', error);
@@ -110,7 +104,7 @@ export const canCreateNewTestSuite = async (userProfile) => {
             };
         }
 
-        // Count user's current test suites
+        // Count user's current test suites using centralized service
         const currentCount = await getUserTestSuiteCount(userProfile.uid || userProfile.user_id);
 
         return {
@@ -137,7 +131,7 @@ export const canCreateNewTestSuite = async (userProfile) => {
 };
 
 /**
- * Get current test suite count for user - FIXED: Use correct collection name
+ * Get current test suite count for user using centralized service
  * @param {string} userId 
  * @returns {Promise<number>}
  */
@@ -145,16 +139,15 @@ export const getUserTestSuiteCount = async (userId) => {
     try {
         if (!userId) return 0;
 
-        // FIXED: Use 'testSuites' collection name as expected by security rules
-        const suitesRef = collection(db, 'testSuites');
-        const q = query(
-            suitesRef,
-            where('ownerId', '==', userId),
-            where('isDeleted', '!=', true)
+        const result = await firestoreService.queryDocuments(
+            'testSuites',
+            [
+                where('ownerId', '==', userId),
+                where('isDeleted', '!=', true)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 0;
 
     } catch (error) {
         console.error('Error getting user test suite count:', error);
@@ -194,7 +187,7 @@ export const canInviteTeamMembers = async (userProfile) => {
             };
         }
 
-        // Count current team members
+        // Count current team members using centralized service
         const currentCount = await getOrganizationMemberCount(userProfile.organizationId);
 
         return {
@@ -219,7 +212,7 @@ export const canInviteTeamMembers = async (userProfile) => {
 };
 
 /**
- * Get current organization member count
+ * Get current organization member count using centralized service
  * @param {string} organizationId 
  * @returns {Promise<number>}
  */
@@ -227,15 +220,15 @@ export const getOrganizationMemberCount = async (organizationId) => {
     try {
         if (!organizationId) return 1;
 
-        const usersRef = collection(db, 'users');
-        const q = query(
-            usersRef,
-            where('organizationId', '==', organizationId),
-            where('isActive', '==', true)
+        const result = await firestoreService.queryDocuments(
+            'users',
+            [
+                where('organizationId', '==', organizationId),
+                where('isActive', '==', true)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 1;
 
     } catch (error) {
         console.error('Error getting organization member count:', error);
@@ -264,7 +257,7 @@ export const canCreateNewTestScript = async (userProfile) => {
             };
         }
 
-        // Count user's current test scripts
+        // Count user's current test scripts using centralized service
         const currentCount = await getUserTestScriptCount(userProfile.uid || userProfile.user_id);
 
         return {
@@ -291,7 +284,7 @@ export const canCreateNewTestScript = async (userProfile) => {
 };
 
 /**
- * Get current test script count for user
+ * Get current test script count for user using centralized service
  * @param {string} userId 
  * @returns {Promise<number>}
  */
@@ -299,15 +292,15 @@ export const getUserTestScriptCount = async (userId) => {
     try {
         if (!userId) return 0;
 
-        const scriptsRef = collection(db, 'testScripts');
-        const q = query(
-            scriptsRef,
-            where('ownerId', '==', userId),
-            where('isDeleted', '!=', true)
+        const result = await firestoreService.queryDocuments(
+            'testScripts',
+            [
+                where('ownerId', '==', userId),
+                where('isDeleted', '!=', true)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 0;
 
     } catch (error) {
         console.error('Error getting user test script count:', error);
@@ -336,7 +329,7 @@ export const canCreateNewAutomatedTest = async (userProfile) => {
             };
         }
 
-        // Count user's current automated tests
+        // Count user's current automated tests using centralized service
         const currentCount = await getUserAutomatedTestCount(userProfile.uid || userProfile.user_id);
 
         return {
@@ -363,7 +356,7 @@ export const canCreateNewAutomatedTest = async (userProfile) => {
 };
 
 /**
- * Get current automated test count for user
+ * Get current automated test count for user using centralized service
  * @param {string} userId 
  * @returns {Promise<number>}
  */
@@ -371,15 +364,15 @@ export const getUserAutomatedTestCount = async (userId) => {
     try {
         if (!userId) return 0;
 
-        const testsRef = collection(db, 'automatedTests');
-        const q = query(
-            testsRef,
-            where('ownerId', '==', userId),
-            where('isDeleted', '!=', true)
+        const result = await firestoreService.queryDocuments(
+            'automatedTests',
+            [
+                where('ownerId', '==', userId),
+                where('isDeleted', '!=', true)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 0;
 
     } catch (error) {
         console.error('Error getting user automated test count:', error);
@@ -408,7 +401,7 @@ export const canCreateNewRecording = async (userProfile) => {
             };
         }
 
-        // Count user's current recordings
+        // Count user's current recordings using centralized service
         const currentCount = await getUserRecordingCount(userProfile.uid || userProfile.user_id);
 
         return {
@@ -435,7 +428,7 @@ export const canCreateNewRecording = async (userProfile) => {
 };
 
 /**
- * Get current recording count for user
+ * Get current recording count for user using centralized service
  * @param {string} userId 
  * @returns {Promise<number>}
  */
@@ -443,15 +436,15 @@ export const getUserRecordingCount = async (userId) => {
     try {
         if (!userId) return 0;
 
-        const recordingsRef = collection(db, 'recordings');
-        const q = query(
-            recordingsRef,
-            where('ownerId', '==', userId),
-            where('isDeleted', '!=', true)
+        const result = await firestoreService.queryDocuments(
+            'recordings',
+            [
+                where('ownerId', '==', userId),
+                where('isDeleted', '!=', true)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 0;
 
     } catch (error) {
         console.error('Error getting user recording count:', error);
@@ -480,7 +473,7 @@ export const canExportReport = async (userProfile) => {
             };
         }
 
-        // Count user's current monthly exports
+        // Count user's current monthly exports using centralized service
         const currentCount = await getUserMonthlyExportCount(userProfile.uid || userProfile.user_id);
 
         return {
@@ -507,7 +500,7 @@ export const canExportReport = async (userProfile) => {
 };
 
 /**
- * Get current monthly export count for user
+ * Get current monthly export count for user using centralized service
  * @param {string} userId 
  * @returns {Promise<number>}
  */
@@ -519,15 +512,15 @@ export const getUserMonthlyExportCount = async (userId) => {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        const exportsRef = collection(db, 'reportExports');
-        const q = query(
-            exportsRef,
-            where('ownerId', '==', userId),
-            where('createdAt', '>=', monthStart)
+        const result = await firestoreService.queryDocuments(
+            'reportExports',
+            [
+                where('ownerId', '==', userId),
+                where('createdAt', '>=', monthStart)
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.size;
+        return result.success ? result.data.length : 0;
 
     } catch (error) {
         console.error('Error getting user monthly export count:', error);
@@ -545,7 +538,7 @@ export const getUserUsageStats = async (userProfile) => {
         const userId = userProfile.uid || userProfile.user_id;
         const capabilities = getUserCapabilities(userProfile);
 
-        // Get all counts in parallel
+        // Get all counts in parallel using centralized service
         const [
             suiteCount,
             testScriptCount,
@@ -609,6 +602,172 @@ export const getUserUsageStats = async (userProfile) => {
     } catch (error) {
         console.error('Error getting user usage stats:', error);
         return {
+            capabilities: getUserCapabilities(userProfile),
+            usage: {},
+            error: error.message
+        };
+    }
+};
+
+/**
+ * Enhanced helper to check multiple limits at once
+ * @param {Object} userProfile 
+ * @param {Array} checkTypes - Array of limit types to check ['suites', 'testScripts', 'automatedTests', 'recordings', 'reportExports']
+ * @returns {Promise<Object>} Comprehensive limits check result
+ */
+export const checkMultipleLimits = async (userProfile, checkTypes = ['suites', 'testScripts', 'automatedTests', 'recordings', 'reportExports']) => {
+    try {
+        const results = {};
+        
+        // Execute checks based on requested types
+        if (checkTypes.includes('suites')) {
+            results.suites = await canCreateNewSuite(userProfile);
+        }
+        
+        if (checkTypes.includes('testScripts')) {
+            results.testScripts = await canCreateNewTestScript(userProfile);
+        }
+        
+        if (checkTypes.includes('automatedTests')) {
+            results.automatedTests = await canCreateNewAutomatedTest(userProfile);
+        }
+        
+        if (checkTypes.includes('recordings')) {
+            results.recordings = await canCreateNewRecording(userProfile);
+        }
+        
+        if (checkTypes.includes('reportExports')) {
+            results.reportExports = await canExportReport(userProfile);
+        }
+        
+        if (checkTypes.includes('teamMembers')) {
+            results.teamMembers = await canInviteTeamMembers(userProfile);
+        }
+
+        return {
+            success: true,
+            data: results,
+            hasAnyLimit: Object.values(results).some(result => !result.canCreate && !result.canExport && !result.canInvite)
+        };
+
+    } catch (error) {
+        console.error('Error checking multiple limits:', error);
+        return {
+            success: false,
+            error: error.message,
+            data: {}
+        };
+    }
+};
+
+/**
+ * Optimized version that gets usage stats using batch queries
+ * @param {Object} userProfile 
+ * @returns {Promise<Object>} Optimized usage statistics
+ */
+export const getOptimizedUsageStats = async (userProfile) => {
+    try {
+        const userId = userProfile.uid || userProfile.user_id;
+        const capabilities = getUserCapabilities(userProfile);
+
+        // Create batch query promises
+        const queries = [];
+        
+        // Add all required queries
+        queries.push(
+            firestoreService.queryDocuments('testSuites', [where('ownerId', '==', userId), where('isDeleted', '!=', true)]),
+            firestoreService.queryDocuments('testScripts', [where('ownerId', '==', userId), where('isDeleted', '!=', true)]),
+            firestoreService.queryDocuments('automatedTests', [where('ownerId', '==', userId), where('isDeleted', '!=', true)]),
+            firestoreService.queryDocuments('recordings', [where('ownerId', '==', userId), where('isDeleted', '!=', true)])
+        );
+
+        // Add monthly exports query
+        const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        queries.push(
+            firestoreService.queryDocuments('reportExports', [
+                where('ownerId', '==', userId),
+                where('createdAt', '>=', monthStart)
+            ])
+        );
+
+        // Add organization members query if needed
+        if (capabilities.accountType === 'organization' && userProfile.organizationId) {
+            queries.push(
+                firestoreService.queryDocuments('users', [
+                    where('organizationId', '==', userProfile.organizationId),
+                    where('isActive', '==', true)
+                ])
+            );
+        }
+
+        // Execute all queries in parallel
+        const results = await Promise.all(queries);
+        
+        // Extract counts from results
+        const [
+            suitesResult,
+            testScriptsResult,
+            automatedTestsResult,
+            recordingsResult,
+            exportsResult,
+            membersResult
+        ] = results;
+
+        const suiteCount = suitesResult.success ? suitesResult.data.length : 0;
+        const testScriptCount = testScriptsResult.success ? testScriptsResult.data.length : 0;
+        const automatedTestCount = automatedTestsResult.success ? automatedTestsResult.data.length : 0;
+        const recordingCount = recordingsResult.success ? recordingsResult.data.length : 0;
+        const monthlyExportCount = exportsResult.success ? exportsResult.data.length : 0;
+        const organizationMemberCount = membersResult ? (membersResult.success ? membersResult.data.length : 1) : 1;
+
+        return {
+            success: true,
+            capabilities,
+            usage: {
+                suites: {
+                    current: suiteCount,
+                    limit: capabilities.limits.suites,
+                    unlimited: capabilities.limits.suites === -1,
+                    percentage: capabilities.limits.suites === -1 ? 0 : (suiteCount / capabilities.limits.suites) * 100
+                },
+                testScripts: {
+                    current: testScriptCount,
+                    limit: capabilities.limits.test_scripts,
+                    unlimited: capabilities.limits.test_scripts === -1,
+                    percentage: capabilities.limits.test_scripts === -1 ? 0 : (testScriptCount / capabilities.limits.test_scripts) * 100
+                },
+                automatedTests: {
+                    current: automatedTestCount,
+                    limit: capabilities.limits.automated_tests,
+                    unlimited: capabilities.limits.automated_tests === -1,
+                    percentage: capabilities.limits.automated_tests === -1 ? 0 : (automatedTestCount / capabilities.limits.automated_tests) * 100
+                },
+                recordings: {
+                    current: recordingCount,
+                    limit: capabilities.limits.recordings,
+                    unlimited: capabilities.limits.recordings === -1,
+                    percentage: capabilities.limits.recordings === -1 ? 0 : (recordingCount / capabilities.limits.recordings) * 100
+                },
+                reportExports: {
+                    current: monthlyExportCount,
+                    limit: capabilities.limits.report_exports,
+                    unlimited: capabilities.limits.report_exports === -1,
+                    percentage: capabilities.limits.report_exports === -1 ? 0 : (monthlyExportCount / capabilities.limits.report_exports) * 100,
+                    resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+                },
+                teamMembers: {
+                    current: organizationMemberCount,
+                    limit: capabilities.limits.team_members,
+                    unlimited: capabilities.limits.team_members === -1,
+                    percentage: capabilities.limits.team_members === -1 ? 0 : (organizationMemberCount / capabilities.limits.team_members) * 100
+                }
+            }
+        };
+
+    } catch (error) {
+        console.error('Error getting optimized usage stats:', error);
+        return {
+            success: false,
             capabilities: getUserCapabilities(userProfile),
             usage: {},
             error: error.message

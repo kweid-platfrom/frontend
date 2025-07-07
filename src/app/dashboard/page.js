@@ -1,15 +1,11 @@
-'use client';
-
-import DashboardLayout from '../../components/layout/AppWrapper';
-import Dashboard from '../../components/pages/Dashboard';
-import ProtectedRoute from '../../components/auth/protectedRoute';
+// app/dashboard/page.js
+import React from 'react';
+import PageLayout from '@/components/layout/PageLayout';
 
 export default function DashboardPage() {
     return (
-        <ProtectedRoute requireEmailVerified>
-            <DashboardLayout>
-                <Dashboard />
-            </DashboardLayout>
-        </ProtectedRoute>
+        <PageLayout title="Dashboard">
+            <h1 className="text-xl font-bold">Dashboard</h1>
+        </PageLayout>
     );
 }
