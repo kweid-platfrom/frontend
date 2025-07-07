@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // components/AppWrapper.js - Main App Layout Wrapper
 'use client';
 
 import React, { useEffect, useState, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
-import { useApp, useAppAuth, useAppSuite, useAppNavigation, useAppNotifications } from './AppProvider';
+import { useRouter, usePathname } from 'next/navigation';
+import { useApp, useAppAuth, useAppSuites, useAppNavigation, useAppNotifications } from '../contexts/AppProvider';
 
-// Component imports (you'll need to create or import these)
+// Component imports
 import AppHeader from './layout/AppHeader';
 import AppSidebar from './layout/AppSidebar';
 import AppBreadcrumbs from './layout/AppBreadcrumbs';
@@ -19,39 +18,51 @@ import TrialBanner from './subscription/TrialBanner';
 // Main app wrapper component
 const AppWrapper = ({ children }) => {
     const router = useRouter();
+    const pathname = usePathname();
     const app = useApp();
     const { isAuthenticated, user } = useAppAuth();
-    const { activeSuite } = useAppSuite();
-    const { currentPath } = useAppNavigation();
-    const { notifications, unreadCount } = useAppNotifications();
+    const { activeSuite, suites } = useAppSuites();
+    const { 
+        activeModule, 
+        breadcrumbs, 
+        sidebarCollapsed, 
+        setSidebarCollapsed, 
+        navigateToModule 
+    } = useAppNavigation();
+    const { notifications } = useAppNotifications();
     
-    const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+    
+    // Calculate unread notifications count
+    const unreadCount = notifications.filter(n => !n.read).length;
     
     // Paths that don't need the full app layout
     const publicPaths = ['/login', '/register', '/verify-email', '/reset-password', '/'];
-    const isPublicPath = publicPaths.includes(currentPath);
+    const isPublicPath = publicPaths.includes(pathname);
     
     // Paths that need minimal layout (no sidebar)
     const minimalLayoutPaths = ['/settings', '/profile'];
-    const isMinimalLayout = minimalLayoutPaths.includes(currentPath);
+    const isMinimalLayout = minimalLayoutPaths.includes(pathname);
     
     // Handle upgrade prompt display
     useEffect(() => {
-        if (app.subscriptionInfo?.shouldShowUpgradePrompts?.general) {
-            setShowUpgradePrompt(true);
+        if (app.userCapabilities && !app.userCapabilities.hasActiveSubscription) {
+            // Show upgrade prompt for certain features
+            const shouldShowUpgrade = app.userCapabilities.isTrialActive && 
+                                    app.userCapabilities.trialDaysRemaining < 7;
+            setShowUpgradePrompt(shouldShowUpgrade);
         }
-    }, [app.subscriptionInfo?.shouldShowUpgradePrompts]);
+    }, [app.userCapabilities]);
     
     // Redirect logic for authenticated users
     useEffect(() => {
-        if (isAuthenticated && isPublicPath && currentPath !== '/') {
+        if (isAuthenticated && isPublicPath && pathname !== '/') {
             router.push('/dashboard');
         }
-    }, [isAuthenticated, isPublicPath, currentPath, router]);
+    }, [isAuthenticated, isPublicPath, pathname, router]);
     
     // Show loading screen while app is initializing
-    if (!app.isAppReady) {
+    if (!app.isInitialized || app.isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
@@ -82,17 +93,17 @@ const AppWrapper = ({ children }) => {
             <div className="min-h-screen bg-gray-50">
                 <ErrorBoundary>
                     <NotificationCenter />
-                    {app.subscriptionInfo?.showTrialBanner && (
+                    {app.userCapabilities?.isTrialActive && (
                         <TrialBanner 
-                            daysRemaining={app.subscriptionInfo.trialDaysRemaining}
-                            subscriptionType={app.subscriptionInfo.type}
+                            daysRemaining={app.userCapabilities.trialDaysRemaining}
+                            subscriptionType={app.subscription?.plan}
                         />
                     )}
                     <AppHeader 
                         user={user}
                         activeSuite={activeSuite}
                         notificationCount={unreadCount}
-                        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+                        onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                     />
                     <main className="flex-1 bg-white">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -113,10 +124,10 @@ const AppWrapper = ({ children }) => {
                 <NotificationCenter />
                 
                 {/* Trial Banner */}
-                {app.subscriptionInfo?.showTrialBanner && (
+                {app.userCapabilities?.isTrialActive && (
                     <TrialBanner 
-                        daysRemaining={app.subscriptionInfo.trialDaysRemaining}
-                        subscriptionType={app.subscriptionInfo.type}
+                        daysRemaining={app.userCapabilities.trialDaysRemaining}
+                        subscriptionType={app.subscription?.plan}
                     />
                 )}
                 
@@ -124,14 +135,16 @@ const AppWrapper = ({ children }) => {
                 <div className="flex h-screen overflow-hidden">
                     {/* Sidebar */}
                     <AppSidebar 
-                        open={sidebarOpen}
-                        onClose={() => setSidebarOpen(false)}
+                        open={!sidebarCollapsed}
+                        onClose={() => setSidebarCollapsed(true)}
                         user={user}
                         activeSuite={activeSuite}
-                        suites={app.suites}
+                        suites={suites}
                         userCapabilities={app.userCapabilities}
-                        subscriptionInfo={app.subscriptionInfo}
-                        currentPath={currentPath}
+                        subscription={app.subscription}
+                        currentPath={pathname}
+                        activeModule={activeModule}
+                        onNavigate={navigateToModule}
                     />
                     
                     {/* Main Content Area */}
@@ -141,16 +154,16 @@ const AppWrapper = ({ children }) => {
                             user={user}
                             activeSuite={activeSuite}
                             notificationCount={unreadCount}
-                            onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-                            onSuiteChange={app.actions.setActiveSuite}
-                            suites={app.suites}
+                            onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                            onSuiteChange={app.setActiveSuite}
+                            suites={suites}
                         />
                         
                         {/* Breadcrumbs */}
                         <AppBreadcrumbs 
-                            breadcrumbs={app.navigationState.breadcrumbs}
-                            canGoBack={app.navigationState.canGoBack}
-                            onGoBack={app.actions.goBack}
+                            breadcrumbs={breadcrumbs}
+                            canGoBack={breadcrumbs.length > 1}
+                            onGoBack={() => window.history.back()}
                         />
                         
                         {/* Main Content */}
@@ -169,7 +182,7 @@ const AppWrapper = ({ children }) => {
                     <UpgradePrompt 
                         isOpen={showUpgradePrompt}
                         onClose={() => setShowUpgradePrompt(false)}
-                        subscriptionInfo={app.subscriptionInfo}
+                        subscription={app.subscription}
                         userCapabilities={app.userCapabilities}
                     />
                 )}

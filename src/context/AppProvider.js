@@ -63,11 +63,11 @@ const UnifiedAppProvider = ({ children }) => {
 
     // Combined loading state
     const isLoading = useMemo(() => {
-        return auth.loading || 
-               userProfile.loading || 
-               subscription.isLoading || 
-               suite.isLoading ||
-               globalLoading;
+        return auth.loading ||
+            userProfile.loading ||
+            subscription.isLoading ||
+            suite.isLoading ||
+            globalLoading;
     }, [auth.loading, userProfile.loading, subscription.isLoading, suite.isLoading, globalLoading]);
 
     // Combined user capabilities
@@ -154,7 +154,7 @@ const UnifiedAppProvider = ({ children }) => {
     }, []);
 
     const markNotificationAsRead = useCallback((id) => {
-        setNotifications(prev => 
+        setNotifications(prev =>
             prev.map(n => n.id === id ? { ...n, read: true } : n)
         );
     }, []);
@@ -166,7 +166,7 @@ const UnifiedAppProvider = ({ children }) => {
     // Navigation helpers
     const navigateToModule = useCallback((module) => {
         setActiveModule(module);
-        
+
         // Update breadcrumbs based on module
         const moduleMap = {
             dashboard: ['Dashboard'],
@@ -194,9 +194,9 @@ const UnifiedAppProvider = ({ children }) => {
     const checkFeatureLimit = useCallback((feature, currentUsage) => {
         const limits = subscription.getFeatureLimits();
         const limit = limits[feature];
-        
+
         if (limit === -1) return { canUse: true, unlimited: true };
-        
+
         return {
             canUse: currentUsage < limit,
             unlimited: false,
@@ -215,7 +215,7 @@ const UnifiedAppProvider = ({ children }) => {
 
         try {
             setGlobalLoading(true);
-            
+
             // Wait for all contexts to be ready
             await Promise.all([
                 // Ensure user profile is loaded
@@ -231,7 +231,7 @@ const UnifiedAppProvider = ({ children }) => {
                     };
                     checkProfile();
                 }),
-                
+
                 // Ensure subscription status is loaded
                 subscription.subscriptionStatus ? Promise.resolve() : new Promise(resolve => {
                     const timeout = setTimeout(resolve, 3000);
@@ -273,7 +273,7 @@ const UnifiedAppProvider = ({ children }) => {
 
             setIsInitialized(true);
             setError(null);
-            
+
         } catch (error) {
             console.error('Error initializing app:', error);
             setError(error.message);
@@ -312,32 +312,32 @@ const UnifiedAppProvider = ({ children }) => {
         // Authentication
         ...auth,
         isAuthenticated,
-        
+
         // User Profile
         userProfile: userProfile.profile,
         ...userProfile,
-        
+
         // Subscription
         subscription: subscription.subscriptionStatus,
         ...subscription,
-        
+
         // Test Suites
         ...suite,
-        
+
         // Application State
         isInitialized,
         isLoading,
         error,
         accountSummary,
         userCapabilities,
-        
+
         // Notifications
         notifications,
         addNotification,
         removeNotification,
         markNotificationAsRead,
         clearAllNotifications,
-        
+
         // Navigation
         activeModule,
         breadcrumbs,
@@ -345,16 +345,16 @@ const UnifiedAppProvider = ({ children }) => {
         setSidebarCollapsed,
         navigateToModule,
         updateBreadcrumbs,
-        
+
         // Features
         featureFlags,
         hasFeatureAccess,
         checkFeatureLimit,
-        
+
         // Preferences
         appPreferences,
         setAppPreferences,
-        
+
         // Utilities
         refreshAll: useCallback(async () => {
             await Promise.all([
@@ -363,10 +363,10 @@ const UnifiedAppProvider = ({ children }) => {
                 subscription.updateTrialStatusInDatabase?.()
             ]);
         }, [userProfile.refreshUserProfile, suite.refetchSuites, subscription.updateTrialStatusInDatabase]),
-        
+
         // Error handling
         clearError: useCallback(() => setError(null), []),
-        
+
         // App actions
         signOut: useCallback(async () => {
             try {
@@ -418,113 +418,113 @@ export const useAppAuth = () => {
 };
 
 export const useAppSubscription = () => {
-    const { 
-        subscription, 
-        subscriptionStatus, 
-        hasFeatureAccess, 
-        getFeatureLimits, 
-        createCheckoutSession, 
-        cancelSubscription, 
-        reactivateSubscription 
+    const {
+        subscription,
+        subscriptionStatus,
+        hasFeatureAccess,
+        getFeatureLimits,
+        createCheckoutSession,
+        cancelSubscription,
+        reactivateSubscription
     } = useApp();
-    return { 
-        subscription, 
-        subscriptionStatus, 
-        hasFeatureAccess, 
-        getFeatureLimits, 
-        createCheckoutSession, 
-        cancelSubscription, 
-        reactivateSubscription 
+    return {
+        subscription,
+        subscriptionStatus,
+        hasFeatureAccess,
+        getFeatureLimits,
+        createCheckoutSession,
+        cancelSubscription,
+        reactivateSubscription
     };
 };
 
 export const useAppSuites = () => {
-    const { 
-        suites, 
-        activeSuite, 
-        setActiveSuite, 
-        createTestSuite, 
-        canCreateSuite, 
-        refetchSuites 
+    const {
+        suites,
+        activeSuite,
+        setActiveSuite,
+        createTestSuite,
+        canCreateSuite,
+        refetchSuites
     } = useApp();
-    return { 
-        suites, 
-        activeSuite, 
-        setActiveSuite, 
-        createTestSuite, 
-        canCreateSuite, 
-        refetchSuites 
+    return {
+        suites,
+        activeSuite,
+        setActiveSuite,
+        createTestSuite,
+        canCreateSuite,
+        refetchSuites
     };
 };
 
 export const useAppProfile = () => {
-    const { 
-        userProfile, 
-        profile, 
-        refreshUserProfile, 
-        updateProfile, 
-        loading: profileLoading 
+    const {
+        userProfile,
+        profile,
+        refreshUserProfile,
+        updateProfile,
+        loading: profileLoading
     } = useApp();
-    return { 
-        userProfile, 
-        profile, 
-        refreshUserProfile, 
-        updateProfile, 
-        loading: profileLoading 
+    return {
+        userProfile,
+        profile,
+        refreshUserProfile,
+        updateProfile,
+        loading: profileLoading
     };
 };
 
 // Navigation hook
 export const useAppNavigation = () => {
-    const { 
-        activeModule, 
-        breadcrumbs, 
-        sidebarCollapsed, 
-        setSidebarCollapsed, 
-        navigateToModule, 
-        updateBreadcrumbs 
+    const {
+        activeModule,
+        breadcrumbs,
+        sidebarCollapsed,
+        setSidebarCollapsed,
+        navigateToModule,
+        updateBreadcrumbs
     } = useApp();
-    return { 
-        activeModule, 
-        breadcrumbs, 
-        sidebarCollapsed, 
-        setSidebarCollapsed, 
-        navigateToModule, 
-        updateBreadcrumbs 
+    return {
+        activeModule,
+        breadcrumbs,
+        sidebarCollapsed,
+        setSidebarCollapsed,
+        navigateToModule,
+        updateBreadcrumbs
     };
 };
 
 // Notifications hook
 export const useAppNotifications = () => {
-    const { 
-        notifications, 
-        addNotification, 
-        removeNotification, 
-        markNotificationAsRead, 
-        clearAllNotifications 
+    const {
+        notifications,
+        addNotification,
+        removeNotification,
+        markNotificationAsRead,
+        clearAllNotifications
     } = useApp();
-    return { 
-        notifications, 
-        addNotification, 
-        removeNotification, 
-        markNotificationAsRead, 
-        clearAllNotifications 
+    return {
+        notifications,
+        addNotification,
+        removeNotification,
+        markNotificationAsRead,
+        clearAllNotifications
     };
 };
 
 // Feature access hook
 export const useAppFeatures = () => {
-    const { 
-        featureFlags, 
-        hasFeatureAccess, 
-        checkFeatureLimit, 
-        userCapabilities 
+    const {
+        featureFlags,
+        hasFeatureAccess,
+        checkFeatureLimit,
+        userCapabilities
     } = useApp();
-    return { 
-        featureFlags, 
-        hasFeatureAccess, 
-        checkFeatureLimit, 
-        userCapabilities 
+    return {
+        featureFlags,
+        hasFeatureAccess,
+        checkFeatureLimit,
+        userCapabilities
     };
 };
 
