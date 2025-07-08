@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // hooks/useUserProfile.js - FIXED: Works with new data structure
 import { useState, useCallback } from 'react';
-import { useAuth } from '../context/AuthProvider';
+import { useAuth } from '../contexts/AuthProvider';
 import { getUserDisplayName, getUserEmail } from '../services/userService';
 
 export const useUserProfile = () => {

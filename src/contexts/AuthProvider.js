@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// Fixed AuthProvider.js
+// Resolved AuthProvider.js - Removed duplications and overlaps
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
@@ -8,9 +8,13 @@ import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
 
 import {
-    fetchUserData
+    fetchUserData,
+    updateUserProfile as updateUserProfileService,
+    getUserDisplayName,
+    getUserEmail,
+    getUserAccountType,
+    getCurrentAccountInfo,
 } from "../services/userService";
-import { updateUserProfile as updateUserProfileService } from "../services/userService";
 
 // Import permissions service
 import { 
@@ -20,6 +24,7 @@ import {
     isIndividualAccount
 } from "../services/permissionService";
 
+// Import auth service functions
 import {
     signInWithGoogle as authSignInWithGoogle,
     logInWithEmail as authLoginWithEmail,
@@ -143,7 +148,7 @@ export const AuthProvider = ({ children }) => {
                 const noRedirectPaths = [
                     "/verify-email",
                     "/handle-email-verification",
-                    "/dashboard", // IMPORTANT: Don't redirect if already on dashboard
+                    "/dashboard",
                     "/settings",
                     "/profile",
                     "/suites",
@@ -220,7 +225,7 @@ export const AuthProvider = ({ children }) => {
         return () => {
             mounted = false;
         };
-    }, []); // Remove dependencies to prevent re-runs
+    }, []);
 
     // Handle auth state changes
     useEffect(() => {
@@ -241,6 +246,7 @@ export const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, [processUserAuthentication, initialized]);
 
+    // ===== AUTHENTICATION METHODS =====
     const signIn = async (email, password) => {
         setAuthError(null);
         try {
@@ -440,14 +446,13 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Permission checking methods using the permissions service
+    // ===== PERMISSION CHECKING METHODS =====
     const hasPermission = useCallback((capability) => {
         return permissionChecker ? permissionChecker.can(capability) : false;
     }, [permissionChecker]);
 
     const hasRole = useCallback((role) => {
         if (!userProfile) return false;
-        // Check if user has specific role
         const userRoles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
         return userRoles.includes(role);
     }, [userProfile]);
@@ -458,17 +463,14 @@ export const AuthProvider = ({ children }) => {
         return roles.some(role => userRoles.includes(role));
     }, [userProfile]);
 
-    const isUserAdmin = useCallback(() => {
+    const isAdmin = useCallback(() => {
         return permissionChecker ? permissionChecker.isAdmin() : false;
     }, [permissionChecker]);
 
     const getPrimaryUserRole = useCallback(() => {
         if (!userProfile) return 'member';
         
-        // Get primary role from user profile
         const roles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
-        
-        // Priority order for roles
         const rolePriority = ['Admin', 'Manager', 'QA_Tester', 'Developer', 'Member', 'Viewer'];
         
         for (const role of rolePriority) {
@@ -480,6 +482,7 @@ export const AuthProvider = ({ children }) => {
         return 'Member';
     }, [userProfile]);
 
+    // ===== DATA MANAGEMENT METHODS =====
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
         
@@ -520,13 +523,14 @@ export const AuthProvider = ({ children }) => {
             }
             
             return false;
-        } catch {
-            throw new Error('Failed to update user profile');
+        } catch (error) {
+            throw new Error('Failed to update user profile', error);
         } finally {
             setLoading(false);
         }
     }, [currentUser, refreshUserData]);
 
+    // ===== UTILITY METHODS =====
     const redirectToEmailVerification = useCallback(() => {
         if (currentUser && !currentUser.emailVerified) {
             setSkipEmailVerificationRedirect(false);
@@ -548,18 +552,14 @@ export const AuthProvider = ({ children }) => {
         return linkedProviders.includes(providerId);
     }, [getLinkedProviders]);
 
-    // Enhanced permission checking methods
-    const canAccessProject = useCallback(async (action = 'read', suiteContext = {}) => {
-        if (!userProfile) return { allowed: false, reason: 'no_user' };
-        return await canAccessProject(userProfile, action, suiteContext);
-    }, [userProfile]);
-
-    const canAccessBugs = useCallback((action = 'read', context = {}) => {
-        if (!userProfile) return { allowed: false, reason: 'no_user' };
-        return canAccessBugs(userProfile, action, context);
-    }, [userProfile]);
+    // ===== COMPUTED VALUES =====
+    const displayName = getUserDisplayName(userProfile);
+    const email = getUserEmail(userProfile);
+    const accountType = getUserAccountType(userProfile);
+    const currentAccountInfo = getCurrentAccountInfo(userProfile);
 
     const value = {
+        // Core auth state
         currentUser,
         userPermissions,
         userProfile,
@@ -568,6 +568,8 @@ export const AuthProvider = ({ children }) => {
         environment,
         initialized,
         permissionChecker,
+        
+        // Authentication methods
         signIn,
         signInWithGoogle,
         registerWithEmail,
@@ -584,15 +586,15 @@ export const AuthProvider = ({ children }) => {
         isProviderLinked,
         refreshSession,
         signOut,
+        
+        // Permission checking methods
         hasPermission,
         hasRole,
         hasAnyRole,
-        isAdmin: isUserAdmin,
+        isAdmin,
         getPrimaryUserRole,
-        canAccessProject,
-        canAccessBugs,
         
-        // Convenience flags from permissions service
+        // Convenience permission flags
         canManageUsers: userPermissions?.canManageUsers || false,
         canManageTestSuites: userPermissions?.canCreateTestSuites || false,
         canCreateTestSuites: userPermissions?.canCreateTestSuites || false,
@@ -631,10 +633,21 @@ export const AuthProvider = ({ children }) => {
         limits: userPermissions?.limits || {},
         shouldShowUpgradePrompts: userPermissions?.shouldShowUpgradePrompts || {},
         
+        // Data management
         updateUserProfile,
         refreshUserData,
+        
+        // Utility methods
         clearAuthError,
         redirectToEmailVerification,
+        
+        // Computed values
+        displayName,
+        email,
+        accountType,
+        currentAccountInfo,
+        
+        // Legacy compatibility
         user: currentUser,
     };
 

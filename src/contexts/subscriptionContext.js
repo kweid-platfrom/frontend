@@ -1,10 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// contexts/SubscriptionContext.js
+// contexts/subscriptionContext.js - Fixed to be single source of truth
 'use client'
 import { createContext, useContext, useMemo, useCallback, useState, useEffect } from 'react';
 import { useUserProfile } from './userProfileContext';
 import { useAuth } from './AuthProvider';
+import { useAccountCapabilities } from '../hooks/useAccountCapabilities';
 import { subscriptionService } from '../services/subscriptionService';
+import accountService from '../services/accountService';
 import { doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -18,9 +20,208 @@ export const useSubscription = () => {
     return context;
 };
 
-export const SubscriptionProvider = ({ children }) => {
+// Helper function to safely get default capabilities
+const getDefaultCapabilities = (accountType = 'individual') => {
+    try {
+        const result = accountService.getDefaultCapabilities(accountType);
+        return result.success ? result.data : {
+            maxSuites: 5,
+            maxTestSuites: 5,
+            maxTestScripts: 20,
+            maxAutomatedTests: 10,
+            maxRecordings: 10,
+            maxMonthlyExports: 5,
+            canInviteTeamMembers: false,
+            maxTeamMembers: 1,
+            canExportReports: true,
+            canCreateAutomatedTests: true,
+            canCreateRecordings: true,
+            canCreateTestScripts: true,
+            maxStorageGB: 1,
+            supportLevel: 'community'
+        };
+    } catch (error) {
+        console.error('Error getting default capabilities:', error);
+        return {
+            maxSuites: 5,
+            maxTestSuites: 5,
+            maxTestScripts: 20,
+            maxAutomatedTests: 10,
+            maxRecordings: 10,
+            maxMonthlyExports: 5,
+            canInviteTeamMembers: false,
+            maxTeamMembers: 1,
+            canExportReports: true,
+            canCreateAutomatedTests: true,
+            canCreateRecordings: true,
+            canCreateTestScripts: true,
+            maxStorageGB: 1,
+            supportLevel: 'community'
+        };
+    }
+};
+
+// Helper function to safely get default plan
+const getDefaultPlan = (accountType = 'individual') => {
+    try {
+        return accountType === 'organization' ? 'organization_free' : 'individual_free';
+    } catch (error) {
+        console.error('Error getting default plan:', error);
+        return 'individual_free';
+    }
+};
+
+// Helper function to safely check feature access
+const safeHasFeatureAccess = (capabilities, userProfile, feature) => {
+    try {
+        if (!capabilities || !userProfile) return false;
+        
+        const featureMap = {
+            'teamCollaboration': 'canInviteTeamMembers',
+            'advancedReporting': 'canExportReports',
+            'automatedTesting': 'canCreateAutomatedTests',
+            'recordings': 'canCreateRecordings',
+            'testScripts': 'canCreateTestScripts'
+        };
+        
+        const capabilityKey = featureMap[feature] || feature;
+        return capabilities[capabilityKey] === true;
+    } catch (error) {
+        console.error('Error checking feature access:', error);
+        return false;
+    }
+};
+
+// CENTRALIZED: Get feature limits with trial support
+const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilities) => {
+    // Default limits for unauthenticated or missing data
+    const defaultLimits = {
+        suites: 1,
+        testSuites: 1,
+        testCases: 10,
+        recordings: 5,
+        automatedScripts: 0,
+        maxSuites: 1,
+        maxTestSuites: 1,
+        maxTestScripts: 10,
+        maxAutomatedTests: 0,
+        maxRecordings: 5,
+        maxMonthlyExports: 5,
+        maxTeamMembers: 1,
+        maxStorageGB: 1
+    };
+
+    if (!subscriptionStatus || !userProfile) {
+        return defaultLimits;
+    }
+
+    const isTrialActive = subscriptionStatus.isTrial || 
+        subscriptionStatus.subscriptionStatus === 'trial';
+
+    // TRIAL LIMITS: Enhanced limits during trial
+    if (isTrialActive) {
+        const accountType = userProfile.accountType || 'individual';
+
+        if (accountType === 'organization') {
+            const orgType = subscriptionStatus.subscriptionPlan || 'organization_trial';
+            if (orgType.includes('enterprise')) {
+                return {
+                    suites: -1,
+                    testSuites: -1,
+                    testCases: -1,
+                    recordings: -1,
+                    automatedScripts: -1,
+                    maxSuites: -1,
+                    maxTestSuites: -1,
+                    maxTestScripts: -1,
+                    maxAutomatedTests: -1,
+                    maxRecordings: -1,
+                    maxMonthlyExports: -1,
+                    maxTeamMembers: -1,
+                    maxStorageGB: -1
+                };
+            } else {
+                return {
+                    suites: 10,
+                    testSuites: 10,
+                    testCases: -1,
+                    recordings: -1,
+                    automatedScripts: -1,
+                    maxSuites: 10,
+                    maxTestSuites: 10,
+                    maxTestScripts: -1,
+                    maxAutomatedTests: -1,
+                    maxRecordings: -1,
+                    maxMonthlyExports: -1,
+                    maxTeamMembers: 10,
+                    maxStorageGB: 10
+                };
+            }
+        } else {
+            return {
+                suites: 5,
+                testSuites: 5,
+                testCases: -1,
+                recordings: -1,
+                automatedScripts: -1,
+                maxSuites: 5,
+                maxTestSuites: 5,
+                maxTestScripts: -1,
+                maxAutomatedTests: -1,
+                maxRecordings: -1,
+                maxMonthlyExports: -1,
+                maxTeamMembers: 5,
+                maxStorageGB: 5
+            };
+        }
+    }
+
+    // PAID SUBSCRIPTION LIMITS: Use capabilities from subscription
+    if (capabilities && subscriptionStatus.isValid) {
+        return {
+            suites: capabilities.maxSuites || capabilities.maxTestSuites || 1,
+            testSuites: capabilities.maxTestSuites || capabilities.maxSuites || 1,
+            testCases: capabilities.maxTestCases || -1,
+            recordings: capabilities.maxRecordings || 5,
+            automatedScripts: capabilities.maxAutomatedTests || 0,
+            maxSuites: capabilities.maxSuites || capabilities.maxTestSuites || 1,
+            maxTestSuites: capabilities.maxTestSuites || capabilities.maxSuites || 1,
+            maxTestScripts: capabilities.maxTestScripts || 20,
+            maxAutomatedTests: capabilities.maxAutomatedTests || 0,
+            maxRecordings: capabilities.maxRecordings || 5,
+            maxMonthlyExports: capabilities.maxMonthlyExports || 5,
+            maxTeamMembers: capabilities.maxTeamMembers || 1,
+            maxStorageGB: capabilities.maxStorageGB || 1
+        };
+    }
+
+    // FREE PLAN LIMITS: Based on account type
+    const accountType = userProfile.accountType || 'individual';
+    if (accountType === 'organization') {
+        return {
+            suites: 5,
+            testSuites: 5,
+            testCases: 50,
+            recordings: 25,
+            automatedScripts: 10,
+            maxSuites: 5,
+            maxTestSuites: 5,
+            maxTestScripts: 50,
+            maxAutomatedTests: 10,
+            maxRecordings: 25,
+            maxMonthlyExports: 10,
+            maxTeamMembers: 5,
+            maxStorageGB: 5
+        };
+    }
+
+    return defaultLimits;
+};
+
+export const SubscriptionProvider = ({ children } = {}) => {
     const { user } = useAuth();
     const { userProfile, refreshUserProfile } = useUserProfile();
+    const { capabilities, loading: capabilitiesLoading, error: capabilitiesError } = useAccountCapabilities(user?.uid);
     const [isLoading, setIsLoading] = useState(false);
 
     // Helper function to calculate trial days remaining
@@ -41,12 +242,10 @@ export const SubscriptionProvider = ({ children }) => {
         
         const { subscriptionStatus, subscriptionEndDate, isTrialActive } = profile;
         
-        // If trial is active, subscription is considered active
         if (isTrialActive) return true;
         
-        // If status is active and not expired
         if (subscriptionStatus === 'active') {
-            if (!subscriptionEndDate) return true; // Assume active if no end date
+            if (!subscriptionEndDate) return true;
             
             const endDate = subscriptionEndDate instanceof Date ? subscriptionEndDate : new Date(subscriptionEndDate);
             return endDate.getTime() > Date.now();
@@ -55,150 +254,34 @@ export const SubscriptionProvider = ({ children }) => {
         return false;
     };
 
-    // Helper function to get subscription plan capabilities
-    const getSubscriptionCapabilities = (profile) => {
-        if (!profile) return getDefaultCapabilities();
-        
-        const plan = profile.subscriptionPlan || 'individual_free';
-        const isActive = isSubscriptionActive(profile);
-        const isTrialActive = profile.isTrialActive || false;
-        
-        // Define capabilities based on plan
-        const planCapabilities = {
-            individual_free: {
-                canCreateMultipleSuites: false,
-                canAccessAdvancedReports: false,
-                canInviteTeamMembers: false,
-                canUseAPI: false,
-                canUseAutomation: false,
-                limits: {
-                    maxSuites: 1,
-                    maxTeamMembers: 1,
-                    maxReports: 3,
-                    maxApiCalls: 0,
-                    maxAutomations: 0
-                }
-            },
-            individual_pro: {
-                canCreateMultipleSuites: true,
-                canAccessAdvancedReports: true,
-                canInviteTeamMembers: false,
-                canUseAPI: true,
-                canUseAutomation: true,
-                limits: {
-                    maxSuites: 10,
-                    maxTeamMembers: 1,
-                    maxReports: -1, // unlimited
-                    maxApiCalls: 10000,
-                    maxAutomations: 50
-                }
-            },
-            organization_free: {
-                canCreateMultipleSuites: false,
-                canAccessAdvancedReports: false,
-                canInviteTeamMembers: true,
-                canUseAPI: false,
-                canUseAutomation: false,
-                limits: {
-                    maxSuites: 1,
-                    maxTeamMembers: 3,
-                    maxReports: 5,
-                    maxApiCalls: 0,
-                    maxAutomations: 0
-                }
-            },
-            organization_starter: {
-                canCreateMultipleSuites: true,
-                canAccessAdvancedReports: true,
-                canInviteTeamMembers: true,
-                canUseAPI: false,
-                canUseAutomation: false,
-                limits: {
-                    maxSuites: 5,
-                    maxTeamMembers: 10,
-                    maxReports: 50,
-                    maxApiCalls: 0,
-                    maxAutomations: 0
-                }
-            },
-            organization_professional: {
-                canCreateMultipleSuites: true,
-                canAccessAdvancedReports: true,
-                canInviteTeamMembers: true,
-                canUseAPI: true,
-                canUseAutomation: true,
-                limits: {
-                    maxSuites: 25,
-                    maxTeamMembers: 50,
-                    maxReports: -1, // unlimited
-                    maxApiCalls: 50000,
-                    maxAutomations: 200
-                }
-            },
-            organization_enterprise: {
-                canCreateMultipleSuites: true,
-                canAccessAdvancedReports: true,
-                canInviteTeamMembers: true,
-                canUseAPI: true,
-                canUseAutomation: true,
-                limits: {
-                    maxSuites: -1, // unlimited
-                    maxTeamMembers: -1, // unlimited
-                    maxReports: -1, // unlimited
-                    maxApiCalls: -1, // unlimited
-                    maxAutomations: -1 // unlimited
-                }
-            }
-        };
-
-        const capabilities = planCapabilities[plan] || planCapabilities.individual_free;
-        
-        // If subscription is not active and not on trial, limit to free capabilities
-        if (!isActive && !isTrialActive) {
-            const accountType = profile.accountType || 'individual';
-            const freePlan = accountType === 'organization' ? 'organization_free' : 'individual_free';
-            return planCapabilities[freePlan];
-        }
-        
-        return capabilities;
-    };
-
-    const getDefaultCapabilities = () => ({
-        canCreateMultipleSuites: false,
-        canAccessAdvancedReports: false,
-        canInviteTeamMembers: false,
-        canUseAPI: false,
-        canUseAutomation: false,
-        limits: {
-            maxSuites: 1,
-            maxTeamMembers: 1,
-            maxReports: 3,
-            maxApiCalls: 0,
-            maxAutomations: 0
-        }
-    });
-
     // Memoized subscription status with trial logic
     const subscriptionStatus = useMemo(() => {
-        if (!userProfile) return {
+        const defaultAccountType = userProfile?.accountType || 'individual';
+        const defaultCapabilities = getDefaultCapabilities(defaultAccountType);
+        
+        const defaultStatus = {
             isValid: false,
             isExpired: true,
             isTrial: false,
             trialDaysRemaining: 0,
-            subscriptionPlan: 'individual_free',
+            subscriptionPlan: getDefaultPlan(defaultAccountType),
             subscriptionStatus: 'inactive',
-            capabilities: getDefaultCapabilities(),
+            capabilities: defaultCapabilities,
             showTrialBanner: false,
             showUpgradePrompt: true,
             profile: null
         };
 
+        if (!userProfile || capabilitiesLoading) {
+            return defaultStatus;
+        }
+
         const isActive = isSubscriptionActive(userProfile);
         const isTrialActive = userProfile.isTrialActive || false;
         const trialDaysRemaining = isTrialActive ? calculateTrialDaysRemaining(userProfile.trialEndDate) : 0;
-        const capabilities = getSubscriptionCapabilities(userProfile);
         
-        // Update trial status if trial has expired
+        const userCapabilities = capabilities || getDefaultCapabilities(userProfile.accountType);
+        
         if (isTrialActive && trialDaysRemaining <= 0) {
             updateTrialStatusInDatabase();
         }
@@ -208,9 +291,9 @@ export const SubscriptionProvider = ({ children }) => {
             isExpired: !isActive && !isTrialActive,
             isTrial: isTrialActive,
             trialDaysRemaining,
-            subscriptionPlan: userProfile.subscriptionPlan || 'individual_free',
+            subscriptionPlan: userProfile.subscriptionPlan || getDefaultPlan(userProfile.accountType),
             subscriptionStatus: userProfile.subscriptionStatus || 'inactive',
-            capabilities,
+            capabilities: userCapabilities,
             showTrialBanner: isTrialActive && trialDaysRemaining <= 7,
             showUpgradePrompt: !isActive && !isTrialActive,
             profile: userProfile,
@@ -218,46 +301,39 @@ export const SubscriptionProvider = ({ children }) => {
             nextBillingDate: userProfile.nextBillingDate || null,
             willCancelAt: userProfile.willCancelAt || null
         };
-    }, [userProfile]);
+    }, [userProfile, capabilities, capabilitiesLoading]);
 
+    // CENTRALIZED: Single source of truth for feature limits
+    const getFeatureLimits = useCallback(() => {
+        return getFeatureLimitsFromStatus(subscriptionStatus, userProfile, capabilities);
+    }, [subscriptionStatus, userProfile, capabilities]);
+
+    // CENTRALIZED: Check if user can create more of a specific resource
+    const canCreateResource = useCallback((resourceType, currentCount = 0) => {
+        const limits = getFeatureLimits();
+        const limit = limits[resourceType] || limits[`max${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}`];
+        
+        if (limit === -1) return true; // Unlimited
+        return currentCount < limit;
+    }, [getFeatureLimits]);
+
+    // CENTRALIZED: Get resource limits for a specific type
+    const getResourceLimit = useCallback((resourceType) => {
+        const limits = getFeatureLimits();
+        return limits[resourceType] || limits[`max${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}`] || 0;
+    }, [getFeatureLimits]);
+
+    // Feature access check using accountService structure
     const hasFeatureAccess = useCallback((featureName) => {
-        if (!userProfile) return false;
+        if (!capabilities || capabilitiesLoading) return false;
 
         try {
-            const capabilities = getSubscriptionCapabilities(userProfile);
-            if (!capabilities) return false;
-
-            switch (featureName) {
-                case 'multipleSuites':
-                    return capabilities.canCreateMultipleSuites;
-                case 'advancedReports':
-                    return capabilities.canAccessAdvancedReports;
-                case 'teamCollaboration':
-                    return capabilities.canInviteTeamMembers;
-                case 'apiAccess':
-                    return capabilities.canUseAPI;
-                case 'automation':
-                    return capabilities.canUseAutomation;
-                default:
-                    return false;
-            }
+            return safeHasFeatureAccess(capabilities, userProfile, featureName);
         } catch (error) {
             console.error(`Error checking feature access for ${featureName}:`, error);
             return false;
         }
-    }, [userProfile]);
-
-    const getFeatureLimits = useCallback(() => {
-        if (!userProfile) return getDefaultCapabilities().limits;
-
-        try {
-            const capabilities = getSubscriptionCapabilities(userProfile);
-            return capabilities?.limits || getDefaultCapabilities().limits;
-        } catch (error) {
-            console.error('Error getting feature limits:', error);
-            return getDefaultCapabilities().limits;
-        }
-    }, [userProfile]);
+    }, [capabilities, userProfile, capabilitiesLoading]);
 
     const updateTrialStatusInDatabase = useCallback(async () => {
         if (!user || !userProfile) return userProfile;
@@ -278,7 +354,6 @@ export const SubscriptionProvider = ({ children }) => {
             let needsUpdate = false;
             const updateData = {};
 
-            // Check if trial has expired
             if (currentData.isTrialActive && currentData.trialEndDate) {
                 const trialEndDate = currentData.trialEndDate instanceof Date 
                     ? currentData.trialEndDate 
@@ -287,35 +362,30 @@ export const SubscriptionProvider = ({ children }) => {
                 const trialDaysRemaining = calculateTrialDaysRemaining(trialEndDate);
                 
                 if (trialDaysRemaining <= 0) {
-                    // Trial has expired
                     updateData.isTrialActive = false;
                     updateData.trialDaysRemaining = 0;
                     
-                    // If no active paid subscription, set to free plan
                     if (currentData.subscriptionStatus !== 'active' || !currentData.subscriptionEndDate || new Date(currentData.subscriptionEndDate) <= now) {
                         const accountType = currentData.accountType || 'individual';
-                        updateData.subscriptionPlan = accountType === 'organization' ? 'organization_free' : 'individual_free';
+                        updateData.subscriptionPlan = getDefaultPlan(accountType);
                         updateData.subscriptionStatus = 'inactive';
                     }
                     
                     needsUpdate = true;
                 } else {
-                    // Update remaining days
                     updateData.trialDaysRemaining = trialDaysRemaining;
                     needsUpdate = currentData.trialDaysRemaining !== trialDaysRemaining;
                 }
             }
 
-            // Check if paid subscription has expired
             if (currentData.subscriptionStatus === 'active' && currentData.subscriptionEndDate) {
                 const subscriptionEndDate = currentData.subscriptionEndDate instanceof Date 
                     ? currentData.subscriptionEndDate 
                     : new Date(currentData.subscriptionEndDate);
                     
                 if (subscriptionEndDate <= now && !currentData.isTrialActive) {
-                    // Subscription has expired and no active trial
                     const accountType = currentData.accountType || 'individual';
-                    updateData.subscriptionPlan = accountType === 'organization' ? 'organization_free' : 'individual_free';
+                    updateData.subscriptionPlan = getDefaultPlan(accountType);
                     updateData.subscriptionStatus = 'inactive';
                     needsUpdate = true;
                 }
@@ -327,7 +397,6 @@ export const SubscriptionProvider = ({ children }) => {
                 console.log('Updating subscription status:', updateData);
                 await updateDoc(userDocRef, updateData);
                 
-                // Refresh user profile to get updated data
                 if (refreshUserProfile) {
                     await refreshUserProfile();
                 }
@@ -462,7 +531,12 @@ export const SubscriptionProvider = ({ children }) => {
         hasFeatureAccess,
         getFeatureLimits,
         updateTrialStatusInDatabase,
-        isLoading,
+        isLoading: isLoading || capabilitiesLoading,
+        error: capabilitiesError,
+        
+        // CENTRALIZED: Resource management functions
+        canCreateResource,
+        getResourceLimit,
         
         // Billing and subscription management
         createCheckoutSession,
@@ -471,8 +545,11 @@ export const SubscriptionProvider = ({ children }) => {
         getBillingHistory,
         updatePaymentMethod,
         
-        // Billing configuration (for components to use)
-        billingConfig: subscriptionService.BILLING_CONFIG
+        // Billing configuration
+        billingConfig: subscriptionService.BILLING_CONFIG,
+        
+        // Expose capabilities for debugging/direct access
+        capabilities
     };
 
     return (
@@ -481,3 +558,5 @@ export const SubscriptionProvider = ({ children }) => {
         </SubscriptionContext.Provider>
     );
 };
+
+export default SubscriptionProvider;

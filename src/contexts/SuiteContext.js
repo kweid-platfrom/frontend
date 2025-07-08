@@ -4,7 +4,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { useUserProfile } from './userProfileContext';
-import { useSubscription } from './subscriptionContext';
+import { useSubscription } from './subscriptionContext'; // Updated import
 import { db } from '../config/firebase';
 import {
     collection,
@@ -33,7 +33,13 @@ export const useSuite = () => {
 export const SuiteProvider = ({ children }) => {
     const { user } = useAuth();
     const { userProfile } = useUserProfile();
-    const { subscriptionStatus } = useSubscription();
+    // UPDATED: Use SubscriptionProvider as single source of truth
+    const { 
+        subscriptionStatus, 
+        getFeatureLimits, 
+        canCreateResource, 
+        getResourceLimit 
+    } = useSubscription();
 
     const [suites, setSuites] = useState([]);
     const [activeSuite, setActiveSuite] = useState(null);
@@ -64,85 +70,18 @@ export const SuiteProvider = ({ children }) => {
         return true;
     }, [user?.uid]);
 
-    // Updated getFeatureLimits function with proper trial support
-    const getFeatureLimits = useCallback(() => {
-        if (!subscriptionStatus) {
-            return {
-                suites: 1,
-                testCases: 10,
-                recordings: 5,
-                automatedScripts: 0
-            };
-        }
-
-        const isTrialActive = subscriptionStatus.isTrialActive ||
-            subscriptionStatus.subscriptionStatus === 'trial';
-
-        if (isTrialActive) {
-            const accountType = userProfile?.accountType || 'individual';
-
-            if (accountType === 'organization') {
-                const orgType = subscriptionStatus.subscriptionType || 'organization_trial';
-                if (orgType.includes('enterprise')) {
-                    return {
-                        suites: -1,
-                        testCases: -1,
-                        recordings: -1,
-                        automatedScripts: -1
-                    };
-                } else {
-                    return {
-                        suites: 10,
-                        testCases: -1,
-                        recordings: -1,
-                        automatedScripts: -1
-                    };
-                }
-            } else {
-                return {
-                    suites: 5,
-                    testCases: -1,
-                    recordings: -1,
-                    automatedScripts: -1
-                };
-            }
-        }
-
-        const limits = subscriptionStatus.capabilities?.limits;
-        if (!limits) {
-            const accountType = userProfile?.accountType || 'individual';
-            if (accountType === 'organization') {
-                return {
-                    suites: 5,
-                    testCases: 50,
-                    recordings: 25,
-                    automatedScripts: 10
-                };
-            }
-            return {
-                suites: 1,
-                testCases: 10,
-                recordings: 5,
-                automatedScripts: 0
-            };
-        }
-
-        return {
-            suites: limits.testSuites || 1,
-            testCases: limits.testCases || 10,
-            recordings: limits.recordings || 5,
-            automatedScripts: limits.automatedScripts || 0
-        };
-    }, [subscriptionStatus, userProfile]);
-
+    // UPDATED: Use SubscriptionProvider's canCreateResource for suite creation
     const canCreateSuite = useMemo(() => {
         if (!userProfile || !subscriptionStatus) return false;
+        
+        // Use the centralized resource creation check from SubscriptionProvider
+        return canCreateResource('suites', suites.length);
+    }, [userProfile, subscriptionStatus, suites.length, canCreateResource]);
 
-        const limits = getFeatureLimits();
-        if (limits.suites === -1) return true;
-
-        return suites.length < limits.suites;
-    }, [userProfile, subscriptionStatus, suites.length, getFeatureLimits]);
+    // UPDATED: Get suite limit from SubscriptionProvider
+    const getSuiteLimit = useCallback(() => {
+        return getResourceLimit('suites');
+    }, [getResourceLimit]);
 
     // ALIGNED: Ensure user document exists BEFORE any suite operations
     const ensureUserDocumentExists = useCallback(async (userId) => {
@@ -345,6 +284,12 @@ export const SuiteProvider = ({ children }) => {
             throw new Error('Email verification required to create suites');
         }
 
+        // UPDATED: Use SubscriptionProvider to check if user can create more suites
+        if (!canCreateResource('suites', suites.length)) {
+            const suiteLimit = getSuiteLimit();
+            throw new Error(`Suite limit reached. Your current plan allows ${suiteLimit === -1 ? 'unlimited' : suiteLimit} suites.`);
+        }
+
         try {
             // ALIGNED: Ensure user document exists before creating suite
             await ensureUserDocumentExists(user.uid);
@@ -358,7 +303,9 @@ export const SuiteProvider = ({ children }) => {
                 ownerType,
                 ownerId,
                 isOrganizationSuite,
-                userProfile: userProfile?.accountType
+                userProfile: userProfile?.accountType,
+                currentSuiteCount: suites.length,
+                suiteLimit: getSuiteLimit()
             });
 
             // ALIGNED: For organization suites, verify admin permissions
@@ -461,7 +408,7 @@ export const SuiteProvider = ({ children }) => {
             console.error('Error creating test suite:', error);
             throw error;
         }
-    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists]);
+    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists, suites.length, canCreateResource, getSuiteLimit]);
 
     // ALIGNED: Initialize suites when user is ready
     useEffect(() => {
@@ -489,7 +436,7 @@ export const SuiteProvider = ({ children }) => {
         setError(null);
     }, [user?.uid]);
 
-    // ALIGNED: Return value that matches dashboard expectations
+    // UPDATED: Return value that uses SubscriptionProvider as single source of truth
     const value = {
         suites,
         userTestSuites: suites,
@@ -502,8 +449,15 @@ export const SuiteProvider = ({ children }) => {
         createTestSuite,
         refetchSuites,
         fetchUserSuites,
+        
+        // UPDATED: Use SubscriptionProvider's centralized functions
         subscriptionStatus,
         getFeatureLimits,
+        canCreateResource,
+        getResourceLimit,
+        getSuiteLimit,
+        
+        // Keep for backward compatibility
         shouldFetchSuites
     };
 

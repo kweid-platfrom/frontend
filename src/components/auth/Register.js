@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import { accountService } from '../../services/accountService';
+import accountService from '../../services/accountService';
 import { validateEmailForAccountType, getEmailDomainInfo, suggestAccountType } from '../../utils/emailDomainValidator';
 import { FcGoogle } from 'react-icons/fc';
 import AccountTypeStep from './reg/AccountTypeStep';

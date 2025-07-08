@@ -1,4 +1,512 @@
 {
-  "indexes": [],
-  "fieldOverrides": []
+  "indexes": [
+    {
+      "collectionGroup": "testSuites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerType", "order": "ASCENDING" },
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "metadata.created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testSuites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerType", "order": "ASCENDING" },
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "metadata.status", "order": "ASCENDING" },
+        { "fieldPath": "metadata.last_modified", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testSuites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "access_control.members", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "metadata.created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testSuites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "access_control.admins", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "metadata.created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testSuites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "metadata.status", "order": "ASCENDING" },
+        { "fieldPath": "metadata.created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "sprint_id", "order": "ASCENDING" },
+        { "fieldPath": "priority", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "assigned_to", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updated_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "severity", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testCases",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testCases",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "sprint_id", "order": "ASCENDING" },
+        { "fieldPath": "priority", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testCases",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "priority", "order": "ASCENDING" },
+        { "fieldPath": "last_executed", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testCases",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "testCases",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "automated", "order": "ASCENDING" },
+        { "fieldPath": "last_executed", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sprints",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "metadata.status", "order": "ASCENDING" },
+        { "fieldPath": "metadata.start_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sprints",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "metadata.end_date", "order": "ASCENDING" },
+        { "fieldPath": "metadata.created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sprints",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "metadata.created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "recordings",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "recordings",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "sprint_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "recordings",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "recordings",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "recording_type", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "automatedScripts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "automatedScripts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "sprint_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "automatedScripts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "automatedScripts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "script_type", "order": "ASCENDING" },
+        { "fieldPath": "last_executed", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "automatedScripts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activityLogs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activityLogs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activityLogs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "action_type", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "comments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "comments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "comments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "entity_type", "order": "ASCENDING" },
+        { "fieldPath": "entity_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reports",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reports",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reports",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "report_type", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "members",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "joined_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "members",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "joined_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "members",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "joined_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "organizations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "organizations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "customDomain", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "userMemberships",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "joined_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "invitee_email", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "invited_by", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "suite_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "plan_type", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "renewal_date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "analytics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "analytics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "analytics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "metric_type", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "action_type", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    }
+  ]
 }

@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { UserProfileProvider, useUserProfile } from './userProfileContext';
-import { SubscriptionProvider, useSubscription } from './subscriptionContext';
+import SubscriptionProvider, { useSubscription } from './subscriptionContext';
 import { SuiteProvider, useSuite } from './SuiteContext';
 
 // Create unified app context

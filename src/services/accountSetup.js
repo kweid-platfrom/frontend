@@ -1,12 +1,6 @@
-// services/accountSetup.js - Account setup and management operations using centralized Firestore service
+// services/accountSetup.js - Simplified Account setup using centralized Firestore service
 import { serverTimestamp } from "firebase/firestore";
 import firestoreService from "./firestoreService";
-import {
-    getAccountType,
-    getDefaultPlan,
-    calculateTrialStatus,
-    determineAccountType
-} from "../config/subscriptionPlans";
 
 /**
  * Check if account exists and get setup status
@@ -26,8 +20,6 @@ export const getAccountSetupStatus = async (userId) => {
         }
 
         const userData = result.data;
-
-        // Check if user profile is complete
         const isComplete = userData.firstName && userData.email;
 
         return {
@@ -43,60 +35,60 @@ export const getAccountSetupStatus = async (userId) => {
 };
 
 /**
+ * Determine account type based on email domain
+ * @param {string} email - User email
+ * @returns {string} Account type ('individual' or 'organization')
+ */
+const determineAccountType = (email) => {
+    if (!email) return 'individual';
+
+    const domain = email.split('@')[1];
+    const commonPersonalDomains = [
+        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+        'icloud.com', 'aol.com', 'protonmail.com'
+    ];
+
+    return commonPersonalDomains.includes(domain.toLowerCase()) ? 'individual' : 'organization';
+};
+
+/**
  * Setup user account with proper structure using centralized Firestore service
  * @param {Object} setupData - Account setup data
  * @returns {Promise<Object>} Setup result
  */
 export const setupAccount = async (setupData) => {
     try {
-        const user = firestoreService.getCurrentUser();
+        // ✅ UPDATED: Try to get user from setupData first, then fallback to getCurrentUser
+        let user = setupData.user;
+        if (!user) {
+            user = firestoreService.getCurrentUser();
+        }
+
         if (!user) {
             throw new Error('No authenticated user found');
         }
 
-        const userId = user.uid;
-        const email = user.email;
+        // ✅ UPDATED: Use passed data or extract from user object
+        const userId = setupData.userId || user.uid;
+        const email = setupData.email || user.email;
+        const accountType = determineAccountType(email);
 
-        // Determine account type
-        const accountType = getAccountType(email);
-
-        // Create user profile data
-        const now = serverTimestamp();
-        const trialEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
-
-        // Determine subscription plan (always start with trial for new users)
-        const subscriptionPlan = accountType === 'organization' ? 'organization_trial' : 'individual_trial';
-
-        // STEP 1: Create base user profile first (required by security rules)
+        // Create base user profile data
         const userProfileData = {
-            user_id: userId, // Required by security rules
+            user_id: userId,
             uid: userId,
             email: email,
             firstName: setupData.firstName || '',
             lastName: setupData.lastName || '',
             fullName: `${setupData.firstName || ''} ${setupData.lastName || ''}`.trim(),
-
-            // Account type
             accountType: accountType,
-
-            // Subscription and trial data
-            subscriptionPlan: subscriptionPlan,
-            subscriptionStatus: 'trial',
-            subscriptionStartDate: now,
-            subscriptionEndDate: trialEndDate,
-
-            // User status
             isActive: true,
             emailVerified: user.emailVerified,
-
-            // User preferences
             timezone: setupData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-
-            // Initialize empty account memberships - will be populated after org creation
             account_memberships: []
         };
 
-        // Create user document first using centralized service
+        // Create user document using centralized service
         const userResult = await firestoreService.createDocument('users', userProfileData, userId);
         if (!userResult.success) {
             throw new Error(userResult.error.message);
@@ -104,18 +96,16 @@ export const setupAccount = async (setupData) => {
 
         console.log('User profile created successfully');
 
-        // STEP 2: Handle account type specific setup
+        // Handle account type specific setup
+        let organizationData = null;
+
         if (accountType === 'individual') {
-            // Create individual account document (required by security rules)
+            // Create individual account document
             const individualAccountData = {
                 userId: userId,
                 email: email,
                 firstName: setupData.firstName || '',
                 lastName: setupData.lastName || '',
-                subscriptionPlan: subscriptionPlan,
-                subscriptionStatus: 'trial',
-                subscriptionStartDate: now,
-                subscriptionEndDate: trialEndDate,
                 isActive: true
             };
 
@@ -127,20 +117,17 @@ export const setupAccount = async (setupData) => {
             console.log('Individual account created successfully');
 
         } else if (accountType === 'organization' && setupData.organizationName) {
-            // Use transaction for organization setup to ensure data consistency
+            // Use transaction for organization setup
             const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
                 const orgId = `org_${userId}`;
+                const now = serverTimestamp();
 
-                // STEP 2A: Create organization document
+                // Create organization document
                 const orgData = {
                     id: orgId,
                     name: setupData.organizationName,
                     ownerId: userId,
                     domain: email.split('@')[1],
-                    subscriptionPlan: subscriptionPlan,
-                    subscriptionStatus: 'trial',
-                    subscriptionStartDate: now,
-                    subscriptionEndDate: trialEndDate,
                     isActive: true
                 };
 
@@ -148,7 +135,7 @@ export const setupAccount = async (setupData) => {
                 const orgDataWithTimestamps = firestoreService.addCommonFields(orgData);
                 transaction.set(orgRef, orgDataWithTimestamps);
 
-                // STEP 2B: Create organization membership
+                // Create organization membership
                 const membershipData = {
                     userId: userId,
                     email: email,
@@ -161,7 +148,7 @@ export const setupAccount = async (setupData) => {
                 const memberDataWithTimestamps = firestoreService.addCommonFields(membershipData);
                 transaction.set(memberRef, memberDataWithTimestamps);
 
-                // STEP 2C: Update user profile with organization information
+                // Update user profile with organization information
                 const userUpdates = {
                     organizationId: orgId,
                     organizationName: setupData.organizationName,
@@ -190,6 +177,7 @@ export const setupAccount = async (setupData) => {
             }
 
             console.log('Organization setup completed successfully');
+            organizationData = transactionResult.data;
 
             // Update local profile data for return
             Object.assign(userProfileData, transactionResult.data.userUpdates);
@@ -199,132 +187,16 @@ export const setupAccount = async (setupData) => {
             success: true,
             userId: userId,
             accountType: accountType,
-            subscriptionPlan: subscriptionPlan,
-            trialEndDate: trialEndDate,
-            userProfile: userProfileData
+            userProfile: userProfileData,
+            organizationData: organizationData
         };
 
     } catch (error) {
         console.error('Error setting up account:', error);
         return {
             success: false,
-            error: error.message
+            error: { message: error.message }
         };
-    }
-};
-
-/**
- * Check and update trial status in database using centralized service
- * @param {Object} userProfile 
- * @returns {Promise<Object>} Updated trial status and user profile
- */
-export const checkAndUpdateTrialStatus = async (userProfile) => {
-    try {
-        if (!userProfile || !userProfile.uid) {
-            return {
-                trialStatus: calculateTrialStatus(userProfile),
-                userProfile,
-                updated: false
-            };
-        }
-
-        const userId = userProfile.uid || userProfile.user_id;
-        const currentTrialStatus = calculateTrialStatus(userProfile);
-
-        // Check if we need to update the user's trial status in the database
-        const needsUpdate = await shouldUpdateTrialStatus(userProfile, currentTrialStatus);
-
-        if (needsUpdate) {
-            const updates = {};
-
-            // Update subscription plan if trial should be active
-            if (currentTrialStatus.isActive && !userProfile.subscriptionPlan?.includes('trial')) {
-                const accountType = determineAccountType(userProfile);
-                updates.subscriptionPlan = accountType === 'organization' ? 'organization_trial' : 'individual_trial';
-                updates.subscriptionStatus = 'trial';
-            }
-
-            // Update trial end date if not set
-            if (!userProfile.subscriptionEndDate && currentTrialStatus.endDate) {
-                updates.subscriptionEndDate = currentTrialStatus.endDate;
-            }
-
-            // Update trial start date if not set
-            if (!userProfile.subscriptionStartDate && currentTrialStatus.startDate) {
-                updates.subscriptionStartDate = currentTrialStatus.startDate;
-            }
-
-            // If trial has expired, update to free plan
-            if (!currentTrialStatus.isActive && userProfile.subscriptionPlan?.includes('trial')) {
-                const accountType = determineAccountType(userProfile);
-                updates.subscriptionPlan = getDefaultPlan(accountType);
-                updates.subscriptionStatus = 'inactive';
-            }
-
-            // Only update if there are changes
-            if (Object.keys(updates).length > 0) {
-                const updateResult = await firestoreService.updateDocument('users', userId, updates);
-                
-                if (!updateResult.success) {
-                    throw new Error(updateResult.error.message);
-                }
-
-                // Return updated profile
-                const updatedProfile = { ...userProfile, ...updates };
-                return {
-                    trialStatus: calculateTrialStatus(updatedProfile),
-                    userProfile: updatedProfile,
-                    updated: true,
-                    updates
-                };
-            }
-        }
-
-        return {
-            trialStatus: currentTrialStatus,
-            userProfile,
-            updated: false
-        };
-
-    } catch (error) {
-        console.error('Error checking/updating trial status:', error);
-        return {
-            trialStatus: calculateTrialStatus(userProfile),
-            userProfile,
-            updated: false,
-            error: error.message
-        };
-    }
-};
-
-/**
- * Helper: Check if trial status needs updating in database
- * @param {Object} userProfile 
- * @param {Object} trialStatus 
- * @returns {Promise<boolean>}
- */
-const shouldUpdateTrialStatus = async (userProfile, trialStatus) => {
-    try {
-        // If trial is active but user doesn't have trial plan
-        if (trialStatus.isActive && !userProfile.subscriptionPlan?.includes('trial')) {
-            return true;
-        }
-
-        // If trial is not active but user has trial plan
-        if (!trialStatus.isActive && userProfile.subscriptionPlan?.includes('trial')) {
-            return true;
-        }
-
-        // If trial dates are missing
-        if (!userProfile.subscriptionStartDate || !userProfile.subscriptionEndDate) {
-            return true;
-        }
-
-        return false;
-
-    } catch (error) {
-        console.error('Error checking if trial status needs update:', error);
-        return false;
     }
 };
 
@@ -352,18 +224,12 @@ export const getCompleteAccountInfo = async (userId = null) => {
         const orgsResult = await firestoreService.getUserOrganizations();
         const organizations = orgsResult.success ? orgsResult.data : [];
 
-        // Get trial status
-        const trialStatus = calculateTrialStatus(userProfile);
-
         return {
             success: true,
             data: {
                 userProfile,
                 organizations,
-                trialStatus,
-                accountType: userProfile.accountType,
-                subscriptionPlan: userProfile.subscriptionPlan,
-                subscriptionStatus: userProfile.subscriptionStatus
+                accountType: userProfile.accountType
             }
         };
 
@@ -402,18 +268,17 @@ export const updateUserProfile = async (userId, updates) => {
  */
 export const deleteUserAccount = async (userId) => {
     try {
-        // Use transaction to ensure all data is deleted consistently
         const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
             // Get user profile first
             const userRef = firestoreService.createDocRef('users', userId);
             const userDoc = await transaction.get(userRef);
-            
+
             if (!userDoc.exists()) {
                 throw new Error('User profile not found');
             }
 
             const userData = userDoc.data();
-            
+
             // Delete user profile
             transaction.delete(userRef);
 
@@ -427,9 +292,6 @@ export const deleteUserAccount = async (userId) => {
             if (userData.accountType === 'organization' && userData.organizationId) {
                 const orgRef = firestoreService.createDocRef('organizations', userData.organizationId);
                 transaction.delete(orgRef);
-                
-                // Note: Organization members subcollection will be automatically cleaned up
-                // by Firestore security rules or cloud functions
             }
 
             return { userId, accountType: userData.accountType };

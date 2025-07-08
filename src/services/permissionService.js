@@ -1,6 +1,6 @@
 // Enhanced permissionService.js - Fully Aligned with Account Service Architecture
 
-import { accountService } from './accountService';
+import accountService  from './accountService';
 
 // Permission constants - centralized permission definitions
 export const PERMISSIONS = {

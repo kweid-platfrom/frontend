@@ -76,7 +76,7 @@ const PageLayout = ({ title, children, toolbar = null }) => {
                             <span>{error}</span>
                         </div>
                     ) : isLoading ? (
-                        <div className="flex items-center justify-center h-full text-blue-600">
+                        <div className="flex items-center justify-center h-full text-teal-600">
                             <Loader2 className="h-6 w-6 animate-spin" />
                             <span className="ml-2">Loading...</span>
                         </div>

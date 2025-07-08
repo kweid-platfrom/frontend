@@ -48,9 +48,24 @@ class FirestoreService {
 
     /**
      * Create document reference
+     * Fixed to handle path segments properly
      */
-    createDocRef(collectionPath, docId) {
-        return doc(this.db, collectionPath, docId);
+    createDocRef(collectionPath, ...pathSegments) {
+        // Filter out null/undefined segments and ensure all are strings
+        const validSegments = pathSegments.filter(segment => 
+            segment !== null && segment !== undefined && segment !== ''
+        ).map(segment => String(segment));
+
+        if (validSegments.length === 0) {
+            throw new Error('Document ID is required');
+        }
+
+        // Build the full path
+        const fullPath = [collectionPath, ...validSegments].join('/');
+        
+        // Split the path and pass individual segments to doc()
+        const pathParts = fullPath.split('/');
+        return doc(this.db, ...pathParts);
     }
 
     /**
@@ -136,6 +151,10 @@ class FirestoreService {
      */
     async getDocument(collectionPath, docId) {
         try {
+            if (!docId) {
+                return { success: false, error: { message: 'Document ID is required' } };
+            }
+
             const docRef = this.createDocRef(collectionPath, docId);
             const docSnap = await getDoc(docRef);
             
@@ -157,6 +176,10 @@ class FirestoreService {
      */
     async updateDocument(collectionPath, docId, data) {
         try {
+            if (!docId) {
+                return { success: false, error: { message: 'Document ID is required' } };
+            }
+
             const docRef = this.createDocRef(collectionPath, docId);
             const updateData = this.addCommonFields(data, true);
             await updateDoc(docRef, updateData);
@@ -171,6 +194,10 @@ class FirestoreService {
      */
     async deleteDocument(collectionPath, docId) {
         try {
+            if (!docId) {
+                return { success: false, error: { message: 'Document ID is required' } };
+            }
+
             const docRef = this.createDocRef(collectionPath, docId);
             await deleteDoc(docRef);
             return { success: true };
@@ -219,6 +246,13 @@ class FirestoreService {
      * Real-time listener for documents
      */
     subscribeToDocument(collectionPath, docId, callback, errorCallback = null) {
+        if (!docId) {
+            if (errorCallback) {
+                errorCallback({ success: false, error: { message: 'Document ID is required' } });
+            }
+            return null;
+        }
+
         const docRef = this.createDocRef(collectionPath, docId);
         const unsubscribe = onSnapshot(
             docRef,
@@ -362,7 +396,8 @@ class FirestoreService {
             const batch = writeBatch(this.db);
             
             // Create organization
-            const orgRef = this.createDocRef('organizations', orgData.orgId || `org_${userId}`);
+            const orgId = orgData.orgId || `org_${userId}`;
+            const orgRef = this.createDocRef('organizations', orgId);
             const organizationData = this.addCommonFields({
                 ownerId: userId,
                 ...orgData
@@ -370,7 +405,7 @@ class FirestoreService {
             batch.set(orgRef, organizationData);
 
             // Add creator as admin member
-            const memberRef = this.createDocRef('organizations', orgRef.id, 'members', userId);
+            const memberRef = this.createDocRef('organizations', orgId, 'members', userId);
             const memberData = this.addCommonFields({
                 user_id: userId,
                 role: 'Admin',
@@ -380,7 +415,7 @@ class FirestoreService {
 
             await batch.commit();
             
-            return { success: true, data: { id: orgRef.id, ...organizationData } };
+            return { success: true, data: { id: orgId, ...organizationData } };
         } catch (error) {
             return this.handleFirestoreError(error, 'create organization');
         }

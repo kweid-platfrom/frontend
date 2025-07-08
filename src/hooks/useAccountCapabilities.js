@@ -1,7 +1,7 @@
 // hooks/useAccountCapabilities.js - Custom hook for capabilities
 import { useState, useEffect } from 'react';
 import { fetchUserData } from '../services/userService';
-import { accountService } from '../services/accountService';
+import accountService from '../services/accountService';
 
 export const useAccountCapabilities = (userId) => {
     const [capabilities, setCapabilities] = useState(null);
