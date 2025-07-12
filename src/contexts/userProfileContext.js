@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 // contexts/UserProfileContext.js
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -42,11 +41,21 @@ export const UserProfileProvider = ({ children }) => {
         if (!userId) {
             setUserProfile(null);
             setError('No user ID provided');
+            setIsLoading(false);
+            return null;
+        }
+
+        // Skip fetch during registration
+        if (window.isRegistering) {
+            console.log('Skipping profile fetch due to registration in progress:', userId);
+            setUserProfile(null);
+            setIsLoading(false);
             return null;
         }
 
         // Don't refetch if we already have data and not forcing refresh
         if (userProfile && userProfile.user_id === userId && !forceRefresh) {
+            console.log('Using cached user profile for:', userId);
             return userProfile;
         }
 
@@ -73,6 +82,12 @@ export const UserProfileProvider = ({ children }) => {
             if (isNewUser) {
                 console.log('New user detected, profile will be created on first update');
                 setUserProfile(null);
+                // Retry after 1 second to allow document creation
+                setTimeout(() => {
+                    if (user?.uid === userId && !window.isRegistering) {
+                        fetchUserProfile(userId, forceRefresh);
+                    }
+                }, 1000);
                 return null;
             }
 
@@ -85,7 +100,7 @@ export const UserProfileProvider = ({ children }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []); // Remove userProfile from dependencies to prevent infinite loop
+    }, [user?.uid, userProfile]);
 
     // Setup new user profile using the service
     const setupNewUserProfile = useCallback(async (firebaseUser, userData = {}, source = 'unknown') => {
@@ -158,72 +173,25 @@ export const UserProfileProvider = ({ children }) => {
         setIsUpdating(false);
     }, []);
 
-    // Load profile when user changes - FIXED: Remove function dependencies
+    // Load profile when user changes
     useEffect(() => {
         const userId = user?.uid;
         
-        // Only fetch if user ID actually changed
-        if (userId && userId !== currentUserIdRef.current) {
+        // Only fetch if user ID actually changed and not registering
+        if (userId && userId !== currentUserIdRef.current && !window.isRegistering) {
             console.log('User changed, loading profile for:', userId);
             currentUserIdRef.current = userId;
-            
-            // Call fetchUserProfile directly to avoid dependency issues
-            const loadProfile = async () => {
-                if (!userId) {
-                    setUserProfile(null);
-                    setError('No user ID provided');
-                    return;
-                }
-
-                // Don't refetch if we already have data for this user
-                if (userProfile && userProfile.user_id === userId) {
-                    return;
-                }
-
-                try {
-                    setIsLoading(true);
-                    setError(null);
-                    
-                    console.log('Fetching user profile for:', userId);
-                    const { userData, error: fetchError, isNewUser } = await fetchUserData(userId);
-                    
-                    if (fetchError) {
-                        setError(fetchError);
-                        setUserProfile(null);
-                        return;
-                    }
-
-                    if (userData) {
-                        setUserProfile(userData);
-                        console.log('User profile loaded successfully');
-                        return;
-                    }
-
-                    // Handle new user case
-                    if (isNewUser) {
-                        console.log('New user detected, profile will be created on first update');
-                        setUserProfile(null);
-                        return;
-                    }
-                } catch (error) {
-                    console.error('Error loading user profile:', error);
-                    setError(error.message);
-                    setUserProfile(null);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-            
-            loadProfile();
+            fetchUserProfile(userId);
         } else if (!userId && currentUserIdRef.current) {
             console.log('No user, clearing profile');
             currentUserIdRef.current = null;
+            clearProfile();
+        } else if (window.isRegistering) {
+            console.log('Registration in progress, skipping profile fetch');
             setUserProfile(null);
-            setError(null);
             setIsLoading(false);
-            setIsUpdating(false);
         }
-    }, [user?.uid]); // Only depend on user.uid, not the functions
+    }, [user?.uid, fetchUserProfile, clearProfile]);
 
     // Computed values using helper functions from service
     const displayName = userProfile ? getUserDisplayName(userProfile) : '';
@@ -260,8 +228,8 @@ export const UserProfileProvider = ({ children }) => {
         isNewUser: !userProfile && !isLoading && !error,
         isProfileLoaded: !!userProfile,
         
-        // Legacy compatibility (if needed)
-        updateUserProfile: updateProfile, // alias for backward compatibility
+        // Legacy compatibility
+        updateUserProfile: updateProfile,
     };
 
     return (

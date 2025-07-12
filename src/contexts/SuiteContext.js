@@ -1,10 +1,9 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 // contexts/SuiteContext.js
 'use client'
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { useUserProfile } from './userProfileContext';
-import { useSubscription } from './subscriptionContext'; // Updated import
+import { useSubscription } from './subscriptionContext';
 import { db } from '../config/firebase';
 import {
     collection,
@@ -33,7 +32,6 @@ export const useSuite = () => {
 export const SuiteProvider = ({ children }) => {
     const { user } = useAuth();
     const { userProfile } = useUserProfile();
-    // UPDATED: Use SubscriptionProvider as single source of truth
     const { 
         subscriptionStatus, 
         getFeatureLimits, 
@@ -62,28 +60,28 @@ export const SuiteProvider = ({ children }) => {
         return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
     }, [cache.timestamp]);
 
-    // ALIGNED: Check if user should have access to fetch suites per security rules
+    // Check if user should have access to fetch suites per security rules
     const shouldFetchSuites = useMemo(() => {
         // Must have authenticated user (isAuthenticated() in rules)
-        if (!user) return false;
-        // Security rules require authenticated user
+        if (!user || window.isRegistering) {
+            console.log('shouldFetchSuites: false', { user: !!user, isRegistering: window.isRegistering });
+            return false;
+        }
         return true;
-    }, [user?.uid]);
+    }, [user]);
 
-    // UPDATED: Use SubscriptionProvider's canCreateResource for suite creation
+    // Use SubscriptionProvider's canCreateResource for suite creation
     const canCreateSuite = useMemo(() => {
         if (!userProfile || !subscriptionStatus) return false;
-        
-        // Use the centralized resource creation check from SubscriptionProvider
         return canCreateResource('suites', suites.length);
     }, [userProfile, subscriptionStatus, suites.length, canCreateResource]);
 
-    // UPDATED: Get suite limit from SubscriptionProvider
+    // Get suite limit from SubscriptionProvider
     const getSuiteLimit = useCallback(() => {
         return getResourceLimit('suites');
     }, [getResourceLimit]);
 
-    // ALIGNED: Ensure user document exists BEFORE any suite operations
+    // Ensure user document exists BEFORE any suite operations
     const ensureUserDocumentExists = useCallback(async (userId) => {
         if (userDocEnsuredRef.current) {
             return;
@@ -106,10 +104,14 @@ export const SuiteProvider = ({ children }) => {
         }
     }, []);
 
-    // ALIGNED: Fetch suites matching security rules constraints
+    // Fetch suites matching security rules constraints
     const fetchUserSuites = useCallback(async (userId = null, forceRefresh = false) => {
         if (!userId || !shouldFetchSuites) {
-            console.log('Skipping fetch - missing requirements:', { userId: !!userId, shouldFetchSuites });
+            console.log('Skipping fetch - missing requirements:', { 
+                userId: !!userId, 
+                shouldFetchSuites, 
+                isRegistering: window.isRegistering 
+            });
             return [];
         }
 
@@ -128,17 +130,15 @@ export const SuiteProvider = ({ children }) => {
             setIsLoading(true);
             setError(null);
 
-            // ALIGNED: Ensure user document exists BEFORE attempting to fetch suites
+            // Ensure user document exists BEFORE attempting to fetch suites
             await ensureUserDocumentExists(userId);
 
             let suiteList = [];
 
             console.log('Fetching suites for userId:', userId);
 
-            // ALIGNED: Fetch individual suites with proper query constraints
+            // Fetch individual suites
             try {
-                // Query for individual suites where user is the owner
-                // This aligns with security rule: ownerType == 'individual' && ownerId == getUserId()
                 const individualSuitesQuery = query(
                     collection(db, 'testSuites'),
                     where('ownerType', '==', 'individual'),
@@ -159,7 +159,6 @@ export const SuiteProvider = ({ children }) => {
                 console.log('Fetched individual suites:', individualSuites.length);
             } catch (error) {
                 console.error('Error fetching individual suites:', error);
-                
                 if (error.code === 'permission-denied') {
                     console.error('Permission denied - user document may not exist or security rules blocking access');
                     throw new Error('Unable to access test suites. Please check your account permissions.');
@@ -167,18 +166,14 @@ export const SuiteProvider = ({ children }) => {
                 throw error;
             }
 
-            // ALIGNED: Fetch organization suites for each membership
+            // Fetch organization suites
             if (userProfile?.account_memberships?.length > 0) {
                 console.log('Checking org memberships:', userProfile.account_memberships.length);
 
-                // Process each organization membership separately to align with security rules
                 for (const membership of userProfile.account_memberships) {
                     if (membership.org_id && membership.status === 'active') {
                         try {
                             console.log('Fetching org suites for:', membership.org_id);
-
-                            // Query for organization suites where user's org is the owner
-                            // This aligns with security rule: ownerType == 'organization' && isOrgMember(ownerId)
                             const orgSuitesQuery = query(
                                 collection(db, 'testSuites'),
                                 where('ownerType', '==', 'organization'),
@@ -200,7 +195,6 @@ export const SuiteProvider = ({ children }) => {
                             console.log('Fetched org suites:', orgSuites.length);
                         } catch (error) {
                             console.warn(`Error fetching org suites for ${membership.org_id}:`, error);
-                            // Continue with other organizations even if one fails
                         }
                     }
                 }
@@ -250,7 +244,11 @@ export const SuiteProvider = ({ children }) => {
 
     const refetchSuites = useCallback(async (forceRefresh = true) => {
         if (!user || !shouldFetchSuites) {
-            console.log('Cannot refetch - missing requirements');
+            console.log('Cannot refetch - missing requirements:', { 
+                user: !!user, 
+                shouldFetchSuites, 
+                isRegistering: window.isRegistering 
+            });
             return;
         }
 
@@ -263,7 +261,6 @@ export const SuiteProvider = ({ children }) => {
         const userSuites = await fetchUserSuites(user.uid, forceRefresh);
         setSuites(userSuites);
 
-        // Handle active suite
         if (userSuites.length > 0 && typeof window !== 'undefined') {
             const savedSuiteId = localStorage.getItem('activeSuiteId');
             const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
@@ -273,28 +270,24 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites]);
 
-    // ALIGNED: Create test suite with proper security rule compliance
+    // Create test suite with security rule compliance
     const createTestSuite = useCallback(async (suiteData) => {
         if (!user) {
             throw new Error('User not authenticated');
         }
 
-        // ALIGNED: Check email verification if required by your business logic
         if (!user.emailVerified) {
             throw new Error('Email verification required to create suites');
         }
 
-        // UPDATED: Use SubscriptionProvider to check if user can create more suites
         if (!canCreateResource('suites', suites.length)) {
             const suiteLimit = getSuiteLimit();
             throw new Error(`Suite limit reached. Your current plan allows ${suiteLimit === -1 ? 'unlimited' : suiteLimit} suites.`);
         }
 
         try {
-            // ALIGNED: Ensure user document exists before creating suite
             await ensureUserDocumentExists(user.uid);
 
-            // ALIGNED: Determine suite ownership based on organizationId
             const isOrganizationSuite = !!suiteData.organizationId;
             const ownerType = isOrganizationSuite ? 'organization' : 'individual';
             const ownerId = isOrganizationSuite ? suiteData.organizationId : user.uid;
@@ -308,11 +301,8 @@ export const SuiteProvider = ({ children }) => {
                 suiteLimit: getSuiteLimit()
             });
 
-            // ALIGNED: For organization suites, verify admin permissions
             if (isOrganizationSuite) {
                 const orgId = suiteData.organizationId;
-
-                // Check if user is an admin of this organization
                 const isOrgAdmin = userProfile?.account_memberships?.some(
                     membership => membership.org_id === orgId &&
                         membership.status === 'active' &&
@@ -324,29 +314,19 @@ export const SuiteProvider = ({ children }) => {
                 }
             }
 
-            // ALIGNED: Create suite data that matches security rule requirements
             const newSuite = {
-                // CRITICAL: Core identification fields required by security rules
                 ownerType,
                 ownerId,
-
-                // Suite metadata
                 name: suiteData.name,
                 description: suiteData.description || '',
                 status: 'active',
                 tags: suiteData.tags || [],
-
-                // ALIGNED: Audit fields required by security rules
                 createdBy: user.uid,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
-
-                // ALIGNED: Access control structure
                 permissions: {
                     [user.uid]: 'admin'
                 },
-
-                // ALIGNED: Testing assets structure (empty initially)
                 testingAssets: {
                     bugs: [],
                     testCases: [],
@@ -356,8 +336,6 @@ export const SuiteProvider = ({ children }) => {
                     reports: [],
                     settings: {}
                 },
-
-                // ALIGNED: Collaboration structure
                 collaboration: {
                     activityLog: [],
                     comments: [],
@@ -367,11 +345,9 @@ export const SuiteProvider = ({ children }) => {
 
             console.log('Creating suite with data:', newSuite);
 
-            // ALIGNED: Create in top-level testSuites collection
             const collectionRef = collection(db, 'testSuites');
             const docRef = await addDoc(collectionRef, newSuite);
 
-            // Update with document ID
             await updateDoc(docRef, {
                 suite_id: docRef.id,
                 updatedAt: serverTimestamp()
@@ -379,7 +355,6 @@ export const SuiteProvider = ({ children }) => {
 
             const createdSuite = { ...newSuite, suite_id: docRef.id };
 
-            // IMMEDIATE UPDATE: Add the new suite to the current state
             const newSuiteForState = {
                 ...createdSuite,
                 accountType: ownerType,
@@ -387,16 +362,10 @@ export const SuiteProvider = ({ children }) => {
                 organizationId: isOrganizationSuite ? suiteData.organizationId : undefined
             };
 
-            // Update state immediately
             setSuites(prevSuites => [newSuiteForState, ...prevSuites]);
-
-            // Set as active suite immediately
             setActiveSuiteWithStorage(newSuiteForState);
-
-            // Clear cache to ensure fresh data on next fetch
             setCache({ suites: null, timestamp: null });
 
-            // Background refresh to ensure data consistency
             setTimeout(() => {
                 refetchSuites(true);
             }, 1000);
@@ -410,9 +379,9 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists, suites.length, canCreateResource, getSuiteLimit]);
 
-    // ALIGNED: Initialize suites when user is ready
+    // Initialize suites when user is ready
     useEffect(() => {
-        if (shouldFetchSuites && !initializedRef.current) {
+        if (shouldFetchSuites && !initializedRef.current && !window.isRegistering) {
             console.log('Initializing suites...');
             initializedRef.current = true;
             refetchSuites(false);
@@ -425,18 +394,28 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [shouldFetchSuites, refetchSuites]);
 
-    // ALIGNED: Reset initialization and user doc ensured status when user changes
+    // Reset initialization and user doc ensured status when user changes
     useEffect(() => {
-        initializedRef.current = false;
-        fetchingRef.current = false;
-        userDocEnsuredRef.current = false;
-        setCache({ suites: null, timestamp: null });
-        setSuites([]);
-        setActiveSuite(null);
-        setError(null);
-    }, [user?.uid]);
+        if (window.isRegistering) {
+            console.log('Registration in progress, resetting suite context');
+            initializedRef.current = false;
+            fetchingRef.current = false;
+            userDocEnsuredRef.current = false;
+            setCache({ suites: null, timestamp: null });
+            setSuites([]);
+            setActiveSuite(null);
+            setError(null);
+        } else {
+            initializedRef.current = false;
+            fetchingRef.current = false;
+            userDocEnsuredRef.current = false;
+            setCache({ suites: null, timestamp: null });
+            setSuites([]);
+            setActiveSuite(null);
+            setError(null);
+        }
+    }, [user.uid]);
 
-    // UPDATED: Return value that uses SubscriptionProvider as single source of truth
     const value = {
         suites,
         userTestSuites: suites,
@@ -449,15 +428,11 @@ export const SuiteProvider = ({ children }) => {
         createTestSuite,
         refetchSuites,
         fetchUserSuites,
-        
-        // UPDATED: Use SubscriptionProvider's centralized functions
         subscriptionStatus,
         getFeatureLimits,
         canCreateResource,
         getResourceLimit,
         getSuiteLimit,
-        
-        // Keep for backward compatibility
         shouldFetchSuites
     };
 

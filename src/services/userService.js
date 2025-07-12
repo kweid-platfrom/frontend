@@ -6,6 +6,15 @@ import {
     parseDisplayName,
 } from "../utils/userUtils";
 
+
+// Helper to add timeout to Firestore operations
+const withTimeout = async (promise, ms = 5000) => {
+    const timeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Firestore operation timed out')), ms);
+    });
+    return Promise.race([promise, timeout]);
+};
+
 /**
  * Create a new user document in Firestore
  * Supports both new format (from Register component) and legacy format conversion
@@ -18,10 +27,8 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
     try {
         console.log('Creating user document with data:', { uid: firebaseUser.uid, source, userData });
 
-        // If userData is already in the new format (from Register component), use it directly
         if (userData.user_id && userData.profile_info) {
             console.log('Using new format user data from Register component');
-
             const finalUserData = {
                 ...userData,
                 profile_info: {
@@ -37,14 +44,12 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
             };
 
             const userRef = doc(db, 'users', firebaseUser.uid);
-            await setDoc(userRef, finalUserData);
+            await withTimeout(setDoc(userRef, finalUserData));
             console.log('User document created successfully with new format');
             return finalUserData;
         }
 
-        // Legacy format or minimal data - convert to new format
         console.log('Converting to new format or creating from minimal data');
-
         const { firstName: parsedFirstName, lastName: parsedLastName } = parseDisplayName(firebaseUser.displayName);
 
         let firstName = (userData.firstName?.trim() || parsedFirstName || "").trim();
@@ -63,7 +68,6 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
         const newFormatUserData = {
             user_id: firebaseUser.uid,
             primary_email: firebaseUser.email?.toLowerCase().trim() || "",
-
             profile_info: {
                 name: {
                     first: firstName,
@@ -81,10 +85,7 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                 created_at: serverTimestamp(),
                 updated_at: serverTimestamp()
             },
-
-            // Initialize as empty array for security rules
             account_memberships: userData.account_memberships || [],
-
             session_context: {
                 current_account_id: userData.current_account_id || null,
                 current_account_type: userType,
@@ -94,7 +95,6 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                     ...userData.preferences
                 }
             },
-
             auth_metadata: {
                 registration_method: source === 'google' ? 'google' : 'email',
                 email_verified: firebaseUser.emailVerified || false,
@@ -107,9 +107,7 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                     }
                 })
             },
-
             role: userData.role || initialRole,
-
             preferences: {
                 notifications: {
                     newMessages: true,
@@ -124,21 +122,17 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                 },
                 ...(userData.preferences || {})
             },
-
             environment: environment || 'development',
             source,
-
-            // Legacy compatibility fields
             ...(userData.organizationId && { organizationId: userData.organizationId }),
             ...(userData.lastPasswordChange && { lastPasswordChange: userData.lastPasswordChange }),
             ...(userData.deviceHistory && { deviceHistory: userData.deviceHistory }),
         };
 
         const userRef = doc(db, 'users', firebaseUser.uid);
-        await setDoc(userRef, newFormatUserData);
+        await withTimeout(setDoc(userRef, newFormatUserData));
         console.log('User document created successfully (converted to new format)');
         return newFormatUserData;
-
     } catch (error) {
         console.error('Error creating user document:', error);
         throw new Error(`Failed to create user profile: ${error.message}`);
@@ -162,26 +156,19 @@ export const fetchUserData = async (userId) => {
     try {
         console.log('Fetching user data for userId:', userId);
         const userRef = doc(db, "users", userId);
-        const userSnap = await getDoc(userRef);
+        const userSnap = await withTimeout(getDoc(userRef));
 
         if (userSnap.exists()) {
             const userData = userSnap.data();
             console.log('User document exists');
-
-            // Normalize to new format if it's legacy data
-            let normalizedData;
-            if (userData.user_id && userData.profile_info) {
-                normalizedData = userData;
-            } else {
-                normalizedData = normalizeLegacyUserData(userData, userId);
-            }
-
+            let normalizedData = userData.user_id && userData.profile_info 
+                ? userData 
+                : normalizeLegacyUserData(userData, userId);
             return {
                 userData: normalizedData,
                 error: null,
                 isNewUser: false
             };
-
         } else {
             console.log('User document does not exist');
             return {
@@ -192,12 +179,12 @@ export const fetchUserData = async (userId) => {
         }
     } catch (error) {
         console.error('Error fetching user data:', error);
-        
         let errorMessage = 'Failed to fetch user data';
         if (error.code === 'permission-denied') {
             errorMessage = 'Permission denied: User may not have access to this profile';
+        } else if (error.message.includes('timed out')) {
+            errorMessage = 'Firestore request timed out';
         }
-
         return {
             userData: null,
             error: errorMessage,
@@ -534,10 +521,49 @@ export const createIndividualAccount = async (userId, accountData) => {
     }
 };
 
-// Export as userService object for backward compatibility
+export const subscribeToUserData = (userId, callback, errorCallback) => {
+    if (!userId) {
+        console.error('subscribeToUserData: No userId provided');
+        if (errorCallback) {
+            errorCallback({ message: 'No user ID provided' });
+        }
+        return null;
+    }
+
+    try {
+        console.log('Subscribing to user data for:', userId);
+        const userRef = doc(db, "users", userId);
+        return onSnapshot(
+            userRef,
+            (doc) => {
+                if (doc.exists()) {
+                    const data = doc.data();
+                    console.log('User data received:', data);
+                    callback(data.user_id && data.profile_info ? data : normalizeLegacyUserData(data, userId));
+                } else {
+                    console.log('User document does not exist');
+                    callback(null);
+                }
+            },
+            (error) => {
+                console.error('Subscription error:', error);
+                if (errorCallback) {
+                    errorCallback(error);
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error setting up subscription:', error);
+        if (errorCallback) {
+            errorCallback(error);
+        }
+        return null;
+    }
+}
+
 export const userService = {
     createUserDocument,
-    fetchUserData,
+    fetchUserData,  
     updateUserProfile,
     getUserDisplayName,
     getUserEmail,
@@ -546,7 +572,22 @@ export const userService = {
     isUserAdminOfAccount,
     getCurrentAccountInfo,
     hasPermission,
-    createIndividualAccount,
-    // Add a getUserProfile method that your hook is expecting
-    getUserProfile: fetchUserData
+    subscribeToUserData
 };
+
+// Export as userService object for backward compatibility
+// export const userService = {
+//     createUserDocument,
+//     fetchUserData,
+//     updateUserProfile,
+//     getUserDisplayName,
+//     getUserEmail,
+//     getUserAccountType,
+//     isUserAdmin,
+//     isUserAdminOfAccount,
+//     getCurrentAccountInfo,
+//     hasPermission,
+//     createIndividualAccount,
+//     // Add a getUserProfile method that your hook is expecting
+//     getUserProfile: fetchUserData
+// };

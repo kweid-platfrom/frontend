@@ -1,12 +1,9 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-// Resolved AuthProvider.js - Removed duplications and overlaps
-"use client";
-
+// AuthProvider.js
+'use client'
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
 import { auth, environment } from "../config/firebase";
 import { useRouter } from "next/navigation";
-
 import {
     fetchUserData,
     updateUserProfile as updateUserProfileService,
@@ -15,16 +12,12 @@ import {
     getUserAccountType,
     getCurrentAccountInfo,
 } from "../services/userService";
-
-// Import permissions service
-import { 
-    getUserPermissions, 
+import {
+    getUserPermissions,
     createPermissionChecker,
     isOrganizationAccount,
-    isIndividualAccount
+    isIndividualAccount,
 } from "../services/permissionService";
-
-// Import auth service functions
 import {
     signInWithGoogle as authSignInWithGoogle,
     logInWithEmail as authLoginWithEmail,
@@ -39,7 +32,7 @@ import {
     deleteUserAccount as authDeleteUserAccount,
     linkAuthProvider as authLinkProvider,
     unlinkAuthProvider as authUnlinkProvider,
-    refreshAuthSession as authRefreshSession
+    refreshAuthSession as authRefreshSession,
 } from "../services/authService";
 
 const AuthContext = createContext();
@@ -61,26 +54,18 @@ export const AuthProvider = ({ children }) => {
     const [initialized, setInitialized] = useState(false);
     const [skipEmailVerificationRedirect, setSkipEmailVerificationRedirect] = useState(false);
     const [permissionChecker, setPermissionChecker] = useState(null);
-    
-    // Add ref to track if we're already processing authentication
     const processingAuth = useRef(false);
     const lastProcessedUserId = useRef(null);
-    
     const router = useRouter();
 
     const processUserAuthentication = useCallback(async (user) => {
-        // Prevent multiple simultaneous processing
-        if (processingAuth.current) {
+        if (processingAuth.current || window.isRegistering) {
+            console.log('Skipping auth processing due to:', { processingAuth: processingAuth.current, isRegistering: window.isRegistering });
             return;
         }
-        
-        // Skip if we just processed this user
-        if (user?.uid === lastProcessedUserId.current) {
-            return;
-        }
-        
+
         processingAuth.current = true;
-        
+
         try {
             if (!user) {
                 setCurrentUser(null);
@@ -88,24 +73,24 @@ export const AuthProvider = ({ children }) => {
                 setUserProfile(null);
                 setPermissionChecker(null);
                 lastProcessedUserId.current = null;
+                setLoading(false);
                 return;
             }
-            
+
             lastProcessedUserId.current = user.uid;
             setCurrentUser(user);
             let authSource = 'email';
-            
+
             if (user.providerData?.length > 0) {
                 const provider = user.providerData[0].providerId;
                 if (provider === 'google.com') authSource = 'google';
             }
-            
-            // Handle verification callback early
+
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 const searchParams = new URLSearchParams(window.location.search);
                 const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
-                
+
                 if (isVerificationCallback && currentPath !== "/verify-email") {
                     router.push(`/verify-email${window.location.search}`);
                     return;
@@ -113,38 +98,33 @@ export const AuthProvider = ({ children }) => {
             }
 
             const result = await fetchUserData(user.uid);
+            console.log('fetchUserData result:', result);
 
             if (result.error) {
+                console.error('fetchUserData error:', result.error);
                 setAuthError(result.error);
                 setUserPermissions(null);
                 setUserProfile({});
                 setPermissionChecker(null);
                 return;
             }
-            
-            if (!result.userData) {
+
+            if (!result.userData && !result.isNewUser) {
                 setAuthError('Failed to load user data');
                 setUserPermissions(null);
                 setUserProfile({});
                 setPermissionChecker(null);
                 return;
             }
-            
-            // Get comprehensive user permissions using the permissions service
+
+            setUserProfile(result.userData || {});
             const permissions = getUserPermissions(result.userData);
             setUserPermissions(permissions);
-            
-            // Create permission checker utility
             const checker = createPermissionChecker(result.userData);
             setPermissionChecker(checker);
-            
-            setUserProfile(result.userData);
-            
-            // Handle redirects with better logic
+
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
-                
-                // Paths that should never redirect
                 const noRedirectPaths = [
                     "/verify-email",
                     "/handle-email-verification",
@@ -153,57 +133,45 @@ export const AuthProvider = ({ children }) => {
                     "/profile",
                     "/suites",
                     "/bugs",
-                    "/admin"
+                    "/admin",
                 ];
-                
-                // Skip redirects for these paths or if flag is set
-                if (noRedirectPaths.some(path => currentPath.startsWith(path)) || 
-                    skipEmailVerificationRedirect) {
+
+                if (noRedirectPaths.some(path => currentPath.startsWith(path)) || skipEmailVerificationRedirect) {
                     return;
                 }
-                
+
                 const needsEmailVerification = authSource === 'email' && !user.emailVerified;
                 const isOnAuthPage = ["/login", "/register"].includes(currentPath);
-                
-                // Only redirect to email verification if needed and not already handled
+
                 if (needsEmailVerification && !isOnAuthPage) {
                     router.push("/verify-email");
                     return;
                 }
-                
-                // Only redirect to dashboard from specific entry points
-                const shouldRedirectToDashboard = [
-                    "/login", 
-                    "/", 
-                    "/register"
-                ].includes(currentPath);
-                
+
+                const shouldRedirectToDashboard = ["/login", "/", "/register"].includes(currentPath);
                 if (shouldRedirectToDashboard && user.emailVerified) {
                     router.push("/dashboard");
                 }
             }
         } catch (error) {
             console.error('Error in processUserAuthentication:', error);
-            setUserPermissions(null);
-            setUserProfile({});
-            setPermissionChecker(null);
             setAuthError(error.message);
         } finally {
             processingAuth.current = false;
+            setLoading(false);
         }
     }, [router, skipEmailVerificationRedirect]);
 
-    // Handle redirect result - only once
     useEffect(() => {
         let mounted = true;
-        
+
         const handleRedirectResult = async () => {
             if (initialized) return;
-            
+
             try {
                 setLoading(true);
                 const result = await getRedirectResult(auth);
-                
+
                 if (result?.user && mounted) {
                     await processUserAuthentication(result.user);
                 }
@@ -214,39 +182,27 @@ export const AuthProvider = ({ children }) => {
                 }
             } finally {
                 if (mounted) {
-                    setLoading(false);
                     setInitialized(true);
                 }
             }
         };
-        
+
         handleRedirectResult();
-        
+
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [initialized, processUserAuthentication]);
 
-    // Handle auth state changes
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            try {
-                await processUserAuthentication(user);
-            } catch (error) {
-                console.error('Auth state change error:', error);
-                setAuthError(error.message);
-            } finally {
-                if (!initialized) {
-                    setLoading(false);
-                    setInitialized(true);
-                }
-            }
+            console.log('Auth state changed:', user ? user.uid : null, 'isRegistering:', window.isRegistering);
+            await processUserAuthentication(user);
         });
-        
-        return () => unsubscribe();
-    }, [processUserAuthentication, initialized]);
 
-    // ===== AUTHENTICATION METHODS =====
+        return () => unsubscribe();
+    }, [processUserAuthentication]);
+
     const signIn = async (email, password) => {
         setAuthError(null);
         try {
@@ -265,7 +221,7 @@ export const AuthProvider = ({ children }) => {
             return {
                 success: true,
                 user: result.user,
-                isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime
+                isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime,
             };
         } catch (error) {
             setAuthError(error.message);
@@ -278,16 +234,13 @@ export const AuthProvider = ({ children }) => {
         try {
             setSkipEmailVerificationRedirect(true);
             const result = await authRegisterWithEmail(email, password);
-            
-            setTimeout(() => {
-                setSkipEmailVerificationRedirect(false);
-            }, 1000);
-            
             return { success: true, user: result.user };
         } catch (error) {
             setSkipEmailVerificationRedirect(false);
             setAuthError(error.message);
             return { success: false, error: error.message };
+        } finally {
+            setTimeout(() => setSkipEmailVerificationRedirect(false), 1000);
         }
     };
 
@@ -367,12 +320,12 @@ export const AuthProvider = ({ children }) => {
                 throw new Error('No user is currently signed in');
             }
             await authDeleteUserAccount(currentUser);
-            
+
             // Clear local storage
             if (typeof window !== 'undefined') {
                 localStorage.clear();
             }
-            
+
             router.push("/login");
             return { success: true };
         } catch (error) {
@@ -428,9 +381,9 @@ export const AuthProvider = ({ children }) => {
             // Reset tracking variables
             processingAuth.current = false;
             lastProcessedUserId.current = null;
-            
+
             await authLogout();
-            
+
             if (typeof window !== 'undefined') {
                 localStorage.removeItem("emailForVerification");
                 localStorage.removeItem("registrationData");
@@ -438,7 +391,7 @@ export const AuthProvider = ({ children }) => {
                 localStorage.removeItem("registeredUserName");
                 localStorage.removeItem("emailSentTimestamp");
             }
-            
+
             router.push("/login");
             return { success: true };
         } catch (error) {
@@ -469,41 +422,41 @@ export const AuthProvider = ({ children }) => {
 
     const getPrimaryUserRole = useCallback(() => {
         if (!userProfile) return 'member';
-        
+
         const roles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
         const rolePriority = ['Admin', 'Manager', 'QA_Tester', 'Developer', 'Member', 'Viewer'];
-        
+
         for (const role of rolePriority) {
             if (roles.includes(role)) {
                 return role;
             }
         }
-        
+
         return 'Member';
     }, [userProfile]);
 
     // ===== DATA MANAGEMENT METHODS =====
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
-        
+
         try {
             setLoading(true);
             const result = await fetchUserData(currentUser.uid);
-            
+
             if (result.userData) {
                 setUserProfile(result.userData);
-                
+
                 // Update permissions with fresh data
                 const permissions = getUserPermissions(result.userData);
                 setUserPermissions(permissions);
-                
+
                 // Update permission checker
                 const checker = createPermissionChecker(result.userData);
                 setPermissionChecker(checker);
-                
+
                 return true;
             }
-            
+
             return false;
         } catch {
             return false;
@@ -516,12 +469,12 @@ export const AuthProvider = ({ children }) => {
         try {
             setLoading(true);
             const result = await updateUserProfileService(userId, updates, currentUser?.uid);
-            
+
             if (result) {
                 await refreshUserData();
                 return true;
             }
-            
+
             return false;
         } catch (error) {
             throw new Error('Failed to update user profile', error);
@@ -558,8 +511,8 @@ export const AuthProvider = ({ children }) => {
     const accountType = getUserAccountType(userProfile);
     const currentAccountInfo = getCurrentAccountInfo(userProfile);
 
+
     const value = {
-        // Core auth state
         currentUser,
         userPermissions,
         userProfile,
@@ -568,8 +521,6 @@ export const AuthProvider = ({ children }) => {
         environment,
         initialized,
         permissionChecker,
-        
-        // Authentication methods
         signIn,
         signInWithGoogle,
         registerWithEmail,
@@ -580,21 +531,14 @@ export const AuthProvider = ({ children }) => {
         confirmPasswordReset,
         resendVerificationEmail,
         deleteAccount,
-        linkProvider,
         unlinkProvider,
-        getLinkedProviders,
-        isProviderLinked,
         refreshSession,
-        signOut,
-        
-        // Permission checking methods
+        signOut: authLogout,
         hasPermission,
         hasRole,
         hasAnyRole,
         isAdmin,
         getPrimaryUserRole,
-        
-        // Convenience permission flags
         canManageUsers: userPermissions?.canManageUsers || false,
         canManageTestSuites: userPermissions?.canCreateTestSuites || false,
         canCreateTestSuites: userPermissions?.canCreateTestSuites || false,
@@ -619,36 +563,25 @@ export const AuthProvider = ({ children }) => {
         canUseAPIAccess: userPermissions?.canUseAPIAccess || false,
         canUseAutomation: userPermissions?.canUseAutomation || false,
         canExportData: userPermissions?.canExportData || false,
-        
-        // Account type helpers
         isOrganizationAccount: userProfile ? isOrganizationAccount(userProfile) : false,
         isIndividualAccount: userProfile ? isIndividualAccount(userProfile) : false,
-        
-        // Subscription information
         subscriptionType: userPermissions?.subscriptionType || 'free',
         subscriptionStatus: userPermissions?.subscriptionStatus || 'inactive',
         isTrialActive: userPermissions?.isTrialActive || false,
         trialDaysRemaining: userPermissions?.trialDaysRemaining || 0,
         showTrialBanner: userPermissions?.showTrialBanner || false,
-        limits: userPermissions?.limits || {},
-        shouldShowUpgradePrompts: userPermissions?.shouldShowUpgradePrompts || {},
-        
-        // Data management
         updateUserProfile,
         refreshUserData,
-        
-        // Utility methods
         clearAuthError,
         redirectToEmailVerification,
-        
-        // Computed values
         displayName,
         email,
         accountType,
         currentAccountInfo,
-        
-        // Legacy compatibility
         user: currentUser,
+        signOut,
+        isProviderLinked,
+        linkProvider,
     };
 
     return (

@@ -27,7 +27,6 @@ export const getAccountSetupStatus = async (userId) => {
             needsSetup: !isComplete,
             userData: userData
         };
-
     } catch (error) {
         console.error('Error checking account setup status:', error);
         return { exists: false, needsSetup: true, error: error.message };
@@ -41,13 +40,11 @@ export const getAccountSetupStatus = async (userId) => {
  */
 const determineAccountType = (email) => {
     if (!email) return 'individual';
-
     const domain = email.split('@')[1];
     const commonPersonalDomains = [
         'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
         'icloud.com', 'aol.com', 'protonmail.com'
     ];
-
     return commonPersonalDomains.includes(domain.toLowerCase()) ? 'individual' : 'organization';
 };
 
@@ -58,22 +55,20 @@ const determineAccountType = (email) => {
  */
 export const setupAccount = async (setupData) => {
     try {
-        // ✅ UPDATED: Try to get user from setupData first, then fallback to getCurrentUser
         let user = setupData.user;
         if (!user) {
             user = firestoreService.getCurrentUser();
+            if (!user) {
+                throw new Error('No authenticated user found');
+            }
         }
 
-        if (!user) {
-            throw new Error('No authenticated user found');
-        }
-
-        // ✅ UPDATED: Use passed data or extract from user object
         const userId = setupData.userId || user.uid;
         const email = setupData.email || user.email;
-        const accountType = determineAccountType(email);
+        const accountType = setupData.accountType || determineAccountType(email);
 
-        // Create base user profile data
+        console.log('Setting up account for user:', { userId, email, accountType });
+
         const userProfileData = {
             user_id: userId,
             uid: userId,
@@ -88,41 +83,38 @@ export const setupAccount = async (setupData) => {
             account_memberships: []
         };
 
-        // Create user document using centralized service
+        console.log('Creating user profile:', userProfileData);
         const userResult = await firestoreService.createDocument('users', userProfileData, userId);
         if (!userResult.success) {
+            console.error('Failed to create user profile:', userResult.error);
             throw new Error(userResult.error.message);
         }
+        console.log('User profile created successfully:', userResult);
 
-        console.log('User profile created successfully');
-
-        // Handle account type specific setup
         let organizationData = null;
 
         if (accountType === 'individual') {
-            // Create individual account document
             const individualAccountData = {
-                userId: userId,
+                user_id: userId, // Fixed: Changed from userId to user_id
                 email: email,
                 firstName: setupData.firstName || '',
                 lastName: setupData.lastName || '',
                 isActive: true
             };
 
+            console.log('Creating individual account:', individualAccountData);
             const individualResult = await firestoreService.createDocument('individualAccounts', individualAccountData, userId);
             if (!individualResult.success) {
+                console.error('Failed to create individual account:', individualResult.error);
                 throw new Error(individualResult.error.message);
             }
-
-            console.log('Individual account created successfully');
-
+            console.log('Individual account created successfully:', individualResult);
         } else if (accountType === 'organization' && setupData.organizationName) {
-            // Use transaction for organization setup
+            console.log('Starting organization setup transaction...');
             const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
                 const orgId = `org_${userId}`;
                 const now = serverTimestamp();
 
-                // Create organization document
                 const orgData = {
                     id: orgId,
                     name: setupData.organizationName,
@@ -135,7 +127,6 @@ export const setupAccount = async (setupData) => {
                 const orgDataWithTimestamps = firestoreService.addCommonFields(orgData);
                 transaction.set(orgRef, orgDataWithTimestamps);
 
-                // Create organization membership
                 const membershipData = {
                     userId: userId,
                     email: email,
@@ -148,7 +139,6 @@ export const setupAccount = async (setupData) => {
                 const memberDataWithTimestamps = firestoreService.addCommonFields(membershipData);
                 transaction.set(memberRef, memberDataWithTimestamps);
 
-                // Update user profile with organization information
                 const userUpdates = {
                     organizationId: orgId,
                     organizationName: setupData.organizationName,
@@ -164,6 +154,7 @@ export const setupAccount = async (setupData) => {
                 const userRef = firestoreService.createDocRef('users', userId);
                 transaction.update(userRef, userUpdates);
 
+                console.log('Transaction prepared:', { orgData, membershipData, userUpdates });
                 return {
                     orgId,
                     orgData: orgDataWithTimestamps,
@@ -173,13 +164,12 @@ export const setupAccount = async (setupData) => {
             });
 
             if (!transactionResult.success) {
+                console.error('Transaction failed:', transactionResult.error);
                 throw new Error(transactionResult.error.message);
             }
 
-            console.log('Organization setup completed successfully');
+            console.log('Organization setup completed successfully:', transactionResult.data);
             organizationData = transactionResult.data;
-
-            // Update local profile data for return
             Object.assign(userProfileData, transactionResult.data.userUpdates);
         }
 
@@ -190,7 +180,6 @@ export const setupAccount = async (setupData) => {
             userProfile: userProfileData,
             organizationData: organizationData
         };
-
     } catch (error) {
         console.error('Error setting up account:', error);
         return {

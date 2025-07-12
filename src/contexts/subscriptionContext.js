@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-// contexts/subscriptionContext.js - Fixed to be single source of truth
+// contexts/subscriptionContext.js
 'use client'
 import { createContext, useContext, useMemo, useCallback, useState, useEffect } from 'react';
 import { useUserProfile } from './userProfileContext';
@@ -218,7 +217,7 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
     return defaultLimits;
 };
 
-export const SubscriptionProvider = ({ children } = {}) => {
+export const SubscriptionProvider = ({ children }) => {
     const { user } = useAuth();
     const { userProfile, refreshUserProfile } = useUserProfile();
     const { capabilities, loading: capabilitiesLoading, error: capabilitiesError } = useAccountCapabilities(user?.uid);
@@ -253,6 +252,33 @@ export const SubscriptionProvider = ({ children } = {}) => {
         
         return false;
     };
+
+    // Load subscription data
+    const loadSubscription = useCallback(async (userId) => {
+        if (!userId || window.isRegistering) {
+            console.log('Skipping subscription load:', { userId, isRegistering: window.isRegistering });
+            setIsLoading(false);
+            setSubscription(null);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            console.log('Loading subscription for:', userId);
+            const subscriptionResult = await subscriptionService.getSubscription(userId);
+            if (subscriptionResult.success) {
+                setSubscription(subscriptionResult.data);
+            } else {
+                console.error('Error fetching subscription:', subscriptionResult.error);
+                setSubscription(null);
+            }
+        } catch (error) {
+            console.error('Error in loadSubscription:', error);
+            setSubscription(null);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     // Memoized subscription status with trial logic
     const subscriptionStatus = useMemo(() => {
@@ -301,7 +327,7 @@ export const SubscriptionProvider = ({ children } = {}) => {
             nextBillingDate: userProfile.nextBillingDate || null,
             willCancelAt: userProfile.willCancelAt || null
         };
-    }, [userProfile, capabilities, capabilitiesLoading]);
+    }, [userProfile, capabilities, capabilitiesLoading, updateTrialStatusInDatabase]);
 
     // CENTRALIZED: Single source of truth for feature limits
     const getFeatureLimits = useCallback(() => {
@@ -515,15 +541,22 @@ export const SubscriptionProvider = ({ children } = {}) => {
         }
     }, [user, refreshUserProfile]);
 
-    // Auto-update trial status when profile changes
+    // Auto-update trial status and load subscription when user changes
     useEffect(() => {
-        if (userProfile && userProfile.isTrialActive) {
-            const trialDaysRemaining = calculateTrialDaysRemaining(userProfile.trialEndDate);
-            if (trialDaysRemaining <= 0) {
-                updateTrialStatusInDatabase();
+        const userId = user?.uid;
+        if (userId && !window.isRegistering) {
+            loadSubscription(userId);
+            if (userProfile && userProfile.isTrialActive) {
+                const trialDaysRemaining = calculateTrialDaysRemaining(userProfile.trialEndDate);
+                if (trialDaysRemaining <= 0) {
+                    updateTrialStatusInDatabase();
+                }
             }
+        } else {
+            setSubscription(null);
+            setIsLoading(false);
         }
-    }, [userProfile, updateTrialStatusInDatabase]);
+    }, [user?.uid, userProfile, loadSubscription, updateTrialStatusInDatabase]);
 
     const value = {
         // Subscription status and capabilities

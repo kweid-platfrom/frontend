@@ -1,5 +1,3 @@
-// Fixed Register.jsx - Respects user's account type choice
-
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -60,7 +58,6 @@ const Register = () => {
 
     const [errors, setErrors] = useState({});
 
-    // Email validation effect
     useEffect(() => {
         if (formData.email) {
             const domainInfo = getEmailDomainInfo(formData.email);
@@ -69,7 +66,6 @@ const Register = () => {
             const validation = validateEmailForAccountType(formData.email, accountType);
             setEmailValidation(validation);
 
-            // Show suggestion for individual accounts with custom domains
             if (accountType === 'individual' &&
                 validation.isValid &&
                 validation.recommendAccountType === 'organization' &&
@@ -99,7 +95,6 @@ const Register = () => {
         setShowAccountTypeSuggestion(false);
 
         if (newAccountType === 'organization' && emailDomainInfo?.domain) {
-            // Pre-fill company name with domain
             const suggestedCompanyName = emailDomainInfo.domain
                 .split('.')[0]
                 .replace(/[-_]/g, ' ')
@@ -129,7 +124,6 @@ const Register = () => {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            // Check if user already exists using accountService
             const setupStatus = await accountService.getAccountSetupStatus(user.uid);
 
             if (setupStatus.exists) {
@@ -138,29 +132,31 @@ const Register = () => {
                 return;
             }
 
-            // For Google sign-up, suggest account type but don't force it
             const suggestedAccountType = suggestAccountType(user.email);
 
-            // Use accountService to create the user profile with proper trial setup
             const setupData = {
                 firstName: user.displayName?.split(' ')[0] || 'Google',
                 lastName: user.displayName?.split(' ').slice(1).join(' ') || 'User',
-                organizationName: suggestedAccountType === 'organization' ? user.email.split('@')[1] : null
+                organizationName: suggestedAccountType === 'organization' ? user.email.split('@')[1] : null,
+                user: user,
+                email: user.email,
+                userId: user.uid,
+                accountType: suggestedAccountType
             };
 
+            console.log('Google sign-up: Setting up account with data:', setupData);
             const result_setup = await accountService.setupAccount(setupData);
 
             if (result_setup.success) {
+                console.log('Google account setup successful:', result_setup);
                 toast.success("Account created successfully with Google!");
                 router.push('/dashboard');
             } else {
-                throw new Error('Failed to setup account');
+                throw new Error('Failed to setup account: ' + result_setup.error.message);
             }
-
         } catch (error) {
             console.error('Error with Google registration:', error);
             let errorMessage = "Failed to sign up with Google. Please try again.";
-
             if (error.code === 'auth/popup-closed-by-user') {
                 errorMessage = "Sign-up was cancelled.";
             } else if (error.code === 'auth/popup-blocked') {
@@ -168,7 +164,6 @@ const Register = () => {
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 errorMessage = "An account already exists with this email using a different sign-in method.";
             }
-
             toast.error(errorMessage);
         } finally {
             setIsGoogleLoading(false);
@@ -179,22 +174,19 @@ const Register = () => {
         const newErrors = {};
 
         if (step === 1) {
-            // Account type is always selected, no validation needed
+            // Account type is always selected
         }
 
         if (step === 2) {
             if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
-
             if (!formData.email.trim()) {
                 newErrors.email = 'Email is required';
             } else {
-                // Use enhanced email validation
                 const validation = validateEmailForAccountType(formData.email, accountType);
                 if (!validation.isValid) {
                     newErrors.email = validation.error;
                 }
             }
-
             if (!formData.password) {
                 newErrors.password = 'Password is required';
             } else if (formData.password.length < 8) {
@@ -231,55 +223,67 @@ const Register = () => {
         if (!validateStep(3)) return;
 
         setIsCreatingAccount(true);
+        window.isRegistering = true; // Set flag to bypass auth listener
+
+        const timeout = setTimeout(() => {
+            console.error('Registration timed out');
+            toast.error('Registration timed out. Please try again.');
+            setIsCreatingAccount(false);
+            window.isRegistering = false;
+        }, 10000); // 10-second timeout
 
         try {
-            // Step 1: Create Firebase Auth user
+            console.log('Starting account creation with data:', { email: formData.email, accountType });
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 formData.email,
                 formData.password
             );
-
+            console.log('Firebase user created:', userCredential.user.uid);
             const user = userCredential.user;
 
-            // Step 2: Use accountService to create user profile with RESPECT for user's chosen account type
             const [firstName, ...lastNameParts] = formData.fullName.trim().split(' ');
             const lastName = lastNameParts.join(' ');
 
             const setupData = {
                 firstName: firstName || '',
                 lastName: lastName || '',
-                // Only set organizationName if user explicitly chose organization account type
-                organizationName: accountType === 'organization' ? formData.companyName : null
+                organizationName: accountType === 'organization' ? formData.companyName : null,
+                user: user,
+                email: formData.email,
+                userId: user.uid,
+                accountType: accountType
             };
 
+            console.log('Setting up account with data:', setupData);
             const setupResult = await accountService.setupAccount(setupData);
+            console.log('Account setup result:', setupResult);
 
             if (!setupResult.success) {
-                throw new Error('Failed to setup account properly');
+                throw new Error('Failed to setup account: ' + setupResult.error.message);
             }
 
-            // Step 3: Send email verification
             try {
+                console.log('Sending email verification to:', formData.email);
                 await sendEmailVerification(user, {
                     url: `${window.location.origin}/verify-email`,
                     handleCodeInApp: false,
                 });
+                console.log('Email verification sent');
                 toast.success("Account created successfully! Please check your email.");
             } catch (emailError) {
                 console.error('Error sending verification email:', emailError);
                 toast.success("Account created successfully! Verification email will be sent shortly.");
             }
 
-            // Store email and sign out user
             setRegisteredUserEmail(formData.email);
+            console.log('Signing out user:', user.uid);
             await signOut(auth);
+            console.log('User signed out, advancing to step 4');
             setCurrentStep(4);
-
         } catch (error) {
             console.error('Error creating account:', error);
             let errorMessage = "Failed to create account. Please try again.";
-
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = "An account with this email already exists.";
             } else if (error.code === 'auth/weak-password') {
@@ -287,10 +291,12 @@ const Register = () => {
             } else if (error.code === 'auth/invalid-email') {
                 errorMessage = "Please enter a valid email address.";
             }
-
             toast.error(errorMessage);
         } finally {
+            clearTimeout(timeout);
             setIsCreatingAccount(false);
+            window.isRegistering = false;
+            console.log('Registration process completed, isRegistering reset');
         }
     };
 
@@ -310,14 +316,12 @@ const Register = () => {
                     <>
                         <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">Create Your Account</h1>
                         <p className="text-slate-600 mb-6 text-center">Get started with QAID today</p>
-
                         <div className="mb-6">
                             <GoogleSignUp
                                 onGoogleRegister={handleGoogleRegister}
                                 loading={isGoogleLoading}
                             />
                         </div>
-
                         <div className="relative mb-6">
                             <div className="absolute inset-0 flex items-center">
                                 <div className="w-full border-t border-slate-200"></div>
@@ -326,7 +330,6 @@ const Register = () => {
                                 <span className="px-4 bg-white text-slate-500">or continue with email</span>
                             </div>
                         </div>
-
                         <AccountTypeStep
                             accountType={accountType}
                             setAccountType={setAccountType}
@@ -381,7 +384,6 @@ const Register = () => {
                                 Please check your inbox and spam folder, then click the verification link to continue.
                             </p>
                         </div>
-
                         <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4">
                             <p className="text-sm text-teal-800">
                                 <strong>What happens next:</strong>
@@ -392,7 +394,6 @@ const Register = () => {
                                 <li>3. Return to the sign-in page to access your account</li>
                             </ol>
                         </div>
-
                         <div className="space-y-3">
                             <button
                                 onClick={handleResendEmail}
@@ -401,7 +402,6 @@ const Register = () => {
                             >
                                 Didn&apos;t receive the email? Go to Sign In
                             </button>
-
                             <button
                                 onClick={() => router.push('/login')}
                                 className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2 px-4 text-sm rounded transition-colors font-medium"
@@ -430,9 +430,7 @@ const Register = () => {
                     }
                 }}
             />
-
             <BackgroundDecorations />
-
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
                     <div className="text-center mb-8">
@@ -442,12 +440,10 @@ const Register = () => {
                             </div>
                         </div>
                     </div>
-
                     <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
                         {renderStepContent()}
                     </div>
-
                     {currentStep <= 3 && (
                         <div className="text-center mt-6">
                             <p className="text-sm text-slate-600">
