@@ -1,19 +1,24 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// hooks/useUserProfile.js - FIXED: Works with new data structure
+// hooks/useUserProfile.js - Aligned with UserProfileContext
 import { useState, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthProvider';
+import { useUserProfile as useUserProfileContext } from '../contexts/userProfileContext';
 import { getUserDisplayName, getUserEmail } from '../services/userService';
 
 export const useUserProfile = () => {
     const { 
         userProfile, 
-        updateUserProfile,
-        currentUser,
-        loading
-    } = useAuth();
+        updateProfile,
+        isLoading,
+        isUpdating,
+        error: contextError,
+        refreshProfile,
+        displayName: contextDisplayName,
+        email: contextEmail,
+        isNewUser,
+        isProfileLoaded
+    } = useUserProfileContext();
     
     const [isEditing, setIsEditing] = useState(false);
-    const [isUpdating, setIsUpdating] = useState(false);
     const [error, setError] = useState(null);
     const [editForm, setEditForm] = useState({
         firstName: '',
@@ -83,27 +88,24 @@ export const useUserProfile = () => {
     }, []);
 
     const saveProfile = useCallback(async () => {
-        if (!updateUserProfile || !currentUser?.uid) {
-            const errorMsg = 'Unable to update profile - user not authenticated';
+        if (!updateProfile) {
+            const errorMsg = 'Unable to update profile - update function not available';
             setError(errorMsg);
             throw new Error(errorMsg);
         }
 
-        setIsUpdating(true);
         setError(null);
 
         try {
-            await updateUserProfile(currentUser.uid, editForm);
+            await updateProfile(editForm);
             setIsEditing(false);
             console.log('Profile updated successfully');
         } catch (error) {
             console.error('Failed to update profile:', error);
             setError(error.message);
             throw error;
-        } finally {
-            setIsUpdating(false);
         }
-    }, [editForm, updateUserProfile, currentUser]);
+    }, [editForm, updateProfile]);
 
     const updateFormField = useCallback((field, value) => {
         setEditForm(prev => ({
@@ -112,35 +114,44 @@ export const useUserProfile = () => {
         }));
     }, []);
 
-    // Direct update function that bypasses the form
-    const updateProfile = useCallback(async (updates) => {
-        if (!updateUserProfile || !currentUser?.uid) {
-            throw new Error('Unable to update profile - user not authenticated');
+    // Direct update function that uses context's updateProfile
+    const updateProfileDirect = useCallback(async (updates) => {
+        if (!updateProfile) {
+            throw new Error('Unable to update profile - update function not available');
         }
 
-        setIsUpdating(true);
         setError(null);
 
         try {
-            await updateUserProfile(currentUser.uid, updates);
+            await updateProfile(updates);
             console.log('Profile updated successfully');
         } catch (error) {
             console.error('Failed to update profile:', error);
             setError(error.message);
             throw error;
-        } finally {
-            setIsUpdating(false);
         }
-    }, [updateUserProfile, currentUser]);
+    }, [updateProfile]);
+
+    // Refresh profile using context method
+    const refresh = useCallback(async () => {
+        if (refreshProfile) {
+            try {
+                await refreshProfile();
+            } catch (error) {
+                console.error('Failed to refresh profile:', error);
+                setError(error.message);
+            }
+        }
+    }, [refreshProfile]);
 
     return {
         // Profile data
         userProfile,
         
-        // Loading states
-        isLoading: loading,
+        // Loading states - prioritize context states
+        isLoading,
         isSaving: isUpdating,
-        error,
+        error: error || contextError, // Local error takes precedence
         
         // Edit state
         isEditing,
@@ -154,13 +165,16 @@ export const useUserProfile = () => {
         setEditForm,
         
         // Direct update function
-        updateProfile,
+        updateProfile: updateProfileDirect,
         
-        // Helper computed values
-        hasProfile: !!userProfile,
-        displayName: getUserDisplayName(userProfile),
-        email: getUserEmail(userProfile),
-        isNewUser: !userProfile && !loading && !error,
+        // Profile management
+        refreshProfile: refresh,
+        
+        // Helper computed values - use context values when available
+        hasProfile: isProfileLoaded,
+        displayName: contextDisplayName || getUserDisplayName(userProfile),
+        email: contextEmail || getUserEmail(userProfile),
+        isNewUser,
         
         // Helper function to get any field value
         getFieldValue

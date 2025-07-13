@@ -1,5 +1,4 @@
 "use client";
-import { useProject } from '../../context/SuiteContext';
 
 export const dynamic = 'force-dynamic';
 

@@ -15,6 +15,48 @@ import { db } from "../../config/firebase";
 import BackgroundDecorations from "../BackgroundDecorations";
 import '../../app/globals.css';
 
+// Registration state management utilities
+const REGISTRATION_STORAGE_KEY = 'qaid_registration_state';
+const REGISTRATION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
+
+const clearRegistrationState = () => {
+    try {
+        localStorage.removeItem(REGISTRATION_STORAGE_KEY);
+        localStorage.removeItem('pendingRegistration');
+        localStorage.removeItem('needsOnboarding');
+        localStorage.removeItem('awaitingEmailVerification');
+        localStorage.removeItem('verificationComplete');
+        localStorage.removeItem('startOnboarding');
+        localStorage.removeItem('needsSuiteCreation');
+        localStorage.removeItem('registrationData');
+        
+        // Clear the problematic window.isRegistering
+        if (typeof window !== 'undefined') {
+            delete window.isRegistering;
+        }
+    } catch (error) {
+        console.error('Error clearing registration state:', error);
+    }
+};
+
+const getRegistrationState = () => {
+    try {
+        const stored = localStorage.getItem(REGISTRATION_STORAGE_KEY);
+        if (!stored) return null;
+        
+        const parsed = JSON.parse(stored);
+        if (Date.now() - parsed.timestamp > REGISTRATION_TIMEOUT) {
+            clearRegistrationState();
+            return null;
+        }
+        
+        return parsed;
+    } catch (error) {
+        console.error('Error getting registration state:', error);
+        return null;
+    }
+};
+
 const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -42,6 +84,7 @@ const Login = () => {
         const urlParams = new URLSearchParams(window.location.search);
         const verified = urlParams.get('verified');
         const message = urlParams.get('message');
+        const continueOnboarding = urlParams.get('continue');
         
         if (verified === 'true') {
             toast.success("Email verified successfully! You can now sign in.", {
@@ -51,6 +94,15 @@ const Login = () => {
             
             // Clear the URL parameter
             window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Handle onboarding continuation
+            if (continueOnboarding === 'onboarding') {
+                const regState = getRegistrationState();
+                if (regState) {
+                    localStorage.setItem('needsOnboarding', 'true');
+                    localStorage.setItem('needsSuiteCreation', 'true');
+                }
+            }
         }
         
         if (message) {
@@ -83,7 +135,7 @@ const Login = () => {
         }
     }, []);
 
-    // Simplified routing logic - only route verified users to dashboard
+    // Enhanced routing logic with better error handling
     const routeUserAfterLogin = async (user) => {
         try {
             // Only check if user is email verified
@@ -92,12 +144,28 @@ const Login = () => {
                 return;
             }
 
-            // Check if user document exists in Firestore (optional - for profile completion)
+            // Clear any stale registration state for returning users
+            clearRegistrationState();
+
+            // Check if user document exists in Firestore
             const userDocRef = doc(db, 'users', user.uid);
             const userDoc = await getDoc(userDocRef);
             
-            if (!userDoc.exists()) {
-                console.log("User document doesn't exist, but proceeding to dashboard");
+            let targetRoute = '/dashboard';
+            
+            // Handle onboarding flow for new users
+            const needsOnboarding = localStorage.getItem('needsOnboarding') === 'true';
+            const needsSuiteCreation = localStorage.getItem('needsSuiteCreation') === 'true';
+            
+            if (needsOnboarding || needsSuiteCreation) {
+                // Check if user actually needs onboarding
+                if (!userDoc.exists() || !userDoc.data().onboardingComplete) {
+                    targetRoute = '/dashboard?onboarding=true';
+                } else {
+                    // User already completed onboarding, clear flags
+                    localStorage.removeItem('needsOnboarding');
+                    localStorage.removeItem('needsSuiteCreation');
+                }
             }
 
             // Add success notification via app provider
@@ -108,9 +176,8 @@ const Login = () => {
                 persistent: false
             });
 
-            // Route verified users directly to dashboard
-            // Dashboard will handle the empty state with create suite modal
-            router.push("/dashboard");
+            // Route to appropriate destination
+            router.push(targetRoute);
 
         } catch (error) {
             console.error("Error routing user after login:", error);
@@ -142,11 +209,6 @@ const Login = () => {
         if (isAuthenticated && user && user.emailVerified && !hasNavigated.current) {
             console.log("User is authenticated and verified, navigating to dashboard");
             hasNavigated.current = true;
-            
-            // Clear any stale registration data
-            localStorage.removeItem("registrationData");
-            localStorage.removeItem("needsOnboarding");
-            localStorage.removeItem("awaitingEmailVerification");
             
             // Add a small delay to ensure state is stable
             navigationTimeout.current = setTimeout(() => {
@@ -263,6 +325,9 @@ const Login = () => {
         setShowVerificationHelper(false); // Hide any existing helper
         
         try {
+            // Clear any existing registration state before login
+            clearRegistrationState();
+            
             const result = await signIn(email, password);
             if (result.success) {
                 // Check if email is verified
@@ -342,6 +407,9 @@ const Login = () => {
         
         setLoadingGoogleLogin(true);
         try {
+            // Clear any existing registration state before login
+            clearRegistrationState();
+            
             const result = await signInWithGoogle();
             if (result.success) {
                 // If this is a completely new user (first time using Google), send to register

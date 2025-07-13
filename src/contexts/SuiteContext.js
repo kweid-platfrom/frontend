@@ -1,9 +1,8 @@
-// contexts/SuiteContext.js
+// contexts/SuiteContext.js - Fixed authentication issues
 'use client'
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
-import { useUserProfile } from './userProfileContext';
-import { useSubscription } from './subscriptionContext';
+import { useUserProfile } from './userProfileContext'; // Fixed import path
 import { db } from '../config/firebase';
 import {
     collection,
@@ -31,13 +30,13 @@ export const useSuite = () => {
 
 export const SuiteProvider = ({ children }) => {
     const { user } = useAuth();
-    const { userProfile } = useUserProfile();
     const { 
-        subscriptionStatus, 
-        getFeatureLimits, 
-        canCreateResource, 
-        getResourceLimit 
-    } = useSubscription();
+        userProfile, 
+        isLoading: profileLoading, 
+        error: profileError,
+        isNewUser,
+        isProfileLoaded
+    } = useUserProfile();
 
     const [suites, setSuites] = useState([]);
     const [activeSuite, setActiveSuite] = useState(null);
@@ -48,6 +47,7 @@ export const SuiteProvider = ({ children }) => {
     const fetchingRef = useRef(false);
     const initializedRef = useRef(false);
     const userDocEnsuredRef = useRef(false);
+    const currentUserIdRef = useRef(null);
 
     // Cache for reducing Firebase calls
     const [cache, setCache] = useState({
@@ -65,6 +65,11 @@ export const SuiteProvider = ({ children }) => {
         return cache.timestamp && (Date.now() - cache.timestamp) < CACHE_DURATION;
     }, [cache.timestamp]);
 
+    // Enhanced authentication checking
+    const isAuthenticated = useMemo(() => {
+        return !!(user && user.uid && user.emailVerified);
+    }, [user]);
+
     // Check if user should have access to fetch suites per security rules
     const shouldFetchSuites = useMemo(() => {
         // NEVER fetch suites during registration
@@ -74,34 +79,72 @@ export const SuiteProvider = ({ children }) => {
         }
 
         // Must have authenticated user with verified email
-        if (!user || !user.emailVerified) {
-            console.log('shouldFetchSuites: false', { 
+        if (!isAuthenticated) {
+            console.log('shouldFetchSuites: false - user not authenticated or email not verified', { 
                 user: !!user, 
+                uid: !!user?.uid,
                 emailVerified: user?.emailVerified 
             });
             return false;
         }
 
-        // Must have user profile loaded
-        if (!userProfile) {
-            console.log('shouldFetchSuites: false - no user profile');
+        // Must not be a new user (profile should exist)
+        if (isNewUser) {
+            console.log('shouldFetchSuites: false - new user detected');
+            return false;
+        }
+
+        // Must have user profile loaded and not be loading
+        if (!isProfileLoaded || profileLoading) {
+            console.log('shouldFetchSuites: false - profile not loaded or loading', {
+                isProfileLoaded,
+                profileLoading,
+                hasProfile: !!userProfile
+            });
+            return false;
+        }
+
+        // Must not have profile errors
+        if (profileError) {
+            console.log('shouldFetchSuites: false - profile error:', profileError);
             return false;
         }
 
         return true;
-    }, [user, userProfile, isRegistering]);
+    }, [isRegistering, isAuthenticated, isNewUser, isProfileLoaded, profileLoading, profileError, user, userProfile]);
 
-    // Use SubscriptionProvider's canCreateResource for suite creation
+    // Simple subscription limits (since useSubscription is not available)
+    const getSubscriptionLimits = useCallback(() => {
+        if (!userProfile) return { suites: 0 };
+        
+        // Basic limits based on account type or subscription status
+        const accountType = userProfile.account_type || 'individual';
+        const subscriptionPlan = userProfile.subscription?.plan || 'free';
+        
+        switch (subscriptionPlan) {
+            case 'pro':
+                return { suites: 50 };
+            case 'enterprise':
+                return { suites: -1 }; // unlimited
+            default:
+                return { suites: accountType === 'organization' ? 10 : 5 };
+        }
+    }, [userProfile]);
+
+    // Check if user can create more suites
     const canCreateSuite = useMemo(() => {
-        if (!userProfile || !subscriptionStatus || isRegistering()) return false;
-        return canCreateResource('suites', suites.length);
-    }, [userProfile, subscriptionStatus, suites.length, canCreateResource, isRegistering]);
+        if (!isAuthenticated || !userProfile || isRegistering()) return false;
+        
+        const limits = getSubscriptionLimits();
+        return limits.suites === -1 || suites.length < limits.suites;
+    }, [isAuthenticated, userProfile, suites.length, getSubscriptionLimits, isRegistering]);
 
-    // Get suite limit from SubscriptionProvider
+    // Get suite limit
     const getSuiteLimit = useCallback(() => {
         if (isRegistering()) return 0;
-        return getResourceLimit('suites');
-    }, [getResourceLimit, isRegistering]);
+        const limits = getSubscriptionLimits();
+        return limits.suites;
+    }, [getSubscriptionLimits, isRegistering]);
 
     // Ensure user document exists BEFORE any suite operations
     const ensureUserDocumentExists = useCallback(async (userId) => {
@@ -144,7 +187,8 @@ export const SuiteProvider = ({ children }) => {
             console.log('Skipping fetch - missing requirements:', { 
                 userId: !!userId, 
                 shouldFetchSuites,
-                isRegistering: isRegistering() 
+                isRegistering: isRegistering(),
+                isAuthenticated
             });
             return [];
         }
@@ -265,7 +309,7 @@ export const SuiteProvider = ({ children }) => {
             setIsLoading(false);
             fetchingRef.current = false;
         }
-    }, [cache.suites, isCacheValid, userProfile, shouldFetchSuites, ensureUserDocumentExists, isRegistering]);
+    }, [cache.suites, isCacheValid, userProfile, shouldFetchSuites, ensureUserDocumentExists, isRegistering, isAuthenticated]);
 
     const setActiveSuiteWithStorage = useCallback((suite) => {
         // Don't set active suite during registration
@@ -289,11 +333,11 @@ export const SuiteProvider = ({ children }) => {
             return;
         }
 
-        if (!user || !shouldFetchSuites) {
+        if (!shouldFetchSuites) {
             console.log('Cannot refetch - missing requirements:', { 
-                user: !!user, 
                 shouldFetchSuites,
-                isRegistering: isRegistering() 
+                isRegistering: isRegistering(),
+                isAuthenticated
             });
             return;
         }
@@ -314,7 +358,7 @@ export const SuiteProvider = ({ children }) => {
         } else {
             setActiveSuiteWithStorage(null);
         }
-    }, [user, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isRegistering]);
+    }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isRegistering, isAuthenticated]);
 
     // Create test suite with security rule compliance
     const createTestSuite = useCallback(async (suiteData) => {
@@ -323,15 +367,15 @@ export const SuiteProvider = ({ children }) => {
             throw new Error('Cannot create test suites during registration');
         }
 
-        if (!user) {
-            throw new Error('User not authenticated');
+        if (!isAuthenticated) {
+            throw new Error('User not authenticated or email not verified');
         }
 
-        if (!user.emailVerified) {
-            throw new Error('Email verification required to create suites');
+        if (!userProfile) {
+            throw new Error('User profile not loaded');
         }
 
-        if (!canCreateResource('suites', suites.length)) {
+        if (!canCreateSuite) {
             const suiteLimit = getSuiteLimit();
             throw new Error(`Suite limit reached. Your current plan allows ${suiteLimit === -1 ? 'unlimited' : suiteLimit} suites.`);
         }
@@ -347,7 +391,7 @@ export const SuiteProvider = ({ children }) => {
                 ownerType,
                 ownerId,
                 isOrganizationSuite,
-                userProfile: userProfile?.accountType,
+                userProfile: userProfile?.account_type,
                 currentSuiteCount: suites.length,
                 suiteLimit: getSuiteLimit()
             });
@@ -417,8 +461,8 @@ export const SuiteProvider = ({ children }) => {
             setActiveSuiteWithStorage(newSuiteForState);
             setCache({ suites: null, timestamp: null });
 
-            // Remove the timeout - it's not needed and causes issues
-            refetchSuites(true);
+            // Refresh suites after creation
+            setTimeout(() => refetchSuites(true), 100);
 
             console.log('Suite created and state updated immediately:', newSuiteForState);
 
@@ -427,46 +471,45 @@ export const SuiteProvider = ({ children }) => {
             console.error('Error creating test suite:', error);
             throw error;
         }
-    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists, suites.length, canCreateResource, getSuiteLimit, isRegistering]);
+    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, ensureUserDocumentExists, suites.length, canCreateSuite, getSuiteLimit, isRegistering, isAuthenticated]);
 
-    // Initialize suites when user is ready (NOT during registration)
+    // Initialize suites when user and profile are ready
     useEffect(() => {
+        const userId = user?.uid;
+        
+        // Reset when user changes
+        if (userId !== currentUserIdRef.current) {
+            console.log('User changed, resetting suite context');
+            currentUserIdRef.current = userId;
+            initializedRef.current = false;
+            fetchingRef.current = false;
+            userDocEnsuredRef.current = false;
+            setCache({ suites: null, timestamp: null });
+            setSuites([]);
+            setActiveSuite(null);
+            setError(null);
+        }
+
+        // Initialize when ready
         if (shouldFetchSuites && !initializedRef.current && !isRegistering()) {
-            console.log('Initializing suites...');
+            console.log('Initializing suites for user:', userId);
             initializedRef.current = true;
             refetchSuites(false);
         } else if (!shouldFetchSuites || isRegistering()) {
-            console.log('Clearing suites - shouldFetchSuites is false or registration in progress');
+            console.log('Clearing suites - conditions not met:', {
+                shouldFetchSuites,
+                isRegistering: isRegistering(),
+                isAuthenticated,
+                profileLoading,
+                isNewUser
+            });
             setSuites([]);
             setActiveSuite(null);
-            setError(null);
-            initializedRef.current = false;
+            if (!isRegistering()) {
+                setError(null);
+            }
         }
-    }, [shouldFetchSuites, refetchSuites, isRegistering]);
-
-    // Reset initialization and user doc ensured status when user changes
-    useEffect(() => {
-        if (isRegistering()) {
-            console.log('Registration in progress, resetting suite context');
-            initializedRef.current = false;
-            fetchingRef.current = false;
-            userDocEnsuredRef.current = false;
-            setCache({ suites: null, timestamp: null });
-            setSuites([]);
-            setActiveSuite(null);
-            setError(null);
-        } else if (user?.uid) {
-            // Only reset when user changes and not during registration
-            console.log('User changed, resetting suite context');
-            initializedRef.current = false;
-            fetchingRef.current = false;
-            userDocEnsuredRef.current = false;
-            setCache({ suites: null, timestamp: null });
-            setSuites([]);
-            setActiveSuite(null);
-            setError(null);
-        }
-    }, [user?.uid, isRegistering]);
+    }, [shouldFetchSuites, refetchSuites, isRegistering, user?.uid, isAuthenticated, profileLoading, isNewUser]);
 
     // Completely disable suite context during registration
     const value = useMemo(() => {
@@ -483,12 +526,9 @@ export const SuiteProvider = ({ children }) => {
                 createTestSuite: () => Promise.reject(new Error('Cannot create test suites during registration')),
                 refetchSuites: () => Promise.resolve(),
                 fetchUserSuites: () => Promise.resolve([]),
-                subscriptionStatus: null,
-                getFeatureLimits: () => ({}),
-                canCreateResource: () => false,
-                getResourceLimit: () => 0,
                 getSuiteLimit: () => 0,
-                shouldFetchSuites: false
+                shouldFetchSuites: false,
+                isAuthenticated: false
             };
         }
 
@@ -504,12 +544,9 @@ export const SuiteProvider = ({ children }) => {
             createTestSuite,
             refetchSuites,
             fetchUserSuites,
-            subscriptionStatus,
-            getFeatureLimits,
-            canCreateResource,
-            getResourceLimit,
             getSuiteLimit,
-            shouldFetchSuites
+            shouldFetchSuites,
+            isAuthenticated
         };
     }, [
         suites,
@@ -521,12 +558,9 @@ export const SuiteProvider = ({ children }) => {
         createTestSuite,
         refetchSuites,
         fetchUserSuites,
-        subscriptionStatus,
-        getFeatureLimits,
-        canCreateResource,
-        getResourceLimit,
         getSuiteLimit,
         shouldFetchSuites,
+        isAuthenticated,
         isRegistering
     ]);
 

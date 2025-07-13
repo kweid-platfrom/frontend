@@ -1,11 +1,12 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { applyActionCode, checkActionCode } from 'firebase/auth';
 import { doc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../../../config/firebase';
 import { CheckCircle, XCircle, Loader2, ArrowRight } from 'lucide-react';
 import BackgroundDecorations from '../../BackgroundDecorations';
+import { clearRegistrationState, handlePostVerification } from '../../../services/accountSetup';
 import '../../../app/globals.css';
 
 const retryOperation = async (operation, maxAttempts = 5, delay = 2000) => {
@@ -29,6 +30,25 @@ const VerifyEmail = () => {
     const [message, setMessage] = useState('');
     const [registrationData, setRegistrationData] = useState(null);
     const [showOnboardingOption, setShowOnboardingOption] = useState(false);
+
+    // Move handleEmailVerified outside useEffect and wrap in useCallback
+    const handleEmailVerified = useCallback(async (user) => {
+        try {
+            if (!user) {
+                throw new Error('User not authenticated');
+            }
+
+            // Clear registration state immediately
+            await clearRegistrationState();
+            
+            // Now redirect to dashboard
+            router.push('/dashboard');
+        } catch (error) {
+            console.error('Post-verification error:', error);
+            // Fallback to login page
+            router.push('/login?verified=true');
+        }
+    }, [router]);
 
     useEffect(() => {
         // Check for pending registration data
@@ -79,6 +99,7 @@ const VerifyEmail = () => {
                             const userDoc = querySnapshot.docs[0];
                             await updateDoc(doc(db, 'users', userDoc.id), {
                                 email_verified: true,
+                                emailVerified: true, // Add this field for consistency with account setup service
                                 updatedAt: new Date().toISOString(),
                                 onboardingStatus: {
                                     emailVerified: true,
@@ -92,6 +113,17 @@ const VerifyEmail = () => {
                     }, 5, 2000);
                 }
 
+                // FIXED: Call the account setup service's post-verification handler
+                if (auth.currentUser?.uid) {
+                    try {
+                        await handlePostVerification(auth.currentUser.uid);
+                        console.log('Post-verification handling completed successfully');
+                    } catch (error) {
+                        console.error('Error in post-verification handling:', error);
+                        // Don't fail the verification process for this
+                    }
+                }
+
                 setStatus('success');
                 setMessage('Your email has been verified successfully!');
 
@@ -102,8 +134,7 @@ const VerifyEmail = () => {
                     localStorage.setItem('verificationComplete', 'true');
                 } else {
                     setTimeout(() => {
-                        window.isRegistering = false; // Ensure SuiteContext can fetch suites
-                        router.push('/login?verified=true');
+                        handleEmailVerified(auth.currentUser);
                     }, 3000);
                 }
             } catch (error) {
@@ -122,20 +153,36 @@ const VerifyEmail = () => {
         };
 
         verifyEmail();
-    }, [searchParams, router, registrationData]);
+    }, [searchParams, registrationData, handleEmailVerified]);
 
-    const handleContinueOnboarding = () => {
-        localStorage.removeItem('pendingRegistration');
-        localStorage.setItem('startOnboarding', 'true');
-        localStorage.setItem('needsSuiteCreation', 'true');
-        window.isRegistering = false; // Allow SuiteContext to fetch suites
-        router.push('/login?verified=true&continue=onboarding');
+    const handleContinueOnboarding = async () => {
+        try {
+            localStorage.removeItem('pendingRegistration');
+            localStorage.setItem('startOnboarding', 'true');
+            localStorage.setItem('needsSuiteCreation', 'true');
+            
+            // Use the centralized function to clear registration state
+            await clearRegistrationState();
+            
+            router.push('/login?verified=true&continue=onboarding');
+        } catch (error) {
+            console.error('Error during onboarding setup:', error);
+            router.push('/login?verified=true');
+        }
     };
 
-    const handleGoToLogin = () => {
-        localStorage.removeItem('pendingRegistration');
-        window.isRegistering = false; // Allow SuiteContext to fetch suites
-        router.push('/login?verified=true');
+    const handleGoToLogin = async () => {
+        try {
+            localStorage.removeItem('pendingRegistration');
+            
+            // Use the centralized function to clear registration state
+            await clearRegistrationState();
+            
+            router.push('/login?verified=true');
+        } catch (error) {
+            console.error('Error during navigation to login:', error);
+            router.push('/login?verified=true');
+        }
     };
 
     const getAccountTypeDisplay = () => {
@@ -207,7 +254,7 @@ const VerifyEmail = () => {
                             </div>
                         ) : status === 'success' && !showOnboardingOption ? (
                             <p className="text-sm text-slate-500">
-                                Redirecting you to the sign-in page...
+                                Redirecting you to the dashboard...
                             </p>
                         ) : status === 'error' && (
                             <div className="space-y-3">

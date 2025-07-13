@@ -72,12 +72,12 @@ const UnifiedAppProvider = ({ children }) => {
     // Stable authentication status - Only update when truly changed
     const isAuthenticated = useMemo(() => {
         const currentAuth = auth.user && auth.user.uid && !auth.loading;
-        
+
         // Only update if state actually changed
         if (initializationRef.current.lastAuthState !== currentAuth) {
             initializationRef.current.lastAuthState = currentAuth;
         }
-        
+
         return currentAuth;
     }, [auth.user?.uid, auth.loading]);
 
@@ -85,21 +85,21 @@ const UnifiedAppProvider = ({ children }) => {
     const isLoading = useMemo(() => {
         // Never show loading for non-authenticated users
         if (!isAuthenticated) return false;
-        
+
         // Don't show loading if we're already initialized
         if (initializationRef.current.isInitialized) return false;
-        
+
         // Show loading only when actually initializing or when contexts are truly loading
-        return initializationRef.current.isInitializing || 
-               userProfile.isLoading || 
-               subscription.isLoading || 
-               suite.isLoading || 
-               globalLoading;
+        return initializationRef.current.isInitializing ||
+            userProfile.isLoading ||
+            subscription.isLoading ||
+            suite.isLoading ||
+            globalLoading;
     }, [
-        isAuthenticated, 
-        userProfile.isLoading, 
-        subscription.isLoading, 
-        suite.isLoading, 
+        isAuthenticated,
+        userProfile.isLoading,
+        subscription.isLoading,
+        suite.isLoading,
         globalLoading,
         isInitialized
     ]);
@@ -122,7 +122,7 @@ const UnifiedAppProvider = ({ children }) => {
             getResourceLimit: subscription.getResourceLimit
         };
     }, [
-        isAuthenticated, 
+        isAuthenticated,
         subscription.subscriptionStatus?.isValid,
         subscription.subscriptionStatus?.isTrial,
         subscription.subscriptionStatus?.trialDaysRemaining,
@@ -299,7 +299,7 @@ const UnifiedAppProvider = ({ children }) => {
         }
 
         initializationRef.current.isInitializing = true;
-        
+
         const initPromise = (async () => {
             try {
                 setGlobalLoading(true);
@@ -336,7 +336,7 @@ const UnifiedAppProvider = ({ children }) => {
                             apiAccess: capabilities.canUseAPI || false,
                             automation: capabilities.canCreateAutomatedTests || false
                         };
-                        
+
                         // Only update if flags actually changed
                         if (JSON.stringify(prev) !== JSON.stringify(newFlags)) {
                             return newFlags;
@@ -419,15 +419,15 @@ const UnifiedAppProvider = ({ children }) => {
     // Optimized refresh function
     const refreshAll = useCallback(async () => {
         const promises = [];
-        
+
         if (userProfile.refreshProfile) {
             promises.push(userProfile.refreshProfile());
         }
-        
+
         if (suite.refetchSuites) {
             promises.push(suite.refetchSuites(true));
         }
-        
+
         if (subscription.updateTrialStatusInDatabase) {
             promises.push(subscription.updateTrialStatusInDatabase());
         }
@@ -439,7 +439,7 @@ const UnifiedAppProvider = ({ children }) => {
     const signOut = useCallback(async () => {
         try {
             await auth.signOut();
-            
+
             // Reset all state
             setNotifications([]);
             setIsInitialized(false);
@@ -448,7 +448,7 @@ const UnifiedAppProvider = ({ children }) => {
             initializationRef.current.isInitialized = false;
             initializationRef.current.isInitializing = false;
             initializationRef.current.initializationPromise = null;
-            
+
             // Clear preferences
             localStorage.removeItem('appPreferences');
             localStorage.removeItem('appPreferencesLoaded');
@@ -552,6 +552,7 @@ const UnifiedAppProvider = ({ children }) => {
         // Preferences
         appPreferences,
         setAppPreferences,
+
 
         // Utilities
         refreshAll,

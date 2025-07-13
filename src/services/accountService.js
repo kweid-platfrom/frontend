@@ -1,13 +1,109 @@
 // services/accountService.js - Main account service that aggregates all account-related functions
 import {
     getAccountSetupStatus,
-    setupAccount,
-    getCompleteAccountInfo,
-    updateUserProfile,
-    deleteUserAccount
+    setupAccount
 } from "./accountSetup";
 
 import firestoreService from "./firestoreService";
+
+/**
+ * Get complete account information
+ * @param {string} userId - User ID (optional, defaults to current user)
+ * @returns {Promise<Object>} Complete account info result
+ */
+export const getCompleteAccountInfo = async (userId = null) => {
+    try {
+        const targetUserId = userId || firestoreService.getCurrentUserId();
+        if (!targetUserId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const result = await firestoreService.getUserProfile(targetUserId);
+        if (!result.success) {
+            return result;
+        }
+
+        const userProfile = result.data;
+        
+        // Get organizations if account type is organization
+        let organizations = [];
+        if (userProfile.accountType === 'organization' && userProfile.organizationId) {
+            const orgResult = await firestoreService.getDocument('organizations', userProfile.organizationId);
+            if (orgResult.success) {
+                organizations = [{ id: userProfile.organizationId, ...orgResult.data }];
+            }
+        }
+
+        return {
+            success: true,
+            data: {
+                userProfile,
+                organizations,
+                accountType: userProfile.accountType || 'individual'
+            }
+        };
+
+    } catch (error) {
+        console.error('Error getting complete account info:', error);
+        return {
+            success: false,
+            error: { message: error.message }
+        };
+    }
+};
+
+/**
+ * Update user profile
+ * @param {string} userId - User ID
+ * @param {Object} updateData - Data to update
+ * @returns {Promise<Object>} Update result
+ */
+export const updateUserProfile = async (userId, updateData) => {
+    try {
+        const targetUserId = userId || firestoreService.getCurrentUserId();
+        if (!targetUserId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const result = await firestoreService.updateUserProfile(targetUserId, updateData);
+        return result;
+
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        return {
+            success: false,
+            error: { message: error.message }
+        };
+    }
+};
+
+/**
+ * Delete user account
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Delete result
+ */
+export const deleteUserAccount = async (userId) => {
+    try {
+        const targetUserId = userId || firestoreService.getCurrentUserId();
+        if (!targetUserId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        // This would need to be implemented based on your requirements
+        // For now, return a placeholder
+        return {
+            success: false,
+            error: { message: 'Account deletion not implemented yet' }
+        };
+
+    } catch (error) {
+        console.error('Error deleting user account:', error);
+        return {
+            success: false,
+            error: { message: error.message }
+        };
+    }
+};
 
 /**
  * Determine account type based on email domain
@@ -780,7 +876,7 @@ export default accountService;
 
 // Export individual functions for backward compatibility and direct imports
 export {
-    // From accountSetup.js
+    // Account setup functions
     getAccountSetupStatus,
     setupAccount,
     getCompleteAccountInfo,
