@@ -222,6 +222,7 @@ export const SubscriptionProvider = ({ children }) => {
     const { userProfile, refreshUserProfile } = useUserProfile();
     const { capabilities, loading: capabilitiesLoading, error: capabilitiesError } = useAccountCapabilities(user?.uid);
     const [isLoading, setIsLoading] = useState(false);
+    const [, setSubscription] = useState(null);
 
     // Helper function to calculate trial days remaining
     const calculateTrialDaysRemaining = (trialEndDate) => {
@@ -253,6 +254,84 @@ export const SubscriptionProvider = ({ children }) => {
         return false;
     };
 
+    // MOVED BEFORE subscriptionStatus: Update trial status in database
+    const updateTrialStatusInDatabase = useCallback(async () => {
+        if (!user || !userProfile) return userProfile;
+
+        try {
+            setIsLoading(true);
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (!userDoc.exists()) {
+                console.error('User document not found');
+                return userProfile;
+            }
+
+            const currentData = userDoc.data();
+            const now = new Date();
+            
+            let needsUpdate = false;
+            const updateData = {};
+
+            if (currentData.isTrialActive && currentData.trialEndDate) {
+                const trialEndDate = currentData.trialEndDate instanceof Date 
+                    ? currentData.trialEndDate 
+                    : new Date(currentData.trialEndDate);
+                    
+                const trialDaysRemaining = calculateTrialDaysRemaining(trialEndDate);
+                
+                if (trialDaysRemaining <= 0) {
+                    updateData.isTrialActive = false;
+                    updateData.trialDaysRemaining = 0;
+                    
+                    if (currentData.subscriptionStatus !== 'active' || !currentData.subscriptionEndDate || new Date(currentData.subscriptionEndDate) <= now) {
+                        const accountType = currentData.accountType || 'individual';
+                        updateData.subscriptionPlan = getDefaultPlan(accountType);
+                        updateData.subscriptionStatus = 'inactive';
+                    }
+                    
+                    needsUpdate = true;
+                } else {
+                    updateData.trialDaysRemaining = trialDaysRemaining;
+                    needsUpdate = currentData.trialDaysRemaining !== trialDaysRemaining;
+                }
+            }
+
+            if (currentData.subscriptionStatus === 'active' && currentData.subscriptionEndDate) {
+                const subscriptionEndDate = currentData.subscriptionEndDate instanceof Date 
+                    ? currentData.subscriptionEndDate 
+                    : new Date(currentData.subscriptionEndDate);
+                    
+                if (subscriptionEndDate <= now && !currentData.isTrialActive) {
+                    const accountType = currentData.accountType || 'individual';
+                    updateData.subscriptionPlan = getDefaultPlan(accountType);
+                    updateData.subscriptionStatus = 'inactive';
+                    needsUpdate = true;
+                }
+            }
+
+            if (needsUpdate) {
+                updateData.updatedAt = serverTimestamp();
+                
+                console.log('Updating subscription status:', updateData);
+                await updateDoc(userDocRef, updateData);
+                
+                if (refreshUserProfile) {
+                    await refreshUserProfile();
+                }
+            }
+            
+            return { ...currentData, ...updateData };
+            
+        } catch (error) {
+            console.error('Error updating trial status:', error);
+            return userProfile;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user, userProfile, refreshUserProfile]);
+
     // Load subscription data
     const loadSubscription = useCallback(async (userId) => {
         if (!userId || window.isRegistering) {
@@ -278,7 +357,7 @@ export const SubscriptionProvider = ({ children }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [setSubscription]);
 
     // Memoized subscription status with trial logic
     const subscriptionStatus = useMemo(() => {
@@ -360,83 +439,6 @@ export const SubscriptionProvider = ({ children }) => {
             return false;
         }
     }, [capabilities, userProfile, capabilitiesLoading]);
-
-    const updateTrialStatusInDatabase = useCallback(async () => {
-        if (!user || !userProfile) return userProfile;
-
-        try {
-            setIsLoading(true);
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (!userDoc.exists()) {
-                console.error('User document not found');
-                return userProfile;
-            }
-
-            const currentData = userDoc.data();
-            const now = new Date();
-            
-            let needsUpdate = false;
-            const updateData = {};
-
-            if (currentData.isTrialActive && currentData.trialEndDate) {
-                const trialEndDate = currentData.trialEndDate instanceof Date 
-                    ? currentData.trialEndDate 
-                    : new Date(currentData.trialEndDate);
-                    
-                const trialDaysRemaining = calculateTrialDaysRemaining(trialEndDate);
-                
-                if (trialDaysRemaining <= 0) {
-                    updateData.isTrialActive = false;
-                    updateData.trialDaysRemaining = 0;
-                    
-                    if (currentData.subscriptionStatus !== 'active' || !currentData.subscriptionEndDate || new Date(currentData.subscriptionEndDate) <= now) {
-                        const accountType = currentData.accountType || 'individual';
-                        updateData.subscriptionPlan = getDefaultPlan(accountType);
-                        updateData.subscriptionStatus = 'inactive';
-                    }
-                    
-                    needsUpdate = true;
-                } else {
-                    updateData.trialDaysRemaining = trialDaysRemaining;
-                    needsUpdate = currentData.trialDaysRemaining !== trialDaysRemaining;
-                }
-            }
-
-            if (currentData.subscriptionStatus === 'active' && currentData.subscriptionEndDate) {
-                const subscriptionEndDate = currentData.subscriptionEndDate instanceof Date 
-                    ? currentData.subscriptionEndDate 
-                    : new Date(currentData.subscriptionEndDate);
-                    
-                if (subscriptionEndDate <= now && !currentData.isTrialActive) {
-                    const accountType = currentData.accountType || 'individual';
-                    updateData.subscriptionPlan = getDefaultPlan(accountType);
-                    updateData.subscriptionStatus = 'inactive';
-                    needsUpdate = true;
-                }
-            }
-
-            if (needsUpdate) {
-                updateData.updatedAt = serverTimestamp();
-                
-                console.log('Updating subscription status:', updateData);
-                await updateDoc(userDocRef, updateData);
-                
-                if (refreshUserProfile) {
-                    await refreshUserProfile();
-                }
-            }
-            
-            return { ...currentData, ...updateData };
-            
-        } catch (error) {
-            console.error('Error updating trial status:', error);
-            return userProfile;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [user, userProfile, refreshUserProfile]);
 
     // Billing and subscription management methods
     const createCheckoutSession = useCallback(async (planId, billingCycle = 'monthly', successUrl, cancelUrl) => {
@@ -556,7 +558,7 @@ export const SubscriptionProvider = ({ children }) => {
             setSubscription(null);
             setIsLoading(false);
         }
-    }, [user?.uid, userProfile, loadSubscription, updateTrialStatusInDatabase]);
+    }, [user?.uid, userProfile, loadSubscription, updateTrialStatusInDatabase, setSubscription]);
 
     const value = {
         // Subscription status and capabilities

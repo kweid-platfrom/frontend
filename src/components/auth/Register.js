@@ -58,6 +58,17 @@ const Register = () => {
 
     const [errors, setErrors] = useState({});
 
+    // Set registration flag on mount and cleanup on unmount
+    useEffect(() => {
+        window.isRegistering = true;
+        console.log('Registration component mounted, isRegistering set to true');
+        
+        return () => {
+            window.isRegistering = false;
+            console.log('Registration component unmounted, isRegistering set to false');
+        };
+    }, []);
+
     useEffect(() => {
         if (formData.email) {
             const domainInfo = getEmailDomainInfo(formData.email);
@@ -124,10 +135,13 @@ const Register = () => {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
+            // Check if account already exists
             const setupStatus = await accountService.getAccountSetupStatus(user.uid);
 
             if (setupStatus.exists) {
                 toast.success("Welcome back!");
+                // Clear registration flag before navigation
+                window.isRegistering = false;
                 router.push('/dashboard');
                 return;
             }
@@ -150,6 +164,8 @@ const Register = () => {
             if (result_setup.success) {
                 console.log('Google account setup successful:', result_setup);
                 toast.success("Account created successfully with Google!");
+                // Clear registration flag before navigation
+                window.isRegistering = false;
                 router.push('/dashboard');
             } else {
                 throw new Error('Failed to setup account: ' + result_setup.error.message);
@@ -223,17 +239,11 @@ const Register = () => {
         if (!validateStep(3)) return;
 
         setIsCreatingAccount(true);
-        window.isRegistering = true; // Set flag to bypass auth listener
-
-        const timeout = setTimeout(() => {
-            console.error('Registration timed out');
-            toast.error('Registration timed out. Please try again.');
-            setIsCreatingAccount(false);
-            window.isRegistering = false;
-        }, 10000); // 10-second timeout
 
         try {
             console.log('Starting account creation with data:', { email: formData.email, accountType });
+            
+            // Create Firebase user
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 formData.email,
@@ -242,9 +252,11 @@ const Register = () => {
             console.log('Firebase user created:', userCredential.user.uid);
             const user = userCredential.user;
 
+            // Parse full name
             const [firstName, ...lastNameParts] = formData.fullName.trim().split(' ');
             const lastName = lastNameParts.join(' ');
 
+            // Setup account data
             const setupData = {
                 firstName: firstName || '',
                 lastName: lastName || '',
@@ -263,6 +275,7 @@ const Register = () => {
                 throw new Error('Failed to setup account: ' + setupResult.error.message);
             }
 
+            // Send verification email
             try {
                 console.log('Sending email verification to:', formData.email);
                 await sendEmailVerification(user, {
@@ -276,11 +289,15 @@ const Register = () => {
                 toast.success("Account created successfully! Verification email will be sent shortly.");
             }
 
+            // Store email for step 4
             setRegisteredUserEmail(formData.email);
+            
+            // Sign out user and proceed to email verification step
             console.log('Signing out user:', user.uid);
             await signOut(auth);
             console.log('User signed out, advancing to step 4');
             setCurrentStep(4);
+            
         } catch (error) {
             console.error('Error creating account:', error);
             let errorMessage = "Failed to create account. Please try again.";
@@ -293,19 +310,21 @@ const Register = () => {
             }
             toast.error(errorMessage);
         } finally {
-            clearTimeout(timeout);
             setIsCreatingAccount(false);
-            window.isRegistering = false;
-            console.log('Registration process completed, isRegistering reset');
+            console.log('Registration process completed');
         }
     };
 
     const handleResendEmail = async () => {
         toast.info("Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.");
+        // Clear registration flag before navigation
+        window.isRegistering = false;
         router.push('/login');
     };
 
     const handleSignInRedirect = () => {
+        // Clear registration flag before navigation
+        window.isRegistering = false;
         router.push('/login');
     };
 
@@ -403,7 +422,7 @@ const Register = () => {
                                 Didn&apos;t receive the email? Go to Sign In
                             </button>
                             <button
-                                onClick={() => router.push('/login')}
+                                onClick={handleSignInRedirect}
                                 className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2 px-4 text-sm rounded transition-colors font-medium"
                             >
                                 Go to Sign In

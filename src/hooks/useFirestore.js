@@ -136,7 +136,9 @@ export const useFirestore = () => {
             })
         );
 
-        subscriptionsRef.current.add(unsubscribe);
+        if (unsubscribe) {
+            subscriptionsRef.current.add(unsubscribe);
+        }
         return unsubscribe;
     }, [isAuthenticated, addNotification]);
 
@@ -162,7 +164,9 @@ export const useFirestore = () => {
             })
         );
 
-        subscriptionsRef.current.add(unsubscribe);
+        if (unsubscribe) {
+            subscriptionsRef.current.add(unsubscribe);
+        }
         return unsubscribe;
     }, [isAuthenticated, addNotification]);
 
@@ -216,7 +220,9 @@ export const useFirestore = () => {
             })
         );
 
-        subscriptionsRef.current.add(unsubscribe);
+        if (unsubscribe) {
+            subscriptionsRef.current.add(unsubscribe);
+        }
         return unsubscribe;
     }, [isAuthenticated, addNotification]);
 
@@ -300,7 +306,9 @@ export const useFirestore = () => {
             })
         );
 
-        subscriptionsRef.current.add(unsubscribe);
+        if (unsubscribe) {
+            subscriptionsRef.current.add(unsubscribe);
+        }
         return unsubscribe;
     }, [isAuthenticated, addNotification]);
 
@@ -357,7 +365,9 @@ export const useFirestore = () => {
             sprintId
         );
 
-        subscriptionsRef.current.add(unsubscribe);
+        if (unsubscribe) {
+            subscriptionsRef.current.add(unsubscribe);
+        }
         return unsubscribe;
     }, [isAuthenticated, addNotification]);
 
@@ -439,6 +449,25 @@ export const useFirestore = () => {
         }
     }, [isAuthenticated, handleResult]);
 
+    // ===== UTILITY METHODS =====
+
+    // Expose utility methods from service
+    const getCurrentUserId = useCallback(() => {
+        return firestoreService.getCurrentUserId();
+    }, []);
+
+    const getCurrentUser = useCallback(() => {
+        return firestoreService.getCurrentUser();
+    }, []);
+
+    const createDocRef = useCallback((collectionPath, ...pathSegments) => {
+        return firestoreService.createDocRef(collectionPath, ...pathSegments);
+    }, []);
+
+    const createCollectionRef = useCallback((collectionPath) => {
+        return firestoreService.createCollectionRef(collectionPath);
+    }, []);
+
     // ===== CLEANUP =====
 
     // Clean up all subscriptions when component unmounts
@@ -515,7 +544,13 @@ export const useFirestore = () => {
         executeBatch,
         executeTransaction,
 
-        // Utility
+        // Utility methods
+        getCurrentUserId,
+        getCurrentUser,
+        createDocRef,
+        createCollectionRef,
+
+        // Authentication status
         isAuthenticated
     };
 };

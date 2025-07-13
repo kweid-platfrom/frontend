@@ -29,12 +29,13 @@ const Login = () => {
     const router = useRouter();
     
     // Use new unified App Provider hooks
-    const { isAuthenticated, isLoading, isInitialized } = useApp();
+    const { isAuthenticated, isInitialized } = useApp();
     const { user, signIn, signInWithGoogle } = useAppAuth();
     const { addNotification } = useAppNotifications();
     
-    // Prevent multiple navigation attempts
+    // Prevent multiple navigation attempts - Fixed logic
     const hasNavigated = useRef(false);
+    const navigationTimeout = useRef(null);
 
     // Handle email verification success and other URL parameters
     useEffect(() => {
@@ -127,27 +128,46 @@ const Login = () => {
         }
     };
 
-    // Handle authenticated user routing using new app provider
+    // FIXED: Handle authenticated user routing with proper checks
     useEffect(() => {
-        if (isAuthenticated && isInitialized && !hasNavigated.current) {
-            hasNavigated.current = true; // Prevent multiple navigation attempts
+        // Clear any existing navigation timeout
+        if (navigationTimeout.current) {
+            clearTimeout(navigationTimeout.current);
+        }
+
+        // Only proceed if app is initialized and we have a clear authentication state
+        if (!isInitialized) return;
+
+        // If user is authenticated and verified, and we haven't navigated yet
+        if (isAuthenticated && user && user.emailVerified && !hasNavigated.current) {
+            console.log("User is authenticated and verified, navigating to dashboard");
+            hasNavigated.current = true;
             
             // Clear any stale registration data
             localStorage.removeItem("registrationData");
             localStorage.removeItem("needsOnboarding");
             localStorage.removeItem("awaitingEmailVerification");
             
-            // Route user based on simplified flow
-            routeUserAfterLogin(user);
+            // Add a small delay to ensure state is stable
+            navigationTimeout.current = setTimeout(() => {
+                routeUserAfterLogin(user);
+            }, 100);
+        }
+        
+        // Reset navigation flag when user logs out or becomes unauthenticated
+        if (!isAuthenticated || !user) {
+            hasNavigated.current = false;
         }
     }, [isAuthenticated, isInitialized, user]);
 
-    // Reset navigation flag when user changes (logout/login)
+    // Cleanup timeout on unmount
     useEffect(() => {
-        if (!isAuthenticated) {
-            hasNavigated.current = false;
-        }
-    }, [isAuthenticated]);
+        return () => {
+            if (navigationTimeout.current) {
+                clearTimeout(navigationTimeout.current);
+            }
+        };
+    }, []);
 
     const validateForm = () => {
         let isValid = true;
@@ -427,8 +447,8 @@ const Login = () => {
         </div>
     );
 
-    // Show loading spinner during auth check or app initialization
-    if (isLoading || !isInitialized) {
+    // FIXED: Only show loading during app initialization, not auth loading
+    if (!isInitialized) {
         return (
             <div className="min-h-screen flex justify-center items-center bg-gray-50">
                 <div className="text-center">
@@ -439,8 +459,8 @@ const Login = () => {
         );
     }
 
-    // If already authenticated, show loading while navigation happens
-    if (isAuthenticated) {
+    // FIXED: Only show signing in message during actual navigation
+    if (isAuthenticated && user && user.emailVerified && hasNavigated.current) {
         return (
             <div className="min-h-screen flex justify-center items-center bg-gray-50">
                 <div className="text-center">

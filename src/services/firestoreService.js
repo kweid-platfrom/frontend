@@ -19,10 +19,6 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 
-/**
- * Centralized Firestore Service Class
- * Handles all database operations with proper error handling and context integration
- */
 class FirestoreService {
     constructor() {
         this.db = db;
@@ -32,26 +28,15 @@ class FirestoreService {
 
     // ===== UTILITY METHODS =====
 
-    /**
-     * Get current user ID
-     */
     getCurrentUserId() {
         return this.auth.currentUser?.uid;
     }
 
-    /**
-     * Get current user
-     */
     getCurrentUser() {
         return this.auth.currentUser;
     }
 
-    /**
-     * Create document reference
-     * Fixed to handle path segments properly
-     */
     createDocRef(collectionPath, ...pathSegments) {
-        // Filter out null/undefined segments and ensure all are strings
         const validSegments = pathSegments.filter(segment => 
             segment !== null && segment !== undefined && segment !== ''
         ).map(segment => String(segment));
@@ -60,40 +45,30 @@ class FirestoreService {
             throw new Error('Document ID is required');
         }
 
-        // Build the full path
-        const fullPath = [collectionPath, ...validSegments].join('/');
-        
-        // Split the path and pass individual segments to doc()
-        const pathParts = fullPath.split('/');
+        const pathParts = [collectionPath, ...validSegments].join('/').split('/');
         return doc(this.db, ...pathParts);
     }
 
-    /**
-     * Create collection reference
-     */
     createCollectionRef(collectionPath) {
         return collection(this.db, collectionPath);
     }
 
-    /**
-     * Handle Firestore errors with user-friendly messages
-     */
     handleFirestoreError(error, operation = 'operation') {
         console.error(`Firestore ${operation} error:`, error);
         
         const errorMessages = {
-            'permission-denied': 'You do not have permission to perform this action.',
-            'not-found': 'The requested document was not found.',
-            'already-exists': 'This document already exists.',
-            'resource-exhausted': 'Too many requests. Please try again later.',
-            'unauthenticated': 'You must be signed in to perform this action.',
-            'unavailable': 'Service temporarily unavailable. Please try again.',
+            'permission-denied': 'Access denied. Check your permissions.',
+            'not-found': 'Document not found.',
+            'already-exists': 'Document already exists.',
+            'unauthenticated': 'Authentication required.',
+            'unavailable': 'Service temporarily unavailable.',
             'invalid-argument': 'Invalid data provided.',
-            'deadline-exceeded': 'Request timed out. Please try again.',
-            'aborted': 'Operation was aborted. Please try again.'
+            'resource-exhausted': 'Rate limit exceeded.',
+            'deadline-exceeded': 'Request timeout.',
+            'aborted': 'Operation aborted.'
         };
 
-        const userMessage = errorMessages[error.code] || `Failed to ${operation}. Please try again.`;
+        const userMessage = errorMessages[error.code] || `${operation} failed. Please try again.`;
         
         return {
             success: false,
@@ -105,19 +80,18 @@ class FirestoreService {
         };
     }
 
-    /**
-     * Add common fields to documents
-     */
     addCommonFields(data, isUpdate = false) {
+        const userId = this.getCurrentUserId();
         const commonFields = {
-            ...(isUpdate ? { updated_at: serverTimestamp() } : {
-                created_at: serverTimestamp(),
-                updated_at: serverTimestamp()
-            })
+            updated_at: serverTimestamp(),
+            ...(userId && { updated_by: userId })
         };
 
-        if (!isUpdate && this.getCurrentUserId()) {
-            commonFields.created_by = this.getCurrentUserId();
+        if (!isUpdate) {
+            commonFields.created_at = serverTimestamp();
+            if (userId) {
+                commonFields.created_by = userId;
+            }
         }
 
         return { ...data, ...commonFields };
@@ -125,9 +99,6 @@ class FirestoreService {
 
     // ===== GENERIC CRUD OPERATIONS =====
 
-    /**
-     * Generic create document
-     */
     async createDocument(collectionPath, data, docId = null) {
         try {
             const documentData = this.addCommonFields(data);
@@ -146,9 +117,6 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Generic read document
-     */
     async getDocument(collectionPath, docId) {
         try {
             if (!docId) {
@@ -171,9 +139,6 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Generic update document
-     */
     async updateDocument(collectionPath, docId, data) {
         try {
             if (!docId) {
@@ -189,9 +154,6 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Generic delete document
-     */
     async deleteDocument(collectionPath, docId) {
         try {
             if (!docId) {
@@ -206,25 +168,19 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Generic query documents
-     */
     async queryDocuments(collectionPath, constraints = [], orderByField = null, limitCount = null) {
         try {
             const colRef = this.createCollectionRef(collectionPath);
             let q = colRef;
 
-            // Apply constraints
             if (constraints.length > 0) {
                 q = query(q, ...constraints);
             }
 
-            // Apply ordering
             if (orderByField) {
                 q = query(q, orderBy(orderByField));
             }
 
-            // Apply limit
             if (limitCount) {
                 q = query(q, limit(limitCount));
             }
@@ -242,14 +198,11 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Real-time listener for documents
-     */
+    // ===== REAL-TIME SUBSCRIPTIONS =====
+
     subscribeToDocument(collectionPath, docId, callback, errorCallback = null) {
         if (!docId) {
-            if (errorCallback) {
-                errorCallback({ success: false, error: { message: 'Document ID is required' } });
-            }
+            errorCallback?.({ success: false, error: { message: 'Document ID is required' } });
             return null;
         }
 
@@ -265,9 +218,7 @@ class FirestoreService {
             },
             (error) => {
                 console.error('Document subscription error:', error);
-                if (errorCallback) {
-                    errorCallback(this.handleFirestoreError(error, 'subscribe to document'));
-                }
+                errorCallback?.(this.handleFirestoreError(error, 'subscribe to document'));
             }
         );
 
@@ -276,9 +227,6 @@ class FirestoreService {
         return unsubscribe;
     }
 
-    /**
-     * Real-time listener for collections
-     */
     subscribeToCollection(collectionPath, constraints = [], callback, errorCallback = null) {
         const colRef = this.createCollectionRef(collectionPath);
         let q = colRef;
@@ -298,9 +246,7 @@ class FirestoreService {
             },
             (error) => {
                 console.error('Collection subscription error:', error);
-                if (errorCallback) {
-                    errorCallback(this.handleFirestoreError(error, 'subscribe to collection'));
-                }
+                errorCallback?.(this.handleFirestoreError(error, 'subscribe to collection'));
             }
         );
 
@@ -309,9 +255,6 @@ class FirestoreService {
         return unsubscribe;
     }
 
-    /**
-     * Unsubscribe from all listeners
-     */
     unsubscribeAll() {
         this.unsubscribes.forEach((unsubscribe) => {
             unsubscribe();
@@ -321,9 +264,6 @@ class FirestoreService {
 
     // ===== USER OPERATIONS =====
 
-    /**
-     * Create or update user profile
-     */
     async createOrUpdateUserProfile(userData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -335,12 +275,10 @@ class FirestoreService {
             const userDoc = await getDoc(userRef);
             
             if (userDoc.exists()) {
-                // Update existing user
                 const updateData = this.addCommonFields(userData, true);
                 await updateDoc(userRef, updateData);
                 return { success: true, data: { id: userId, ...updateData } };
             } else {
-                // Create new user
                 const newUserData = this.addCommonFields({
                     user_id: userId,
                     email: this.getCurrentUser()?.email,
@@ -354,9 +292,6 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Get user profile
-     */
     async getUserProfile(userId = null) {
         const targetUserId = userId || this.getCurrentUserId();
         if (!targetUserId) {
@@ -366,15 +301,10 @@ class FirestoreService {
         return await this.getDocument('users', targetUserId);
     }
 
-    /**
-     * Subscribe to user profile changes
-     */
     subscribeToUserProfile(callback, errorCallback = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
-            if (errorCallback) {
-                errorCallback({ success: false, error: { message: 'User not authenticated' } });
-            }
+            errorCallback?.({ success: false, error: { message: 'User not authenticated' } });
             return null;
         }
 
@@ -383,9 +313,6 @@ class FirestoreService {
 
     // ===== ORGANIZATION OPERATIONS =====
 
-    /**
-     * Create organization
-     */
     async createOrganization(orgData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -395,20 +322,25 @@ class FirestoreService {
         try {
             const batch = writeBatch(this.db);
             
-            // Create organization
-            const orgId = orgData.orgId || `org_${userId}`;
+            // Create organization with user as owner
+            const orgId = orgData.orgId || doc(this.createCollectionRef('organizations')).id;
             const orgRef = this.createDocRef('organizations', orgId);
             const organizationData = this.addCommonFields({
+                name: orgData.name,
+                description: orgData.description || '',
                 ownerId: userId,
-                ...orgData
+                members: [userId], // Initialize with creator
+                memberCount: 1,
+                settings: orgData.settings || {}
             });
             batch.set(orgRef, organizationData);
 
-            // Add creator as admin member
+            // Add member document
             const memberRef = this.createDocRef('organizations', orgId, 'members', userId);
             const memberData = this.addCommonFields({
                 user_id: userId,
-                role: 'Admin',
+                role: 'owner',
+                status: 'active',
                 joined_at: serverTimestamp()
             });
             batch.set(memberRef, memberData);
@@ -421,9 +353,6 @@ class FirestoreService {
         }
     }
 
-    /**
-     * Get user organizations
-     */
     async getUserOrganizations() {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -431,37 +360,23 @@ class FirestoreService {
         }
 
         try {
-            // Get organizations where user is owner
-            const ownedOrgsQuery = query(
+            // Get organizations where user is a member
+            const orgsQuery = query(
                 this.createCollectionRef('organizations'),
-                where('ownerId', '==', userId)
+                where('members', 'array-contains', userId)
             );
 
-            const ownedOrgs = await getDocs(ownedOrgsQuery);
+            const orgsSnapshot = await getDocs(orgsQuery);
             const organizations = [];
 
-            ownedOrgs.forEach((doc) => {
-                organizations.push({ id: doc.id, ...doc.data(), userRole: 'Owner' });
+            orgsSnapshot.forEach((doc) => {
+                const orgData = doc.data();
+                organizations.push({ 
+                    id: doc.id, 
+                    ...orgData,
+                    userRole: orgData.ownerId === userId ? 'owner' : 'member'
+                });
             });
-
-            // Get organizations where user is a member
-            const userMembershipsRef = this.createDocRef('userMemberships', userId);
-            const userMembershipsSnap = await getDoc(userMembershipsRef);
-
-            if (userMembershipsSnap.exists()) {
-                const memberships = userMembershipsSnap.data().organizations || [];
-                
-                for (const membership of memberships) {
-                    const orgDoc = await getDoc(this.createDocRef('organizations', membership.orgId));
-                    if (orgDoc.exists()) {
-                        organizations.push({
-                            id: orgDoc.id,
-                            ...orgDoc.data(),
-                            userRole: membership.role
-                        });
-                    }
-                }
-            }
 
             return { success: true, data: organizations };
         } catch (error) {
@@ -471,9 +386,6 @@ class FirestoreService {
 
     // ===== TEST SUITE OPERATIONS =====
 
-    /**
-     * Create test suite
-     */
     async createTestSuite(suiteData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -481,17 +393,19 @@ class FirestoreService {
         }
 
         const testSuiteData = this.addCommonFields({
-            ownerType: 'individual',
-            ownerId: userId,
-            ...suiteData
+            name: suiteData.name,
+            description: suiteData.description || '',
+            ownerType: suiteData.ownerType || 'individual',
+            ownerId: suiteData.ownerId || userId,
+            members: [userId], // Initialize with creator
+            isPublic: suiteData.isPublic || false,
+            settings: suiteData.settings || {},
+            tags: suiteData.tags || []
         });
 
-        return await this.createDocument('testSuites', testSuiteData);
+        return await this.createDocument('testSuites', testSuiteData, suiteData.id);
     }
 
-    /**
-     * Get user test suites
-     */
     async getUserTestSuites() {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -499,66 +413,38 @@ class FirestoreService {
         }
 
         try {
-            // Get individual test suites
-            const individualSuites = await this.queryDocuments(
-                'testSuites',
-                [
-                    where('ownerType', '==', 'individual'),
-                    where('ownerId', '==', userId)
-                ],
-                'created_at',
-                50
+            // Get test suites where user is a member
+            const suitesQuery = query(
+                this.createCollectionRef('testSuites'),
+                where('members', 'array-contains', userId),
+                orderBy('created_at', 'desc')
             );
 
-            // Get organization test suites (if user is part of organizations)
-            const userOrgs = await this.getUserOrganizations();
-            let organizationSuites = [];
+            const suitesSnapshot = await getDocs(suitesQuery);
+            const testSuites = [];
 
-            if (userOrgs.success && userOrgs.data.length > 0) {
-                const orgIds = userOrgs.data.map(org => org.id);
-                const orgSuitesQuery = await this.queryDocuments(
-                    'testSuites',
-                    [
-                        where('ownerType', '==', 'organization'),
-                        where('ownerId', 'in', orgIds)
-                    ],
-                    'created_at',
-                    50
-                );
+            suitesSnapshot.forEach((doc) => {
+                testSuites.push({ id: doc.id, ...doc.data() });
+            });
 
-                if (orgSuitesQuery.success) {
-                    organizationSuites = orgSuitesQuery.data;
-                }
-            }
-
-            const allSuites = [
-                ...(individualSuites.success ? individualSuites.data : []),
-                ...organizationSuites
-            ];
-
-            return { success: true, data: allSuites };
+            return { success: true, data: testSuites };
         } catch (error) {
             return this.handleFirestoreError(error, 'get user test suites');
         }
     }
 
-    /**
-     * Subscribe to user test suites
-     */
     subscribeToUserTestSuites(callback, errorCallback = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
-            if (errorCallback) {
-                errorCallback({ success: false, error: { message: 'User not authenticated' } });
-            }
+            errorCallback?.({ success: false, error: { message: 'User not authenticated' } });
             return null;
         }
 
         return this.subscribeToCollection(
             'testSuites',
             [
-                where('ownerType', '==', 'individual'),
-                where('ownerId', '==', userId)
+                where('members', 'array-contains', userId),
+                orderBy('created_at', 'desc')
             ],
             callback,
             errorCallback
@@ -567,9 +453,6 @@ class FirestoreService {
 
     // ===== SUITE ASSETS OPERATIONS =====
 
-    /**
-     * Create suite asset (bug, testCase, recording, automatedScript)
-     */
     async createSuiteAsset(suiteId, assetType, assetData, sprintId = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -582,7 +465,6 @@ class FirestoreService {
 
         const data = this.addCommonFields({
             suite_id: suiteId,
-            created_by: userId,
             ...(sprintId && { sprint_id: sprintId }),
             ...assetData
         });
@@ -590,9 +472,6 @@ class FirestoreService {
         return await this.createDocument(collectionPath, data);
     }
 
-    /**
-     * Get suite assets
-     */
     async getSuiteAssets(suiteId, assetType, sprintId = null) {
         const collectionPath = sprintId 
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
@@ -601,30 +480,26 @@ class FirestoreService {
         return await this.queryDocuments(collectionPath, [], 'created_at');
     }
 
-    /**
-     * Subscribe to suite assets
-     */
     subscribeToSuiteAssets(suiteId, assetType, callback, errorCallback = null, sprintId = null) {
         const collectionPath = sprintId 
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
 
-        return this.subscribeToCollection(collectionPath, [], callback, errorCallback);
+        return this.subscribeToCollection(
+            collectionPath, 
+            [orderBy('created_at', 'desc')], 
+            callback, 
+            errorCallback
+        );
     }
 
     // ===== SPRINT OPERATIONS =====
 
-    /**
-     * Create sprint
-     */
     async createSprint(suiteId, sprintData) {
         const collectionPath = `testSuites/${suiteId}/sprints`;
         return await this.createDocument(collectionPath, sprintData);
     }
 
-    /**
-     * Get suite sprints
-     */
     async getSuiteSprints(suiteId) {
         const collectionPath = `testSuites/${suiteId}/sprints`;
         return await this.queryDocuments(collectionPath, [], 'created_at');
@@ -632,9 +507,6 @@ class FirestoreService {
 
     // ===== ACTIVITY LOGS =====
 
-    /**
-     * Create activity log
-     */
     async createActivityLog(suiteId, logData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -653,9 +525,6 @@ class FirestoreService {
 
     // ===== BATCH OPERATIONS =====
 
-    /**
-     * Execute batch operations
-     */
     async executeBatch(operations) {
         try {
             const batch = writeBatch(this.db);
@@ -685,9 +554,6 @@ class FirestoreService {
 
     // ===== TRANSACTION OPERATIONS =====
 
-    /**
-     * Execute transaction
-     */
     async executeTransaction(transactionFunction) {
         try {
             const result = await runTransaction(this.db, transactionFunction);
@@ -699,9 +565,6 @@ class FirestoreService {
 
     // ===== CLEANUP =====
 
-    /**
-     * Cleanup service (call when component unmounts)
-     */
     cleanup() {
         this.unsubscribeAll();
     }
@@ -710,6 +573,4 @@ class FirestoreService {
 // Create and export singleton instance
 const firestoreService = new FirestoreService();
 export default firestoreService;
-
-// Export the class for testing or multiple instances
 export { FirestoreService };

@@ -1,21 +1,6 @@
-// services/suiteService.js
-import { db } from '../config/firebase';
-import { 
-    collection, 
-    doc,
-    addDoc, 
-    getDocs,
-    getDoc,
-    updateDoc,
-    deleteDoc,
-    query, 
-    where, 
-    orderBy,
-    limit,
-    onSnapshot,
-    serverTimestamp,
-    setDoc
-} from 'firebase/firestore';
+// services/suiteService.js - Refactored to use centralized FirestoreService
+import firestoreService from './firestoreService';
+import { where, orderBy } from 'firebase/firestore';
 import { validateSuiteName } from '../utils/onboardingUtils';
 
 /**
@@ -46,26 +31,29 @@ class SuiteLimitError extends Error {
 }
 
 /**
- * ALIGNED: Get user profile to determine capabilities
+ * Get user profile using centralized service
  */
 const getUserProfile = async (userId) => {
     try {
-        const userRef = doc(db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        
-        if (!userDoc.exists()) {
-            // Ensure user document exists
-            await setDoc(userRef, {
+        const result = await firestoreService.getUserProfile(userId);
+
+        if (!result.success) {
+            // Create user profile if it doesn't exist
+            const createResult = await firestoreService.createOrUpdateUserProfile({
                 user_id: userId,
-                created_at: serverTimestamp(),
                 preferences: {},
-                contact_info: {}
-            }, { merge: true });
-            
+                contact_info: {},
+                account_memberships: []
+            });
+
+            if (!createResult.success) {
+                throw new Error('Failed to create user profile');
+            }
+
             return { user_id: userId, account_memberships: [] };
         }
-        
-        return userDoc.data();
+
+        return result.data;
     } catch (error) {
         console.error('Error fetching user profile:', error);
         throw error;
@@ -73,7 +61,7 @@ const getUserProfile = async (userId) => {
 };
 
 /**
- * ALIGNED: Get feature limits based on subscription context
+ * Get feature limits based on subscription context
  */
 const getFeatureLimits = (subscriptionStatus, userProfile) => {
     if (!subscriptionStatus) {
@@ -85,25 +73,24 @@ const getFeatureLimits = (subscriptionStatus, userProfile) => {
         };
     }
 
-    // Check if user is on trial
     const isTrialActive = subscriptionStatus.isTrialActive ||
         subscriptionStatus.subscriptionStatus === 'trial';
 
     if (isTrialActive) {
         const accountType = userProfile?.accountType || 'individual';
-        
+
         if (accountType === 'organization') {
             const orgType = subscriptionStatus.subscriptionType || 'organization_trial';
             if (orgType.includes('enterprise')) {
                 return {
-                    suites: -1, // unlimited
+                    suites: -1,
                     testCases: -1,
                     recordings: -1,
                     automatedScripts: -1
                 };
             } else {
                 return {
-                    suites: 10, // team level
+                    suites: 10,
                     testCases: -1,
                     recordings: -1,
                     automatedScripts: -1
@@ -111,7 +98,7 @@ const getFeatureLimits = (subscriptionStatus, userProfile) => {
             }
         } else {
             return {
-                suites: 5, // individual trial
+                suites: 5,
                 testCases: -1,
                 recordings: -1,
                 automatedScripts: -1
@@ -119,7 +106,6 @@ const getFeatureLimits = (subscriptionStatus, userProfile) => {
         }
     }
 
-    // Non-trial limits
     const limits = subscriptionStatus.capabilities?.limits;
     if (!limits) {
         const accountType = userProfile?.accountType || 'individual';
@@ -148,7 +134,7 @@ const getFeatureLimits = (subscriptionStatus, userProfile) => {
 };
 
 /**
- * ALIGNED: Count user's current suites from testSuites collection
+ * Count user's current suites using centralized service
  */
 const getCurrentSuiteCount = async (userId, userProfile = null) => {
     try {
@@ -156,29 +142,35 @@ const getCurrentSuiteCount = async (userId, userProfile = null) => {
         let totalSuites = 0;
 
         // Count individual suites
-        const individualQuery = query(
-            collection(db, 'testSuites'),
-            where('ownerType', '==', 'individual'),
-            where('ownerId', '==', userId)
+        const individualResult = await firestoreService.queryDocuments(
+            'testSuites',
+            [
+                where('ownerType', '==', 'individual'),
+                where('ownerId', '==', userId)
+            ]
         );
-        
-        const individualSnapshot = await getDocs(individualQuery);
-        totalSuites += individualSnapshot.size;
+
+        if (individualResult.success) {
+            totalSuites += individualResult.data.length;
+        }
 
         // Count organization suites where user is creator
         if (profile.account_memberships?.length > 0) {
             for (const membership of profile.account_memberships) {
                 if (membership.org_id && membership.status === 'active') {
                     try {
-                        const orgQuery = query(
-                            collection(db, 'testSuites'),
-                            where('ownerType', '==', 'organization'),
-                            where('ownerId', '==', membership.org_id),
-                            where('createdBy', '==', userId)
+                        const orgResult = await firestoreService.queryDocuments(
+                            'testSuites',
+                            [
+                                where('ownerType', '==', 'organization'),
+                                where('ownerId', '==', membership.org_id),
+                                where('createdBy', '==', userId)
+                            ]
                         );
-                        
-                        const orgSnapshot = await getDocs(orgQuery);
-                        totalSuites += orgSnapshot.size;
+
+                        if (orgResult.success) {
+                            totalSuites += orgResult.data.length;
+                        }
                     } catch (error) {
                         console.warn(`Error counting suites for org ${membership.org_id}:`, error);
                     }
@@ -194,7 +186,20 @@ const getCurrentSuiteCount = async (userId, userProfile = null) => {
 };
 
 /**
- * ALIGNED: Validate user permissions with new structure
+ * Get suite by ID using centralized service
+ */
+const getSuiteById = async (suiteId) => {
+    try {
+        const result = await firestoreService.getDocument('testSuites', suiteId);
+        return result.success ? result.data : null;
+    } catch (error) {
+        console.error('Error getting suite by ID:', error);
+        return null;
+    }
+};
+
+/**
+ * Validate user permissions
  */
 const validateSuitePermissions = async (userId, operation, context = {}) => {
     try {
@@ -203,7 +208,6 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
 
         switch (operation) {
             case 'create':
-                // For organization suites, verify admin permissions
                 if (organizationId) {
                     const isOrgAdmin = userProfile.account_memberships?.some(
                         membership => membership.org_id === organizationId &&
@@ -221,7 +225,6 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
                 break;
 
             case 'read':
-                // Basic read permission validation
                 break;
 
             case 'update':
@@ -232,13 +235,12 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
                         throw new SuiteValidationError('Suite not found');
                     }
 
-                    // Check if user has permission
                     const hasPermission = suite.createdBy === userId ||
                         suite.permissions?.[userId] ||
-                        (suite.ownerType === 'organization' && 
-                         userProfile.account_memberships?.some(
-                             m => m.org_id === suite.ownerId && m.status === 'active'
-                         ));
+                        (suite.ownerType === 'organization' &&
+                            userProfile.account_memberships?.some(
+                                m => m.org_id === suite.ownerId && m.status === 'active'
+                            ));
 
                     if (!hasPermission) {
                         throw new SuitePermissionError(
@@ -247,15 +249,14 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
                         );
                     }
 
-                    // For delete, require creator or admin
                     if (operation === 'delete' && suite.createdBy !== userId) {
                         if (suite.ownerType === 'organization') {
                             const isOrgAdmin = userProfile.account_memberships?.some(
-                                m => m.org_id === suite.ownerId && 
-                                     m.status === 'active' && 
-                                     m.role === 'Admin'
+                                m => m.org_id === suite.ownerId &&
+                                    m.status === 'active' &&
+                                    m.role === 'Admin'
                             );
-                            
+
                             if (!isOrgAdmin) {
                                 throw new SuitePermissionError(
                                     'Only the suite creator or organization admin can delete this suite',
@@ -278,8 +279,8 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
 
         return { userProfile };
     } catch (error) {
-        if (error instanceof SuitePermissionError || 
-            error instanceof SuiteValidationError || 
+        if (error instanceof SuitePermissionError ||
+            error instanceof SuiteValidationError ||
             error instanceof SuiteLimitError) {
             throw error;
         }
@@ -289,21 +290,7 @@ const validateSuitePermissions = async (userId, operation, context = {}) => {
 };
 
 /**
- * ALIGNED: Get suite by ID from testSuites collection
- */
-const getSuiteById = async (suiteId) => {
-    try {
-        const suiteRef = doc(db, 'testSuites', suiteId);
-        const suiteDoc = await getDoc(suiteRef);
-        return suiteDoc.exists() ? { suite_id: suiteDoc.id, ...suiteDoc.data() } : null;
-    } catch (error) {
-        console.error('Error getting suite by ID:', error);
-        return null;
-    }
-};
-
-/**
- * ALIGNED: Check if suite name exists
+ * Check if suite name exists using centralized service
  */
 export const checkSuiteNameExists = async (name, userId, organizationId = null) => {
     try {
@@ -317,15 +304,16 @@ export const checkSuiteNameExists = async (name, userId, organizationId = null) 
         const ownerType = organizationId ? 'organization' : 'individual';
         const ownerId = organizationId || userId;
 
-        const q = query(
-            collection(db, 'testSuites'),
-            where('ownerType', '==', ownerType),
-            where('ownerId', '==', ownerId),
-            where('name', '==', name.trim())
+        const result = await firestoreService.queryDocuments(
+            'testSuites',
+            [
+                where('ownerType', '==', ownerType),
+                where('ownerId', '==', ownerId),
+                where('name', '==', name.trim())
+            ]
         );
 
-        const querySnapshot = await getDocs(q);
-        return !querySnapshot.empty;
+        return result.success && result.data.length > 0;
     } catch (error) {
         console.error('Error checking suite name:', error);
         throw error;
@@ -333,25 +321,22 @@ export const checkSuiteNameExists = async (name, userId, organizationId = null) 
 };
 
 /**
- * ALIGNED: Create a new suite using testSuites collection
+ * Create a new suite using centralized service
  */
 export const createSuite = async (suiteData, userId, subscriptionStatus = null, organizationId = null) => {
     try {
         const { name, description = '', tags = [] } = suiteData;
-        
-        // Validate suite name
+
         const validation = validateSuiteName(name);
         if (!validation.isValid) {
             throw new SuiteValidationError(validation.errors[0]);
         }
 
-        // Validate permissions
-        const { userProfile } = await validateSuitePermissions(userId, 'create', { 
-            organizationId, 
-            suiteData 
+        const { userProfile } = await validateSuitePermissions(userId, 'create', {
+            organizationId,
+            suiteData
         });
 
-        // Check limits
         const limits = getFeatureLimits(subscriptionStatus, userProfile);
         if (limits.suites > 0) {
             const currentCount = await getCurrentSuiteCount(userId, userProfile);
@@ -363,7 +348,6 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
             }
         }
 
-        // Check if name already exists
         const nameExists = await checkSuiteNameExists(name, userId, organizationId);
         if (nameExists) {
             throw new SuiteValidationError(
@@ -371,32 +355,20 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
             );
         }
 
-        // ALIGNED: Create suite with new structure
         const ownerType = organizationId ? 'organization' : 'individual';
         const ownerId = organizationId || userId;
 
         const newSuite = {
-            // Core identification
             ownerType,
             ownerId,
-            
-            // Metadata
             name: name.trim(),
             description: description.trim(),
             status: 'active',
             tags: tags || [],
-            
-            // Audit fields
             createdBy: userId,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            
-            // Access control
             permissions: {
                 [userId]: 'admin'
             },
-            
-            // Testing assets structure
             testingAssets: {
                 bugs: [],
                 testCases: [],
@@ -406,8 +378,6 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
                 reports: [],
                 settings: {}
             },
-            
-            // Collaboration
             collaboration: {
                 activityLog: [],
                 comments: [],
@@ -415,20 +385,21 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
             }
         };
 
-        // Create in testSuites collection
-        const collectionRef = collection(db, 'testSuites');
-        const docRef = await addDoc(collectionRef, newSuite);
-        
-        // Update with document ID
-        await updateDoc(docRef, {
-            suite_id: docRef.id,
-            updatedAt: serverTimestamp()
+        const result = await firestoreService.createDocument('testSuites', newSuite);
+
+        if (!result.success) {
+            throw new Error(result.error.message || 'Failed to create suite');
+        }
+
+        // Update with suite_id
+        await firestoreService.updateDocument('testSuites', result.id, {
+            suite_id: result.id
         });
 
-        const createdSuite = { ...newSuite, suite_id: docRef.id };
+        const createdSuite = { ...newSuite, suite_id: result.id };
 
         console.log('Suite created successfully:', {
-            suiteId: docRef.id,
+            suiteId: result.id,
             userId,
             organizationId,
             ownerType,
@@ -437,14 +408,14 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
 
         return {
             success: true,
-            suiteId: docRef.id,
+            suiteId: result.id,
             suite: createdSuite
         };
     } catch (error) {
         console.error('Error creating suite:', error);
-        
-        if (error instanceof SuitePermissionError || 
-            error instanceof SuiteValidationError || 
+
+        if (error instanceof SuitePermissionError ||
+            error instanceof SuiteValidationError ||
             error instanceof SuiteLimitError) {
             return {
                 success: false,
@@ -452,7 +423,7 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
                 code: error.code
             };
         }
-        
+
         return {
             success: false,
             error: 'Failed to create suite. Please try again.',
@@ -462,7 +433,7 @@ export const createSuite = async (suiteData, userId, subscriptionStatus = null, 
 };
 
 /**
- * ALIGNED: Get all suites for a user using testSuites collection
+ * Get all suites for a user using centralized service
  */
 export const getUserSuites = async (userId) => {
     try {
@@ -470,26 +441,24 @@ export const getUserSuites = async (userId) => {
         const userSuites = [];
 
         // Get individual suites
-        try {
-            const individualQuery = query(
-                collection(db, 'testSuites'),
+        const individualResult = await firestoreService.queryDocuments(
+            'testSuites',
+            [
                 where('ownerType', '==', 'individual'),
-                where('ownerId', '==', userId),
-                orderBy('createdAt', 'desc'),
-                limit(50)
-            );
+                where('ownerId', '==', userId)
+            ],
+            'created_at',
+            50
+        );
 
-            const individualSnapshot = await getDocs(individualQuery);
-            const individualSuites = individualSnapshot.docs.map(doc => ({
-                suite_id: doc.id,
-                ...doc.data(),
+        if (individualResult.success) {
+            const individualSuites = individualResult.data.map(suite => ({
+                ...suite,
+                suite_id: suite.id,
                 accountType: 'individual',
                 membershipType: 'individual'
             }));
-
             userSuites.push(...individualSuites);
-        } catch (error) {
-            console.error('Error fetching individual suites:', error);
         }
 
         // Get organization suites
@@ -497,25 +466,27 @@ export const getUserSuites = async (userId) => {
             for (const membership of userProfile.account_memberships) {
                 if (membership.org_id && membership.status === 'active') {
                     try {
-                        const orgQuery = query(
-                            collection(db, 'testSuites'),
-                            where('ownerType', '==', 'organization'),
-                            where('ownerId', '==', membership.org_id),
-                            orderBy('createdAt', 'desc'),
-                            limit(25)
+                        const orgResult = await firestoreService.queryDocuments(
+                            'testSuites',
+                            [
+                                where('ownerType', '==', 'organization'),
+                                where('ownerId', '==', membership.org_id)
+                            ],
+                            'created_at',
+                            25
                         );
 
-                        const orgSnapshot = await getDocs(orgQuery);
-                        const orgSuites = orgSnapshot.docs.map(doc => ({
-                            suite_id: doc.id,
-                            ...doc.data(),
-                            accountType: 'organization',
-                            organizationId: membership.org_id,
-                            membershipType: 'organization',
-                            userRole: membership.role
-                        }));
-
-                        userSuites.push(...orgSuites);
+                        if (orgResult.success) {
+                            const orgSuites = orgResult.data.map(suite => ({
+                                ...suite,
+                                suite_id: suite.id,
+                                accountType: 'organization',
+                                organizationId: membership.org_id,
+                                membershipType: 'organization',
+                                userRole: membership.role
+                            }));
+                            userSuites.push(...orgSuites);
+                        }
                     } catch (error) {
                         console.warn(`Error fetching suites for org ${membership.org_id}:`, error);
                     }
@@ -533,8 +504,8 @@ export const getUserSuites = async (userId) => {
         }, []);
 
         uniqueSuites.sort((a, b) => {
-            const dateA = a.createdAt?.toDate?.() || new Date(0);
-            const dateB = b.createdAt?.toDate?.() || new Date(0);
+            const dateA = a.created_at?.toDate?.() || new Date(0);
+            const dateB = b.created_at?.toDate?.() || new Date(0);
             return dateB - dateA;
         });
 
@@ -551,7 +522,7 @@ export const getUserSuites = async (userId) => {
 };
 
 /**
- * Get a specific suite
+ * Get a specific suite using centralized service
  */
 export const getSuite = async (suiteId, userId = null) => {
     try {
@@ -560,16 +531,13 @@ export const getSuite = async (suiteId, userId = null) => {
         }
 
         const suite = await getSuiteById(suiteId);
-        
+
         if (!suite) {
             throw new SuiteValidationError('Suite not found');
         }
 
-        // Validate permissions if userId is provided
         if (userId) {
-            await validateSuitePermissions(userId, 'read', {
-                suiteId
-            });
+            await validateSuitePermissions(userId, 'read', { suiteId });
         }
 
         return suite;
@@ -580,7 +548,7 @@ export const getSuite = async (suiteId, userId = null) => {
 };
 
 /**
- * ALIGNED: Update suite in testSuites collection
+ * Update suite using centralized service
  */
 export const updateSuite = async (suiteId, updates, userId) => {
     try {
@@ -588,27 +556,23 @@ export const updateSuite = async (suiteId, updates, userId) => {
             throw new SuiteValidationError('Suite ID is required');
         }
 
-        // Validate permissions
         await validateSuitePermissions(userId, 'update', { suiteId });
 
-        const suiteRef = doc(db, 'testSuites', suiteId);
+        const result = await firestoreService.updateDocument('testSuites', suiteId, updates);
 
-        const updateData = {
-            ...updates,
-            updatedAt: serverTimestamp()
-        };
+        if (!result.success) {
+            throw new Error(result.error.message || 'Failed to update suite');
+        }
 
-        await updateDoc(suiteRef, updateData);
-        
         const updatedSuite = await getSuiteById(suiteId);
-        
+
         return {
             success: true,
             suite: updatedSuite
         };
     } catch (error) {
         console.error('Error updating suite:', error);
-        
+
         if (error instanceof SuitePermissionError || error instanceof SuiteValidationError) {
             return {
                 success: false,
@@ -616,7 +580,7 @@ export const updateSuite = async (suiteId, updates, userId) => {
                 code: error.code
             };
         }
-        
+
         return {
             success: false,
             error: 'Failed to update suite. Please try again.',
@@ -626,7 +590,7 @@ export const updateSuite = async (suiteId, updates, userId) => {
 };
 
 /**
- * ALIGNED: Delete suite from testSuites collection
+ * Delete suite using centralized service
  */
 export const deleteSuite = async (suiteId, userId) => {
     try {
@@ -634,21 +598,23 @@ export const deleteSuite = async (suiteId, userId) => {
             throw new SuiteValidationError('Suite ID is required');
         }
 
-        // Validate permissions
         await validateSuitePermissions(userId, 'delete', { suiteId });
 
-        const suiteRef = doc(db, 'testSuites', suiteId);
-        await deleteDoc(suiteRef);
-        
+        const result = await firestoreService.deleteDocument('testSuites', suiteId);
+
+        if (!result.success) {
+            throw new Error(result.error.message || 'Failed to delete suite');
+        }
+
         console.log('Suite deleted successfully:', { suiteId, userId });
-        
+
         return {
             success: true,
             message: 'Suite deleted successfully'
         };
     } catch (error) {
         console.error('Error deleting suite:', error);
-        
+
         if (error instanceof SuitePermissionError || error instanceof SuiteValidationError) {
             return {
                 success: false,
@@ -656,7 +622,7 @@ export const deleteSuite = async (suiteId, userId) => {
                 code: error.code
             };
         }
-        
+
         return {
             success: false,
             error: 'Failed to delete suite. Please try again.',
@@ -666,7 +632,7 @@ export const deleteSuite = async (suiteId, userId) => {
 };
 
 /**
- * ALIGNED: Listen to suite changes in testSuites collection
+ * Subscribe to suite changes using centralized service
  */
 export const subscribeToSuites = (callback, userId) => {
     try {
@@ -674,21 +640,19 @@ export const subscribeToSuites = (callback, userId) => {
             throw new SuiteValidationError('User ID is required for subscription');
         }
 
-        // Subscribe to individual suites
-        const individualQuery = query(
-            collection(db, 'testSuites'),
-            where('ownerType', '==', 'individual'),
-            where('ownerId', '==', userId),
-            orderBy('createdAt', 'desc')
-        );
-        
-        return onSnapshot(individualQuery, 
-            (querySnapshot) => {
-                const suites = querySnapshot.docs.map(doc => ({
-                    suite_id: doc.id,
-                    ...doc.data()
+        return firestoreService.subscribeToCollection(
+            'testSuites',
+            [
+                where('ownerType', '==', 'individual'),
+                where('ownerId', '==', userId),
+                orderBy('created_at', 'desc')
+            ],
+            (suites) => {
+                const formattedSuites = suites.map(suite => ({
+                    ...suite,
+                    suite_id: suite.id
                 }));
-                callback(suites);
+                callback(formattedSuites);
             },
             (error) => {
                 console.error('Error in suite subscription:', error);
@@ -709,16 +673,16 @@ export const canCreateNewSuite = async (userId, subscriptionStatus = null) => {
         const userProfile = await getUserProfile(userId);
         const limits = getFeatureLimits(subscriptionStatus, userProfile);
         const currentCount = await getCurrentSuiteCount(userId, userProfile);
-        
+
         const canCreate = limits.suites === -1 || currentCount < limits.suites;
         const remaining = limits.suites === -1 ? -1 : Math.max(0, limits.suites - currentCount);
-        
+
         return {
             canCreate,
             currentCount,
             maxAllowed: limits.suites,
             remaining,
-            message: canCreate ? 
+            message: canCreate ?
                 `You can create ${remaining === -1 ? 'unlimited' : remaining} more suite${remaining !== 1 ? 's' : ''}` :
                 `You've reached your limit of ${limits.suites} suite${limits.suites !== 1 ? 's' : ''}. Please upgrade to create more.`
         };
@@ -739,7 +703,6 @@ let currentSuiteData = {};
 
 export const switchSuite = async (userId, suiteId) => {
     try {
-        // Validate that user can access this suite
         await getSuite(suiteId, userId);
 
         const suiteData = {
@@ -747,17 +710,14 @@ export const switchSuite = async (userId, suiteId) => {
             timestamp: new Date().toISOString()
         };
 
-        // Store in memory
         currentSuiteData[userId] = suiteData;
 
-        // Update user's profile with last accessed suite
-        const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, {
+        // Update user's profile using centralized service
+        await firestoreService.updateDocument('users', userId, {
             lastAccessedSuite: {
                 suiteId,
-                accessedAt: serverTimestamp()
-            },
-            updated_at: serverTimestamp()
+                accessedAt: new Date()
+            }
         });
 
         return {
@@ -766,7 +726,7 @@ export const switchSuite = async (userId, suiteId) => {
         };
     } catch (error) {
         console.error('Error switching suite:', error);
-        
+
         return {
             success: false,
             error: error.message || 'Failed to switch suite'

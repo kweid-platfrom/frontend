@@ -1,5 +1,5 @@
 // services/subscriptionService.js - Handle ONLY billing and payment logic
-import { doc, updateDoc, getDoc, collection, addDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc, collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { db } from "../config/firebase";
 
 /**
@@ -36,6 +36,182 @@ export const subscriptionService = {
             stripe: 'stripe',
             paypal: 'paypal'
         }
+    },
+
+    /**
+     * Get user's current subscription details
+     * @param {string} userId - User ID
+     * @returns {Promise<Object>} Subscription details
+     */
+    async getSubscription(userId) {
+        try {
+            if (!userId) {
+                return {
+                    success: false,
+                    error: 'User ID is required'
+                };
+            }
+
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (!userDoc.exists()) {
+                return {
+                    success: false,
+                    error: 'User not found'
+                };
+            }
+
+            const userData = userDoc.data();
+            
+            // Extract subscription-related fields
+            const subscriptionData = {
+                subscriptionPlan: userData.subscriptionPlan || 'individual_free',
+                subscriptionStatus: userData.subscriptionStatus || 'active',
+                subscriptionStartDate: userData.subscriptionStartDate,
+                subscriptionEndDate: userData.subscriptionEndDate,
+                billingCycle: userData.billingCycle || 'monthly',
+                isTrialActive: userData.isTrialActive || false,
+                trialDaysRemaining: userData.trialDaysRemaining || 0,
+                
+                // Billing information
+                stripeCustomerId: userData.stripeCustomerId,
+                stripeSubscriptionId: userData.stripeSubscriptionId,
+                lastPaymentDate: userData.lastPaymentDate,
+                nextBillingDate: userData.nextBillingDate,
+                
+                // Calculated fields
+                isActive: userData.subscriptionStatus === 'active',
+                isPaidPlan: userData.subscriptionPlan && !userData.subscriptionPlan.includes('free'),
+                willCancelAt: userData.willCancelAt,
+                cancelledAt: userData.cancelledAt
+            };
+
+            return {
+                success: true,
+                data: subscriptionData
+            };
+
+        } catch (error) {
+            console.error('Error getting subscription:', error);
+            return {
+                success: false,
+                error: error.message || 'Failed to get subscription'
+            };
+        }
+    },
+
+    /**
+     * Check if user has access to a specific feature based on subscription
+     * @param {string} userId - User ID
+     * @param {string} feature - Feature to check
+     * @returns {Promise<boolean>} Has access
+     */
+    async hasFeatureAccess(userId, feature) {
+        try {
+            const subscriptionResult = await this.getSubscription(userId);
+            
+            if (!subscriptionResult.success) {
+                return false;
+            }
+
+            const { subscriptionPlan, subscriptionStatus } = subscriptionResult.data;
+            
+            // If subscription is not active, only free features are available
+            if (subscriptionStatus !== 'active') {
+                return this.isFeatureInFreePlan(feature);
+            }
+
+            // Check feature access based on plan
+            return this.isFeatureInPlan(subscriptionPlan, feature);
+
+        } catch (error) {
+            console.error('Error checking feature access:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Check if feature is available in free plan
+     * @param {string} feature - Feature to check
+     * @returns {boolean} Is available in free plan
+     */
+    isFeatureInFreePlan(feature) {
+        const freeFeatures = [
+            'basic_projects',
+            'basic_export',
+            'community_support'
+        ];
+        return freeFeatures.includes(feature);
+    },
+
+    /**
+     * Check if feature is available in specific plan
+     * @param {string} plan - Subscription plan
+     * @param {string} feature - Feature to check
+     * @returns {boolean} Is available in plan
+     */
+    isFeatureInPlan(plan, feature) {
+        const planFeatures = {
+            individual_free: [
+                'basic_projects',
+                'basic_export',
+                'community_support'
+            ],
+            individual_pro: [
+                'basic_projects',
+                'basic_export',
+                'community_support',
+                'advanced_projects',
+                'premium_export',
+                'priority_support',
+                'advanced_analytics'
+            ],
+            organization_free: [
+                'basic_projects',
+                'basic_export',
+                'community_support',
+                'team_collaboration'
+            ],
+            organization_starter: [
+                'basic_projects',
+                'basic_export',
+                'community_support',
+                'team_collaboration',
+                'advanced_projects',
+                'premium_export',
+                'basic_admin_tools'
+            ],
+            organization_professional: [
+                'basic_projects',
+                'basic_export',
+                'community_support',
+                'team_collaboration',
+                'advanced_projects',
+                'premium_export',
+                'basic_admin_tools',
+                'advanced_admin_tools',
+                'priority_support',
+                'advanced_analytics'
+            ],
+            organization_enterprise: [
+                'basic_projects',
+                'basic_export',
+                'community_support',
+                'team_collaboration',
+                'advanced_projects',
+                'premium_export',
+                'basic_admin_tools',
+                'advanced_admin_tools',
+                'priority_support',
+                'advanced_analytics',
+                'custom_integrations',
+                'dedicated_support',
+                'sso_integration'
+            ]
+        };
+
+        return planFeatures[plan]?.includes(feature) || false;
     },
 
     /**
@@ -333,15 +509,46 @@ export const subscriptionService = {
      * @param {string} userId - User ID
      * @returns {Promise<Array>} Billing history
      */
-    async getBillingHistory() {
+    async getBillingHistory(userId) {
         try {
-            // This would query payment transactions from database
-            // For now, returning mock data structure
+            if (!userId) {
+                return {
+                    success: false,
+                    error: 'User ID is required',
+                    transactions: []
+                };
+            }
+
+            // Query payment transactions for this user
+            const transactionsRef = collection(db, 'payment_transactions');
+            const q = query(transactionsRef, where('userId', '==', userId));
+            const querySnapshot = await getDocs(q);
+
+            const transactions = [];
+            let totalSpent = 0;
+
+            querySnapshot.forEach((doc) => {
+                const transaction = doc.data();
+                transactions.push({
+                    id: doc.id,
+                    ...transaction
+                });
+                
+                if (transaction.status === 'completed' && transaction.amount) {
+                    totalSpent += transaction.amount;
+                }
+            });
+
+            // Get next billing date from user profile
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userDocRef);
+            const nextBillingDate = userDoc.exists() ? userDoc.data().nextBillingDate : null;
+
             return {
                 success: true,
-                transactions: [], // Would contain actual transaction records
-                totalSpent: 0,
-                nextBillingDate: null
+                transactions: transactions.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
+                totalSpent,
+                nextBillingDate
             };
 
         } catch (error) {
@@ -396,11 +603,17 @@ export const subscriptionService = {
         }
     },
 
-    async getCheckoutSession() {
+    async getCheckoutSession(sessionId) {
         try {
-            // Implementation would query checkout_sessions collection
-            // For now, returning null as this would need proper database query
-            return null;
+            const sessionsRef = collection(db, 'checkout_sessions');
+            const q = query(sessionsRef, where('id', '==', sessionId));
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+                return null;
+            }
+
+            return querySnapshot.docs[0].data();
         } catch (error) {
             console.error('Error getting checkout session:', error);
             return null;

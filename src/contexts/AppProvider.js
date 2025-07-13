@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // contexts/AppProvider.js - Unified provider for QA Test Management Platform
 'use client'
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { UserProfileProvider, useUserProfile } from './userProfileContext';
@@ -28,6 +28,14 @@ const UnifiedAppProvider = ({ children }) => {
     const subscription = useSubscription();
     const suite = useSuite();
 
+    // Track initialization state with refs to prevent unnecessary re-renders
+    const initializationRef = useRef({
+        isInitialized: false,
+        isInitializing: false,
+        lastAuthState: null,
+        initializationPromise: null
+    });
+
     // Application-wide state
     const [notifications, setNotifications] = useState([]);
     const [isInitialized, setIsInitialized] = useState(false);
@@ -49,11 +57,10 @@ const UnifiedAppProvider = ({ children }) => {
     const pathname = usePathname();
     const initialModule = pathname?.split('/')[1] || null;
     const [activeModule, setActiveModule] = useState(() => {
-        // Prevent setting dashboard when on root path
         return initialModule && initialModule !== '' ? initialModule : null;
     });
 
-    // Feature flags and capabilities
+    // Feature flags - Use ref to prevent unnecessary re-renders
     const [featureFlags, setFeatureFlags] = useState({
         betaFeatures: false,
         advancedReports: false,
@@ -62,23 +69,42 @@ const UnifiedAppProvider = ({ children }) => {
         automation: false
     });
 
-    // Combined authentication status
+    // Stable authentication status - Only update when truly changed
     const isAuthenticated = useMemo(() => {
-        return auth.user && auth.user.uid && !auth.loading;
-    }, [auth.user, auth.loading]);
+        const currentAuth = auth.user && auth.user.uid && !auth.loading;
+        
+        // Only update if state actually changed
+        if (initializationRef.current.lastAuthState !== currentAuth) {
+            initializationRef.current.lastAuthState = currentAuth;
+        }
+        
+        return currentAuth;
+    }, [auth.user?.uid, auth.loading]);
 
-    // Combined loading state - Only show loading when actually needed
+    // Optimized loading state - More granular control
     const isLoading = useMemo(() => {
-        // Don't show loading if user is not authenticated
+        // Never show loading for non-authenticated users
         if (!isAuthenticated) return false;
         
-        return userProfile.loading ||
-            subscription.isLoading ||
-            suite.isLoading ||
-            globalLoading;
-    }, [isAuthenticated, userProfile.loading, subscription.isLoading, suite.isLoading, globalLoading]);
+        // Don't show loading if we're already initialized
+        if (initializationRef.current.isInitialized) return false;
+        
+        // Show loading only when actually initializing or when contexts are truly loading
+        return initializationRef.current.isInitializing || 
+               userProfile.isLoading || 
+               subscription.isLoading || 
+               suite.isLoading || 
+               globalLoading;
+    }, [
+        isAuthenticated, 
+        userProfile.isLoading, 
+        subscription.isLoading, 
+        suite.isLoading, 
+        globalLoading,
+        isInitialized
+    ]);
 
-    // Combined user capabilities
+    // Memoized user capabilities with dependency tracking
     const userCapabilities = useMemo(() => {
         if (!isAuthenticated || !subscription.subscriptionStatus) return {};
 
@@ -91,15 +117,24 @@ const UnifiedAppProvider = ({ children }) => {
             canCreateSuite: suite.canCreateSuite,
             hasActiveSubscription: subscription.subscriptionStatus.isValid,
             isTrialActive: subscription.subscriptionStatus.isTrial,
-            trialDaysRemaining: subscription.subscriptionStatus.trialDaysRemaining
+            trialDaysRemaining: subscription.subscriptionStatus.trialDaysRemaining,
+            canCreateResource: subscription.canCreateResource,
+            getResourceLimit: subscription.getResourceLimit
         };
-    }, [isAuthenticated, subscription.subscriptionStatus, subscription.getFeatureLimits, suite.canCreateSuite]);
+    }, [
+        isAuthenticated, 
+        subscription.subscriptionStatus?.isValid,
+        subscription.subscriptionStatus?.isTrial,
+        subscription.subscriptionStatus?.trialDaysRemaining,
+        subscription.subscriptionStatus?.capabilities,
+        suite.canCreateSuite
+    ]);
 
-    // Account summary
+    // Optimized account summary with shallow comparison
     const accountSummary = useMemo(() => {
-        if (!isAuthenticated || !userProfile.profile) return null;
+        if (!isAuthenticated || !userProfile.userProfile) return null;
 
-        const profile = userProfile.profile;
+        const profile = userProfile.userProfile;
         const subs = subscription.subscriptionStatus;
 
         return {
@@ -125,7 +160,10 @@ const UnifiedAppProvider = ({ children }) => {
                 trialDaysRemaining: subs?.trialDaysRemaining || 0,
                 billingCycle: subs?.billingCycle,
                 nextBillingDate: subs?.nextBillingDate,
-                willCancelAt: subs?.willCancelAt
+                willCancelAt: subs?.willCancelAt,
+                isExpired: subs?.isExpired || false,
+                showTrialBanner: subs?.showTrialBanner || false,
+                showUpgradePrompt: subs?.showUpgradePrompt || true
             },
             suites: {
                 total: suite.suites?.length || 0,
@@ -133,9 +171,28 @@ const UnifiedAppProvider = ({ children }) => {
                 canCreate: suite.canCreateSuite
             }
         };
-    }, [isAuthenticated, userProfile.profile, subscription.subscriptionStatus, suite.suites, suite.activeSuite, suite.canCreateSuite, auth.user]);
+    }, [
+        isAuthenticated,
+        auth.user?.uid,
+        auth.user?.email,
+        auth.user?.displayName,
+        auth.user?.emailVerified,
+        auth.user?.photoURL,
+        userProfile.userProfile?.accountType,
+        userProfile.userProfile?.organizationId,
+        userProfile.userProfile?.organizationName,
+        userProfile.userProfile?.role,
+        subscription.subscriptionStatus?.subscriptionPlan,
+        subscription.subscriptionStatus?.subscriptionStatus,
+        subscription.subscriptionStatus?.isValid,
+        subscription.subscriptionStatus?.isTrial,
+        subscription.subscriptionStatus?.trialDaysRemaining,
+        suite.suites?.length,
+        suite.activeSuite,
+        suite.canCreateSuite
+    ]);
 
-    // Notification management
+    // Optimized notification management
     const addNotification = useCallback((notification) => {
         const id = Date.now().toString();
         const newNotification = {
@@ -171,11 +228,10 @@ const UnifiedAppProvider = ({ children }) => {
         setNotifications([]);
     }, []);
 
-    // Navigation helpers
+    // Navigation helpers - Stable references
     const navigateToModule = useCallback((module) => {
         setActiveModule(module);
 
-        // Update breadcrumbs based on module
         const moduleMap = {
             dashboard: ['Dashboard'],
             bugs: ['Bug Tracker'],
@@ -194,7 +250,7 @@ const UnifiedAppProvider = ({ children }) => {
         setBreadcrumbs(crumbs);
     }, []);
 
-    // Feature access helpers
+    // Stable feature access helpers
     const hasFeatureAccess = useCallback((feature) => {
         return subscription.hasFeatureAccess(feature);
     }, [subscription.hasFeatureAccess]);
@@ -214,134 +270,255 @@ const UnifiedAppProvider = ({ children }) => {
         };
     }, [subscription.getFeatureLimits]);
 
-    // Application initialization - Fixed to handle non-authenticated users
+    const canCreateResource = useCallback((resourceType, currentCount = 0) => {
+        return subscription.canCreateResource(resourceType, currentCount);
+    }, [subscription.canCreateResource]);
+
+    const getResourceLimit = useCallback((resourceType) => {
+        return subscription.getResourceLimit(resourceType);
+    }, [subscription.getResourceLimit]);
+
+    // Improved initialization with proper state management
     const initializeApp = useCallback(async () => {
+        // Prevent concurrent initialization
+        if (initializationRef.current.isInitializing) {
+            return initializationRef.current.initializationPromise;
+        }
+
         // Don't initialize if user is not authenticated
         if (!isAuthenticated) {
-            setIsInitialized(true); // Set to true so non-authenticated users can use the app
-            setGlobalLoading(false);
-            return;
-        }
-
-        // If already initialized, don't initialize again
-        if (isInitialized) {
-            return;
-        }
-
-        try {
-            setGlobalLoading(true);
-
-            // Wait for all contexts to be ready with reasonable timeouts
-            await Promise.all([
-                // Ensure user profile is loaded
-                userProfile.profile ? Promise.resolve() : new Promise((resolve) => {
-                    let attempts = 0;
-                    const maxAttempts = 30; // 3 seconds
-                    const checkProfile = () => {
-                        attempts++;
-                        if (userProfile.profile || attempts >= maxAttempts) {
-                            resolve();
-                        } else {
-                            setTimeout(checkProfile, 100);
-                        }
-                    };
-                    checkProfile();
-                }),
-
-                // Ensure subscription status is loaded
-                subscription.subscriptionStatus ? Promise.resolve() : new Promise((resolve) => {
-                    let attempts = 0;
-                    const maxAttempts = 30; // 3 seconds
-                    const checkSubscription = () => {
-                        attempts++;
-                        if (subscription.subscriptionStatus || attempts >= maxAttempts) {
-                            resolve();
-                        } else {
-                            setTimeout(checkSubscription, 100);
-                        }
-                    };
-                    checkSubscription();
-                })
-            ]);
-
-            // Update feature flags based on subscription
-            if (subscription.subscriptionStatus) {
-                setFeatureFlags({
-                    betaFeatures: subscription.subscriptionStatus.capabilities?.canUseAPI || false,
-                    advancedReports: subscription.subscriptionStatus.capabilities?.canAccessAdvancedReports || false,
-                    teamCollaboration: subscription.subscriptionStatus.capabilities?.canInviteTeamMembers || false,
-                    apiAccess: subscription.subscriptionStatus.capabilities?.canUseAPI || false,
-                    automation: subscription.subscriptionStatus.capabilities?.canUseAutomation || false
-                });
-            }
-
-            // Load app preferences from localStorage
-            try {
-                const savedPreferences = localStorage.getItem('appPreferences');
-                if (savedPreferences) {
-                    setAppPreferences(prev => ({
-                        ...prev,
-                        ...JSON.parse(savedPreferences)
-                    }));
-                }
-            } catch (error) {
-                console.warn('Error loading app preferences:', error);
-            }
-
+            initializationRef.current.isInitialized = true;
             setIsInitialized(true);
-            setError(null);
-
-        } catch (error) {
-            console.error('Error initializing app:', error);
-            setError(error.message);
-            addNotification({
-                type: 'error',
-                title: 'Initialization Error',
-                message: 'Failed to initialize application. Please refresh the page.',
-                persistent: true
-            });
-        } finally {
             setGlobalLoading(false);
+            return;
         }
-    }, [isAuthenticated, userProfile.profile, subscription.subscriptionStatus, addNotification, isInitialized]);
 
-    // Initialize app when authentication state changes
+        // If already initialized for this auth state, don't reinitialize
+        if (initializationRef.current.isInitialized) {
+            return;
+        }
+
+        initializationRef.current.isInitializing = true;
+        
+        const initPromise = (async () => {
+            try {
+                setGlobalLoading(true);
+
+                // Create timeout promises for each context
+                const createTimeoutPromise = (checkFn, timeout = 5000) => {
+                    return new Promise((resolve) => {
+                        const startTime = Date.now();
+                        const check = () => {
+                            if (checkFn() || Date.now() - startTime > timeout) {
+                                resolve();
+                            } else {
+                                setTimeout(check, 100);
+                            }
+                        };
+                        check();
+                    });
+                };
+
+                // Wait for contexts to be ready with proper timeouts
+                await Promise.allSettled([
+                    createTimeoutPromise(() => userProfile.userProfile),
+                    createTimeoutPromise(() => subscription.subscriptionStatus)
+                ]);
+
+                // Update feature flags only if subscription data is available
+                if (subscription.subscriptionStatus?.capabilities) {
+                    const capabilities = subscription.subscriptionStatus.capabilities;
+                    setFeatureFlags(prev => {
+                        const newFlags = {
+                            betaFeatures: capabilities.canUseAPI || false,
+                            advancedReports: capabilities.canExportReports || false,
+                            teamCollaboration: capabilities.canInviteTeamMembers || false,
+                            apiAccess: capabilities.canUseAPI || false,
+                            automation: capabilities.canCreateAutomatedTests || false
+                        };
+                        
+                        // Only update if flags actually changed
+                        if (JSON.stringify(prev) !== JSON.stringify(newFlags)) {
+                            return newFlags;
+                        }
+                        return prev;
+                    });
+                }
+
+                // Load preferences only once
+                if (!localStorage.getItem('appPreferencesLoaded')) {
+                    try {
+                        const savedPreferences = localStorage.getItem('appPreferences');
+                        if (savedPreferences) {
+                            const parsed = JSON.parse(savedPreferences);
+                            setAppPreferences(prev => ({
+                                ...prev,
+                                ...parsed
+                            }));
+                        }
+                        localStorage.setItem('appPreferencesLoaded', 'true');
+                    } catch (error) {
+                        console.warn('Error loading app preferences:', error);
+                    }
+                }
+
+                initializationRef.current.isInitialized = true;
+                setIsInitialized(true);
+                setError(null);
+
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                setError(error.message);
+                addNotification({
+                    type: 'error',
+                    title: 'Initialization Error',
+                    message: 'Failed to initialize application. Please refresh the page.',
+                    persistent: true
+                });
+            } finally {
+                setGlobalLoading(false);
+                initializationRef.current.isInitializing = false;
+                initializationRef.current.initializationPromise = null;
+            }
+        })();
+
+        initializationRef.current.initializationPromise = initPromise;
+        return initPromise;
+    }, [isAuthenticated, userProfile.userProfile, subscription.subscriptionStatus?.capabilities, addNotification]);
+
+    // Optimized initialization effect
     useEffect(() => {
-        // Reset initialization state when authentication changes
         if (!isAuthenticated) {
-            setIsInitialized(true); // Allow non-authenticated users to use the app
+            // Reset for non-authenticated users
+            initializationRef.current.isInitialized = true;
+            setIsInitialized(true);
             setGlobalLoading(false);
             setError(null);
-        } else if (isAuthenticated && !isInitialized) {
+            return;
+        }
+
+        // Only initialize if not already initialized and user is authenticated
+        if (isAuthenticated && !initializationRef.current.isInitialized && !initializationRef.current.isInitializing) {
             initializeApp();
         }
-    }, [isAuthenticated, isInitialized, initializeApp]);
+    }, [isAuthenticated, initializeApp]);
 
-    // Save preferences to localStorage
+    // Debounced preferences save
     useEffect(() => {
-        try {
-            localStorage.setItem('appPreferences', JSON.stringify(appPreferences));
-        } catch (error) {
-            console.warn('Error saving app preferences:', error);
-        }
+        const timeoutId = setTimeout(() => {
+            try {
+                localStorage.setItem('appPreferences', JSON.stringify(appPreferences));
+            } catch (error) {
+                console.warn('Error saving app preferences:', error);
+            }
+        }, 500); // Debounce by 500ms
+
+        return () => clearTimeout(timeoutId);
     }, [appPreferences]);
 
-    // Unified context value
-    const value = {
+    // Optimized refresh function
+    const refreshAll = useCallback(async () => {
+        const promises = [];
+        
+        if (userProfile.refreshProfile) {
+            promises.push(userProfile.refreshProfile());
+        }
+        
+        if (suite.refetchSuites) {
+            promises.push(suite.refetchSuites(true));
+        }
+        
+        if (subscription.updateTrialStatusInDatabase) {
+            promises.push(subscription.updateTrialStatusInDatabase());
+        }
+
+        await Promise.allSettled(promises);
+    }, [userProfile.refreshProfile, suite.refetchSuites, subscription.updateTrialStatusInDatabase]);
+
+    // Optimized sign out
+    const signOut = useCallback(async () => {
+        try {
+            await auth.signOut();
+            
+            // Reset all state
+            setNotifications([]);
+            setIsInitialized(false);
+            setActiveModule(null);
+            setBreadcrumbs([]);
+            initializationRef.current.isInitialized = false;
+            initializationRef.current.isInitializing = false;
+            initializationRef.current.initializationPromise = null;
+            
+            // Clear preferences
+            localStorage.removeItem('appPreferences');
+            localStorage.removeItem('appPreferencesLoaded');
+        } catch (error) {
+            console.error('Error signing out:', error);
+            addNotification({
+                type: 'error',
+                title: 'Sign Out Error',
+                message: 'Failed to sign out. Please try again.'
+            });
+        }
+    }, [auth.signOut, addNotification]);
+
+    // Clear error callback
+    const clearError = useCallback(() => setError(null), []);
+
+    // Memoized context value to prevent unnecessary re-renders
+    const value = useMemo(() => ({
         // Authentication
         ...auth,
         isAuthenticated,
 
         // User Profile
-        userProfile: userProfile.profile,
-        ...userProfile,
+        profile: userProfile.userProfile,
+        userProfile: userProfile.userProfile,
+        isLoading: userProfile.isLoading,
+        isUpdating: userProfile.isUpdating,
+        displayName: userProfile.displayName,
+        email: userProfile.email,
+        accountType: userProfile.accountType,
+        isAdmin: userProfile.isAdmin,
+        currentAccount: userProfile.currentAccount,
+        hasAdminPermission: userProfile.hasAdminPermission,
+        isNewUser: userProfile.isNewUser,
+        isProfileLoaded: userProfile.isProfileLoaded,
+        fetchUserProfile: userProfile.fetchUserProfile,
+        updateProfile: userProfile.updateProfile,
+        updateProfileField: userProfile.updateProfileField,
+        setupNewUserProfile: userProfile.setupNewUserProfile,
+        refreshUserProfile: userProfile.refreshProfile,
+        clearProfile: userProfile.clearProfile,
+        updateUserProfile: userProfile.updateProfile,
 
         // Subscription
         subscription: subscription.subscriptionStatus,
-        ...subscription,
+        subscriptionStatus: subscription.subscriptionStatus,
+        hasFeatureAccess: subscription.hasFeatureAccess,
+        getFeatureLimits: subscription.getFeatureLimits,
+        updateTrialStatusInDatabase: subscription.updateTrialStatusInDatabase,
+        canCreateResource: subscription.canCreateResource,
+        getResourceLimit: subscription.getResourceLimit,
+        createCheckoutSession: subscription.createCheckoutSession,
+        cancelSubscription: subscription.cancelSubscription,
+        reactivateSubscription: subscription.reactivateSubscription,
+        getBillingHistory: subscription.getBillingHistory,
+        updatePaymentMethod: subscription.updatePaymentMethod,
+        billingConfig: subscription.billingConfig,
+        capabilities: subscription.capabilities,
 
         // Test Suites
-        ...suite,
+        suites: suite.suites,
+        userTestSuites: suite.userTestSuites,
+        activeSuite: suite.activeSuite,
+        setActiveSuite: suite.setActiveSuite,
+        createTestSuite: suite.createTestSuite,
+        canCreateSuite: suite.canCreateSuite,
+        refetchSuites: suite.refetchSuites,
+        fetchUserSuites: suite.fetchUserSuites,
+        getSuiteLimit: suite.getSuiteLimit,
+        shouldFetchSuites: suite.shouldFetchSuites,
 
         // Application State
         isInitialized,
@@ -369,42 +546,48 @@ const UnifiedAppProvider = ({ children }) => {
         featureFlags,
         hasFeatureAccess,
         checkFeatureLimit,
+        canCreateResource,
+        getResourceLimit,
 
         // Preferences
         appPreferences,
         setAppPreferences,
 
         // Utilities
-        refreshAll: useCallback(async () => {
-            await Promise.all([
-                userProfile.refreshUserProfile?.(),
-                suite.refetchSuites?.(true),
-                subscription.updateTrialStatusInDatabase?.()
-            ]);
-        }, [userProfile.refreshUserProfile, suite.refetchSuites, subscription.updateTrialStatusInDatabase]),
-
-        // Error handling
-        clearError: useCallback(() => setError(null), []),
-
-        // App actions
-        signOut: useCallback(async () => {
-            try {
-                await auth.signOut();
-                setNotifications([]);
-                setIsInitialized(false);
-                setActiveModule(null);
-                setBreadcrumbs([]);
-                localStorage.removeItem('appPreferences');
-            } catch (error) {
-                console.error('Error signing out:', error);
-                addNotification({
-                    type: 'error',
-                    title: 'Sign Out Error',
-                    message: 'Failed to sign out. Please try again.'
-                });
-            }
-        }, [auth.signOut, addNotification])
-    };
+        refreshAll,
+        clearError,
+        signOut
+    }), [
+        auth,
+        isAuthenticated,
+        userProfile,
+        subscription,
+        suite,
+        isInitialized,
+        isLoading,
+        error,
+        accountSummary,
+        userCapabilities,
+        notifications,
+        addNotification,
+        removeNotification,
+        markNotificationAsRead,
+        clearAllNotifications,
+        activeModule,
+        breadcrumbs,
+        sidebarCollapsed,
+        navigateToModule,
+        updateBreadcrumbs,
+        featureFlags,
+        hasFeatureAccess,
+        checkFeatureLimit,
+        canCreateResource,
+        getResourceLimit,
+        appPreferences,
+        refreshAll,
+        clearError,
+        signOut
+    ]);
 
     return (
         <AppContext.Provider value={value}>
@@ -442,18 +625,30 @@ export const useAppSubscription = () => {
         subscriptionStatus,
         hasFeatureAccess,
         getFeatureLimits,
+        canCreateResource,
+        getResourceLimit,
         createCheckoutSession,
         cancelSubscription,
-        reactivateSubscription
+        reactivateSubscription,
+        getBillingHistory,
+        updatePaymentMethod,
+        billingConfig,
+        capabilities
     } = useApp();
     return {
         subscription,
         subscriptionStatus,
         hasFeatureAccess,
         getFeatureLimits,
+        canCreateResource,
+        getResourceLimit,
         createCheckoutSession,
         cancelSubscription,
-        reactivateSubscription
+        reactivateSubscription,
+        getBillingHistory,
+        updatePaymentMethod,
+        billingConfig,
+        capabilities
     };
 };
 
@@ -482,7 +677,7 @@ export const useAppProfile = () => {
         profile,
         refreshUserProfile,
         updateProfile,
-        loading: profileLoading
+        isLoading: profileLoading
     } = useApp();
     return {
         userProfile,
@@ -493,7 +688,6 @@ export const useAppProfile = () => {
     };
 };
 
-// Navigation hook
 export const useAppNavigation = () => {
     const {
         activeModule,
@@ -513,7 +707,6 @@ export const useAppNavigation = () => {
     };
 };
 
-// Notifications hook
 export const useAppNotifications = () => {
     const {
         notifications,
@@ -531,19 +724,22 @@ export const useAppNotifications = () => {
     };
 };
 
-// Feature access hook
 export const useAppFeatures = () => {
     const {
         featureFlags,
         hasFeatureAccess,
         checkFeatureLimit,
-        userCapabilities
+        userCapabilities,
+        canCreateResource,
+        getResourceLimit
     } = useApp();
     return {
         featureFlags,
         hasFeatureAccess,
         checkFeatureLimit,
-        userCapabilities
+        userCapabilities,
+        canCreateResource,
+        getResourceLimit
     };
 };
 
