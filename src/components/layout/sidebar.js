@@ -14,8 +14,8 @@ import { getUserPermissions } from '../../services/permissionService';
 import {
     HomeIcon,
     DocumentTextIcon,
-    BugAntIcon,
     VideoCameraIcon,
+    BugAntIcon,
     BeakerIcon,
     ChartBarIcon,
     CogIcon,

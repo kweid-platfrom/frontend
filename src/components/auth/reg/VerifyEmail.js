@@ -9,16 +9,16 @@ import BackgroundDecorations from '../../BackgroundDecorations';
 import { clearRegistrationState, handlePostVerification } from '../../../services/accountSetup';
 import '../../../app/globals.css';
 
-const retryOperation = async (operation, maxAttempts = 5, delay = 2000) => {
+const retryOperation = async (operation, maxAttempts = 3, delay = 1000) => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
             return await operation();
         } catch (error) {
-            if (attempt === maxAttempts || !error.message.includes('permission-denied')) {
+            if (attempt === maxAttempts) {
                 throw error;
             }
-            console.warn(`Retry ${attempt}/${maxAttempts} due to permission error:`, error);
-            await new Promise(resolve => setTimeout(resolve, delay));
+            console.warn(`Retry ${attempt}/${maxAttempts} failed:`, error.message);
+            await new Promise(resolve => setTimeout(resolve, delay * attempt));
         }
     }
 };
@@ -75,80 +75,107 @@ const VerifyEmail = () => {
             }
 
             try {
-                // Verify action code
-                const info = await retryOperation(async () => {
-                    const result = await checkActionCode(auth, actionCode);
-                    console.log('Action code info:', result);
-                    return result;
-                }, 5, 2000);
-
-                // Apply email verification
-                await retryOperation(async () => {
-                    await applyActionCode(auth, actionCode);
-                    console.log('Email verification applied successfully');
-                }, 5, 2000);
-
-                // Update user document
-                if (info.data.email) {
-                    await retryOperation(async () => {
-                        const usersRef = collection(db, 'users');
-                        const q = query(usersRef, where('email', '==', info.data.email), where('user_id', '==', auth.currentUser?.uid));
-                        const querySnapshot = await getDocs(q);
-
-                        if (!querySnapshot.empty) {
-                            const userDoc = querySnapshot.docs[0];
-                            await updateDoc(doc(db, 'users', userDoc.id), {
-                                email_verified: true,
-                                emailVerified: true, // Add this field for consistency with account setup service
-                                updatedAt: new Date().toISOString(),
-                                onboardingStatus: {
-                                    emailVerified: true,
-                                    needsSuiteCreation: true
-                                }
-                            });
-                            console.log('User document updated successfully:', userDoc.id);
-                        } else {
-                            console.warn('No user document found for email:', info.data.email);
-                        }
-                    }, 5, 2000);
+                // Step 1: Verify and apply action code (this is the critical part)
+                console.log('Starting email verification...');
+                
+                let info;
+                try {
+                    info = await retryOperation(async () => {
+                        return await checkActionCode(auth, actionCode);
+                    }, 3, 1000);
+                    console.log('Action code verified:', info);
+                } catch (error) {
+                    console.error('Failed to check action code:', error);
+                    throw error;
                 }
 
-                // FIXED: Call the account setup service's post-verification handler
+                try {
+                    await retryOperation(async () => {
+                        await applyActionCode(auth, actionCode);
+                    }, 3, 1000);
+                    console.log('Email verification applied successfully');
+                } catch (error) {
+                    console.error('Failed to apply action code:', error);
+                    throw error;
+                }
+
+                // At this point, email verification is successful
+                // Everything below is post-verification cleanup and should not fail the verification
+                setStatus('success');
+                setMessage('Your email has been verified successfully!');
+
+                // Step 2: Update user document (non-critical - don't fail verification if this fails)
+                if (info?.data?.email) {
+                    try {
+                        await retryOperation(async () => {
+                            const usersRef = collection(db, 'users');
+                            const q = query(usersRef, where('email', '==', info.data.email));
+                            const querySnapshot = await getDocs(q);
+
+                            if (!querySnapshot.empty) {
+                                const userDoc = querySnapshot.docs[0];
+                                await updateDoc(doc(db, 'users', userDoc.id), {
+                                    email_verified: true,
+                                    emailVerified: true,
+                                    updatedAt: new Date().toISOString(),
+                                    onboardingStatus: {
+                                        emailVerified: true,
+                                        needsSuiteCreation: true
+                                    }
+                                });
+                                console.log('User document updated successfully:', userDoc.id);
+                            } else {
+                                console.warn('No user document found for email:', info.data.email);
+                                // This is not a failure - user might not have a document yet
+                            }
+                        }, 2, 1000);
+                    } catch (error) {
+                        console.error('Error updating user document (non-critical):', error);
+                        // Don't fail verification for this
+                    }
+                }
+
+                // Step 3: Handle post-verification (non-critical)
                 if (auth.currentUser?.uid) {
                     try {
                         await handlePostVerification(auth.currentUser.uid);
                         console.log('Post-verification handling completed successfully');
                     } catch (error) {
-                        console.error('Error in post-verification handling:', error);
-                        // Don't fail the verification process for this
+                        console.error('Error in post-verification handling (non-critical):', error);
+                        // Don't fail verification for this
                     }
                 }
 
-                setStatus('success');
-                setMessage('Your email has been verified successfully!');
-
-                // Handle onboarding for new registrations
+                // Step 4: Handle onboarding flow
                 if (registrationData?.isNewRegistration) {
                     setShowOnboardingOption(true);
                     localStorage.setItem('needsOnboarding', 'true');
                     localStorage.setItem('verificationComplete', 'true');
                 } else {
+                    // Wait a bit to show success message, then redirect
                     setTimeout(() => {
                         handleEmailVerified(auth.currentUser);
-                    }, 3000);
+                    }, 2000);
                 }
+
             } catch (error) {
-                console.error('Error verifying email:', error);
+                console.error('Email verification failed:', error);
                 setStatus('error');
-                setMessage(
-                    error.code === 'auth/expired-action-code'
-                        ? 'This verification link has expired. Please request a new one.'
-                        : error.code === 'auth/invalid-action-code'
-                            ? 'This verification link is invalid. Please request a new one.'
-                            : error.code === 'auth/user-disabled'
-                                ? 'This account has been disabled.'
-                                : 'Failed to verify email. Please try again.'
-                );
+                
+                // Provide specific error messages
+                let errorMessage = 'Failed to verify email. Please try again.';
+                
+                if (error.code === 'auth/expired-action-code') {
+                    errorMessage = 'This verification link has expired. Please request a new one.';
+                } else if (error.code === 'auth/invalid-action-code') {
+                    errorMessage = 'This verification link is invalid. Please request a new one.';
+                } else if (error.code === 'auth/user-disabled') {
+                    errorMessage = 'This account has been disabled.';
+                } else if (error.message?.includes('permission-denied')) {
+                    errorMessage = 'Permission denied. Please try signing in again.';
+                }
+                
+                setMessage(errorMessage);
             }
         };
 

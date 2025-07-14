@@ -1,12 +1,16 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 // contexts/AppProvider.js - Unified provider for QA Test Management Platform
-'use client'
+'use client';
+
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { UserProfileProvider, useUserProfile } from './userProfileContext';
 import SubscriptionProvider, { useSubscription } from './subscriptionContext';
 import { SuiteProvider, useSuite } from './SuiteContext';
+
+// Public pages to skip auth checks when no token is present
+const NO_AUTH_CHECK_PAGES = ['/login', '/register'];
 
 // Create unified app context
 const AppContext = createContext();
@@ -27,6 +31,8 @@ const UnifiedAppProvider = ({ children }) => {
     const userProfile = useUserProfile();
     const subscription = useSubscription();
     const suite = useSuite();
+    const pathname = usePathname();
+    const router = useRouter();
 
     // Track initialization state with refs to prevent unnecessary re-renders
     const initializationRef = useRef({
@@ -54,7 +60,6 @@ const UnifiedAppProvider = ({ children }) => {
     // Navigation state
     const [breadcrumbs, setBreadcrumbs] = useState([]);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const pathname = usePathname();
     const initialModule = pathname?.split('/')[1] || null;
     const [activeModule, setActiveModule] = useState(() => {
         return initialModule && initialModule !== '' ? initialModule : null;
@@ -80,6 +85,12 @@ const UnifiedAppProvider = ({ children }) => {
 
         return currentAuth;
     }, [auth.user?.uid, auth.loading]);
+
+    // Override auth loading for /login and /register when no token exists
+    const authLoadingOverride = useMemo(() => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+        return NO_AUTH_CHECK_PAGES.includes(pathname) && !token ? false : auth.loading;
+    }, [auth.loading, pathname]);
 
     // Optimized loading state - More granular control
     const isLoading = useMemo(() => {
@@ -280,6 +291,15 @@ const UnifiedAppProvider = ({ children }) => {
 
     // Improved initialization with proper state management
     const initializeApp = useCallback(async () => {
+        // Skip initialization for /login and /register if no token exists
+        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+        if (NO_AUTH_CHECK_PAGES.includes(pathname) && !token) {
+            initializationRef.current.isInitialized = true;
+            setIsInitialized(true);
+            setGlobalLoading(false);
+            return;
+        }
+
         // Prevent concurrent initialization
         if (initializationRef.current.isInitializing) {
             return initializationRef.current.initializationPromise;
@@ -346,7 +366,7 @@ const UnifiedAppProvider = ({ children }) => {
                 }
 
                 // Load preferences only once
-                if (!localStorage.getItem('appPreferencesLoaded')) {
+                if (typeof window !== 'undefined' && !localStorage.getItem('appPreferencesLoaded')) {
                     try {
                         const savedPreferences = localStorage.getItem('appPreferences');
                         if (savedPreferences) {
@@ -384,24 +404,37 @@ const UnifiedAppProvider = ({ children }) => {
 
         initializationRef.current.initializationPromise = initPromise;
         return initPromise;
-    }, [isAuthenticated, userProfile.userProfile, subscription.subscriptionStatus?.capabilities, addNotification]);
+    }, [isAuthenticated, userProfile.userProfile, subscription.subscriptionStatus?.capabilities, addNotification, pathname]);
 
     // Optimized initialization effect
     useEffect(() => {
+        // Skip initialization for /login and /register if no token exists
+        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+        if (NO_AUTH_CHECK_PAGES.includes(pathname) && !token) {
+            initializationRef.current.isInitialized = true;
+            setIsInitialized(true);
+            setGlobalLoading(false);
+            setError(null);
+            console.log('Skipped initialization for:', { pathname, tokenExists: !!token });
+            return;
+        }
+
         if (!isAuthenticated) {
             // Reset for non-authenticated users
             initializationRef.current.isInitialized = true;
             setIsInitialized(true);
             setGlobalLoading(false);
             setError(null);
+            console.log('Reset for non-authenticated user:', { pathname, isAuthenticated });
             return;
         }
 
         // Only initialize if not already initialized and user is authenticated
         if (isAuthenticated && !initializationRef.current.isInitialized && !initializationRef.current.isInitializing) {
+            console.log('Initializing app for:', { pathname, isAuthenticated });
             initializeApp();
         }
-    }, [isAuthenticated, initializeApp]);
+    }, [isAuthenticated, initializeApp, pathname]);
 
     // Debounced preferences save
     useEffect(() => {
@@ -438,20 +471,18 @@ const UnifiedAppProvider = ({ children }) => {
     // Optimized sign out
     const signOut = useCallback(async () => {
         try {
-            await auth.signOut();
-
-            // Reset all state
             setNotifications([]);
-            setIsInitialized(false);
             setActiveModule(null);
             setBreadcrumbs([]);
+            setError(null);
             initializationRef.current.isInitialized = false;
             initializationRef.current.isInitializing = false;
             initializationRef.current.initializationPromise = null;
-
-            // Clear preferences
+            initializationRef.current.lastAuthState = null;
             localStorage.removeItem('appPreferences');
             localStorage.removeItem('appPreferencesLoaded');
+            await auth.signOut();
+            router.push('/login'); // Explicitly redirect to login
         } catch (error) {
             console.error('Error signing out:', error);
             addNotification({
@@ -460,7 +491,7 @@ const UnifiedAppProvider = ({ children }) => {
                 message: 'Failed to sign out. Please try again.'
             });
         }
-    }, [auth.signOut, addNotification]);
+    }, [auth.signOut, addNotification, router]);
 
     // Clear error callback
     const clearError = useCallback(() => setError(null), []);
@@ -470,6 +501,7 @@ const UnifiedAppProvider = ({ children }) => {
         // Authentication
         ...auth,
         isAuthenticated,
+        loading: authLoadingOverride, // Use overridden loading value
 
         // User Profile
         profile: userProfile.userProfile,
@@ -553,7 +585,6 @@ const UnifiedAppProvider = ({ children }) => {
         appPreferences,
         setAppPreferences,
 
-
         // Utilities
         refreshAll,
         clearError,
@@ -561,6 +592,7 @@ const UnifiedAppProvider = ({ children }) => {
     }), [
         auth,
         isAuthenticated,
+        authLoadingOverride,
         userProfile,
         subscription,
         suite,

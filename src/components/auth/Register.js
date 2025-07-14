@@ -11,7 +11,7 @@ import PersonalInfoStep from './reg/PersonalInfoStep';
 import ReviewStep from './reg/ReviewStep';
 import { Mail, Square } from 'lucide-react';
 import BackgroundDecorations from '../BackgroundDecorations';
-import { toast, Toaster } from 'sonner';
+import { useAppNotifications } from '../../contexts/AppProvider';
 import '../../app/globals.css';
 
 const GoogleSignUp = ({ onGoogleRegister, loading }) => {
@@ -35,6 +35,7 @@ const GoogleSignUp = ({ onGoogleRegister, loading }) => {
 
 const Register = () => {
     const router = useRouter();
+    const { addNotification } = useAppNotifications();
     const [currentStep, setCurrentStep] = useState(1);
     const [accountType, setAccountType] = useState('individual');
     const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -117,7 +118,12 @@ const Register = () => {
             }));
         }
 
-        toast.success(`Switched to ${newAccountType} account type`);
+        addNotification({
+            type: 'success',
+            title: 'Account Type Switched',
+            message: `Switched to ${newAccountType} account type`,
+            persistent: false
+        });
     };
 
     const dismissAccountTypeSuggestion = () => {
@@ -139,7 +145,12 @@ const Register = () => {
             const setupStatus = await accountService.getAccountSetupStatus(user.uid);
 
             if (setupStatus.exists) {
-                toast.success("Welcome back!");
+                addNotification({
+                    type: 'success',
+                    title: 'Welcome Back',
+                    message: 'Welcome back!',
+                    persistent: false
+                });
                 // Clear registration flag before navigation
                 window.isRegistering = false;
                 router.push('/dashboard');
@@ -163,7 +174,12 @@ const Register = () => {
 
             if (result_setup.success) {
                 console.log('Google account setup successful:', result_setup);
-                toast.success("Account created successfully with Google!");
+                addNotification({
+                    type: 'success',
+                    title: 'Account Created',
+                    message: 'Account created successfully with Google!',
+                    persistent: false
+                });
                 // Clear registration flag before navigation
                 window.isRegistering = false;
                 router.push('/dashboard');
@@ -180,7 +196,12 @@ const Register = () => {
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 errorMessage = "An account already exists with this email using a different sign-in method.";
             }
-            toast.error(errorMessage);
+            addNotification({
+                type: 'error',
+                title: 'Google Sign-Up Failed',
+                message: errorMessage,
+                persistent: true
+            });
         } finally {
             setIsGoogleLoading(false);
         }
@@ -283,10 +304,20 @@ const Register = () => {
                     handleCodeInApp: false,
                 });
                 console.log('Email verification sent');
-                toast.success("Account created successfully! Please check your email.");
+                addNotification({
+                    type: 'success',
+                    title: 'Account Created',
+                    message: 'Account created successfully! Please check your email.',
+                    persistent: false
+                });
             } catch (emailError) {
                 console.error('Error sending verification email:', emailError);
-                toast.success("Account created successfully! Verification email will be sent shortly.");
+                addNotification({
+                    type: 'success',
+                    title: 'Account Created',
+                    message: 'Account created successfully! Verification email will be sent shortly.',
+                    persistent: false
+                });
             }
 
             // Store email for step 4
@@ -308,7 +339,12 @@ const Register = () => {
             } else if (error.code === 'auth/invalid-email') {
                 errorMessage = "Please enter a valid email address.";
             }
-            toast.error(errorMessage);
+            addNotification({
+                type: 'error',
+                title: 'Account Creation Failed',
+                message: errorMessage,
+                persistent: true
+            });
         } finally {
             setIsCreatingAccount(false);
             console.log('Registration process completed');
@@ -316,7 +352,12 @@ const Register = () => {
     };
 
     const handleResendEmail = async () => {
-        toast.info("Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.");
+        addNotification({
+            type: 'info',
+            title: 'Verification Required',
+            message: "Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.",
+            persistent: false
+        });
         // Clear registration flag before navigation
         window.isRegistering = false;
         router.push('/login');
@@ -355,38 +396,75 @@ const Register = () => {
                             onNext={nextStep}
                             currentStep={currentStep}
                         />
+                        <div className="text-center mt-6">
+                            <p className="text-sm text-slate-600">
+                                Already have an account?{' '}
+                                <button
+                                    onClick={handleSignInRedirect}
+                                    className="text-teal-600 hover:text-teal-700 font-medium hover:underline transition-colors"
+                                >
+                                    Sign In
+                                </button>
+                            </p>
+                        </div>
                     </>
                 );
             case 2:
                 return (
-                    <PersonalInfoStep
-                        formData={formData}
-                        errors={errors}
-                        onInputChange={handleInputChange}
-                        onNext={nextStep}
-                        onPrev={prevStep}
-                        currentStep={currentStep}
-                        accountType={accountType}
-                        emailDomainInfo={emailDomainInfo}
-                        emailValidation={emailValidation}
-                        setAccountType={setAccountType} 
-                        onAccountTypeSwitch={handleAccountTypeSwitch}
-                        showAccountTypeSuggestion={showAccountTypeSuggestion}
-                        onDismissAccountTypeSuggestion={dismissAccountTypeSuggestion}
-                    />
+                    <>
+                        <PersonalInfoStep
+                            formData={formData}
+                            errors={errors}
+                            onInputChange={handleInputChange}
+                            onNext={nextStep}
+                            onPrev={prevStep}
+                            currentStep={currentStep}
+                            accountType={accountType}
+                            emailDomainInfo={emailDomainInfo}
+                            emailValidation={emailValidation}
+                            setAccountType={setAccountType} 
+                            onAccountTypeSwitch={handleAccountTypeSwitch}
+                            showAccountTypeSuggestion={showAccountTypeSuggestion}
+                            onDismissAccountTypeSuggestion={dismissAccountTypeSuggestion}
+                        />
+                        <div className="text-center mt-6">
+                            <p className="text-sm text-slate-600">
+                                Already have an account?{' '}
+                                <button
+                                    onClick={handleSignInRedirect}
+                                    className="text-teal-600 hover:text-teal-700 font-medium hover:underline transition-colors"
+                                >
+                                    Sign In
+                                </button>
+                            </p>
+                        </div>
+                    </>
                 );
             case 3:
                 return (
-                    <ReviewStep
-                        formData={formData}
-                        errors={errors}
-                        accountType={accountType}
-                        onInputChange={handleInputChange}
-                        onPrev={prevStep}
-                        onCreateAccount={handleCreateAccount}
-                        isCreatingAccount={isCreatingAccount}
-                        currentStep={currentStep}
-                    />
+                    <>
+                        <ReviewStep
+                            formData={formData}
+                            errors={errors}
+                            accountType={accountType}
+                            onInputChange={handleInputChange}
+                            onPrev={prevStep}
+                            onCreateAccount={handleCreateAccount}
+                            isCreatingAccount={isCreatingAccount}
+                            currentStep={currentStep}
+                        />
+                        <div className="text-center mt-6">
+                            <p className="text-sm text-slate-600">
+                                Already have an account?{' '}
+                                <button
+                                    onClick={handleSignInRedirect}
+                                    className="text-teal-600 hover:text-teal-700 font-medium hover:underline transition-colors"
+                                >
+                                    Sign In
+                                </button>
+                            </p>
+                        </div>
+                    </>
                 );
             case 4:
                 return (
@@ -437,18 +515,6 @@ const Register = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
-            <Toaster
-                richColors
-                position="top-center"
-                toastOptions={{
-                    style: {
-                        background: 'rgba(255, 255, 255, 0.95)',
-                        backdropFilter: 'blur(12px)',
-                        border: '1px solid rgba(148, 163, 184, 0.2)',
-                        borderRadius: '12px'
-                    }
-                }}
-            />
             <BackgroundDecorations />
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
@@ -463,19 +529,6 @@ const Register = () => {
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
                         {renderStepContent()}
                     </div>
-                    {currentStep <= 3 && (
-                        <div className="text-center mt-6">
-                            <p className="text-sm text-slate-600">
-                                Already have an account?{' '}
-                                <button
-                                    onClick={handleSignInRedirect}
-                                    className="text-teal-600 hover:text-teal-700 font-medium hover:underline transition-colors"
-                                >
-                                    Sign In
-                                </button>
-                            </p>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>

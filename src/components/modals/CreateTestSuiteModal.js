@@ -1,12 +1,9 @@
-// components/modals/CreateTestSuiteModal.js
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
-import { useState, Fragment, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog, Transition } from '@headlessui/react';
-import { useSuite } from '../../contexts/SuiteContext';
-import { useAuth } from '../../contexts/AuthProvider';
-import { useAccountCapabilities } from '../../hooks/useAccountCapabilities';
-import { toast } from 'sonner';
+import { useApp } from '../../contexts/AppProvider';
 import {
     XMarkIcon,
     BeakerIcon,
@@ -25,9 +22,16 @@ const CreateTestSuiteModal = ({
     onSuccess
 }) => {
     const router = useRouter();
-    const { userProfile } = useAuth();
-    const { createTestSuite } = useSuite();
-    const { capabilities, loading: capabilitiesLoading } = useAccountCapabilities(userProfile?.uid);
+    const {
+        accountSummary,
+        userCapabilities,
+        isLoading: capabilitiesLoading,
+        createTestSuite,
+        addNotification,
+        shouldFetchSuites,
+        isAuthenticated,
+        user
+    } = useApp();
 
     const [suiteName, setSuiteName] = useState('');
     const [description, setDescription] = useState('');
@@ -60,28 +64,22 @@ const CreateTestSuiteModal = ({
         }
     ];
 
-    // Get user's organization admin status
     const getUserOrgInfo = () => {
-        if (!userProfile?.account_memberships) {
+        if (!accountSummary?.profile) {
+            console.log('No profile available for org info');
             return { isAdmin: false, orgId: null, orgName: null };
         }
 
-        const adminMembership = userProfile.account_memberships.find(
-            membership => membership.status === 'active' && membership.role === 'Admin'
-        );
+        const { role, organizationId, organizationName, memberships } = accountSummary.profile;
+        const isAdmin = role === 'Admin' || memberships?.some(m => m.status === 'active' && m.role === 'Admin');
 
-        if (adminMembership) {
-            return {
-                isAdmin: true,
-                orgId: adminMembership.org_id,
-                orgName: userProfile.organizationName || 'Your Organization'
-            };
-        }
-
-        return { isAdmin: false, orgId: null, orgName: null };
+        return {
+            isAdmin,
+            orgId: organizationId || (isAdmin ? memberships?.find(m => m.role === 'Admin')?.org_id : null),
+            orgName: organizationName || (isAdmin ? 'Your Organization' : null)
+        };
     };
 
-    // Reset form when modal closes
     useEffect(() => {
         if (!isOpen) {
             setSuiteName('');
@@ -89,99 +87,209 @@ const CreateTestSuiteModal = ({
         }
     }, [isOpen]);
 
+    useEffect(() => {
+        if (isOpen) {
+            console.log('CreateTestSuiteModal opened:', {
+                isAuthenticated,
+                shouldFetchSuites,
+                hasProfile: !!accountSummary?.profile,
+                canCreateSuite: userCapabilities?.canCreateSuite,
+                suiteLimit: userCapabilities?.limits?.suites,
+                userId: accountSummary?.user?.uid,
+                emailVerified: accountSummary?.user?.emailVerified
+            });
+        }
+    }, [isOpen, isAuthenticated, shouldFetchSuites, accountSummary, userCapabilities]);
+
+    const validatePermissions = () => {
+        // Check authentication
+        if (!isAuthenticated || !accountSummary?.user?.emailVerified) {
+            throw new Error('User not authenticated or email not verified');
+        }
+
+        // Check if user profile is loaded
+        if (!shouldFetchSuites || !accountSummary?.profile) {
+            throw new Error('User profile not loaded or insufficient permissions');
+        }
+
+        // Check suite creation limits
+        if (!isFirstSuite && !userCapabilities?.canCreateSuite) {
+            const suiteLimit = userCapabilities?.limits?.suites || 1;
+            throw new Error(`Suite limit reached. Your current plan allows ${suiteLimit === -1 ? 'unlimited' : suiteLimit} suites.`);
+        }
+
+        return true;
+    };
+
     const handleCreateSuite = async (e) => {
         e.preventDefault();
 
         if (!suiteName.trim()) {
-            toast.error('Suite name required', {
-                description: 'Please enter a name for your test suite.',
-                duration: 3000,
-            });
-            return;
-        }
-
-        // Check if user can create suites using capabilities
-        if (!isFirstSuite && capabilities && !capabilities.canCreateSuite) {
-            toast.error('Suite limit reached', {
-                description: capabilities.limits?.suites === 1
-                    ? 'You can only create 1 test suite on your current plan.'
-                    : `You've reached your test suite limit. Upgrade to create more.`,
-                duration: 5000,
+            addNotification({
+                type: 'error',
+                title: 'Suite name required',
+                message: 'Please enter a name for your test suite.',
+                persistent: false
             });
             return;
         }
 
         setIsLoading(true);
 
-        try {
-            const orgInfo = getUserOrgInfo();
-
-            const suiteData = {
-                name: suiteName.trim(),
-                description: description.trim() || '',
-                tags: [],
+        // Prepare suite data first (before try block to ensure it's available in catch)
+        const orgInfo = getUserOrgInfo();
+        const suiteData = {
+            name: suiteName.trim(),
+            description: description.trim() || '',
+            tags: [],
+            ownerType: orgInfo.isAdmin ? 'organization' : 'individual',
+            ownerId: orgInfo.isAdmin ? orgInfo.orgId : accountSummary?.user?.uid,
+            created_by: accountSummary?.user?.uid,
+            access_control: {
                 ownerType: orgInfo.isAdmin ? 'organization' : 'individual',
-                ownerId: orgInfo.isAdmin ? orgInfo.orgId : userProfile.uid,
-                createdBy: userProfile.uid,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                ...(orgInfo.isAdmin && {
-                    organizationId: orgInfo.orgId,
-                    organizationName: orgInfo.orgName
-                })
-            };
+                ownerId: orgInfo.isAdmin ? orgInfo.orgId : accountSummary?.user?.uid
+            },
+            ...(orgInfo.isAdmin && {
+                organizationId: orgInfo.orgId,
+                organizationName: orgInfo.orgName
+            })
+        };
+
+        try {
+            // Validate permissions first
+            validatePermissions();
+
+            // Validate suite data
+            if (!suiteData.ownerId || !suiteData.created_by) {
+                throw new Error('Missing required fields: ownerId or created_by');
+            }
+
+            // Refresh auth token to ensure we have the latest permissions
+            console.log('Refreshing Firebase auth token...');
+            await user.getIdToken(true);
+
+            // Additional validation for organization suites
+            if (orgInfo.isAdmin && suiteData.organizationId) {
+                const isOrgAdmin = accountSummary?.profile?.account_memberships?.some(
+                    membership => membership.org_id === suiteData.organizationId &&
+                        membership.status === 'active' &&
+                        membership.role === 'Admin'
+                );
+
+                if (!isOrgAdmin) {
+                    throw new Error('Only organization administrators can create test suites for the organization');
+                }
+            }
 
             console.log('Creating suite with data:', suiteData);
-            await createTestSuite(suiteData);
 
-            toast.success('Test suite created successfully!', {
-                description: `${suiteName} is ready for testing.`,
-                duration: 3000,
+            // Try to create suite with retry logic
+            let retries = 2; // Reduced from 3 to 2
+            let lastError = null;
+            
+            while (retries > 0) {
+                try {
+                    await createTestSuite(suiteData);
+                    break; // Success, exit retry loop
+                } catch (error) {
+                    lastError = error;
+                    retries--;
+                    
+                    console.error(`Suite creation attempt failed:`, {
+                        error: error.message,
+                        code: error.code,
+                        retriesLeft: retries
+                    });
+
+                    if (retries === 0) {
+                        throw error; // No more retries, throw the error
+                    }
+
+                    // Wait before retry, but refresh token first
+                    console.log(`Retrying suite creation (${retries} attempts left)...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Refresh token before retry
+                    try {
+                        await user.getIdToken(true);
+                    } catch (tokenError) {
+                        console.error('Token refresh failed:', tokenError);
+                        throw new Error('Authentication token refresh failed');
+                    }
+                }
+            }
+
+            // Success notification
+            addNotification({
+                type: 'success',
+                title: 'Test suite created successfully!',
+                message: `${suiteName} is ready for testing.`,
+                persistent: false
             });
 
-            // Reset form first
+            // Reset form
             setSuiteName('');
             setDescription('');
 
-            // For first suite: close modal AND navigate
+            // Handle navigation
             if (isFirstSuite) {
-                // Close modal first
                 onClose();
-                // Navigate to dashboard after brief delay to ensure modal closes
                 setTimeout(() => {
                     router.push('/dashboard');
                 }, 150);
             } else {
-                // For additional suites: close modal and call success callback
                 onClose();
                 onSuccess?.();
             }
 
         } catch (error) {
-            console.error('Error creating test suite:', error);
+            console.error('Detailed createTestSuite error:', {
+                errorCode: error.code,
+                errorMessage: error.message,
+                suiteData: {
+                    name: suiteData.name,
+                    ownerType: suiteData.ownerType,
+                    ownerId: suiteData.ownerId,
+                    created_by: suiteData.created_by
+                },
+                userAuth: {
+                    uid: accountSummary?.user?.uid,
+                    emailVerified: accountSummary?.user?.emailVerified,
+                    hasProfile: !!accountSummary?.profile
+                }
+            });
 
             let errorMessage = 'Failed to create test suite';
             let errorDescription = '';
 
-            if (error.message.includes('Email verification required')) {
-                errorDescription = 'Please verify your email address first.';
-            } else if (error.message.includes('Suite creation limit reached')) {
-                errorDescription = 'You\'ve reached your suite limit. Upgrade to create more.';
+            // Enhanced error handling
+            if (error.message.includes('Suite limit reached')) {
+                errorDescription = 'You\'ve reached your test suite limit. Upgrade to create more.';
             } else if (error.message.includes('Only organization administrators can create')) {
                 errorDescription = 'You need admin permissions to create organization test suites.';
-            } else if (error.message.includes('permission-denied') || error.code === 'permission-denied') {
-                errorDescription = 'You don\'t have permission to create test suites. Please check your account status.';
-            } else if (error.message.includes('unauthenticated') || error.code === 'unauthenticated') {
-                errorDescription = 'Please log in again to continue.';
-            } else if (error.code === 'insufficient-permission') {
-                errorDescription = 'Insufficient permissions. Please verify your account or contact support.';
+            } else if (error.message.includes('User profile not loaded')) {
+                errorDescription = 'Your profile is still loading. Please wait a moment and try again.';
+            } else if (error.message.includes('User not authenticated')) {
+                errorDescription = 'Please log in and verify your email to create test suites.';
+            } else if (error.code === 'permission-denied') {
+                errorDescription = 'Permission denied. Please check your account permissions or contact support.';
+            } else if (error.code === 'unauthenticated') {
+                errorDescription = 'Your session has expired. Please log in again.';
+            } else if (error.code === 'invalid-argument') {
+                errorDescription = 'Invalid suite data. Please check your input and try again.';
+            } else if (error.code === 'unavailable') {
+                errorDescription = 'Service temporarily unavailable. Please try again in a moment.';
+            } else if (error.message.includes('Authentication token refresh failed')) {
+                errorDescription = 'Authentication failed. Please log out and log back in.';
             } else {
-                errorDescription = error.message || 'Please try again or contact support.';
+                errorDescription = error.message || 'An unexpected error occurred. Please try again or contact support.';
             }
 
-            toast.error(errorMessage, {
-                description: errorDescription,
-                duration: 5000,
+            addNotification({
+                type: 'error',
+                title: errorMessage,
+                message: errorDescription,
+                persistent: true
             });
         } finally {
             setIsLoading(false);
@@ -195,9 +303,9 @@ const CreateTestSuiteModal = ({
     };
 
     const renderLimitWarning = () => {
-        if (isFirstSuite || capabilitiesLoading || !capabilities) return null;
+        if (isFirstSuite || capabilitiesLoading || !userCapabilities) return null;
 
-        if (!capabilities.canCreateSuite) {
+        if (!userCapabilities.canCreateSuite) {
             return (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
                     <div className="flex items-center space-x-2">
@@ -205,7 +313,7 @@ const CreateTestSuiteModal = ({
                         <h4 className="font-medium text-red-800">Suite Limit Reached</h4>
                     </div>
                     <p className="text-sm text-red-700 mt-1">
-                        {capabilities.limits?.suites === 1
+                        {userCapabilities.limits?.suites === 1
                             ? 'You can only create 1 test suite on your current plan.'
                             : 'You\'ve reached your test suite limit. Upgrade to create more.'
                         }
@@ -227,13 +335,12 @@ const CreateTestSuiteModal = ({
             );
         }
 
-        if (!capabilities) {
+        if (!userCapabilities) {
             return null;
         }
 
         const orgInfo = getUserOrgInfo();
-        // FIXED: Safe access to subscription object with fallback defaults
-        const subscription = capabilities.subscription || {
+        const subscription = userCapabilities.subscription || {
             isTrialActive: false,
             isPaid: false,
             displayName: 'Free Plan'
@@ -241,26 +348,26 @@ const CreateTestSuiteModal = ({
 
         return (
             <div className={`p-4 rounded-xl border ${subscription.isTrialActive ? 'bg-blue-50 border-blue-200' :
-                    subscription.isPaid ? 'bg-green-50 border-green-200' :
-                        'bg-gray-50 border-gray-200'
+                subscription.isPaid ? 'bg-green-50 border-green-200' :
+                    'bg-gray-50 border-gray-200'
                 }`}>
                 <div className="flex items-center space-x-2 mb-2">
                     <div className={`w-2 h-2 rounded-full ${subscription.isTrialActive ? 'bg-blue-400' :
-                            subscription.isPaid ? 'bg-green-400' :
-                                'bg-gray-400'
+                        subscription.isPaid ? 'bg-green-400' :
+                            'bg-gray-400'
                         }`}></div>
                     <p className={`text-sm font-medium ${subscription.isTrialActive ? 'text-blue-800' :
-                            subscription.isPaid ? 'text-green-800' :
-                                'text-gray-800'
+                        subscription.isPaid ? 'text-green-800' :
+                            'text-gray-800'
                         }`}>
                         {subscription.displayName}
                     </p>
                 </div>
                 <p className={`text-xs ${subscription.isTrialActive ? 'text-blue-700' :
-                        subscription.isPaid ? 'text-green-700' :
-                            'text-gray-700'
+                    subscription.isPaid ? 'text-green-700' :
+                        'text-gray-700'
                     }`}>
-                    {capabilities.limits?.suites === -1 ? 'Unlimited' : capabilities.limits?.suites || 1} test suites included
+                    {userCapabilities.limits?.suites === -1 ? 'Unlimited' : userCapabilities.limits?.suites || 1} test suites included
                     {orgInfo.orgId && (
                         <span>
                             {' • '}
@@ -273,15 +380,14 @@ const CreateTestSuiteModal = ({
     };
 
     const isFeatureAvailable = (capability) => {
-        if (!capabilities) return false;
-        // FIXED: Safe access to subscription with fallback
-        const subscription = capabilities.subscription || { isTrialActive: false };
-        return capabilities.features?.[capability] || subscription.isTrialActive;
+        if (!userCapabilities) return false;
+        const subscription = userCapabilities.subscription || { isTrialActive: false };
+        return userCapabilities.features?.[capability] || subscription.isTrialActive;
     };
 
     const canUserCreateSuite = () => {
         if (isFirstSuite) return true;
-        return capabilities?.canCreateSuite || false;
+        return userCapabilities?.canCreateSuite || false;
     };
 
     return (
@@ -311,7 +417,6 @@ const CreateTestSuiteModal = ({
                             leaveTo="opacity-0 scale-95"
                         >
                             <Dialog.Panel className="w-full max-w-6xl transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all">
-                                {/* Header */}
                                 <div className="relative bg-gradient-to-r from-teal-600 to-blue-600 px-8 py-6">
                                     {!isFirstSuite && (
                                         <button
@@ -342,7 +447,6 @@ const CreateTestSuiteModal = ({
 
                                 <div className="p-8">
                                     <div className="grid lg:grid-cols-2 gap-8 items-start">
-                                        {/* Features Showcase */}
                                         <div className="space-y-6">
                                             <div className="flex items-center space-x-2 mb-4">
                                                 <SparklesIcon className="h-5 w-5 text-teal-600" />
@@ -357,8 +461,8 @@ const CreateTestSuiteModal = ({
 
                                                     return (
                                                         <div key={index} className={`flex items-start space-x-3 p-4 rounded-xl border transition-all duration-200 ${isAvailable
-                                                                ? 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-100 hover:border-teal-200'
-                                                                : 'bg-gray-50 border-gray-200 opacity-60'
+                                                            ? 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-100 hover:border-teal-200'
+                                                            : 'bg-gray-50 border-gray-200 opacity-60'
                                                             }`}>
                                                             <div className={`flex-shrink-0 p-2 rounded-lg ${isAvailable ? 'bg-teal-100' : 'bg-gray-200'
                                                                 }`}>
@@ -386,11 +490,9 @@ const CreateTestSuiteModal = ({
                                                 })}
                                             </div>
 
-                                            {/* Account Info */}
                                             {renderSubscriptionInfo()}
                                         </div>
 
-                                        {/* Test Suite Creation Form */}
                                         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
                                             {renderLimitWarning()}
 

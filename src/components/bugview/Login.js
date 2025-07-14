@@ -7,10 +7,40 @@ import Link from "next/link";
 import { useApp, useAppAuth, useAppNotifications } from "../../contexts/AppProvider";
 import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
+import { toast } from "sonner";
 import { sendEmailVerification } from "firebase/auth";
-import { useFirebaseOperation } from "../../utils/firebaseErrorHandler";
+import { getFirebaseErrorMessage } from "../../utils/firebaseErrorHandler";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../config/firebase";
 import BackgroundDecorations from "../BackgroundDecorations";
 import '../../app/globals.css';
+
+// Simple registration state cleanup - only clear what's needed
+const clearRegistrationState = () => {
+    try {
+        const keysToRemove = [
+            'qaid_registration_state',
+            'pendingRegistration',
+            'needsOnboarding',
+            'awaitingEmailVerification',
+            'verificationComplete',
+            'startOnboarding',
+            'needsSuiteCreation',
+            'registrationData'
+        ];
+        
+        keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+        });
+        
+        // Clear the problematic window.isRegistering
+        if (typeof window !== 'undefined') {
+            delete window.isRegistering;
+        }
+    } catch (error) {
+        console.error('Error clearing registration state:', error);
+    }
+};
 
 const Login = () => {
     const [email, setEmail] = useState("");
@@ -25,53 +55,83 @@ const Login = () => {
     
     const router = useRouter();
     
-    // Use unified App Provider hooks
-    const { isAuthenticated, isInitialized, loading: authLoading } = useApp();
+    // Use new unified App Provider hooks
+    const { isAuthenticated, isInitialized } = useApp();
     const { user, signIn, signInWithGoogle } = useAppAuth();
     const { addNotification } = useAppNotifications();
     
-    // Firebase operation hook for error handling
-    const { executeOperation } = useFirebaseOperation();
-    
-    // Navigation tracking
+    // Simplified navigation tracking
     const hasNavigated = useRef(false);
 
-    // Debug initialization state
-    useEffect(() => {
-        console.log('Login.js state:', {
-            isInitialized,
-            isAuthenticated,
-            authLoading,
-            emailVerified: user?.emailVerified,
-            hasNavigated: hasNavigated.current
-        });
-    }, [isInitialized, isAuthenticated, authLoading, user?.emailVerified]);
-
-    // Handle URL parameters for feedback messages only
+    // Handle email verification success and other URL parameters
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const verified = urlParams.get('verified');
+        const message = urlParams.get('message');
         
         if (verified === 'true') {
-            addNotification({
-                type: 'success',
-                title: 'Email Verified',
-                message: 'Email verified successfully! You can now sign in.',
-                persistent: false
+            toast.success("Email verified successfully! You can now sign in.", {
+                duration: 5000,
+                position: "top-center"
             });
-            
-            // Clear URL parameters
+        }
+        
+        if (message) {
+            // Handle other messages from redirects
+            switch (message) {
+                case 'password-reset':
+                    toast.success("Password reset email sent! Check your inbox.", {
+                        duration: 5000,
+                        position: "top-center"
+                    });
+                    break;
+                case 'registration-complete':
+                    toast.success("Registration completed! Please sign in.", {
+                        duration: 5000,
+                        position: "top-center"
+                    });
+                    break;
+                case 'verification-sent':
+                    toast.success("Verification email sent! Check your inbox.", {
+                        duration: 5000,
+                        position: "top-center"
+                    });
+                    break;
+                default:
+                    break;
+            }
+        }
+        
+        // Clear URL parameters
+        if (verified || message) {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, []);
 
-    // Simple authenticated user routing - only to dashboard
-    useEffect(() => {
-        if (!isInitialized || authLoading) return;
+    // Simplified routing logic
+    const routeUserAfterLogin = async (user) => {
+        try {
+            // Only check if user is email verified
+            if (!user.emailVerified) {
+                console.log("User email not verified, staying on login page");
+                return;
+            }
 
-        if (isAuthenticated && user?.emailVerified && !hasNavigated.current) {
-            hasNavigated.current = true;
+            // Clear any stale registration state for returning users
+            clearRegistrationState();
+
+            // Check if user document exists in Firestore
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
             
+            let targetRoute = '/dashboard';
+            
+            // Only check onboarding if user doesn't exist in database
+            if (!userDoc.exists()) {
+                targetRoute = '/dashboard?onboarding=true';
+            }
+
+            // Add success notification
             addNotification({
                 type: 'success',
                 title: 'Welcome back!',
@@ -79,14 +139,41 @@ const Login = () => {
                 persistent: false
             });
 
-            router.push('/dashboard');
+            // Navigate to appropriate destination
+            router.push(targetRoute);
+
+        } catch (error) {
+            console.error("Error routing user after login:", error);
+            
+            addNotification({
+                type: 'error',
+                title: 'Login Error',
+                message: 'Failed to load account information. Please try again.',
+                persistent: true
+            });
+            
+            // Fallback to dashboard on error since user is verified
+            router.push("/dashboard");
+        }
+    };
+
+    // SIMPLIFIED: Handle authenticated user routing
+    useEffect(() => {
+        // Only proceed if app is initialized
+        if (!isInitialized) return;
+
+        // If user is authenticated, verified, and we haven't navigated yet
+        if (isAuthenticated && user?.emailVerified && !hasNavigated.current) {
+            console.log("User is authenticated and verified, navigating to dashboard");
+            hasNavigated.current = true;
+            routeUserAfterLogin(user);
         }
         
         // Reset navigation flag when user logs out
         if (!isAuthenticated) {
             hasNavigated.current = false;
         }
-    }, [isAuthenticated, isInitialized, authLoading, user?.emailVerified]);
+    }, [isAuthenticated, isInitialized, user?.emailVerified]);
 
     const validateForm = () => {
         let isValid = true;
@@ -118,31 +205,53 @@ const Login = () => {
         if (!unverifiedUser) return;
 
         setLoadingResendVerification(true);
-        
-        await executeOperation(
-            () => sendEmailVerification(unverifiedUser),
-            () => {
-                addNotification({
-                    type: 'success',
-                    title: 'Verification Email Sent',
-                    message: 'Please check your inbox and spam folder.',
-                    persistent: false
-                });
-                
-                setShowVerificationHelper(false);
-                setUnverifiedUser(null);
-            },
-            (error) => {
-                addNotification({
-                    type: 'error',
-                    title: 'Verification Error',
-                    message: error,
-                    persistent: true
-                });
+        try {
+            await sendEmailVerification(unverifiedUser);
+            
+            toast.success("Verification email sent! Please check your inbox and spam folder.", {
+                duration: 6000,
+                position: "top-center"
+            });
+            
+            addNotification({
+                type: 'success',
+                title: 'Verification Email Sent',
+                message: 'Please check your inbox and spam folder.',
+                persistent: false
+            });
+            
+            setShowVerificationHelper(false);
+            setUnverifiedUser(null);
+            
+        } catch (error) {
+            console.error("Error sending verification email:", error);
+            let errorMessage = "Failed to send verification email. ";
+            
+            switch (error.code) {
+                case 'auth/too-many-requests':
+                    errorMessage += "Too many requests. Please wait a few minutes before trying again.";
+                    break;
+                case 'auth/user-token-expired':
+                    errorMessage += "Your session has expired. Please try logging in again.";
+                    break;
+                default:
+                    errorMessage += "Please try again or contact support if the problem persists.";
             }
-        );
-        
-        setLoadingResendVerification(false);
+            
+            toast.error(errorMessage, {
+                duration: 6000,
+                position: "top-center"
+            });
+
+            addNotification({
+                type: 'error',
+                title: 'Verification Error',
+                message: errorMessage,
+                persistent: true
+            });
+        } finally {
+            setLoadingResendVerification(false);
+        }
     };
 
     const handleLogin = async (e) => {
@@ -156,50 +265,76 @@ const Login = () => {
         setLoadingEmailLogin(true);
         setShowVerificationHelper(false);
         
-        await executeOperation(
-            () => signIn(email, password),
-            (result) => {
-                if (result.success) {
-                    // Check if email is verified
-                    if (result.user && !result.user.emailVerified) {
-                        const errorMessage = "Please verify your email before signing in. Check your inbox for the verification link.";
-                        
-                        addNotification({
-                            type: 'warning',
-                            title: 'Email Verification Required',
-                            message: errorMessage,
-                            persistent: true
-                        });
-                        
-                        // Store the unverified user for resend functionality
-                        setUnverifiedUser(result.user);
-                        setShowVerificationHelper(true);
-                        
-                        // Sign out the user since email is not verified
-                        result.user.auth.signOut();
-                        return;
-                    }
+        try {
+            // Clear any existing registration state before login
+            clearRegistrationState();
+            
+            const result = await signIn(email, password);
+            if (result.success) {
+                // Check if email is verified
+                if (result.user && !result.user.emailVerified) {
+                    const errorMessage = "Please verify your email before signing in. Check your inbox for the verification link.";
+                    
+                    toast.error(errorMessage, {
+                        duration: 6000,
+                        position: "top-center"
+                    });
                     
                     addNotification({
-                        type: 'success',
-                        title: 'Login Successful',
-                        message: 'Login successful!',
-                        persistent: false
+                        type: 'warning',
+                        title: 'Email Verification Required',
+                        message: errorMessage,
+                        persistent: true
                     });
-                    // Navigation will be handled by useEffect
+                    
+                    // Store the unverified user for resend functionality
+                    setUnverifiedUser(result.user);
+                    setShowVerificationHelper(true);
+                    
+                    // Sign out the user since email is not verified
+                    await result.user.auth.signOut();
+                    return;
                 }
-            },
-            (error) => {
+                
+                toast.success("Login successful!");
+                // Navigation will be handled by useEffect
+                
+            } else {
+                // Handle specific Firebase auth errors
+                const error = result.error || result;
+                let friendlyError = getFirebaseErrorMessage(error);
+                
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    friendlyError = "Invalid email or password. Please check your credentials and try again.";
+                } else if (error.code === 'auth/too-many-requests') {
+                    friendlyError = "Too many failed login attempts. Please wait a few minutes before trying again.";
+                } else if (error.code === 'auth/user-disabled') {
+                    friendlyError = "This account has been disabled. Please contact support.";
+                }
+                
+                toast.error(friendlyError);
+                
                 addNotification({
                     type: 'error',
                     title: 'Login Failed',
-                    message: error,
+                    message: friendlyError,
                     persistent: true
                 });
             }
-        );
-        
-        setLoadingEmailLogin(false);
+        } catch (error) {
+            console.error('Login error:', error);
+            const friendlyError = getFirebaseErrorMessage(error);
+            toast.error(friendlyError);
+            
+            addNotification({
+                type: 'error',
+                title: 'Login Error',
+                message: friendlyError,
+                persistent: true
+            });
+        } finally {
+            setLoadingEmailLogin(false);
+        }
     };
 
     const handleGoogleLogin = async (e) => {
@@ -207,44 +342,55 @@ const Login = () => {
         e.stopPropagation();
         
         setLoadingGoogleLogin(true);
-        
-        await executeOperation(
-            () => signInWithGoogle(),
-            (result) => {
-                if (result.success) {
-                    // For SSO, if it's a new user, redirect to register
-                    if (result.isNewUser) {
-                        addNotification({
-                            type: 'info',
-                            title: 'Registration Required',
-                            message: 'Please complete your registration first.',
-                            persistent: false
-                        });
-                        
-                        router.push("/register");
-                        return;
-                    }
+        try {
+            // Clear any existing registration state before login
+            clearRegistrationState();
+            
+            const result = await signInWithGoogle();
+            if (result.success) {
+                // If this is a completely new user, send to register
+                if (result.isNewUser) {
+                    toast.info("Please complete your registration first.");
                     
                     addNotification({
-                        type: 'success',
-                        title: 'Login Successful',
-                        message: 'Login successful!',
+                        type: 'info',
+                        title: 'Registration Required',
+                        message: 'Please complete your registration first.',
                         persistent: false
                     });
-                    // Navigation will be handled by useEffect
+                    
+                    router.push("/register");
+                    return;
                 }
-            },
-            (error) => {
+                
+                toast.success("Login successful!");
+                // Navigation will be handled by useEffect
+                
+            } else {
+                const friendlyError = getFirebaseErrorMessage(result.error || result);
+                toast.error(friendlyError);
+                
                 addNotification({
                     type: 'error',
                     title: 'Google Login Failed',
-                    message: error,
+                    message: friendlyError,
                     persistent: true
                 });
             }
-        );
-        
-        setLoadingGoogleLogin(false);
+        } catch (error) {
+            console.error('Google login error:', error);
+            const friendlyError = getFirebaseErrorMessage(error);
+            toast.error(friendlyError);
+            
+            addNotification({
+                type: 'error',
+                title: 'Google Login Error',
+                message: friendlyError,
+                persistent: true
+            });
+        } finally {
+            setLoadingGoogleLogin(false);
+        }
     };
     
     const handleForgotPassword = (e) => {
@@ -301,7 +447,18 @@ const Login = () => {
         </div>
     );
 
-    // Skip loading screen for /login
+    // Show loading only during app initialization
+    if (!isInitialized) {
+        return (
+            <div className="min-h-screen flex justify-center items-center bg-gray-50">
+                <div className="text-center">
+                    <Loader2 className="animate-spin h-8 w-8 text-teal-600 mx-auto mb-4" />
+                    <p className="text-gray-600">Loading your workspace...</p>
+                </div>
+            </div>
+        );
+    }
+
     // Show signing in only when actually navigating
     if (isAuthenticated && user?.emailVerified && hasNavigated.current) {
         return (

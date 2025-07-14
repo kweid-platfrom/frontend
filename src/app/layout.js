@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { AppProvider } from "../contexts/AppProvider";
-import AppWrapper from "../components/layout/AppWrapper";
+import AppWrapper from "../components/AppWrapper";
 import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
 import { Toaster } from "sonner";
 

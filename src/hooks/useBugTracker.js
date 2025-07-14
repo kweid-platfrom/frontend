@@ -1,9 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { collection, onSnapshot, query, orderBy, where, doc, updateDoc, addDoc, getDocs } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { useSuite } from "../context/SuiteContext";
+import { useApp } from "../contexts/AppProvider";
+import firestoreService from "../services/firestoreService";
 import {
     getTeamMemberName,
     getPriorityFromSeverity,
@@ -14,17 +12,14 @@ import {
     VALID_BUG_PRIORITIES,
     VALID_ENVIRONMENTS
 } from "../utils/bugUtils";
-import { calculateBugMetrics, calculateBugMetricsWithTrends } from "../utils/calculateBugMetrics";
 
 const DEFAULT_ENVIRONMENTS = ['Development', 'Staging', 'Production', 'Testing', 'Unknown'];
 
-// FIXED: Hook now accepts parameters with proper defaults
 export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}) => {
-    // FIXED: Use parameters if provided, otherwise fall back to context
-    const suiteContext = useSuite();
-    const activeSuite = suite || suiteContext.activeSuite;
-    const contextUser = user || suiteContext.user;
-    
+    const { activeSuite: contextSuite, user: contextUser, userCapabilities, isAuthenticated } = useApp();
+    const activeSuite = suite || contextSuite;
+    const currentUser = user || contextUser;
+
     const [bugs, setBugs] = useState([]);
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
@@ -43,134 +38,52 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
         environment: "all",
         searchTerm: ""
     });
-    const calculatingMetrics = useRef(false);
 
-    // FIXED: Helper function to get the correct bugs collection path based on account type
-    const getBugsCollectionPath = useCallback((suiteData) => {
-        if (!suiteData || !suiteData.suite_id || !contextUser) {
-            console.warn("Suite, suite_id, or user missing:", { suiteData, contextUser });
+    // Helper to get collection paths
+    const getBugsCollectionPath = useCallback(() => {
+        if (!activeSuite?.suite_id || !currentUser) {
+            console.warn("Missing suite or user:", { activeSuite, currentUser });
             return null;
         }
-        
-        if (suiteData.accountType === 'individual') {
-            // FIXED: For individual accounts, always use the authenticated user's UID
-            // The path structure in Firestore rules expects: /individualAccounts/{userId}/testSuites/{suiteId}/bugs
-            return `individualAccounts/${contextUser.uid}/testSuites/${suiteData.suite_id}/bugs`;
-        } else if (suiteData.accountType === 'organization') {
-            // For organization accounts, orgId is required
-            if (!suiteData.orgId) {
-                console.error("Organization account missing orgId:", suiteData);
-                return null;
-            }
-            return `organizations/${suiteData.orgId}/testSuites/${suiteData.suite_id}/bugs`;
+        if (activeSuite.accountType === 'individual') {
+            return `individualAccounts/${currentUser.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+        } else if (activeSuite.accountType === 'organization' && activeSuite.orgId) {
+            return `organizations/${activeSuite.orgId}/testSuites/${activeSuite.suite_id}/bugs`;
         }
-        
-        console.error("Invalid or unsupported account type:", suiteData.accountType);
+        console.error("Invalid account type or missing orgId:", activeSuite);
         return null;
-    }, [contextUser]);
+    }, [activeSuite, currentUser]);
 
-    // FIXED: Helper function to get the correct team members collection path
-    const getTeamMembersCollectionPath = useCallback((suiteData) => {
-        if (!suiteData || !contextUser) return null;
-        
-        // Only organizations have a members collection according to Firestore rules
-        if (suiteData.accountType === 'organization' && suiteData.orgId) {
-            return `organizations/${suiteData.orgId}/members`;
-        }
-        
-        return null; // Individual accounts don't have a separate members collection
-    }, [contextUser]);
+    const getTeamMembersCollectionPath = useCallback(() => {
+        if (activeSuite?.accountType !== 'organization' || !activeSuite.orgId) return null;
+        return `organizations/${activeSuite.orgId}/members`;
+    }, [activeSuite]);
 
-    // FIXED: Helper function to get sprints collection path
-    const getSprintsCollectionPath = useCallback((suiteData) => {
-        if (!suiteData || !suiteData.suite_id || !contextUser) return null;
-        
-        if (suiteData.accountType === 'individual') {
-            // FIXED: Use authenticated user's UID directly
-            return `individualAccounts/${contextUser.uid}/testSuites/${suiteData.suite_id}/sprints`;
-        } else if (suiteData.accountType === 'organization') {
-            if (!suiteData.orgId) return null;
-            return `organizations/${suiteData.orgId}/testSuites/${suiteData.suite_id}/sprints`;
+    const getSprintsCollectionPath = useCallback(() => {
+        if (!activeSuite?.suite_id || !currentUser) return null;
+        if (activeSuite.accountType === 'individual') {
+            return `individualAccounts/${currentUser.uid}/testSuites/${activeSuite.suite_id}/sprints`;
+        } else if (activeSuite.accountType === 'organization' && activeSuite.orgId) {
+            return `organizations/${activeSuite.orgId}/testSuites/${activeSuite.suite_id}/sprints`;
         }
-        
         return null;
-    }, [contextUser]);
+    }, [activeSuite, currentUser]);
 
-    // FIXED: Validation function to ensure user has access to the suite
-    const validateSuiteAccess = useCallback((suiteData) => {
-        if (!suiteData || !contextUser) {
-            console.log("Missing suite or user for validation:", { suiteData, contextUser });
+    // Validate suite access
+    const validateSuiteAccess = useCallback(() => {
+        if (!activeSuite || !currentUser || !isAuthenticated) return false;
+        if (!userCapabilities.canAccessBugs) {
+            console.log("User lacks bug access permissions:", currentUser.uid);
             return false;
         }
-        
-        if (suiteData.accountType === 'individual') {
-            // FIXED: For individual accounts, the authenticated user must match the path
-            // Since we're using contextUser.uid in the path, this should always be true for individual accounts
-            return true;
-        } else if (suiteData.accountType === 'organization') {
-            // For organization accounts, user must be a member (this will be validated by Firestore rules)
-            return suiteData.orgId && contextUser.uid;
-        }
-        
-        return false;
-    }, [contextUser]);
+        return true;
+    }, [activeSuite, currentUser, isAuthenticated, userCapabilities]);
 
-    const currentMetrics = useMemo(() => {
-        if (calculatingMetrics.current || bugs.length === 0) return null;
-
-        try {
-            calculatingMetrics.current = true;
-            return calculateBugMetrics(bugs);
-        } catch (error) {
-            console.error("Error calculating current metrics:", error);
-            return null;
-        } finally {
-            calculatingMetrics.current = false;
-        }
-    }, [bugs]);
-
-    const metricsWithTrends = useMemo(() => {
-        if (calculatingMetrics.current || bugs.length === 0) return null;
-
-        try {
-            const now = new Date();
-            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-
-            const currentPeriodBugs = bugs.filter(bug => {
-                const createdAt = bug.createdAt?.seconds ?
-                    new Date(bug.createdAt.seconds * 1000) :
-                    new Date(bug.createdAt);
-                return createdAt >= thirtyDaysAgo;
-            });
-
-            const previousPeriodBugs = bugs.filter(bug => {
-                const createdAt = bug.createdAt?.seconds ?
-                    new Date(bug.createdAt.seconds * 1000) :
-                    new Date(bug.createdAt);
-                return createdAt >= sixtyDaysAgo && createdAt < thirtyDaysAgo;
-            });
-
-            return calculateBugMetricsWithTrends(currentPeriodBugs, previousPeriodBugs);
-        } catch (error) {
-            console.error("Error calculating metrics with trends:", error);
-            return null;
-        }
-    }, [bugs]);
-
+    // Format date
     const formatDate = useCallback((timestamp) => {
         if (!timestamp) return 'N/A';
-
         try {
-            let date;
-            if (timestamp?.toDate) {
-                date = timestamp.toDate();
-            } else if (timestamp instanceof Date) {
-                date = timestamp;
-            } else {
-                date = new Date(timestamp);
-            }
-
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             return date.toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'short',
@@ -184,25 +97,21 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
         }
     }, []);
 
+    // Update bug in Firestore
     const updateBugInFirestore = useCallback(async (bugId, updates) => {
-        if (isUpdating.has(bugId) || !bugId || !updates || !activeSuite) return;
-
-        // Validate suite access before attempting update
-        if (!validateSuiteAccess(activeSuite)) {
-            toast.error("You don't have permission to access this suite");
+        if (isUpdating.has(bugId) || !bugId || !updates || !activeSuite || !userCapabilities.canCreateBugs) {
+            toast.error("Cannot update bug: Invalid parameters or insufficient permissions");
             return;
         }
 
-        const bugsCollectionPath = getBugsCollectionPath(activeSuite);
+        const bugsCollectionPath = getBugsCollectionPath();
         if (!bugsCollectionPath) {
             toast.error("Invalid suite configuration");
             return;
         }
 
         const cleanUpdates = Object.keys(updates).reduce((acc, key) => {
-            if (updates[key] !== undefined && updates[key] !== null) {
-                acc[key] = updates[key];
-            }
+            if (updates[key] !== undefined && updates[key] !== null) acc[key] = updates[key];
             return acc;
         }, {});
 
@@ -211,15 +120,13 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
         setIsUpdating(prev => new Set(prev).add(bugId));
 
         try {
-            const bugRef = doc(db, bugsCollectionPath, bugId);
-            const updateData = { 
-                ...cleanUpdates, 
+            const updateData = {
+                ...cleanUpdates,
                 updated_at: new Date(),
-                // Ensure we track who made the update
-                updated_by: contextUser.uid
+                updated_by: currentUser.uid
             };
 
-            // Validate fields against allowed values
+            // Validate fields
             if (updateData.status && !VALID_BUG_STATUSES.includes(updateData.status)) {
                 throw new Error(`Invalid status: ${updateData.status}`);
             }
@@ -233,28 +140,24 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
                 throw new Error(`Invalid environment: ${updateData.environment}`);
             }
 
-            // Optimistic update for better UX
+            // Optimistic update
             setBugs(prevBugs =>
                 prevBugs.map(bug =>
                     bug.id === bugId ? { ...bug, ...updateData } : bug
                 )
             );
 
-            await updateDoc(bugRef, updateData);
+            await firestoreService.updateDocument(`${bugsCollectionPath}/${bugId}`, updateData);
+            toast.success("Bug updated successfully");
         } catch (error) {
             console.error("Error updating bug:", error);
-            
-            // Revert optimistic update on error
             setBugs(prevBugs =>
                 prevBugs.map(bug => {
                     if (bug.id === bugId) {
                         const revertedBug = { ...bug };
                         Object.keys(cleanUpdates).forEach(key => {
-                            if (key !== 'updated_at' && key !== 'updated_by') {
-                                // Only revert if this was a new field, not an existing one being updated
-                                if (!(key in bug)) {
-                                    delete revertedBug[key];
-                                }
+                            if (key !== 'updated_at' && key !== 'updated_by' && !(key in bug)) {
+                                delete revertedBug[key];
                             }
                         });
                         return revertedBug;
@@ -262,8 +165,6 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
                     return bug;
                 })
             );
-            
-            // Handle permission errors specifically
             if (error.code === 'permission-denied') {
                 toast.error("You don't have permission to update this bug");
             } else {
@@ -277,50 +178,44 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
                 return newSet;
             });
         }
-    }, [isUpdating, activeSuite, getBugsCollectionPath, validateSuiteAccess, environments, contextUser]);
+    }, [isUpdating, activeSuite, currentUser, userCapabilities, getBugsCollectionPath, environments]);
 
+    // Bug management functions
     const updateBugStatus = useCallback(async (bugId, newStatus) => {
         if (!VALID_BUG_STATUSES.includes(newStatus)) {
             toast.error(`Invalid status: ${newStatus}`);
             return;
         }
-
         try {
-            const updates = { status: newStatus.trim() };
-
-            // Add resolution tracking for completed statuses
-            if (['Resolved', 'Closed', 'Done'].includes(newStatus)) {
-                updates.resolved_at = new Date();
-                updates.resolved_by = contextUser.uid;
-            }
-
+            const updates = {
+                status: newStatus.trim(),
+                ...(newStatus === 'Resolved' || newStatus === 'Closed' || newStatus === 'Done'
+                    ? { resolved_at: new Date(), resolved_by: currentUser.uid }
+                    : {})
+            };
             await updateBugInFirestore(bugId, updates);
             toast.success(`Bug status updated to ${newStatus}`);
         } catch (error) {
             console.error("Error updating bug status:", error);
-            // Error toast is handled by updateBugInFirestore
         }
-    }, [updateBugInFirestore, contextUser]);
+    }, [updateBugInFirestore, currentUser]);
 
     const updateBugSeverity = useCallback(async (bugId, newSeverity, newPriority = null) => {
         if (!VALID_BUG_SEVERITIES.includes(newSeverity)) {
             toast.error(`Invalid severity: ${newSeverity}`);
             return;
         }
-
         try {
-            const updates = { severity: newSeverity.trim() };
-            const calculatedPriority = newPriority || getPriorityFromSeverity(newSeverity);
-
-            if (calculatedPriority && VALID_BUG_PRIORITIES.includes(calculatedPriority)) {
-                updates.priority = calculatedPriority.trim();
-            }
-
+            const updates = {
+                severity: newSeverity.trim(),
+                ...(newPriority && VALID_BUG_PRIORITIES.includes(newPriority)
+                    ? { priority: newPriority.trim() }
+                    : { priority: getPriorityFromSeverity(newSeverity).trim() })
+            };
             await updateBugInFirestore(bugId, updates);
             toast.success(`Bug severity updated to ${newSeverity}`);
         } catch (error) {
             console.error("Error updating bug severity:", error);
-            // Error toast is handled by updateBugInFirestore
         }
     }, [updateBugInFirestore]);
 
@@ -331,7 +226,6 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
             toast.success(`Bug assigned to ${assigneeName}`);
         } catch (error) {
             console.error("Error updating bug assignment:", error);
-            // Error toast is handled by updateBugInFirestore
         }
     }, [updateBugInFirestore, teamMembers]);
 
@@ -340,26 +234,21 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
             toast.error(`Invalid environment: ${newEnvironment}`);
             return;
         }
-
         try {
             await updateBugInFirestore(bugId, { environment: newEnvironment });
             toast.success(`Bug environment updated to ${newEnvironment}`);
         } catch (error) {
             console.error("Error updating bug environment:", error);
-            // Error toast is handled by updateBugInFirestore
         }
     }, [updateBugInFirestore, environments]);
 
     const updateBug = useCallback(async (updatedBug) => {
         try {
-            const { id, created_at, created_by, ...updateData } = updatedBug;
-            
-            // Don't allow updating creation metadata
+            const { id, ...updateData } = updatedBug;
             await updateBugInFirestore(id, updateData);
             toast.success("Bug updated successfully");
         } catch (error) {
             console.error("Error updating bug:", error);
-            // Error toast is handled by updateBugInFirestore
         }
     }, [updateBugInFirestore]);
 
@@ -369,41 +258,34 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
             toast.success("Bug title updated successfully");
         } catch (error) {
             console.error("Error updating bug title:", error);
-            // Error toast is handled by updateBugInFirestore
         }
     }, [updateBugInFirestore]);
 
+    // Create sprint
     const createSprint = useCallback(async (sprintData) => {
-        if (!activeSuite || !contextUser) {
-            toast.error("No active suite selected or user not authenticated");
+        if (!activeSuite || !currentUser || !userCapabilities.canCreateBugs) {
+            toast.error("No active suite selected or insufficient permissions");
             return;
         }
 
-        if (!validateSuiteAccess(activeSuite)) {
-            toast.error("You don't have permission to create sprints in this suite");
+        const sprintCollectionPath = getSprintsCollectionPath();
+        if (!sprintCollectionPath) {
+            toast.error("Invalid suite configuration");
             return;
         }
 
         try {
-            const sprintCollectionPath = getSprintsCollectionPath(activeSuite);
-            if (!sprintCollectionPath) {
-                throw new Error("Invalid suite configuration for sprints");
-            }
-
-            const sprintRef = collection(db, sprintCollectionPath);
             const newSprint = {
                 ...sprintData,
                 suite_id: activeSuite.suite_id,
                 account_type: activeSuite.accountType,
-                // FIXED: Add correct context based on account type
                 ...(activeSuite.accountType === 'organization' && { org_id: activeSuite.orgId }),
-                ...(activeSuite.accountType === 'individual' && { user_id: contextUser.uid }),
-                created_by: contextUser.uid,
+                ...(activeSuite.accountType === 'individual' && { user_id: currentUser.uid }),
+                created_by: currentUser.uid,
                 created_at: new Date(),
                 updated_at: new Date()
             };
-
-            const docRef = await addDoc(sprintRef, newSprint);
+            const docRef = await firestoreService.createDocument(sprintCollectionPath, newSprint);
             toast.success("Sprint created successfully");
             return docRef.id;
         } catch (error) {
@@ -415,21 +297,16 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
             }
             throw error;
         }
-    }, [activeSuite, contextUser, validateSuiteAccess, getSprintsCollectionPath]);
+    }, [activeSuite, currentUser, userCapabilities, getSprintsCollectionPath]);
 
-    // Refetch function with proper error handling
+    // Refetch bugs
     const refetchBugs = useCallback(async () => {
-        if (!activeSuite || !contextUser) {
-            console.warn("Cannot refetch bugs: missing activeSuite or user");
-            return;
-        }
-
-        if (!validateSuiteAccess(activeSuite)) {
+        if (!validateSuiteAccess()) {
             setError("You don't have permission to access this suite");
             return;
         }
 
-        const bugsCollectionPath = getBugsCollectionPath(activeSuite);
+        const bugsCollectionPath = getBugsCollectionPath();
         if (!bugsCollectionPath) {
             setError("Invalid suite configuration");
             return;
@@ -437,97 +314,51 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
 
         setLoading(true);
         try {
-            const bugsRef = collection(db, bugsCollectionPath);
-            const bugsQuery = query(bugsRef, orderBy("created_at", "desc"));
-            const snapshot = await getDocs(bugsQuery);
-            
-            const bugsData = snapshot.docs.map(doc => ({
+            const bugsData = await firestoreService.queryDocuments(bugsCollectionPath, [
+                { field: 'created_at', direction: 'desc' }
+            ]);
+            setBugs(bugsData.map(doc => ({
                 id: doc.id,
-                ...doc.data(),
-                created_at: doc.data().created_at?.toDate(),
-                updated_at: doc.data().updated_at?.toDate()
-            }));
-            
-            setBugs(bugsData);
+                ...doc,
+                created_at: doc.created_at?.toDate?.() || new Date(doc.created_at),
+                updated_at: doc.updated_at?.toDate?.() || new Date(doc.updated_at)
+            })));
             setError(null);
         } catch (error) {
             console.error("Error refetching bugs:", error);
-            if (error.code === 'permission-denied') {
-                setError("You don't have permission to access bugs in this suite");
-            } else {
-                setError(`Failed to refresh bugs: ${error.message}`);
-            }
+            setError(error.code === 'permission-denied'
+                ? "You don't have permission to access bugs in this suite"
+                : `Failed to refresh bugs: ${error.message}`);
         } finally {
             setLoading(false);
         }
-    }, [activeSuite, contextUser, getBugsCollectionPath, validateSuiteAccess]);
+    }, [getBugsCollectionPath, validateSuiteAccess]);
 
-    // FIXED: Real-time listeners with proper enabled check and parameter validation
+    // Real-time listeners
     useEffect(() => {
-        // FIXED: Check enabled flag first
-        if (!enabled) {
-            console.log("BugTracker hook disabled");
-            return;
-        }
-
-        // FIXED: Better validation with more detailed logging
-        if (!contextUser || !activeSuite) {
-            console.log("BugTracker prerequisites not met:", {
-                user: !!contextUser,
-                userUid: contextUser?.uid,
-                activeSuite: !!activeSuite,
-                suiteId: activeSuite?.suite_id,
-                accountType: activeSuite?.accountType
-            });
-            setError("Suite or user not loaded. Please ensure you are logged in and have an active suite selected.");
+        if (!enabled || !validateSuiteAccess()) {
+            setError("Bug tracking disabled or you lack permission to access this suite");
             setBugs([]);
             setTeamMembers([]);
             setSprints([]);
             return;
         }
 
-        if (!validateSuiteAccess(activeSuite)) {
-            console.log("Suite access validation failed:", {
-                suite: activeSuite,
-                user: contextUser
-            });
-            setError("You don't have permission to access this suite");
-            setBugs([]);
-            setTeamMembers([]);
-            setSprints([]);
-            return;
-        }
-
-        const unsubscribers = [];
-        setError(null);
         setLoading(true);
+        const unsubscribers = [];
 
-        console.log("Setting up BugTracker listeners for:", {
-            suiteId: activeSuite.suite_id,
-            accountType: activeSuite.accountType,
-            userUid: contextUser.uid
-        });
-
-        // FIXED: Bugs listener with better error handling
-        try {
-            const bugsCollectionPath = getBugsCollectionPath(activeSuite);
-            if (!bugsCollectionPath) {
-                throw new Error("Invalid suite configuration for bugs");
-            }
-
-            console.log("Bugs collection path:", bugsCollectionPath);
-
-            const bugsRef = collection(db, bugsCollectionPath);
-            const bugsQuery = query(bugsRef, orderBy("created_at", "desc"));
-
-            const unsubscribeBugs = onSnapshot(
-                bugsQuery,
+        // Bugs subscription
+        const bugsCollectionPath = getBugsCollectionPath();
+        if (bugsCollectionPath) {
+            const unsubscribeBugs = firestoreService.subscribeDocuments(
+                bugsCollectionPath,
+                [{ field: 'created_at', direction: 'desc' }],
                 (snapshot) => {
-                    const bugsData = snapshot.docs.map(doc => ({
+                    const bugsData = snapshot.map(doc => ({
                         id: doc.id,
-                        ...doc.data(),
-                        created_at: doc.data().created_at?.toDate(),
-                        updated_at: doc.data().updated_at?.toDate()
+                        ...doc,
+                        created_at: doc.created_at?.toDate?.() || new Date(doc.created_at),
+                        updated_at: doc.updated_at?.toDate?.() || new Date(doc.updated_at)
                     }));
                     console.log(`Loaded ${bugsData.length} bugs from Firestore`);
                     setBugs(bugsData);
@@ -535,94 +366,63 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
                     setLoading(false);
                 },
                 (err) => {
-                    console.error("Firestore onSnapshot (bugs) error:", err);
-                    console.error("Error details:", {
-                        code: err.code,
-                        message: err.message,
-                        path: bugsCollectionPath
-                    });
-                    setLoading(false);
-                    if (err.code === 'permission-denied') {
-                        setError("You don't have permission to access bugs in this suite");
-                    } else {
-                        setError("Failed to load bugs. Please check your internet connection and try again.");
-                    }
+                    console.error("Firestore subscription error (bugs):", err);
+                    setError(err.code === 'permission-denied'
+                        ? "You don't have permission to access bugs in this suite"
+                        : "Failed to load bugs. Please check your internet connection.");
                     setBugs([]);
+                    setLoading(false);
                 }
             );
-
             unsubscribers.push(unsubscribeBugs);
-        } catch (error) {
-            console.error("Error setting up bug listener:", error);
-            setLoading(false);
-            setError("Failed to initialize bug tracking. Please try refreshing the page.");
         }
 
-        // Team members listener
-        try {
-            if (activeSuite.accountType === 'organization') {
-                const membersCollectionPath = getTeamMembersCollectionPath(activeSuite);
-                if (membersCollectionPath) {
-                    const membersRef = collection(db, membersCollectionPath);
-                    const unsubscribeMembers = onSnapshot(
-                        membersRef,
-                        (snapshot) => {
-                            const membersData = snapshot.docs.map(doc => ({
-                                id: doc.id,
-                                ...doc.data()
-                            }));
-                            setTeamMembers(membersData);
-                        },
-                        (err) => {
-                            console.error("Firestore onSnapshot (teamMembers) error:", err);
-                            // Don't show error for team members as it's not critical
-                            setTeamMembers([]);
-                        }
-                    );
-                    unsubscribers.push(unsubscribeMembers);
-                }
-            } else {
-                // For individual accounts, set user as the only team member
-                setTeamMembers([{
-                    id: contextUser.uid,
-                    name: contextUser.displayName || contextUser.email || 'You',
-                    email: contextUser.email,
-                    role: 'Owner'
-                }]);
-            }
-        } catch (error) {
-            console.error("Error setting up team members listener:", error);
-            setTeamMembers([]);
-        }
-
-        // Sprints listener
-        try {
-            const sprintsCollectionPath = getSprintsCollectionPath(activeSuite);
-            if (sprintsCollectionPath) {
-                const sprintsRef = collection(db, sprintsCollectionPath);
-                const sprintsQuery = query(sprintsRef, orderBy("created_at", "desc"));
-
-                const unsubscribeSprints = onSnapshot(
-                    sprintsQuery,
+        // Team members subscription
+        if (activeSuite?.accountType === 'organization') {
+            const membersCollectionPath = getTeamMembersCollectionPath();
+            if (membersCollectionPath) {
+                const unsubscribeMembers = firestoreService.subscribeDocuments(
+                    membersCollectionPath,
+                    [],
                     (snapshot) => {
-                        const sprintsData = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data(),
-                            created_at: doc.data().created_at?.toDate(),
-                            updated_at: doc.data().updated_at?.toDate()
-                        }));
-                        setSprints(sprintsData);
+                        setTeamMembers(snapshot.map(doc => ({ id: doc.id, ...doc })));
                     },
                     (err) => {
-                        console.error("Firestore onSnapshot (sprints) error:", err);
-                        setSprints([]);
+                        console.error("Firestore subscription error (teamMembers):", err);
+                        setTeamMembers([]);
                     }
                 );
-                unsubscribers.push(unsubscribeSprints);
+                unsubscribers.push(unsubscribeMembers);
             }
-        } catch (error) {
-            console.error("Error setting up sprints listener:", error);
-            setSprints([]);
+        } else {
+            setTeamMembers([{
+                id: currentUser.uid,
+                name: currentUser.displayName || currentUser.email || 'You',
+                email: currentUser.email,
+                role: 'Owner'
+            }]);
+        }
+
+        // Sprints subscription
+        const sprintsCollectionPath = getSprintsCollectionPath();
+        if (sprintsCollectionPath) {
+            const unsubscribeSprints = firestoreService.subscribeDocuments(
+                sprintsCollectionPath,
+                [{ field: 'created_at', direction: 'desc' }],
+                (snapshot) => {
+                    setSprints(snapshot.map(doc => ({
+                        id: doc.id,
+                        ...doc,
+                        created_at: doc.created_at?.toDate?.() || new Date(doc.created_at),
+                        updated_at: doc.updated_at?.toDate?.() || new Date(doc.updated_at)
+                    })));
+                },
+                (err) => {
+                    console.error("Firestore subscription error (sprints):", err);
+                    setSprints([]);
+                }
+            );
+            unsubscribers.push(unsubscribeSprints);
         }
 
         return () => {
@@ -634,40 +434,30 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
                 }
             });
         };
-    }, [enabled, contextUser, activeSuite, getBugsCollectionPath, getTeamMembersCollectionPath, getSprintsCollectionPath, validateSuiteAccess]);
+    }, [enabled, activeSuite, currentUser, validateSuiteAccess, getBugsCollectionPath, getTeamMembersCollectionPath, getSprintsCollectionPath]);
 
-    // Filter bugs based on current filters
+    // Client-side filtering
     useEffect(() => {
         let filtered = [...bugs];
 
         if (filters.status !== "all") {
             filtered = filtered.filter(bug => bug.status === filters.status);
         }
-
         if (filters.severity !== "all") {
             filtered = filtered.filter(bug => bug.severity === filters.severity);
         }
-
         if (filters.assignedTo !== "all") {
-            if (filters.assignedTo === "unassigned") {
-                filtered = filtered.filter(bug => !bug.assigned_to);
-            } else {
-                filtered = filtered.filter(bug => bug.assigned_to === filters.assignedTo);
-            }
+            filtered = filtered.filter(bug => filters.assignedTo === "unassigned" ? !bug.assigned_to : bug.assigned_to === filters.assignedTo);
         }
-
         if (filters.category !== "all") {
             filtered = filtered.filter(bug => bug.category === filters.category);
         }
-
         if (filters.sprint !== "all") {
             filtered = filtered.filter(bug => bug.sprint_id === filters.sprint);
         }
-
         if (filters.environment !== "all") {
             filtered = filtered.filter(bug => bug.environment === filters.environment);
         }
-
         if (filters.dueDate !== "all") {
             const now = new Date();
             switch (filters.dueDate) {
@@ -693,7 +483,6 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
                     break;
             }
         }
-
         if (filters.searchTerm.trim()) {
             const searchTerm = filters.searchTerm.toLowerCase().trim();
             filtered = filtered.filter(bug =>
@@ -716,11 +505,9 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
         environments,
         filters,
         setFilters,
-        currentMetrics,
-        metricsWithTrends,
-        isUpdating,
         error,
         loading,
+        isUpdating,
         updateBugStatus,
         updateBugSeverity,
         updateBugAssignment,
@@ -730,7 +517,6 @@ export const useBugTracker = ({ enabled = true, suite = null, user = null } = {}
         createSprint,
         formatDate,
         refetchBugs,
-        // Additional utilities that can be helpful
         validateSuiteAccess
     };
 };

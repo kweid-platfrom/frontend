@@ -1,22 +1,10 @@
+"use client"
 import { useState, useEffect, useCallback } from 'react';
-import {
-    collection,
-    getDocs,
-    query,
-    where,
-    Timestamp,
-    orderBy,
-    limit
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { useAuth } from '../contexts/AuthProvider';
-import { useSuite } from '../contexts/SuiteContext';
-import { 
-    canAccessBugs,
-    getUserPermissions
-} from '../services/permissionService';
+import { Timestamp } from 'firebase/firestore';
+import { useApp } from '../contexts/AppProvider';
+import firestoreService from '../services/firestoreService';
 
-// Utility function to get date range filter
+// Utility to get date range for filtering
 const getDateRange = (timeRange) => {
     const now = new Date();
     const ranges = {
@@ -28,19 +16,15 @@ const getDateRange = (timeRange) => {
     return ranges[timeRange] || ranges['7d'];
 };
 
-// Helper function to convert Firebase Timestamp to Date
+// Convert Firebase Timestamp to Date
 const convertFirebaseDate = (timestamp) => {
     if (!timestamp) return null;
-    if (typeof timestamp === 'string') {
-        return new Date(timestamp);
-    }
-    if (timestamp.toDate) {
-        return timestamp.toDate();
-    }
+    if (typeof timestamp === 'string') return new Date(timestamp);
+    if (timestamp.toDate) return timestamp.toDate();
     return timestamp;
 };
 
-// Helper function to calculate time difference in hours
+// Calculate time difference in hours
 const calculateHoursDifference = (startDate, endDate) => {
     if (!startDate || !endDate) return 0;
     const start = convertFirebaseDate(startDate);
@@ -52,220 +36,179 @@ const calculateHoursDifference = (startDate, endDate) => {
 const calculateReportCompleteness = (bug) => {
     let score = 0;
     const totalFields = 10;
-
-    // Check for required fields
-    if (bug.title && bug.title.trim()) score++;
-    if (bug.actualBehavior && bug.actualBehavior.trim()) score++;
-    if (bug.expectedBehavior && bug.expectedBehavior.trim()) score++;
-    if (bug.stepsToReproduce && bug.stepsToReproduce.trim()) score++;
+    if (bug.title?.trim()) score++;
+    if (bug.actualBehavior?.trim()) score++;
+    if (bug.expectedBehavior?.trim()) score++;
+    if (bug.stepsToReproduce?.trim()) score++;
     if (bug.environment) score++;
     if (bug.priority) score++;
     if (bug.severity) score++;
     if (bug.category) score++;
-    
-    // Check for attachments/evidence
-    if (bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)) score++;
+    if (bug.hasAttachments || (bug.attachments?.length > 0)) score++;
     if (bug.hasVideoEvidence || bug.hasConsoleLogs || bug.hasNetworkLogs) score++;
-
     return Math.round((score / totalFields) * 100);
 };
 
-// Apply filters to the query
-const applyFilters = (baseQuery, filters, dateField = 'createdAt') => {
-    let filteredQuery = baseQuery;
-
-    // Time range filter
+// Build query constraints for Firestore
+const buildQueryConstraints = (filters, dateField = 'createdAt') => {
+    const constraints = [];
     if (filters.timeRange && filters.timeRange !== 'all') {
         const fromDate = getDateRange(filters.timeRange);
-        filteredQuery = query(filteredQuery, where(dateField, '>=', Timestamp.fromDate(fromDate)));
+        constraints.push({ field: dateField, op: '>=', value: Timestamp.fromDate(fromDate) });
     }
-
-    // Individual field filters
-    const filterFields = ['priority', 'severity', 'status', 'source', 'team', 'component', 'environment'];
-    filterFields.forEach(field => {
+    ['priority', 'severity', 'status', 'source', 'team', 'component', 'environment'].forEach(field => {
         if (filters[field] && filters[field] !== 'all') {
-            filteredQuery = query(filteredQuery, where(field, '==', filters[field]));
+            constraints.push({ field, op: '==', value: filters[field] });
         }
     });
-
-    return filteredQuery;
+    return constraints;
 };
 
-// Secure fetch function with corrected permission system
-const fetchBugTrackingMetrics = async (filters = {}, suiteContext = {}, userProfile = null) => {
+// Fetch bug tracking metrics
+const fetchBugTrackingMetrics = async (filters = {}, suiteContext = {}, userCapabilities = {}) => {
     try {
-        const { suiteId, suiteOwnerId = false } = suiteContext;
+        const { suiteId } = suiteContext;
 
-        // Check if suite is selected
         if (!suiteId) {
             throw new Error('No suite selected. Please select a suite to view bug metrics.');
         }
 
-        // Check permissions for accessing bugs
-        if (!canAccessBugs(userProfile, 'read', { 
-            suiteId, 
-            suiteOwnerId 
-        })) {
-            throw new Error('Access denied: You cannot read bugs in this suite.');
+        if (!userCapabilities.canAccessBugs) {
+            throw new Error('Access denied: Bug tracking feature not available.');
         }
 
-        // Query the suite's bugs subcollection
-        const bugsRef = collection(db, 'suites', suiteId, 'bugs');
-        const filteredQuery = applyFilters(bugsRef, filters, 'createdAt');
-        
-        // Add ordering and limit for performance
-        const finalQuery = query(
-            filteredQuery,
-            orderBy('createdAt', 'desc'),
-            limit(1000) // Reasonable limit for performance
+        const bugsCollectionPath = `testSuites/${suiteId}/bugs`;
+        const constraints = buildQueryConstraints(filters);
+        const queryResult = await firestoreService.queryDocuments(
+            bugsCollectionPath,
+            [...constraints, { field: 'createdAt', order: 'desc' }],
+            'createdAt',
+            1000
         );
 
-        console.log('Executing bug metrics query for suite:', suiteId);
-        const snapshot = await getDocs(finalQuery);
-        const bugs = snapshot.docs.map(doc => ({ 
-            id: doc.id, 
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate(),
-            updatedAt: doc.data().updatedAt?.toDate()
+        if (!queryResult.success) {
+            throw new Error(queryResult.error.message);
+        }
+
+        const bugs = queryResult.data.map(bug => ({
+            ...bug,
+            createdAt: convertFirebaseDate(bug.createdAt),
+            updatedAt: convertFirebaseDate(bug.updatedAt),
+            resolvedAt: convertFirebaseDate(bug.resolvedAt)
         }));
 
-        console.log(`Fetched ${bugs.length} bugs for metrics`);
+        console.log(`Fetched ${bugs.length} bugs for suite ${suiteId}`);
 
         const totalBugs = bugs.length;
-        
-        // Status distribution
+
+        // Calculate distributions
         const statusCounts = bugs.reduce((acc, bug) => {
             const status = bug.status || 'Open';
             acc[status] = (acc[status] || 0) + 1;
             return acc;
         }, {});
 
-        // Priority distribution
         const priorityCounts = bugs.reduce((acc, bug) => {
             const priority = bug.priority || 'Medium';
             acc[priority] = (acc[priority] || 0) + 1;
             return acc;
         }, {});
 
-        // Severity distribution
         const severityCounts = bugs.reduce((acc, bug) => {
             const severity = bug.severity || 'Medium';
             acc[severity] = (acc[severity] || 0) + 1;
             return acc;
         }, {});
 
-        // Source distribution
         const sourceCounts = bugs.reduce((acc, bug) => {
             const source = bug.source || 'manual';
             acc[source] = (acc[source] || 0) + 1;
             return acc;
         }, {});
 
-        // Environment distribution
         const environmentCounts = bugs.reduce((acc, bug) => {
             const environment = bug.environment || 'Unknown';
             acc[environment] = (acc[environment] || 0) + 1;
             return acc;
         }, {});
 
-        // Calculate resolved bugs
+        const assigneeCounts = bugs.reduce((acc, bug) => {
+            const assignee = bug.assignedTo || 'Unassigned';
+            acc[assignee] = (acc[assignee] || 0) + 1;
+            return acc;
+        }, {});
+
+        // Calculate resolved bugs and resolution time
         const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Verified', 'Done'];
-        const resolvedBugs = bugs.filter(bug => 
-            resolvedStatuses.includes(bug.status)
-        );
-
-        // Calculate resolution time for resolved bugs
+        const resolvedBugs = bugs.filter(bug => resolvedStatuses.includes(bug.status));
         const resolutionTimes = resolvedBugs
-            .filter(bug => bug.resolvedAt && bug.createdAt)
+            .filter(bug => bug.createdAt && bug.resolvedAt)
             .map(bug => calculateHoursDifference(bug.createdAt, bug.resolvedAt));
-
-        const avgResolutionTime = resolutionTimes.length > 0 
-            ? resolutionTimes.reduce((sum, time) => sum + time, 0) / resolutionTimes.length
+        const avgResolutionTime = resolutionTimes.length > 0
+            ? Math.round(resolutionTimes.reduce((sum, time) => sum + time, 0) / resolutionTimes.length)
             : 0;
-
-        // Calculate bug resolution rate
-        const bugResolutionRate = totalBugs > 0 
+        const bugResolutionRate = totalBugs > 0
             ? Math.round((resolvedBugs.length / totalBugs) * 100)
             : 0;
 
-        // Count bugs by source
+        // Source metrics
         const bugsFromScreenRecording = sourceCounts['screen-recording'] || 0;
         const bugsFromManualTesting = sourceCounts['manual'] || 0;
         const bugsFromAutomatedTesting = sourceCounts['automated'] || 0;
 
-        // Count bugs with evidence
+        // Evidence metrics
         const bugsWithVideoEvidence = bugs.filter(bug => bug.hasVideoEvidence).length;
         const bugsWithNetworkLogs = bugs.filter(bug => bug.hasNetworkLogs).length;
         const bugsWithConsoleLogs = bugs.filter(bug => bug.hasConsoleLogs).length;
-        const bugsWithAttachments = bugs.filter(bug => 
-            bug.hasAttachments || (bug.attachments && bug.attachments.length > 0)
-        ).length;
+        const bugsWithAttachments = bugs.filter(bug => bug.hasAttachments || (bug.attachments?.length > 0)).length;
 
-        // Count bugs by priority levels
+        // Priority and severity metrics
         const criticalBugs = priorityCounts['Critical'] || 0;
         const highPriorityBugs = priorityCounts['High'] || 0;
         const mediumPriorityBugs = priorityCounts['Medium'] || 0;
         const lowPriorityBugs = priorityCounts['Low'] || 0;
-
-        // Count bugs by severity levels
         const criticalSeverity = severityCounts['Critical'] || 0;
         const highSeverity = severityCounts['High'] || 0;
         const mediumSeverity = severityCounts['Medium'] || 0;
         const lowSeverity = severityCounts['Low'] || 0;
 
-        // Calculate report completeness
+        // Quality metrics
         const completenessScores = bugs.map(calculateReportCompleteness);
         const avgBugReportCompleteness = completenessScores.length > 0
             ? Math.round(completenessScores.reduce((sum, score) => sum + score, 0) / completenessScores.length)
             : 0;
-
-        // Calculate reproduction rate
-        const bugsWithSteps = bugs.filter(bug => 
-            bug.stepsToReproduce && bug.stepsToReproduce.trim()
-        ).length;
-        const bugReproductionRate = totalBugs > 0 
+        const bugsWithSteps = bugs.filter(bug => bug.stepsToReproduce?.trim()).length;
+        const bugReproductionRate = totalBugs > 0
             ? Math.round((bugsWithSteps / totalBugs) * 100)
             : 0;
 
         // Recent activity metrics
         const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const recentBugs = bugs.filter(bug => {
-            const createdDate = convertFirebaseDate(bug.createdAt);
-            return createdDate >= last24Hours;
-        }).length;
-
+        const recentBugs = bugs.filter(bug => convertFirebaseDate(bug.createdAt) >= last24Hours).length;
         const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const weeklyBugs = bugs.filter(bug => {
-            const createdDate = convertFirebaseDate(bug.createdAt);
-            return createdDate >= last7Days;
-        }).length;
-
+        const weeklyBugs = bugs.filter(bug => convertFirebaseDate(bug.createdAt) >= last7Days).length;
         const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const monthlyBugs = bugs.filter(bug => {
-            const createdDate = convertFirebaseDate(bug.createdAt);
-            return createdDate >= last30Days;
-        }).length;
+        const monthlyBugs = bugs.filter(bug => convertFirebaseDate(bug.createdAt) >= last30Days).length;
 
-        // Estimate report generation metrics
+        // Report metrics
         const weeklyReportsGenerated = Math.ceil(weeklyBugs / 10);
         const monthlyReportsGenerated = Math.ceil(monthlyBugs / 20);
-        const avgBugsPerReport = weeklyReportsGenerated > 0 
+        const avgBugsPerReport = weeklyReportsGenerated > 0
             ? Math.round(weeklyBugs / weeklyReportsGenerated)
             : 0;
 
-        // Bug trend analysis
+        // Trend analysis
         const bugTrend = bugs.reduce((acc, bug) => {
             const createdDate = convertFirebaseDate(bug.createdAt);
             if (createdDate) {
                 const date = createdDate.toISOString().split('T')[0];
-                if (!acc[date]) acc[date] = { reported: 0, resolved: 0 };
+                acc[date] = acc[date] || { reported: 0, resolved: 0 };
                 acc[date].reported++;
-                
                 if (bug.resolvedAt) {
                     const resolvedDate = convertFirebaseDate(bug.resolvedAt);
                     if (resolvedDate) {
                         const resolvedDateStr = resolvedDate.toISOString().split('T')[0];
-                        if (!acc[resolvedDateStr]) acc[resolvedDateStr] = { reported: 0, resolved: 0 };
+                        acc[resolvedDateStr] = acc[resolvedDateStr] || { reported: 0, resolved: 0 };
                         acc[resolvedDateStr].resolved++;
                     }
                 }
@@ -273,85 +216,55 @@ const fetchBugTrackingMetrics = async (filters = {}, suiteContext = {}, userProf
             return acc;
         }, {});
 
-        // Calculate assignment metrics
-        const assignedBugs = bugs.filter(bug => bug.assignedTo && bug.assignedTo.trim()).length;
+        // Assignment metrics
+        const assignedBugs = bugs.filter(bug => bug.assignedTo?.trim()).length;
         const unassignedBugs = totalBugs - assignedBugs;
-        const assignmentRate = totalBugs > 0 
+        const assignmentRate = totalBugs > 0
             ? Math.round((assignedBugs / totalBugs) * 100)
             : 0;
 
-        // Calculate assignee distribution
-        const assigneeDistribution = bugs.reduce((acc, bug) => {
-            const assignee = bug.assignedTo || 'Unassigned';
-            acc[assignee] = (acc[assignee] || 0) + 1;
-            return acc;
-        }, {});
-
         return {
-            // Core metrics
             totalBugs,
             resolvedBugs: resolvedBugs.length,
             activeBugs: totalBugs - resolvedBugs.length,
-            avgResolutionTime: Math.round(avgResolutionTime),
+            avgResolutionTime,
             bugResolutionRate,
-            
-            // Bug sources
             bugsFromScreenRecording,
             bugsFromManualTesting,
             bugsFromAutomatedTesting,
-            
-            // Evidence metrics
             bugsWithVideoEvidence,
             bugsWithNetworkLogs,
             bugsWithConsoleLogs,
             bugReportsWithAttachments: bugsWithAttachments,
-            
-            // Priority breakdown
             criticalBugs,
             highPriorityBugs,
             mediumPriorityBugs,
             lowPriorityBugs,
-            
-            // Severity breakdown
             criticalSeverity,
             highSeverity,
             mediumSeverity,
             lowSeverity,
-            
-            // Assignment metrics
             assignedBugs,
             unassignedBugs,
             assignmentRate,
-            
-            // Quality metrics
             avgBugReportCompleteness,
             bugReproductionRate,
-            
-            // Report metrics
             weeklyReportsGenerated,
             monthlyReportsGenerated,
             avgBugsPerReport,
-            
-            // Distributions
             statusDistribution: statusCounts,
             priorityDistribution: priorityCounts,
             severityDistribution: severityCounts,
             sourceDistribution: sourceCounts,
             environmentDistribution: environmentCounts,
-            assigneeDistribution,
-            
-            // Trends and recent activity
+            assigneeDistribution: assigneeCounts,
             bugTrend,
             recentlyReported: recentBugs,
             weeklyBugs,
             monthlyBugs,
-            
-            // Additional metrics
             openBugs: statusCounts['Open'] || 0,
             inProgress: statusCounts['In Progress'] || 0,
             closed: statusCounts['Closed'] || 0,
-            
-            // Summary for quick overview
             summary: {
                 totalItems: totalBugs,
                 criticalIssues: criticalBugs,
@@ -360,123 +273,83 @@ const fetchBugTrackingMetrics = async (filters = {}, suiteContext = {}, userProf
                 lastUpdated: new Date()
             }
         };
-
     } catch (error) {
-        console.error('Error fetching bug tracking metrics:', error);
-        
-        // Handle specific Firebase errors
-        if (error.code === 'permission-denied') {
+        console.error('Error fetching bug metrics:', error);
+        const errorMessage = error.message || 'Failed to fetch bug metrics';
+        if (errorMessage.includes('permission-denied') || errorMessage.includes('Access denied')) {
             throw new Error('You do not have permission to view bugs for this suite');
         }
-        
-        if (error.code === 'unauthenticated') {
-            throw new Error('Authentication required. Please log in to continue.');
+        if (errorMessage.includes('unauthenticated')) {
+            throw new Error('Authentication required. Please log in.');
         }
-        
-        if (error.code === 'failed-precondition') {
-            throw new Error('Database query failed. Please try again or contact support.');
+        if (errorMessage.includes('failed-precondition')) {
+            throw new Error('Database query failed. Please try again.');
         }
-        
-        if (error.code === 'not-found') {
-            throw new Error('Suite not found or you do not have access to it.');
+        if (errorMessage.includes('not-found')) {
+            throw new Error('Suite not found or you do not have access.');
         }
-        
-        throw error;
+        throw new Error(errorMessage);
     }
 };
 
-// Main hook for bug tracking metrics (updated with corrected permission system)
+// Main hook for bug tracking metrics
 export const useBugTrackingMetrics = (filters = {}) => {
     const [metrics, setMetrics] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    
-    // Get auth and suite context
-    const { userProfile } = useAuth(); // Get full userProfile instead of just hasPermission
-    const { activeSuite } = useSuite();
-
-    // Get user permissions using the corrected permission system
-    const userPermissions = userProfile ? getUserPermissions(userProfile) : null;
+    const { activeSuite, userCapabilities, addNotification, isAuthenticated } = useApp();
 
     const fetchMetrics = useCallback(async () => {
+        if (!isAuthenticated) {
+            setMetrics(null);
+            setError('User not authenticated');
+            setLoading(false);
+            return;
+        }
         if (!activeSuite?.id) {
             setMetrics(null);
+            setError('No suite selected');
             setLoading(false);
             return;
         }
 
+        setLoading(true);
+        setError(null);
         try {
-            setLoading(true);
-            setError(null);
-
-            // Create suite context for permission checking
             const suiteContext = {
-                suiteId: activeSuite.id,
-                suiteOwnerId: activeSuite.ownerId || activeSuite.owner,
-                isPublic: activeSuite.isPublic || false
+                suiteId: activeSuite.id
             };
-
-            const data = await fetchBugTrackingMetrics(filters, suiteContext, userProfile);
+            const data = await fetchBugTrackingMetrics(filters, suiteContext, userCapabilities);
             setMetrics(data);
         } catch (err) {
             setError(err.message);
-            console.error('Error in useBugTrackingMetrics:', err);
+            addNotification({
+                type: 'error',
+                title: 'Bug Metrics Error',
+                message: err.message
+            });
         } finally {
             setLoading(false);
         }
-    }, [filters, activeSuite?.id, activeSuite?.ownerId, activeSuite?.owner, activeSuite?.isPublic, userProfile]);
+    }, [filters, activeSuite?.id, userCapabilities, isAuthenticated, addNotification]);
 
     useEffect(() => {
         fetchMetrics();
     }, [fetchMetrics]);
 
-    const refetch = useCallback(() => {
-        fetchMetrics();
-    }, [fetchMetrics]);
-
-    // Enhanced permission checks using the corrected system
-    const hasReadAccess = userPermissions?.canReadBugs && 
-        canAccessBugs(userProfile, 'read', { 
-            suiteId: activeSuite?.id, 
-            suiteOwnerId: activeSuite?.ownerId || activeSuite?.owner 
-        });
-
-    const hasWriteAccess = userPermissions?.canWriteBugs && 
-        canAccessBugs(userProfile, 'write', { 
-            suiteId: activeSuite?.id, 
-            suiteOwnerId: activeSuite?.ownerId || activeSuite?.owner 
-        });
-
-    const hasAnalyticsAccess = userPermissions?.canViewBugAnalytics;
+    const refetch = useCallback(() => fetchMetrics(), [fetchMetrics]);
 
     return {
         metrics,
         loading,
         error,
         refetch,
-        
-        // Enhanced permission properties using corrected system
-        hasAccess: hasReadAccess,
-        canRead: hasReadAccess,
-        canWrite: hasWriteAccess,
-        canModify: hasWriteAccess,
-        canViewAnalytics: hasAnalyticsAccess,
-        canExportReports: userPermissions?.canExportBugReports,
-        
-        // User and suite context
-        activeSuite,
-        userProfile,
-        userPermissions,
-        
-        // Account type information
-        isIndividualAccount: userPermissions?.isIndividual,
-        isOrganizationAccount: userPermissions?.isOrganization,
-        isAdmin: userPermissions?.isAdmin,
-        
-        // Upgrade prompts for individual accounts trying to access org features
-        shouldShowUpgradePrompts: userPermissions?.shouldShowUpgradePrompts || {}
+        canRead: userCapabilities?.canAccessBugs,
+        canWrite: userCapabilities?.canCreateBugs,
+        canModify: userCapabilities?.canCreateBugs,
+        canViewAnalytics: userCapabilities?.canViewBugAnalytics,
+        canExportReports: userCapabilities?.canExportReports
     };
 };
 
-// Export the main fetch function for use in other services
 export { fetchBugTrackingMetrics };

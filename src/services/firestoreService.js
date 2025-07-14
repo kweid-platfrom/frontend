@@ -1,19 +1,19 @@
 // services/firestoreService.js - Centralized Firestore Service
-import { 
-    doc, 
-    getDoc, 
-    getDocs, 
-    setDoc, 
-    updateDoc, 
-    deleteDoc, 
-    addDoc, 
-    collection, 
-    query, 
-    where, 
-    orderBy, 
-    limit, 
-    onSnapshot, 
-    serverTimestamp, 
+import {
+    doc,
+    getDoc,
+    getDocs,
+    setDoc,
+    updateDoc,
+    deleteDoc,
+    addDoc,
+    collection,
+    query,
+    where,
+    orderBy,
+    limit,
+    onSnapshot,
+    serverTimestamp,
     writeBatch,
     runTransaction
 } from 'firebase/firestore';
@@ -37,7 +37,7 @@ class FirestoreService {
     }
 
     createDocRef(collectionPath, ...pathSegments) {
-        const validSegments = pathSegments.filter(segment => 
+        const validSegments = pathSegments.filter(segment =>
             segment !== null && segment !== undefined && segment !== ''
         ).map(segment => String(segment));
 
@@ -55,7 +55,7 @@ class FirestoreService {
 
     handleFirestoreError(error, operation = 'operation') {
         console.error(`Firestore ${operation} error:`, error);
-        
+
         const errorMessages = {
             'permission-denied': 'Access denied. Check your permissions.',
             'not-found': 'Document not found.',
@@ -69,7 +69,7 @@ class FirestoreService {
         };
 
         const userMessage = errorMessages[error.code] || `${operation} failed. Please try again.`;
-        
+
         return {
             success: false,
             error: {
@@ -102,7 +102,7 @@ class FirestoreService {
     async createDocument(collectionPath, data, docId = null) {
         try {
             const documentData = this.addCommonFields(data);
-            
+
             if (docId) {
                 const docRef = this.createDocRef(collectionPath, docId);
                 await setDoc(docRef, documentData);
@@ -125,11 +125,11 @@ class FirestoreService {
 
             const docRef = this.createDocRef(collectionPath, docId);
             const docSnap = await getDoc(docRef);
-            
+
             if (docSnap.exists()) {
-                return { 
-                    success: true, 
-                    data: { id: docSnap.id, ...docSnap.data() } 
+                return {
+                    success: true,
+                    data: { id: docSnap.id, ...docSnap.data() }
                 };
             } else {
                 return { success: false, error: { message: 'Document not found' } };
@@ -187,7 +187,7 @@ class FirestoreService {
 
             const querySnapshot = await getDocs(q);
             const documents = [];
-            
+
             querySnapshot.forEach((doc) => {
                 documents.push({ id: doc.id, ...doc.data() });
             });
@@ -273,7 +273,7 @@ class FirestoreService {
         try {
             const userRef = this.createDocRef('users', userId);
             const userDoc = await getDoc(userRef);
-            
+
             if (userDoc.exists()) {
                 const updateData = this.addCommonFields(userData, true);
                 await updateDoc(userRef, updateData);
@@ -321,7 +321,7 @@ class FirestoreService {
 
         try {
             const batch = writeBatch(this.db);
-            
+
             // Create organization with user as owner
             const orgId = orgData.orgId || doc(this.createCollectionRef('organizations')).id;
             const orgRef = this.createDocRef('organizations', orgId);
@@ -346,7 +346,7 @@ class FirestoreService {
             batch.set(memberRef, memberData);
 
             await batch.commit();
-            
+
             return { success: true, data: { id: orgId, ...organizationData } };
         } catch (error) {
             return this.handleFirestoreError(error, 'create organization');
@@ -371,8 +371,8 @@ class FirestoreService {
 
             orgsSnapshot.forEach((doc) => {
                 const orgData = doc.data();
-                organizations.push({ 
-                    id: doc.id, 
+                organizations.push({
+                    id: doc.id,
                     ...orgData,
                     userRole: orgData.ownerId === userId ? 'owner' : 'member'
                 });
@@ -386,24 +386,47 @@ class FirestoreService {
 
     // ===== TEST SUITE OPERATIONS =====
 
+    // services/firestoreService.js
     async createTestSuite(suiteData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const testSuiteData = this.addCommonFields({
-            name: suiteData.name,
-            description: suiteData.description || '',
-            ownerType: suiteData.ownerType || 'individual',
-            ownerId: suiteData.ownerId || userId,
-            members: [userId], // Initialize with creator
-            isPublic: suiteData.isPublic || false,
-            settings: suiteData.settings || {},
-            tags: suiteData.tags || []
-        });
+        try {
+            // Refresh auth token
+            await this.auth.currentUser.getIdToken(true);
+            console.log('Firebase auth token refreshed');
+        } catch (error) {
+            console.error('Error refreshing auth token:', error);
+            return this.handleFirestoreError(error, 'refresh auth token');
+        }
 
-        return await this.createDocument('testSuites', testSuiteData, suiteData.id);
+        try {
+            const testSuiteData = this.addCommonFields({
+                name: suiteData.name,
+                description: suiteData.description || '',
+                ownerType: suiteData.ownerType || 'individual',
+                ownerId: suiteData.ownerId || userId,
+                members: [userId],
+                isPublic: suiteData.isPublic || false,
+                settings: suiteData.settings || {},
+                tags: suiteData.tags || [],
+                access_control: {
+                    ownerType: suiteData.ownerType || 'individual',
+                    ownerId: suiteData.ownerId || userId
+                }
+            });
+
+            return await this.createDocument('testSuites', testSuiteData, suiteData.id);
+        } catch (error) {
+            console.error('Detailed createTestSuite error:', {
+                errorCode: error.code,
+                errorMessage: error.message,
+                suiteData
+            });
+            return this.handleFirestoreError(error, 'create test suite');
+        }
     }
 
     async getUserTestSuites() {
@@ -459,7 +482,7 @@ class FirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const collectionPath = sprintId 
+        const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
 
@@ -473,7 +496,7 @@ class FirestoreService {
     }
 
     async getSuiteAssets(suiteId, assetType, sprintId = null) {
-        const collectionPath = sprintId 
+        const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
 
@@ -481,14 +504,14 @@ class FirestoreService {
     }
 
     subscribeToSuiteAssets(suiteId, assetType, callback, errorCallback = null, sprintId = null) {
-        const collectionPath = sprintId 
+        const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
 
         return this.subscribeToCollection(
-            collectionPath, 
-            [orderBy('created_at', 'desc')], 
-            callback, 
+            collectionPath,
+            [orderBy('created_at', 'desc')],
+            callback,
             errorCallback
         );
     }
@@ -528,10 +551,10 @@ class FirestoreService {
     async executeBatch(operations) {
         try {
             const batch = writeBatch(this.db);
-            
+
             operations.forEach(operation => {
                 const { type, ref, data } = operation;
-                
+
                 switch (type) {
                     case 'set':
                         batch.set(ref, this.addCommonFields(data));

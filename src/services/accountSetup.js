@@ -112,7 +112,7 @@ export const clearRegistrationState = () => {
     if (typeof window !== 'undefined') {
         window.isRegistering = false;
         isSetupInProgress = false;
-        
+
         // Clear any registration-related localStorage items
         try {
             localStorage.removeItem('registrationInProgress');
@@ -120,7 +120,7 @@ export const clearRegistrationState = () => {
         } catch (e) {
             console.warn('Could not clear localStorage items:', e);
         }
-        
+
         console.log('Registration state cleared completely');
     }
 };
@@ -144,7 +144,7 @@ export const handlePostVerification = async (userId) => {
                 emailVerified: true,
                 updated_at: serverTimestamp()
             });
-            
+
             if (updateResult.success) {
                 console.log('Updated user emailVerified status in Firestore');
             } else {
@@ -160,7 +160,7 @@ export const handlePostVerification = async (userId) => {
 };
 
 /**
- * Setup user account - ENHANCED with better guards
+ * Setup user account - FIXED to avoid serverTimestamp in arrays
  * @param {Object} setupData - Account setup data
  * @returns {Promise<Object>} Setup result
  */
@@ -205,8 +205,112 @@ export const setupAccount = async (setupData) => {
 
         console.log('Setting up account for user:', { userId, email, accountType });
 
-        // Rest of the setup logic remains the same...
-        // [Previous setupAccount implementation continues here]
+        const userProfileData = {
+            user_id: userId,
+            uid: userId,
+            email: email,
+            firstName: setupData.firstName || '',
+            lastName: setupData.lastName || '',
+            fullName: `${setupData.firstName || ''} ${setupData.lastName || ''}`.trim(),
+            accountType: accountType,
+            isActive: true,
+            emailVerified: user.emailVerified,
+            timezone: setupData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            account_memberships: [] // Initialize empty, will update later if needed
+        };
+
+        console.log('Creating user profile:', userProfileData);
+        const userResult = await firestoreService.createDocument('users', userProfileData, userId);
+        if (!userResult.success) {
+            console.error('Failed to create user profile:', userResult.error);
+            throw new Error(userResult.error.message);
+        }
+        console.log('User profile created successfully:', userResult);
+
+        let organizationData = null;
+
+        if (accountType === 'individual') {
+            const individualAccountData = {
+                user_id: userId,
+                email: email,
+                firstName: setupData.firstName || '',
+                lastName: setupData.lastName || '',
+                isActive: true
+            };
+
+            console.log('Creating individual account:', individualAccountData);
+            const individualResult = await firestoreService.createDocument('individualAccounts', individualAccountData, userId);
+            if (!individualResult.success) {
+                console.error('Failed to create individual account:', individualResult.error);
+                throw new Error(individualResult.error.message);
+            }
+            console.log('Individual account created successfully:', individualResult);
+        } else if (accountType === 'organization' && setupData.organizationName) {
+            console.log('Starting organization setup transaction...');
+            const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
+                const orgId = `org_${userId}`;
+                const now = serverTimestamp();
+
+                const orgData = {
+                    id: orgId,
+                    name: setupData.organizationName,
+                    ownerId: userId,
+                    domain: email.split('@')[1],
+                    isActive: true,
+                    created_at: now,
+                    updated_at: now
+                };
+
+                const orgRef = firestoreService.createDocRef('organizations', orgId);
+                transaction.set(orgRef, orgData);
+
+                const membershipData = {
+                    userId: userId,
+                    email: email,
+                    role: 'Admin',
+                    status: 'active',
+                    joinedAt: now,
+                    created_at: now,
+                    updated_at: now
+                };
+
+                const memberRef = firestoreService.createDocRef('organizations', orgId, 'members', userId);
+                transaction.set(memberRef, membershipData);
+
+                const userUpdates = {
+                    organizationId: orgId,
+                    organizationName: setupData.organizationName,
+                    // Store membership reference without serverTimestamp in array
+                    account_memberships: [{
+                        org_id: orgId,
+                        role: 'Admin',
+                        status: 'active'
+                        // joined_at is moved to the members subcollection
+                    }],
+                    updated_at: now
+                };
+
+                const userRef = firestoreService.createDocRef('users', userId);
+                transaction.update(userRef, userUpdates);
+
+                console.log('Transaction prepared:', { orgData, membershipData, userUpdates });
+                return {
+                    orgId,
+                    orgData,
+                    membershipData,
+                    userUpdates
+                };
+            });
+
+            if (!transactionResult.success) {
+                console.error('Transaction failed:', transactionResult.error);
+                throw new Error(transactionResult.error.message);
+            }
+
+            console.log('Organization setup completed successfully:', transactionResult.data);
+            organizationData = transactionResult.data;
+            Object.assign(userProfileData, transactionResult.data.userUpdates);
+        }
 
         return {
             success: true,

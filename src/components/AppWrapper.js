@@ -1,131 +1,88 @@
-// components/AppWrapper.js - Properly Aligned Main App Layout Wrapper
+// components/AppWrapper.js
 'use client';
 
-import React, { useEffect, useState, Suspense, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import {
-    useApp,
-    useAppNavigation,
-    useAppNotifications,
-} from '../../contexts/AppProvider';
+import { useApp, useAppNavigation, useAppNotifications } from '../contexts/AppProvider';
+import LoadingSpinner from './common/LoadingSpinner';
+import ErrorBoundary from './common/ErrorBoundary';
+import NotificationCenter from './notifications/NotificationCenter';
+import AppHeader from './layout/AppHeader';
+import AppSidebar from './layout/AppSidebar';
+import AppBreadcrumbs from './layout/AppBreadcrumbs';
+import TrialBanner from './subscription/TrialBanner';
+import UpgradePrompt from './subscription/UpgradePrompt';
 
-// Component imports
-import AppHeader from './AppHeader';
-import AppSidebar from './AppSidebar';
-import AppBreadcrumbs from './AppBreadcrumbs';
-import NotificationCenter from '../notifications/NotificationCenter';
-import UpgradePrompt from '../subscription/UpgradePrompt';
-import LoadingSpinner from '../common/LoadingSpinner';
-import ErrorBoundary from '../common/ErrorBoundary';
-import TrialBanner from '../subscription/TrialBanner';
-
-// Constants
-const PUBLIC_PATHS = ['/login', '/register', '/verify-email', '/reset-password', '/'];
+// Public pages that don't require authentication
+const PUBLIC_PAGES = ['/', '/login', '/register', '/verify-email', '/reset-password', '/forgot-password'];
 const MINIMAL_LAYOUT_PATHS = ['/settings', '/profile'];
-const PROTECTED_PATHS = ['/dashboard', '/bugs', '/testcases', '/recordings', '/automation', '/reports'];
+const NO_AUTH_CHECK_PAGES = ['/login', '/register']; // Pages to skip auth checks entirely
 
-// Component for handling incomplete registrations
-const RedirectToRegistration = () => {
-    const router = useRouter();
-
-    useEffect(() => {
-        // Store current path for redirect after registration
-        localStorage.setItem('redirectAfterAuth', window.location.pathname);
-        router.push('/register?incomplete=true');
-    }, [router]);
-
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="text-center">
-                <LoadingSpinner size="lg" />
-                <p className="mt-4 text-gray-600">
-                    Completing your registration...
-                </p>
-            </div>
-        </div>
-    );
+// Utility to debounce a function
+const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
 };
 
-// Enhanced error display with retry functionality
-const ErrorDisplay = ({ error, onRetry, canRetry }) => {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="text-center max-w-md">
-                <div className="bg-white rounded-lg shadow-lg p-8">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                        Something went wrong
-                    </h2>
-                    <p className="text-gray-600 mb-6">
-                        {error || 'An unexpected error occurred. Please try again.'}
-                    </p>
-                    {canRetry && (
-                        <button
-                            onClick={onRetry}
-                            className="px-6 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
-                        >
-                            Try Again
-                        </button>
-                    )}
-                </div>
+// Error display component
+const ErrorDisplay = ({ error, onRetry, canRetry }) => (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+            <div className="bg-white rounded-lg shadow-lg p-8">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Something went wrong</h2>
+                <p className="text-gray-600 mb-6">{error || 'An unexpected error occurred.'}</p>
+                {canRetry && (
+                    <button
+                        onClick={onRetry}
+                        className="px-6 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700"
+                    >
+                        Try Again
+                    </button>
+                )}
             </div>
         </div>
-    );
-};
+    </div>
+);
 
-// Main app wrapper component
 const AppWrapper = ({ children }) => {
     const router = useRouter();
     const pathname = usePathname();
-    
-    // Use the unified app context - this gives us everything we need
     const {
-        // Authentication state
         isAuthenticated,
         user,
         loading: authLoading,
         error: authError,
-        
-        // User profile state (from the unified context)
         userProfile,
-        isLoading: profileLoading,
-        
-        // Application state
         isInitialized,
         isLoading: appLoading,
         error: appError,
         accountSummary,
         userCapabilities,
-        
-        // Other contexts
         suites,
         activeSuite,
         setActiveSuite,
-        
-        // Utility functions
         refreshAll,
         clearError,
     } = useApp();
-
-    // Specific context hooks for cleaner code
     const {
         activeModule,
         breadcrumbs,
         sidebarCollapsed,
         setSidebarCollapsed,
-        navigateToModule
+        navigateToModule,
     } = useAppNavigation();
-    
     const { notifications, addNotification } = useAppNotifications();
 
-    // Local state
     const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
     const [isRetrying, setIsRetrying] = useState(false);
 
-    // Derived state
-    const isPublicPath = PUBLIC_PATHS.includes(pathname);
+    const isPublicPage = PUBLIC_PAGES.includes(pathname);
     const isMinimalLayout = MINIMAL_LAYOUT_PATHS.includes(pathname);
-    const isProtectedPath = PROTECTED_PATHS.some(path => pathname.startsWith(path));
+    const skipAuthCheck = NO_AUTH_CHECK_PAGES.includes(pathname);
     const unreadCount = notifications.filter(n => !n.read).length;
 
     // Retry mechanism
@@ -136,7 +93,7 @@ const AppWrapper = ({ children }) => {
             addNotification({
                 type: 'success',
                 title: 'Retry Successful',
-                message: 'Application data has been refreshed.'
+                message: 'Application data has been refreshed.',
             });
             setRetryCount(0);
             clearError();
@@ -146,57 +103,108 @@ const AppWrapper = ({ children }) => {
                 type: 'error',
                 title: 'Retry Failed',
                 message: error?.message || 'Failed to refresh application data',
-                persistent: true
+                persistent: true,
             });
         } finally {
             setIsRetrying(false);
         }
     }, [refreshAll, addNotification, clearError]);
 
-    // Error handling with retry logic
-    const handleError = useCallback((error, context = 'application') => {
-        console.error(`AppWrapper ${context} error:`, error);
+    // Error handling
+    const handleError = useCallback(
+        (error, context = 'application') => {
+            console.error(`AppWrapper ${context} error:`, error);
+            const errorMessage = error?.message || 'An unexpected error occurred';
+            const isRetryable = error?.retryable ||
+                ['unavailable', 'deadline-exceeded', 'aborted'].includes(error?.code);
 
-        const errorMessage = error?.message || 'An unexpected error occurred';
-        const isRetryable = error?.retryable ||
-            ['unavailable', 'deadline-exceeded', 'aborted'].includes(error?.code);
+            addNotification({
+                type: 'error',
+                title: `${context.charAt(0).toUpperCase() + context.slice(1)} Error`,
+                message: errorMessage,
+                persistent: !isRetryable,
+                action: isRetryable && retryCount < 3 ? {
+                    label: 'Retry',
+                    onClick: handleRetry,
+                } : undefined,
+            });
 
-        addNotification({
-            type: 'error',
-            title: `${context.charAt(0).toUpperCase() + context.slice(1)} Error`,
-            message: errorMessage,
-            persistent: !isRetryable,
-            action: isRetryable && retryCount < 3 ? {
-                label: 'Retry',
-                onClick: handleRetry
-            } : undefined
-        });
-
-        if (isRetryable && retryCount < 3) {
-            setRetryCount(prev => prev + 1);
-        }
-    }, [addNotification, handleRetry, retryCount]);
+            if (isRetryable && retryCount < 3) {
+                setRetryCount(prev => prev + 1);
+            }
+        },
+        [addNotification, handleRetry, retryCount]
+    );
 
     // Handle authentication errors
     useEffect(() => {
-        if (authError) {
-            handleError(authError, 'authentication');
-        }
+        if (authError) handleError(authError, 'authentication');
     }, [authError, handleError]);
 
     // Handle general app errors
     useEffect(() => {
-        if (appError) {
-            handleError(appError, 'application');
-        }
+        if (appError) handleError(appError, 'application');
     }, [appError, handleError]);
 
-    // Enhanced upgrade prompt logic
+    // Authentication guard for non-public pages and redirect for authenticated users
     useEffect(() => {
-        if (userCapabilities && isAuthenticated) {
-            const { isTrialActive, trialDaysRemaining, hasActiveSubscription } = userCapabilities;
+        const handleAuthRedirect = debounce(() => {
+            if (!isPublicPage && isInitialized && !isAuthenticated && !authLoading) {
+                const redirectCount = parseInt(localStorage.getItem('redirectCount') || '0', 10);
+                if (redirectCount > 2) {
+                    console.warn('Redirect loop detected. Stopping redirect to login.');
+                    addNotification({
+                        type: 'error',
+                        title: 'Redirect Error',
+                        message: 'Too many redirects. Please try logging in again.',
+                        persistent: true,
+                    });
+                    return;
+                }
 
-            // Show upgrade prompt based on trial status and usage
+                localStorage.setItem('redirectCount', (redirectCount + 1).toString());
+                localStorage.setItem('redirectAfterAuth', pathname);
+                router.replace('/login');
+            } else if (isPublicPage && isInitialized && isAuthenticated && user && user.emailVerified !== false) {
+                // Only redirect from /login and /register if authenticated
+                if (pathname !== '/' && !skipAuthCheck) {
+                    const redirectCount = parseInt(localStorage.getItem('redirectCount') || '0', 10);
+                    if (redirectCount > 2) {
+                        console.warn('Redirect loop detected. Stopping redirect.');
+                        addNotification({
+                            type: 'error',
+                            title: 'Redirect Error',
+                            message: 'Too many redirects. Please try refreshing the page.',
+                            persistent: true,
+                        });
+                        return;
+                    }
+
+                    const redirectTo = localStorage.getItem('redirectAfterAuth') || '/dashboard';
+                    localStorage.setItem('redirectCount', (redirectCount + 1).toString());
+                    localStorage.removeItem('redirectAfterAuth');
+                    addNotification({
+                        type: 'info',
+                        title: 'Already Signed In',
+                        message: 'You are already signed in. Redirecting to your dashboard.',
+                        persistent: false,
+                    });
+                    router.replace(redirectTo);
+                }
+            } else {
+                localStorage.setItem('redirectCount', '0');
+            }
+        }, 300);
+
+        if (typeof window !== 'undefined') {
+            handleAuthRedirect();
+        }
+    }, [isPublicPage, isInitialized, isAuthenticated, authLoading, user, pathname, router, addNotification, skipAuthCheck]);
+
+    // Upgrade prompt logic
+    useEffect(() => {
+        if (userCapabilities && isAuthenticated && !isPublicPage) {
+            const { isTrialActive, trialDaysRemaining, hasActiveSubscription } = userCapabilities;
             const shouldShowUpgrade = !hasActiveSubscription && (
                 (isTrialActive && trialDaysRemaining <= 7) ||
                 (!isTrialActive && !hasActiveSubscription)
@@ -204,18 +212,14 @@ const AppWrapper = ({ children }) => {
 
             setShowUpgradePrompt(shouldShowUpgrade);
 
-            // Show trial warning notifications
             if (isTrialActive) {
                 if (trialDaysRemaining <= 3 && trialDaysRemaining > 0) {
                     addNotification({
                         type: 'warning',
                         title: 'Trial Ending Soon',
-                        message: `Your trial expires in ${trialDaysRemaining} day${trialDaysRemaining > 1 ? 's' : ''}. Upgrade to continue using all features.`,
+                        message: `Your trial expires in ${trialDaysRemaining} day${trialDaysRemaining > 1 ? 's' : ''}.`,
                         persistent: true,
-                        action: {
-                            label: 'Upgrade Now',
-                            onClick: () => router.push('/upgrade')
-                        }
+                        action: { label: 'Upgrade Now', onClick: () => router.push('/upgrade') },
                     });
                 } else if (trialDaysRemaining === 0) {
                     addNotification({
@@ -223,49 +227,16 @@ const AppWrapper = ({ children }) => {
                         title: 'Trial Expired',
                         message: 'Your trial has expired. Upgrade to continue using premium features.',
                         persistent: true,
-                        action: {
-                            label: 'Upgrade Now',
-                            onClick: () => router.push('/upgrade')
-                        }
+                        action: { label: 'Upgrade Now', onClick: () => router.push('/upgrade') },
                     });
                 }
             }
         }
-    }, [userCapabilities, isAuthenticated, addNotification, router]);
+    }, [userCapabilities, isAuthenticated, isPublicPage, addNotification, router]);
 
-    // Enhanced redirect logic with error handling
-    useEffect(() => {
-        // Don't redirect while auth is loading or during retry
-        if (authLoading || isRetrying) return;
-
-        try {
-            // Handle authenticated users on public paths
-            if (isAuthenticated && isPublicPath && pathname !== '/') {
-                const targetPath = localStorage.getItem('redirectAfterAuth') || '/dashboard';
-                localStorage.removeItem('redirectAfterAuth');
-                router.replace(targetPath);
-                return;
-            }
-
-            // Handle unauthenticated users on protected paths
-            if (!isAuthenticated && !isPublicPath && !authLoading) {
-                // Store intended destination
-                if (isProtectedPath) {
-                    localStorage.setItem('redirectAfterAuth', pathname);
-                }
-                router.replace('/login');
-                return;
-            }
-        } catch (error) {
-            handleError(error, 'navigation');
-        }
-    }, [isAuthenticated, authLoading, isPublicPath, isProtectedPath, pathname, router, isRetrying, handleError]);
-
-    // Determine loading state based on unified context
-    const shouldShowLoading = authLoading || 
-        (isAuthenticated && !isInitialized) || 
-        (isAuthenticated && appLoading) || 
-        isRetrying;
+    // Loading state - Skip all loading checks for /login and /register
+    const shouldShowLoading = skipAuthCheck ? false :
+        (isPublicPage ? false : (authLoading || (isAuthenticated && !isInitialized) || (isAuthenticated && appLoading) || isRetrying));
 
     if (shouldShowLoading) {
         return (
@@ -273,40 +244,26 @@ const AppWrapper = ({ children }) => {
                 <div className="text-center">
                     <LoadingSpinner size="lg" />
                     <p className="mt-4 text-gray-600">
-                        {authLoading ? 'Checking authentication...' :
-                            !isInitialized ? 'Initializing application...' :
-                                appLoading ? 'Loading user data...' :
-                                    isRetrying ? 'Retrying connection...' :
-                                        'Loading your workspace...'}
+                        {authLoading ? 'Authenticating...' :
+                            !isInitialized ? 'Initializing workspace...' :
+                                appLoading ? 'Loading your data...' :
+                                    isRetrying ? 'Retrying connection...' : 'Loading...'}
                     </p>
                     {retryCount > 0 && (
-                        <p className="mt-2 text-sm text-gray-500">
-                            Attempt {retryCount} of 3
-                        </p>
+                        <p className="mt-2 text-sm text-gray-500">Attempt {retryCount} of 3</p>
                     )}
                 </div>
             </div>
         );
     }
 
-    // Handle app errors with retry option
-    if (appError) {
-        return (
-            <ErrorDisplay
-                error={appError}
-                onRetry={handleRetry}
-                canRetry={retryCount < 3}
-            />
-        );
+    // Error state - Skip for public pages
+    if (appError && !isPublicPage) {
+        return <ErrorDisplay error={appError} onRetry={handleRetry} canRetry={retryCount < 3} />;
     }
 
-    // Handle incomplete registration - check if user is authenticated but no profile
-    if (isAuthenticated && isInitialized && !userProfile && !profileLoading) {
-        return <RedirectToRegistration />;
-    }
-
-    // Public layout for unauthenticated users
-    if (!isAuthenticated || isPublicPath) {
+    // Public page layout
+    if (isPublicPage) {
         return (
             <div className="min-h-screen bg-gray-50">
                 <ErrorBoundary
@@ -340,14 +297,12 @@ const AppWrapper = ({ children }) => {
         );
     }
 
-    // Minimal layout for settings and profile pages
+    // Minimal layout for authenticated settings/profile pages
     if (isMinimalLayout) {
         return (
             <div className="min-h-screen bg-gray-50">
                 <ErrorBoundary>
                     <NotificationCenter />
-
-                    {/* Trial Banner */}
                     {userCapabilities?.isTrialActive && (
                         <TrialBanner
                             daysRemaining={userCapabilities.trialDaysRemaining}
@@ -355,8 +310,6 @@ const AppWrapper = ({ children }) => {
                             onUpgradeClick={() => router.push('/upgrade')}
                         />
                     )}
-
-                    {/* Header */}
                     <AppHeader
                         user={user}
                         userProfile={userProfile}
@@ -366,8 +319,6 @@ const AppWrapper = ({ children }) => {
                         userCapabilities={userCapabilities}
                         accountSummary={accountSummary}
                     />
-
-                    {/* Main Content */}
                     <main className="flex-1 bg-white">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                             <Suspense fallback={<LoadingSpinner />}>
@@ -380,13 +331,11 @@ const AppWrapper = ({ children }) => {
         );
     }
 
-    // Full app layout with sidebar
+    // Full authenticated layout
     return (
         <div className="min-h-screen bg-gray-50">
             <ErrorBoundary>
                 <NotificationCenter />
-
-                {/* Trial Banner */}
                 {userCapabilities?.isTrialActive && (
                     <TrialBanner
                         daysRemaining={userCapabilities.trialDaysRemaining}
@@ -394,10 +343,7 @@ const AppWrapper = ({ children }) => {
                         onUpgradeClick={() => router.push('/upgrade')}
                     />
                 )}
-
-                {/* Main App Layout */}
                 <div className="flex h-screen overflow-hidden">
-                    {/* Sidebar */}
                     <AppSidebar
                         open={!sidebarCollapsed}
                         onClose={() => setSidebarCollapsed(true)}
@@ -413,10 +359,7 @@ const AppWrapper = ({ children }) => {
                         onError={(error) => handleError(error, 'sidebar')}
                         accountSummary={accountSummary}
                     />
-
-                    {/* Main Content Area */}
                     <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Header */}
                         <AppHeader
                             user={user}
                             userProfile={userProfile}
@@ -429,32 +372,20 @@ const AppWrapper = ({ children }) => {
                             onError={(error) => handleError(error, 'header')}
                             accountSummary={accountSummary}
                         />
-
-                        {/* Breadcrumbs */}
                         <AppBreadcrumbs
                             breadcrumbs={breadcrumbs}
                             canGoBack={breadcrumbs.length > 1}
                             onGoBack={() => window.history.back()}
                         />
-
-                        {/* Main Content */}
                         <main className="flex-1 overflow-y-auto bg-white">
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                                <Suspense
-                                    fallback={
-                                        <div className="flex items-center justify-center py-12">
-                                            <LoadingSpinner />
-                                        </div>
-                                    }
-                                >
+                                <Suspense fallback={<div className="flex items-center justify-center py-12"><LoadingSpinner /></div>}>
                                     {children}
                                 </Suspense>
                             </div>
                         </main>
                     </div>
                 </div>
-
-                {/* Upgrade Prompt Modal */}
                 {showUpgradePrompt && (
                     <UpgradePrompt
                         isOpen={showUpgradePrompt}

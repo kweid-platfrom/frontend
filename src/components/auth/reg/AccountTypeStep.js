@@ -28,7 +28,7 @@ const AccountTypeStep = ({
     const displayError = error || localError;
 
     return (
-        <div className="bg-white rounded-xl border border-white/20 p-6 sm:p-8 relative">
+        <div className="relative">
             {/* Card glow effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
             

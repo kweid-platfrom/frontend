@@ -1,22 +1,10 @@
-// contexts/SuiteContext.js - Fixed authentication issues
+// contexts/SuiteContext.js - Aligned with FirestoreService
 'use client'
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
-import { useUserProfile } from './userProfileContext'; // Fixed import path
-import { db } from '../config/firebase';
-import {
-    collection,
-    query,
-    getDocs,
-    orderBy,
-    limit,
-    serverTimestamp,
-    addDoc,
-    updateDoc,
-    setDoc,
-    doc,
-    where
-} from 'firebase/firestore';
+import { useUserProfile } from './userProfileContext';
+import firestoreService from '../services/firestoreService';
+import { where } from 'firebase/firestore';
 
 const SuiteContext = createContext();
 
@@ -113,7 +101,7 @@ export const SuiteProvider = ({ children }) => {
         return true;
     }, [isRegistering, isAuthenticated, isNewUser, isProfileLoaded, profileLoading, profileError, user, userProfile]);
 
-    // Simple subscription limits (since useSubscription is not available)
+    // Simple subscription limits
     const getSubscriptionLimits = useCallback(() => {
         if (!userProfile) return { suites: 0 };
         
@@ -146,9 +134,8 @@ export const SuiteProvider = ({ children }) => {
         return limits.suites;
     }, [getSubscriptionLimits, isRegistering]);
 
-    // Ensure user document exists BEFORE any suite operations
+    // Ensure user document exists using FirestoreService
     const ensureUserDocumentExists = useCallback(async (userId) => {
-        // Never run during registration
         if (isRegistering()) {
             console.log('Skipping user document creation - registration in progress');
             return;
@@ -160,12 +147,22 @@ export const SuiteProvider = ({ children }) => {
 
         try {
             console.log('Ensuring user document exists for:', userId);
-            await setDoc(doc(db, 'users', userId), {
-                user_id: userId,
-                created_at: serverTimestamp(),
-                preferences: {},
-                contact_info: {}
-            }, { merge: true });
+            
+            // Check if user document exists
+            const userResult = await firestoreService.getUserProfile(userId);
+            
+            if (!userResult.success) {
+                // Create user document if it doesn't exist
+                const createResult = await firestoreService.createOrUpdateUserProfile({
+                    user_id: userId,
+                    preferences: {},
+                    contact_info: {}
+                });
+                
+                if (!createResult.success) {
+                    throw new Error(createResult.error.message);
+                }
+            }
             
             userDocEnsuredRef.current = true;
             console.log('User document ensured successfully');
@@ -175,9 +172,8 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [isRegistering]);
 
-    // Fetch suites matching security rules constraints
+    // Fetch suites using FirestoreService
     const fetchUserSuites = useCallback(async (userId = null, forceRefresh = false) => {
-        // Never fetch during registration
         if (isRegistering()) {
             console.log('Skipping suite fetch - registration in progress');
             return [];
@@ -208,43 +204,47 @@ export const SuiteProvider = ({ children }) => {
             setIsLoading(true);
             setError(null);
 
-            // Ensure user document exists BEFORE attempting to fetch suites
+            // Ensure user document exists
             await ensureUserDocumentExists(userId);
 
             let suiteList = [];
 
             console.log('Fetching suites for userId:', userId);
 
-            // Fetch individual suites
+            // Fetch individual suites using FirestoreService
             try {
-                const individualSuitesQuery = query(
-                    collection(db, 'testSuites'),
-                    where('ownerType', '==', 'individual'),
-                    where('ownerId', '==', userId),
-                    orderBy('createdAt', 'desc'),
-                    limit(50)
+                const individualSuitesResult = await firestoreService.queryDocuments(
+                    'testSuites',
+                    [
+                        where('ownerType', '==', 'individual'),
+                        where('ownerId', '==', userId)
+                    ],
+                    'created_at',
+                    50
                 );
 
-                const individualSnapshot = await getDocs(individualSuitesQuery);
-                const individualSuites = individualSnapshot.docs.map(doc => ({
-                    suite_id: doc.id,
-                    ...doc.data(),
-                    accountType: 'individual',
-                    ownerId: userId
-                }));
+                if (individualSuitesResult.success) {
+                    const individualSuites = individualSuitesResult.data.map(suite => ({
+                        suite_id: suite.id,
+                        ...suite,
+                        accountType: 'individual',
+                        ownerId: userId
+                    }));
 
-                suiteList = [...individualSuites];
-                console.log('Fetched individual suites:', individualSuites.length);
+                    suiteList = [...individualSuites];
+                    console.log('Fetched individual suites:', individualSuites.length);
+                } else {
+                    console.error('Error fetching individual suites:', individualSuitesResult.error);
+                    if (individualSuitesResult.error.code === 'permission-denied') {
+                        throw new Error('Unable to access test suites. Please check your account permissions.');
+                    }
+                }
             } catch (error) {
                 console.error('Error fetching individual suites:', error);
-                if (error.code === 'permission-denied') {
-                    console.error('Permission denied - user document may not exist or security rules blocking access');
-                    throw new Error('Unable to access test suites. Please check your account permissions.');
-                }
                 throw error;
             }
 
-            // Fetch organization suites
+            // Fetch organization suites if user has memberships
             if (userProfile?.account_memberships?.length > 0) {
                 console.log('Checking org memberships:', userProfile.account_memberships.length);
 
@@ -252,25 +252,31 @@ export const SuiteProvider = ({ children }) => {
                     if (membership.org_id && membership.status === 'active') {
                         try {
                             console.log('Fetching org suites for:', membership.org_id);
-                            const orgSuitesQuery = query(
-                                collection(db, 'testSuites'),
-                                where('ownerType', '==', 'organization'),
-                                where('ownerId', '==', membership.org_id),
-                                orderBy('createdAt', 'desc'),
-                                limit(25)
+                            
+                            const orgSuitesResult = await firestoreService.queryDocuments(
+                                'testSuites',
+                                [
+                                    where('ownerType', '==', 'organization'),
+                                    where('ownerId', '==', membership.org_id)
+                                ],
+                                'created_at',
+                                25
                             );
 
-                            const orgSnapshot = await getDocs(orgSuitesQuery);
-                            const orgSuites = orgSnapshot.docs.map(doc => ({
-                                suite_id: doc.id,
-                                ...doc.data(),
-                                accountType: 'organization',
-                                organizationId: membership.org_id,
-                                ownerId: membership.org_id
-                            }));
+                            if (orgSuitesResult.success) {
+                                const orgSuites = orgSuitesResult.data.map(suite => ({
+                                    suite_id: suite.id,
+                                    ...suite,
+                                    accountType: 'organization',
+                                    organizationId: membership.org_id,
+                                    ownerId: membership.org_id
+                                }));
 
-                            suiteList = [...suiteList, ...orgSuites];
-                            console.log('Fetched org suites:', orgSuites.length);
+                                suiteList = [...suiteList, ...orgSuites];
+                                console.log('Fetched org suites:', orgSuites.length);
+                            } else {
+                                console.warn(`Error fetching org suites for ${membership.org_id}:`, orgSuitesResult.error);
+                            }
                         } catch (error) {
                             console.warn(`Error fetching org suites for ${membership.org_id}:`, error);
                         }
@@ -288,8 +294,8 @@ export const SuiteProvider = ({ children }) => {
             }, []);
 
             uniqueSuites.sort((a, b) => {
-                const dateA = a.createdAt?.toDate?.() || new Date(0);
-                const dateB = b.createdAt?.toDate?.() || new Date(0);
+                const dateA = a.created_at?.toDate?.() || new Date(0);
+                const dateB = b.created_at?.toDate?.() || new Date(0);
                 return dateB - dateA;
             });
 
@@ -312,7 +318,6 @@ export const SuiteProvider = ({ children }) => {
     }, [cache.suites, isCacheValid, userProfile, shouldFetchSuites, ensureUserDocumentExists, isRegistering, isAuthenticated]);
 
     const setActiveSuiteWithStorage = useCallback((suite) => {
-        // Don't set active suite during registration
         if (isRegistering()) {
             console.log('Skipping active suite setting - registration in progress');
             return;
@@ -327,7 +332,6 @@ export const SuiteProvider = ({ children }) => {
     }, [isRegistering]);
 
     const refetchSuites = useCallback(async (forceRefresh = true) => {
-        // Never refetch during registration
         if (isRegistering()) {
             console.log('Skipping refetch - registration in progress');
             return;
@@ -360,9 +364,8 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isRegistering, isAuthenticated]);
 
-    // Create test suite with security rule compliance
+    // Create test suite using FirestoreService
     const createTestSuite = useCallback(async (suiteData) => {
-        // Never create suites during registration
         if (isRegistering()) {
             throw new Error('Cannot create test suites during registration');
         }
@@ -381,6 +384,7 @@ export const SuiteProvider = ({ children }) => {
         }
 
         try {
+            // Ensure user document exists
             await ensureUserDocumentExists(user.uid);
 
             const isOrganizationSuite = !!suiteData.organizationId;
@@ -396,6 +400,7 @@ export const SuiteProvider = ({ children }) => {
                 suiteLimit: getSuiteLimit()
             });
 
+            // Verify organization permissions if creating org suite
             if (isOrganizationSuite) {
                 const orgId = suiteData.organizationId;
                 const isOrgAdmin = userProfile?.account_memberships?.some(
@@ -409,16 +414,17 @@ export const SuiteProvider = ({ children }) => {
                 }
             }
 
-            const newSuite = {
-                ownerType,
-                ownerId,
+            // Prepare suite data for FirestoreService
+            const suitePayload = {
                 name: suiteData.name,
                 description: suiteData.description || '',
+                ownerType,
+                ownerId,
                 status: 'active',
                 tags: suiteData.tags || [],
-                createdBy: user.uid,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
+                members: [user.uid],
+                isPublic: suiteData.isPublic || false,
+                settings: suiteData.settings || {},
                 permissions: {
                     [user.uid]: 'admin'
                 },
@@ -435,38 +441,49 @@ export const SuiteProvider = ({ children }) => {
                     activityLog: [],
                     comments: [],
                     notifications: []
+                },
+                access_control: {
+                    ownerType,
+                    ownerId
                 }
             };
 
-            console.log('Creating suite with data:', newSuite);
+            console.log('Creating suite with FirestoreService:', suitePayload);
 
-            const collectionRef = collection(db, 'testSuites');
-            const docRef = await addDoc(collectionRef, newSuite);
+            // Create the suite using FirestoreService
+            const createResult = await firestoreService.createTestSuite(suitePayload);
 
-            await updateDoc(docRef, {
-                suite_id: docRef.id,
-                updatedAt: serverTimestamp()
-            });
+            if (!createResult.success) {
+                throw new Error(createResult.error.message);
+            }
 
-            const createdSuite = { ...newSuite, suite_id: docRef.id };
+            const createdSuite = createResult.data;
 
+            // Prepare suite for state management
             const newSuiteForState = {
+                suite_id: createResult.id,
                 ...createdSuite,
                 accountType: ownerType,
                 ownerId,
                 organizationId: isOrganizationSuite ? suiteData.organizationId : undefined
             };
 
+            // Update local state immediately
             setSuites(prevSuites => [newSuiteForState, ...prevSuites]);
             setActiveSuiteWithStorage(newSuiteForState);
+            
+            // Clear cache to force refresh on next fetch
             setCache({ suites: null, timestamp: null });
 
             // Refresh suites after creation
             setTimeout(() => refetchSuites(true), 100);
 
-            console.log('Suite created and state updated immediately:', newSuiteForState);
+            console.log('Suite created successfully:', newSuiteForState);
 
-            return createdSuite;
+            return {
+                suite_id: createResult.id,
+                ...createdSuite
+            };
         } catch (error) {
             console.error('Error creating test suite:', error);
             throw error;
@@ -511,7 +528,14 @@ export const SuiteProvider = ({ children }) => {
         }
     }, [shouldFetchSuites, refetchSuites, isRegistering, user?.uid, isAuthenticated, profileLoading, isNewUser]);
 
-    // Completely disable suite context during registration
+    // Cleanup subscriptions when component unmounts
+    useEffect(() => {
+        return () => {
+            firestoreService.cleanup();
+        };
+    }, []);
+
+    // Context value with registration protection
     const value = useMemo(() => {
         if (isRegistering()) {
             return {

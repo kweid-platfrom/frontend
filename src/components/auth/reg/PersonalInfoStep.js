@@ -36,7 +36,8 @@ const PersonalInfoStep = ({
         setEmailValidationTimer(timer);
     }, [emailValidationTimer, accountType]);
 
-    const handleEmailChange = (value) => {
+    const handleEmailChange = (e) => {
+        const value = e.target.value;
         onInputChange('email', value);
         
         // Show organization prompt for custom domains on individual accounts
@@ -132,7 +133,7 @@ const PersonalInfoStep = ({
     }, [emailValidationTimer]);
 
     return (
-        <div className="bg-white rounded-xl border border-white/20 p-6 sm:p-8 relative">
+        <div className="relative">
             {/* Card glow effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
             
@@ -150,9 +151,7 @@ const PersonalInfoStep = ({
                         type="text"
                         value={formData.fullName}
                         onChange={(e) => onInputChange('fullName', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base ${
-                            errors.fullName ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-teal-500'
-                        }`}
+                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base border-slate-200 focus:border-teal-500"
                         placeholder="Enter your full name"
                     />
                     {errors.fullName && <p className="text-red-600 text-xs font-medium mt-2">{errors.fullName}</p>}
@@ -166,10 +165,8 @@ const PersonalInfoStep = ({
                         <input
                             type="email"
                             value={formData.email}
-                            onChange={(e) => handleEmailChange(e.target.value)}
-                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-xs sm:text-base ${
-                                errors.email ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-teal-500'
-                            }`}
+                            onChange={handleEmailChange}
+                            className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base border-slate-200 focus:border-teal-500"
                             placeholder="name@company.com"
                         />
                         
@@ -229,9 +226,7 @@ const PersonalInfoStep = ({
                             type={showPassword ? "text" : "password"}
                             value={formData.password}
                             onChange={(e) => onInputChange('password', e.target.value)}
-                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base ${
-                                errors.password ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-teal-500'
-                            }`}
+                            className="w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base border-slate-200 focus:border-teal-500"
                             placeholder="Create a password"
                         />
                         <button
@@ -254,9 +249,7 @@ const PersonalInfoStep = ({
                             type={showConfirmPassword ? "text" : "password"}
                             value={formData.confirmPassword}
                             onChange={(e) => onInputChange('confirmPassword', e.target.value)}
-                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base ${
-                                errors.confirmPassword ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-teal-500'
-                            }`}
+                            className="w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base border-slate-200 focus:border-teal-500"
                             placeholder="Confirm your password"
                         />
                         <button
