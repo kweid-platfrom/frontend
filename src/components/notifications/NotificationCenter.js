@@ -1,89 +1,76 @@
 // components/notifications/NotificationCenter.js
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { Toaster, toast } from 'sonner';
 import { useAppNotifications } from '../../contexts/AppProvider';
-import { X, CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react';
+import { getFirebaseErrorMessage } from '../../utils/firebaseErrorHandler';
 
 const NotificationCenter = () => {
     const { notifications, removeNotification } = useAppNotifications();
+    const processedNotifications = useRef(new Set());
     
-    // Auto-remove notifications after timeout
+    // Handle notifications with Sonner
     useEffect(() => {
-        const timeouts = notifications.map(notification => {
-            if (notification.type === 'success' || notification.type === 'info') {
-                return setTimeout(() => {
-                    removeNotification(notification.id);
-                }, 5000);
+        notifications.forEach(notification => {
+            // Skip if already processed
+            if (processedNotifications.current.has(notification.id)) {
+                return;
             }
-            return null;
-        }).filter(Boolean);
-        
-        return () => {
-            timeouts.forEach(timeout => clearTimeout(timeout));
-        };
+            
+            // Mark as processed
+            processedNotifications.current.add(notification.id);
+            
+            // Process the message through Firebase error handler if it's an error
+            let processedMessage = notification.message || notification.title;
+            
+            if (notification.type === 'error' && notification.error) {
+                processedMessage = getFirebaseErrorMessage(notification.error);
+            } else if (notification.type === 'error' && !notification.error) {
+                // Try to process the message itself as a potential Firebase error
+                processedMessage = getFirebaseErrorMessage(processedMessage);
+            }
+            
+            const options = {
+                id: notification.id,
+                duration: notification.type === 'error' || notification.type === 'warning' ? 8000 : 5000,
+                onDismiss: () => {
+                    removeNotification(notification.id);
+                    processedNotifications.current.delete(notification.id);
+                }
+            };
+            
+            // Use appropriate toast method based on type
+            switch (notification.type) {
+                case 'success':
+                    toast.success(processedMessage, options);
+                    break;
+                case 'error':
+                    toast.error(processedMessage, options);
+                    break;
+                case 'warning':
+                    toast.warning(processedMessage, options);
+                    break;
+                default:
+                    toast.info(processedMessage, options);
+                    break;
+            }
+            
+            // Remove from context after showing
+            removeNotification(notification.id);
+        });
     }, [notifications, removeNotification]);
     
-    const getNotificationIcon = (type) => {
-        switch (type) {
-            case 'success':
-                return <CheckCircle className="h-5 w-5 text-green-500" />;
-            case 'error':
-                return <XCircle className="h-5 w-5 text-red-500" />;
-            case 'warning':
-                return <AlertCircle className="h-5 w-5 text-yellow-500" />;
-            default:
-                return <Info className="h-5 w-5 text-blue-500" />;
-        }
-    };
-    
-    const getNotificationStyles = (type) => {
-        switch (type) {
-            case 'success':
-                return 'bg-green-50 border-green-200 text-green-800';
-            case 'error':
-                return 'bg-red-50 border-red-200 text-red-800';
-            case 'warning':
-                return 'bg-yellow-50 border-yellow-200 text-yellow-800';
-            default:
-                return 'bg-blue-50 border-blue-200 text-blue-800';
-        }
-    };
-    
-    if (notifications.length === 0) return null;
-    
     return (
-        <div className="fixed top-4 right-4 z-50 space-y-2">
-            {notifications.slice(0, 5).map((notification) => (
-                <div
-                    key={notification.id}
-                    className={`
-                        max-w-sm w-full bg-white border rounded-lg shadow-lg p-4 transition-all duration-300 ease-in-out
-                        ${getNotificationStyles(notification.type)}
-                    `}
-                >
-                    <div className="flex items-start space-x-3">
-                        {getNotificationIcon(notification.type)}
-                        <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm">
-                                {notification.title}
-                            </div>
-                            {notification.message && (
-                                <div className="text-sm mt-1 opacity-90">
-                                    {notification.message}
-                                </div>
-                            )}
-                        </div>
-                        <button
-                            onClick={() => removeNotification(notification.id)}
-                            className="flex-shrink-0 p-1 rounded-full hover:bg-black hover:bg-opacity-10"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
-            ))}
-        </div>
+        <Toaster
+            position="top-center"
+            expand={false}
+            richColors={true}
+            closeButton={true}
+            toastOptions={{
+                duration: 5000
+            }}
+        />
     );
 };
 
