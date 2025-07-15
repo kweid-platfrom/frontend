@@ -66,7 +66,7 @@ const NotificationCenter = () => {
             position="top-center"
             expand={false}
             richColors={true}
-            closeButton={true}
+            closeButton={false}
             toastOptions={{
                 duration: 5000
             }}
