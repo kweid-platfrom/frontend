@@ -1,4 +1,3 @@
-// AuthProvider.js
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
@@ -12,12 +11,7 @@ import {
     getUserAccountType,
     getCurrentAccountInfo,
 } from "../services/userService";
-import {
-    getUserPermissions,
-    createPermissionChecker,
-    isOrganizationAccount,
-    isIndividualAccount,
-} from "../services/permissionService";
+import PermissionService, { isOrganizationAccount, isIndividualAccount } from "../services/permissionService";
 import {
     signInWithGoogle as authSignInWithGoogle,
     logInWithEmail as authLoginWithEmail,
@@ -118,9 +112,12 @@ export const AuthProvider = ({ children }) => {
             }
 
             setUserProfile(result.userData || {});
-            const permissions = getUserPermissions(result.userData);
+            const permissions = await PermissionService.getUserPermissions(user.uid);
             setUserPermissions(permissions);
-            const checker = createPermissionChecker(result.userData);
+            const checker = {
+                can: async (capability) => await PermissionService.hasPermission(user.uid, capability),
+                isAdmin: async (orgId) => await PermissionService.hasRole(user.uid, 'Admin', orgId),
+            };
             setPermissionChecker(checker);
 
             if (typeof window !== 'undefined') {
@@ -321,7 +318,6 @@ export const AuthProvider = ({ children }) => {
             }
             await authDeleteUserAccount(currentUser);
 
-            // Clear local storage
             if (typeof window !== 'undefined') {
                 localStorage.clear();
             }
@@ -378,7 +374,6 @@ export const AuthProvider = ({ children }) => {
 
     const signOut = async () => {
         try {
-            // Reset tracking variables
             processingAuth.current = false;
             lastProcessedUserId.current = null;
 
@@ -404,35 +399,21 @@ export const AuthProvider = ({ children }) => {
         return permissionChecker ? permissionChecker.can(capability) : false;
     }, [permissionChecker]);
 
-    const hasRole = useCallback((role) => {
-        if (!userProfile) return false;
-        const userRoles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
-        return userRoles.includes(role);
-    }, [userProfile]);
-
-    const hasAnyRole = useCallback((roles) => {
-        if (!userProfile) return false;
-        const userRoles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
-        return roles.some(role => userRoles.includes(role));
-    }, [userProfile]);
-
-    const isAdmin = useCallback(() => {
-        return permissionChecker ? permissionChecker.isAdmin() : false;
+    const hasRole = useCallback((role, organizationId) => {
+        return permissionChecker ? permissionChecker.isAdmin(organizationId) : false;
     }, [permissionChecker]);
 
-    const getPrimaryUserRole = useCallback(() => {
-        if (!userProfile) return 'member';
+    const hasAnyRole = useCallback((roles, organizationId) => {
+        return roles.some(role => hasRole(role, organizationId));
+    }, [hasRole]);
 
-        const roles = Array.isArray(userProfile.role) ? userProfile.role : [userProfile.role];
-        const rolePriority = ['Admin', 'Manager', 'QA_Tester', 'Developer', 'Member', 'Viewer'];
+    const isAdmin = useCallback((organizationId) => {
+        return permissionChecker ? permissionChecker.isAdmin(organizationId) : false;
+    }, [permissionChecker]);
 
-        for (const role of rolePriority) {
-            if (roles.includes(role)) {
-                return role;
-            }
-        }
-
-        return 'Member';
+    const getPrimaryUserRole = useCallback((organizationId) => {
+        if (!userProfile || !organizationId) return 'member';
+        return PermissionService.hasRole(userProfile.user_id, 'Admin', organizationId) ? 'Admin' : 'Member';
     }, [userProfile]);
 
     // ===== DATA MANAGEMENT METHODS =====
@@ -445,15 +426,13 @@ export const AuthProvider = ({ children }) => {
 
             if (result.userData) {
                 setUserProfile(result.userData);
-
-                // Update permissions with fresh data
-                const permissions = getUserPermissions(result.userData);
+                const permissions = await PermissionService.getUserPermissions(currentUser.uid);
                 setUserPermissions(permissions);
-
-                // Update permission checker
-                const checker = createPermissionChecker(result.userData);
+                const checker = {
+                    can: async (capability) => await PermissionService.hasPermission(currentUser.uid, capability),
+                    isAdmin: async (orgId) => await PermissionService.hasRole(currentUser.uid, 'Admin', orgId),
+                };
                 setPermissionChecker(checker);
-
                 return true;
             }
 
@@ -511,7 +490,6 @@ export const AuthProvider = ({ children }) => {
     const accountType = getUserAccountType(userProfile);
     const currentAccountInfo = getCurrentAccountInfo(userProfile);
 
-
     const value = {
         currentUser,
         userPermissions,
@@ -533,36 +511,18 @@ export const AuthProvider = ({ children }) => {
         deleteAccount,
         unlinkProvider,
         refreshSession,
-        signOut: authLogout,
+        signOut,
         hasPermission,
         hasRole,
         hasAnyRole,
         isAdmin,
         getPrimaryUserRole,
-        canManageUsers: userPermissions?.canManageUsers || false,
-        canManageTestSuites: userPermissions?.canCreateTestSuites || false,
-        canCreateTestSuites: userPermissions?.canCreateTestSuites || false,
-        canDeleteTestSuites: userPermissions?.canDeleteTestSuites || false,
-        canViewAnalytics: userPermissions?.canViewAnalytics || false,
-        canManageBilling: userPermissions?.canViewBilling || false,
-        canManageBugs: userPermissions?.canWriteBugs || false,
-        canAssignBugs: userPermissions?.canAssignBugs || false,
-        canCreateBugs: userPermissions?.canCreateBugs || false,
-        canCreateTestCases: userPermissions?.canCreateContent || false,
-        canRunTests: userPermissions?.canReadProjects || false,
-        canViewSubscription: userPermissions?.canViewSubscription || false,
-        canViewDashboard: userPermissions?.canViewDashboard || false,
-        canViewSettings: userPermissions?.canViewSettings || false,
-        canViewAdminPanel: userPermissions?.canViewAdminPanel || false,
-        canViewReports: userPermissions?.canViewReports || false,
-        canInviteUsers: userPermissions?.canInviteUsers || false,
-        canViewTeamMembers: userPermissions?.canViewTeamMembers || false,
+        canCreateSuite: userPermissions?.canCreateSuite || false,
+        canViewSuite: userPermissions?.canViewSuite || false,
+        canEditSuite: userPermissions?.canEditSuite || false,
+        canDeleteSuite: userPermissions?.canDeleteSuite || false,
+        canInviteTeamMembers: userPermissions?.canInviteTeamMembers || false,
         canManageOrganization: userPermissions?.canManageOrganization || false,
-        canViewOrganizationSettings: userPermissions?.canViewOrganizationSettings || false,
-        canUseAdvancedReports: userPermissions?.canUseAdvancedReports || false,
-        canUseAPIAccess: userPermissions?.canUseAPIAccess || false,
-        canUseAutomation: userPermissions?.canUseAutomation || false,
-        canExportData: userPermissions?.canExportData || false,
         isOrganizationAccount: userProfile ? isOrganizationAccount(userProfile) : false,
         isIndividualAccount: userProfile ? isIndividualAccount(userProfile) : false,
         subscriptionType: userPermissions?.subscriptionType || 'free',
@@ -579,7 +539,6 @@ export const AuthProvider = ({ children }) => {
         accountType,
         currentAccountInfo,
         user: currentUser,
-        signOut,
         isProviderLinked,
         linkProvider,
     };

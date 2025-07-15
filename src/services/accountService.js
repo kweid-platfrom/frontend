@@ -1,10 +1,6 @@
-// services/accountService.js - Main account service that aggregates all account-related functions
-import {
-    getAccountSetupStatus,
-    setupAccount
-} from "./accountSetup";
-
+import { getAccountSetupStatus, setupAccount } from "./accountSetup";
 import firestoreService from "./firestoreService";
+import { suiteService } from "./suiteService"; // Import suiteService
 
 /**
  * Get complete account information
@@ -25,7 +21,6 @@ export const getCompleteAccountInfo = async (userId = null) => {
 
         const userProfile = result.data;
         
-        // Get organizations if account type is organization
         let organizations = [];
         if (userProfile.accountType === 'organization' && userProfile.organizationId) {
             const orgResult = await firestoreService.getDocument('organizations', userProfile.organizationId);
@@ -42,13 +37,9 @@ export const getCompleteAccountInfo = async (userId = null) => {
                 accountType: userProfile.accountType || 'individual'
             }
         };
-
     } catch (error) {
         console.error('Error getting complete account info:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -67,13 +58,9 @@ export const updateUserProfile = async (userId, updateData) => {
 
         const result = await firestoreService.updateUserProfile(targetUserId, updateData);
         return result;
-
     } catch (error) {
         console.error('Error updating user profile:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -89,19 +76,10 @@ export const deleteUserAccount = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        // This would need to be implemented based on your requirements
-        // For now, return a placeholder
-        return {
-            success: false,
-            error: { message: 'Account deletion not implemented yet' }
-        };
-
+        return { success: false, error: { message: 'Account deletion not implemented yet' } };
     } catch (error) {
         console.error('Error deleting user account:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -146,18 +124,14 @@ export const getAccountType = async (userId = null) => {
                 userId: targetUserId
             }
         };
-
     } catch (error) {
         console.error('Error getting account type:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
 /**
- * Check if user can create new suite (basic check without subscription limits)
+ * Check if user can create new suite
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Permission result
  */
@@ -168,60 +142,36 @@ export const canCreateNewSuite = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const user = firestoreService.getCurrentUser();
-        if (!user) {
-            return { success: false, error: { message: 'User not authenticated' } };
+        const capabilitiesResult = await getUserCapabilities(targetUserId);
+        if (!capabilitiesResult.success) {
+            return { success: false, error: { message: 'Unable to fetch capabilities' } };
         }
+
+        const { maxTestSuites, remaining } = capabilitiesResult.data;
+        const canCreate = remaining.testSuites !== 0;
 
         return {
             success: true,
             data: {
-                canCreate: true,
-                message: 'Suite creation allowed'
+                canCreate,
+                message: canCreate ? 
+                    `You can create ${remaining.testSuites === -1 ? 'unlimited' : remaining.testSuites} more suites` : 
+                    `Suite limit of ${maxTestSuites} reached`
             }
         };
-
     } catch (error) {
         console.error('Error checking suite creation permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
 /**
- * Check if user can create new test suite
+ * Alias for canCreateNewSuite
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Permission result
  */
 export const canCreateNewTestSuite = async (userId) => {
-    try {
-        const targetUserId = userId || firestoreService.getCurrentUserId();
-        if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const user = firestoreService.getCurrentUser();
-        if (!user) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return {
-            success: true,
-            data: {
-                canCreate: true,
-                message: 'Test suite creation allowed'
-            }
-        };
-
-    } catch (error) {
-        console.error('Error checking test suite creation permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
-    }
+    return await canCreateNewSuite(userId);
 };
 
 /**
@@ -236,7 +186,6 @@ export const canInviteTeamMembers = async (userId) => {
             return accountInfo;
         }
 
-        // Only organization accounts can invite team members
         const canInvite = accountInfo.data.accountType === 'organization';
 
         return {
@@ -246,13 +195,9 @@ export const canInviteTeamMembers = async (userId) => {
                 message: canInvite ? 'Team member invitation allowed' : 'Team invitations only available for organization accounts'
             }
         };
-
     } catch (error) {
         console.error('Error checking team invitation permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -279,18 +224,14 @@ export const getOrganizationMemberCount = async (organizationId) => {
                 members: result.data
             }
         };
-
     } catch (error) {
         console.error('Error getting organization member count:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
 /**
- * Get user's suite count (using testSuites collection)
+ * Get user's suite count
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Suite count result
  */
@@ -301,36 +242,27 @@ export const getUserSuiteCount = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const result = await firestoreService.getUserTestSuites();
-        if (!result.success) {
-            return result;
-        }
-
+        const result = await suiteService.getUserSuites(targetUserId); // Use suiteService
         return {
             success: true,
             data: {
-                count: result.data.length,
-                suites: result.data,
+                count: result.suites.length,
+                suites: result.suites,
                 message: 'Suite count retrieved'
             }
         };
-
     } catch (error) {
         console.error('Error getting user suite count:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
 /**
- * Get user's test suite count (alias for getUserSuiteCount)
+ * Alias for getUserSuiteCount
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Test suite count result
  */
 export const getUserTestSuiteCount = async (userId) => {
-    // This is the same as getUserSuiteCount since your collection is 'testSuites'
     return await getUserSuiteCount(userId);
 };
 
@@ -351,11 +283,9 @@ export const getUserUsageStats = async (userId) => {
             return accountInfo;
         }
 
-        // Get test suites count
         const suitesResult = await getUserSuiteCount(targetUserId);
         const suitesCount = suitesResult.success ? suitesResult.data.count : 0;
 
-        // Get organization member count if user has organizations
         let totalMembersCount = 0;
         if (accountInfo.data.organizations && accountInfo.data.organizations.length > 0) {
             for (const org of accountInfo.data.organizations) {
@@ -380,13 +310,9 @@ export const getUserUsageStats = async (userId) => {
                 message: 'Usage statistics retrieved'
             }
         };
-
     } catch (error) {
         console.error('Error getting user usage stats:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -402,18 +328,16 @@ export const getUserTestScriptCount = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        // Get user's test suites first
-        const suitesResult = await getUserSuiteCount(targetUserId);
+        const suitesResult = await suiteService.getUserSuites(targetUserId);
         if (!suitesResult.success) {
             return suitesResult;
         }
 
         let totalScriptCount = 0;
-        const suites = suitesResult.data.suites;
+        const suites = suitesResult.suites;
 
-        // Count test scripts across all suites
         for (const suite of suites) {
-            const scriptsResult = await firestoreService.getSuiteAssets(suite.id, 'automatedScripts');
+            const scriptsResult = await firestoreService.getSuiteAssets(suite.suite_id, 'automatedScripts');
             if (scriptsResult.success) {
                 totalScriptCount += scriptsResult.data.length;
             }
@@ -426,13 +350,9 @@ export const getUserTestScriptCount = async (userId) => {
                 message: 'Test script count retrieved'
             }
         };
-
     } catch (error) {
         console.error('Error getting user test script count:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -448,20 +368,17 @@ export const getUserAutomatedTestCount = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        // Get user's test suites first
-        const suitesResult = await getUserSuiteCount(targetUserId);
+        const suitesResult = await suiteService.getUserSuites(targetUserId);
         if (!suitesResult.success) {
             return suitesResult;
         }
 
         let totalAutomatedTestCount = 0;
-        const suites = suitesResult.data.suites;
+        const suites = suitesResult.suites;
 
-        // Count automated tests across all suites (could be testCases with automation flag)
         for (const suite of suites) {
-            const testCasesResult = await firestoreService.getSuiteAssets(suite.id, 'testCases');
+            const testCasesResult = await firestoreService.getSuiteAssets(suite.suite_id, 'testCases');
             if (testCasesResult.success) {
-                // Count only automated test cases
                 const automatedTests = testCasesResult.data.filter(testCase => testCase.isAutomated === true);
                 totalAutomatedTestCount += automatedTests.length;
             }
@@ -474,13 +391,9 @@ export const getUserAutomatedTestCount = async (userId) => {
                 message: 'Automated test count retrieved'
             }
         };
-
     } catch (error) {
         console.error('Error getting user automated test count:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -496,18 +409,16 @@ export const getUserRecordingCount = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        // Get user's test suites first
-        const suitesResult = await getUserSuiteCount(targetUserId);
+        const suitesResult = await suiteService.getUserSuites(targetUserId);
         if (!suitesResult.success) {
             return suitesResult;
         }
 
         let totalRecordingCount = 0;
-        const suites = suitesResult.data.suites;
+        const suites = suitesResult.suites;
 
-        // Count recordings across all suites
         for (const suite of suites) {
-            const recordingsResult = await firestoreService.getSuiteAssets(suite.id, 'recordings');
+            const recordingsResult = await firestoreService.getSuiteAssets(suite.suite_id, 'recordings');
             if (recordingsResult.success) {
                 totalRecordingCount += recordingsResult.data.length;
             }
@@ -520,13 +431,9 @@ export const getUserRecordingCount = async (userId) => {
                 message: 'Recording count retrieved'
             }
         };
-
     } catch (error) {
         console.error('Error getting user recording count:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -554,13 +461,9 @@ export const canCreateNewTestScript = async (userId) => {
                 message: 'Test script creation allowed'
             }
         };
-
     } catch (error) {
         console.error('Error checking test script creation permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -588,13 +491,9 @@ export const canCreateNewAutomatedTest = async (userId) => {
                 message: 'Automated test creation allowed'
             }
         };
-
     } catch (error) {
         console.error('Error checking automated test creation permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -622,13 +521,9 @@ export const canCreateNewRecording = async (userId) => {
                 message: 'Recording creation allowed'
             }
         };
-
     } catch (error) {
         console.error('Error checking recording creation permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -656,18 +551,14 @@ export const canExportReport = async (userId) => {
                 message: 'Report export allowed'
             }
         };
-
     } catch (error) {
         console.error('Error checking report export permission:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
 /**
- * Get user's monthly export count (placeholder - would need export tracking)
+ * Get user's monthly export count (placeholder)
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Monthly export count result
  */
@@ -678,8 +569,6 @@ export const getUserMonthlyExportCount = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        // This would require an exports collection to track export history
-        // For now, return placeholder data
         return {
             success: true,
             data: {
@@ -687,13 +576,9 @@ export const getUserMonthlyExportCount = async (userId) => {
                 message: 'Monthly export count retrieved (placeholder)'
             }
         };
-
     } catch (error) {
         console.error('Error getting user monthly export count:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -709,24 +594,19 @@ export const getUserCapabilities = async (userId) => {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        // Get account info to determine account type
         const accountInfo = await getCompleteAccountInfo(targetUserId);
         if (!accountInfo.success) {
             return accountInfo;
         }
 
         const accountType = accountInfo.data.accountType || 'individual';
-        
-        // Get default capabilities based on account type
-        const defaultCapabilities = getDefaultCapabilities(accountType);
-        
-        // Get current usage stats
+        const defaultCapabilities = getDefaultCapabilities(accountType).data;
+
         const usageStats = await getUserUsageStats(targetUserId);
         const currentUsage = usageStats.success ? usageStats.data : {};
 
-        // Calculate remaining limits
         const capabilities = {
-            ...defaultCapabilities.data,
+            ...defaultCapabilities,
             currentUsage: {
                 testSuites: currentUsage.testSuitesCount || 0,
                 testScripts: 0,
@@ -738,7 +618,6 @@ export const getUserCapabilities = async (userId) => {
             }
         };
 
-        // Get more detailed usage counts
         const [scriptsResult, automatedTestsResult, recordingsResult, exportsResult] = await Promise.all([
             getUserTestScriptCount(targetUserId),
             getUserAutomatedTestCount(targetUserId),
@@ -759,7 +638,6 @@ export const getUserCapabilities = async (userId) => {
             capabilities.currentUsage.monthlyExports = exportsResult.data.count;
         }
 
-        // Calculate remaining limits
         capabilities.remaining = {
             testSuites: Math.max(0, capabilities.maxTestSuites - capabilities.currentUsage.testSuites),
             testScripts: Math.max(0, capabilities.maxTestScripts - capabilities.currentUsage.testScripts),
@@ -769,7 +647,6 @@ export const getUserCapabilities = async (userId) => {
             teamMembers: Math.max(0, capabilities.maxTeamMembers - capabilities.currentUsage.teamMembers)
         };
 
-        // Add usage percentage for UI indicators
         capabilities.usagePercentage = {
             testSuites: Math.round((capabilities.currentUsage.testSuites / capabilities.maxTestSuites) * 100),
             testScripts: Math.round((capabilities.currentUsage.testScripts / capabilities.maxTestScripts) * 100),
@@ -779,17 +656,10 @@ export const getUserCapabilities = async (userId) => {
             teamMembers: Math.round((capabilities.currentUsage.teamMembers / capabilities.maxTeamMembers) * 100)
         };
 
-        return {
-            success: true,
-            data: capabilities
-        };
-
+        return { success: true, data: capabilities };
     } catch (error) {
         console.error('Error getting user capabilities:', error);
-        return {
-            success: false,
-            error: { message: error.message }
-        };
+        return { success: false, error: { message: error.message } };
     }
 };
 
@@ -800,64 +670,36 @@ export const getUserCapabilities = async (userId) => {
  */
 export const getDefaultCapabilities = (accountType = 'individual') => {
     const baseCapabilities = {
-        // Suite limits
         maxSuites: accountType === 'individual' ? 5 : 50,
         maxTestSuites: accountType === 'individual' ? 5 : 50,
-        
-        // Test limits
         maxTestScripts: accountType === 'individual' ? 20 : 500,
         maxAutomatedTests: accountType === 'individual' ? 10 : 200,
         maxRecordings: accountType === 'individual' ? 10 : 100,
-        
-        // Export limits
         maxMonthlyExports: accountType === 'individual' ? 5 : 50,
-        
-        // Team features
         canInviteTeamMembers: accountType === 'organization',
         maxTeamMembers: accountType === 'individual' ? 1 : 25,
-        
-        // Advanced features
         canExportReports: true,
         canCreateAutomatedTests: true,
         canCreateRecordings: true,
         canCreateTestScripts: true,
-        
-        // Storage limits
         maxStorageGB: accountType === 'individual' ? 1 : 10,
-        
-        // Support level
         supportLevel: accountType === 'individual' ? 'community' : 'email'
     };
 
-    return {
-        success: true,
-        data: baseCapabilities
-    };
+    return { success: true, data: baseCapabilities };
 };
 
-// Default export object
 const accountService = {
-    // Account setup functions
     getAccountSetupStatus,
     getAccountType,
     setupAccount,
     getCompleteAccountInfo,
     updateUserProfile,
     deleteUserAccount,
-
-    // Account type functions
     determineAccountType,
-
-    // Permission checking functions
     canCreateNewSuite,
     canCreateNewTestSuite,
     canInviteTeamMembers,
-    canCreateNewTestScript,
-    canCreateNewAutomatedTest,
-    canCreateNewRecording,
-    canExportReport,
-
-    // Usage counting functions
     getUserSuiteCount,
     getUserTestSuiteCount,
     getOrganizationMemberCount,
@@ -866,37 +708,23 @@ const accountService = {
     getUserRecordingCount,
     getUserMonthlyExportCount,
     getUserUsageStats,
-
-    // Capabilities functions
     getUserCapabilities,
     getDefaultCapabilities
 };
 
 export default accountService;
 
-// Export individual functions for backward compatibility and direct imports
 export {
-    // Account setup functions
     getAccountSetupStatus,
     setupAccount,
     getCompleteAccountInfo,
     updateUserProfile,
     deleteUserAccount,
-
-    // Account type functions
     getAccountType,
     determineAccountType,
-
-    // Permission functions
     canCreateNewSuite,
     canCreateNewTestSuite,
     canInviteTeamMembers,
-    canCreateNewTestScript,
-    canCreateNewAutomatedTest,
-    canCreateNewRecording,
-    canExportReport,
-
-    // Usage functions
     getUserSuiteCount,
     getUserTestSuiteCount,
     getOrganizationMemberCount,
@@ -905,8 +733,6 @@ export {
     getUserRecordingCount,
     getUserMonthlyExportCount,
     getUserUsageStats,
-
-    // Capabilities functions
     getUserCapabilities,
     getDefaultCapabilities
 };
