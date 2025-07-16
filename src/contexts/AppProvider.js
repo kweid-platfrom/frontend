@@ -1,6 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-// contexts/AppProvider.js - Unified provider for QA Test Management Platform
-'use client';
+"use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -9,13 +7,10 @@ import { UserProfileProvider, useUserProfile } from './userProfileContext';
 import SubscriptionProvider, { useSubscription } from './subscriptionContext';
 import { SuiteProvider, useSuite } from './SuiteContext';
 
-// Public pages to skip auth checks when no token is present
 const NO_AUTH_CHECK_PAGES = ['/login', '/register'];
 
-// Create unified app context
 const AppContext = createContext();
 
-// Custom hook to access unified app state
 export const useApp = () => {
     const context = useContext(AppContext);
     if (!context) {
@@ -24,9 +19,7 @@ export const useApp = () => {
     return context;
 };
 
-// Internal provider that combines all contexts
 const UnifiedAppProvider = ({ children }) => {
-    // Get all context values
     const auth = useAuth();
     const userProfile = useUserProfile();
     const subscription = useSubscription();
@@ -34,7 +27,6 @@ const UnifiedAppProvider = ({ children }) => {
     const pathname = usePathname();
     const router = useRouter();
 
-    // Track initialization state with refs to prevent unnecessary re-renders
     const initializationRef = useRef({
         isInitialized: false,
         isInitializing: false,
@@ -42,7 +34,6 @@ const UnifiedAppProvider = ({ children }) => {
         initializationPromise: null,
     });
 
-    // Application-wide state
     const [notifications, setNotifications] = useState([]);
     const [isInitialized, setIsInitialized] = useState(false);
     const [globalLoading, setGlobalLoading] = useState(false);
@@ -50,46 +41,110 @@ const UnifiedAppProvider = ({ children }) => {
     const [appPreferences, setAppPreferences] = useState({
         theme: 'system',
         language: 'en',
-        notifications: {
-            email: true,
-            push: true,
-            inApp: true,
-        },
+        notifications: { email: true, push: true, inApp: true },
     });
-
-    // Navigation state
     const [breadcrumbs, setBreadcrumbs] = useState([]);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const initialModule = pathname?.split('/')[1] || null;
-    const [activeModule, setActiveModule] = useState(() => {
-        return initialModule && initialModule !== '' ? initialModule : null;
-    });
-
-    // Feature flags
+    const [activeModule, setActiveModule] = useState(pathname?.split('/')[1] || null);
     const [featureFlags, setFeatureFlags] = useState({
         betaFeatures: false,
         advancedReports: false,
         teamCollaboration: false,
         apiAccess: false,
         automation: false,
+        bugTracker: true,
     });
 
-    // Stable authentication status
+    const removeNotification = useCallback((id) => {
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, []);
+
+    const addNotification = useCallback((notification) => {
+        const id = Date.now().toString();
+        const newNotification = {
+            id,
+            timestamp: new Date(),
+            read: false,
+            ...notification,
+        };
+        setNotifications((prev) => [newNotification, ...prev]);
+        if (notification.type === 'success' || notification.type === 'info') {
+            setTimeout(() => removeNotification(id), 5000);
+        }
+        return id;
+    }, [removeNotification]);
+
+    const markNotificationAsRead = useCallback((id) => {
+        setNotifications((prev) =>
+            prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        );
+    }, []);
+
+    const clearAllNotifications = useCallback(() => {
+        setNotifications([]);
+    }, []);
+
+    const navigateToModule = useCallback((module) => {
+        setActiveModule(module);
+        const moduleMap = {
+            dashboard: ['Dashboard'],
+            bugs: ['Bug Tracker'],
+            testcases: ['Test Cases'],
+            recordings: ['Recordings'],
+            automation: ['Automation'],
+            reports: ['Reports'],
+            settings: ['Settings'],
+            upgrade: ['Upgrade'],
+        };
+        setBreadcrumbs(moduleMap[module] || [module]);
+    }, []);
+
+    const updateBreadcrumbs = useCallback((crumbs) => {
+        setBreadcrumbs(crumbs);
+    }, []);
+
+    const hasFeatureAccess = useCallback(
+        (feature) => subscription.hasFeatureAccess?.(feature) || feature === 'bugTracker',
+        [subscription]
+    );
+
+    const checkFeatureLimit = useCallback(
+        (feature, currentUsage) => {
+            const limits = subscription.getFeatureLimits?.() || {};
+            const limit = limits[feature] || (feature === 'bugTracker' ? -1 : 0);
+            return {
+                canUse: limit === -1 || currentUsage < limit,
+                unlimited: limit === -1,
+                limit,
+                remaining: Math.max(0, limit - currentUsage),
+                usage: currentUsage,
+            };
+        },
+        [subscription]
+    );
+
+    const canCreateResource = useCallback(
+        (resourceType, currentCount = 0) =>
+            subscription.canCreateResource?.(resourceType, currentCount) || resourceType === 'bugs',
+        [subscription]
+    );
+
+    const getResourceLimit = useCallback(
+        (resourceType) => subscription.getResourceLimit?.(resourceType) || (resourceType === 'bugs' ? -1 : 0),
+        [subscription]
+    );
+
     const isAuthenticated = useMemo(() => {
         const currentAuth = auth.currentUser && auth.currentUser.uid && !auth.loading;
-        if (initializationRef.current.lastAuthState !== currentAuth) {
-            initializationRef.current.lastAuthState = currentAuth;
-        }
+        initializationRef.current.lastAuthState = currentAuth;
         return currentAuth;
-    }, [auth.currentUser?.uid, auth.loading]);
+    }, [auth.currentUser, auth.loading]);
 
-    // Override auth loading for public pages
     const authLoadingOverride = useMemo(() => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
         return NO_AUTH_CHECK_PAGES.includes(pathname) && !token ? false : auth.loading;
     }, [auth.loading, pathname]);
 
-    // Optimized loading state
     const isLoading = useMemo(() => {
         if (!isAuthenticated) return false;
         if (initializationRef.current.isInitialized) return false;
@@ -108,16 +163,19 @@ const UnifiedAppProvider = ({ children }) => {
         globalLoading,
     ]);
 
-    // Memoized user capabilities
     const userCapabilities = useMemo(() => {
         if (!isAuthenticated || !subscription.subscriptionStatus) {
             return {
-                canCreateSuite: false,
                 canViewSuite: false,
                 canEditSuite: false,
                 canDeleteSuite: false,
                 canInviteTeamMembers: false,
                 canManageOrganization: false,
+                canViewBugs: false,
+                canCreateBugs: false,
+                canUpdateBugs: false,
+                canDeleteBugs: false,
+                canManageBugs: false,
                 hasActiveSubscription: false,
                 isTrialActive: false,
                 trialDaysRemaining: 0,
@@ -126,37 +184,29 @@ const UnifiedAppProvider = ({ children }) => {
 
         const capabilities = subscription.subscriptionStatus.capabilities || {};
         const limits = subscription.getFeatureLimits?.() || {};
+        const userRole = auth.getPrimaryUserRole?.(userProfile.userProfile?.organizationId) || userProfile.userProfile?.role || 'member';
 
         return {
             ...capabilities,
             limits,
-            canCreateSuite: auth.canCreateSuite,
             canViewSuite: auth.canViewSuite,
             canEditSuite: auth.canEditSuite,
             canDeleteSuite: auth.canDeleteSuite,
             canInviteTeamMembers: auth.canInviteTeamMembers,
             canManageOrganization: auth.canManageOrganization,
+            canViewBugs: true,
+            canCreateBugs: true,
+            canUpdateBugs: userRole === 'admin' || userRole === 'editor',
+            canDeleteBugs: userRole === 'admin',
+            canManageBugs: userRole === 'admin',
             hasActiveSubscription: subscription.subscriptionStatus.isValid || false,
             isTrialActive: subscription.subscriptionStatus.isTrial || false,
             trialDaysRemaining: subscription.subscriptionStatus.trialDaysRemaining || 0,
             canCreateResource: subscription.canCreateResource,
             getResourceLimit: subscription.getResourceLimit,
         };
-    }, [
-        isAuthenticated,
-        subscription.subscriptionStatus,
-        auth.canCreateSuite,
-        auth.canViewSuite,
-        auth.canEditSuite,
-        auth.canDeleteSuite,
-        auth.canInviteTeamMembers,
-        auth.canManageOrganization,
-        subscription.getFeatureLimits,
-        subscription.canCreateResource,
-        subscription.getResourceLimit,
-    ]);
+    }, [isAuthenticated, subscription, auth, userProfile.userProfile?.organizationId, userProfile.userProfile?.role]);
 
-    // Optimized account summary
     const accountSummary = useMemo(() => {
         if (!isAuthenticated || !userProfile.userProfile || !auth.currentUser) {
             return null;
@@ -177,7 +227,7 @@ const UnifiedAppProvider = ({ children }) => {
                 accountType: auth.accountType || profile.accountType,
                 organizationId: profile.organizationId,
                 organizationName: profile.organizationName,
-                role: auth.getPrimaryUserRole(profile.organizationId) || profile.role,
+                role: auth.getPrimaryUserRole?.(profile.organizationId) || profile.role,
                 memberships: profile.account_memberships || [],
             },
             subscription: {
@@ -196,107 +246,10 @@ const UnifiedAppProvider = ({ children }) => {
             suites: {
                 total: suite.suites?.length || 0,
                 active: suite.activeSuite,
-                canCreate: auth.canCreateSuite,
             },
         };
-    }, [
-        isAuthenticated,
-        auth.currentUser,
-        auth.email,
-        auth.displayName,
-        auth.accountType,
-        auth.getPrimaryUserRole,
-        auth.canCreateSuite,
-        userProfile.userProfile,
-        subscription.subscriptionStatus,
-        suite.suites,
-        suite.activeSuite,
-    ]);
+    }, [isAuthenticated, userProfile.userProfile, auth, subscription.subscriptionStatus, suite.suites?.length, suite.activeSuite]);
 
-    // Notification management
-    const addNotification = useCallback((notification) => {
-        const id = Date.now().toString();
-        const newNotification = {
-            id,
-            timestamp: new Date(),
-            read: false,
-            ...notification,
-        };
-        setNotifications((prev) => [newNotification, ...prev]);
-        if (notification.type === 'success' || notification.type === 'info') {
-            setTimeout(() => removeNotification(id), 5000);
-        }
-        return id;
-    }, []);
-
-    const removeNotification = useCallback((id) => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, []);
-
-    const markNotificationAsRead = useCallback((id) => {
-        setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-        );
-    }, []);
-
-    const clearAllNotifications = useCallback(() => {
-        setNotifications([]);
-    }, []);
-
-    // Navigation helpers
-    const navigateToModule = useCallback((module) => {
-        setActiveModule(module);
-        const moduleMap = {
-            dashboard: ['Dashboard'],
-            bugs: ['Bug Tracker'],
-            testcases: ['Test Cases'],
-            recordings: ['Recordings'],
-            automation: ['Automation'],
-            reports: ['Reports'],
-            settings: ['Settings'],
-            upgrade: ['Upgrade'],
-        };
-        setBreadcrumbs(moduleMap[module] || [module]);
-    }, []);
-
-    const updateBreadcrumbs = useCallback((crumbs) => {
-        setBreadcrumbs(crumbs);
-    }, []);
-
-    // Feature access helpers
-    const hasFeatureAccess = useCallback(
-        (feature) => subscription.hasFeatureAccess?.(feature) || false,
-        [subscription.hasFeatureAccess],
-    );
-
-    const checkFeatureLimit = useCallback(
-        (feature, currentUsage) => {
-            const limits = subscription.getFeatureLimits?.() || {};
-            const limit = limits[feature] || 0;
-            if (limit === -1) return { canUse: true, unlimited: true };
-            return {
-                canUse: currentUsage < limit,
-                unlimited: false,
-                limit,
-                remaining: Math.max(0, limit - currentUsage),
-                usage: currentUsage,
-            };
-        },
-        [subscription.getFeatureLimits],
-    );
-
-    const canCreateResource = useCallback(
-        (resourceType, currentCount = 0) =>
-            subscription.canCreateResource?.(resourceType, currentCount) || false,
-        [subscription.canCreateResource],
-    );
-
-    const getResourceLimit = useCallback(
-        (resourceType) => subscription.getResourceLimit?.(resourceType) || 0,
-        [subscription.getResourceLimit],
-    );
-
-    // Application initialization
     const initializeApp = useCallback(async () => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
         if (NO_AUTH_CHECK_PAGES.includes(pathname) && !token) {
@@ -322,11 +275,9 @@ const UnifiedAppProvider = ({ children }) => {
         }
 
         initializationRef.current.isInitializing = true;
-
         const initPromise = (async () => {
             try {
                 setGlobalLoading(true);
-
                 const createTimeoutPromise = (checkFn, timeout = 5000) => {
                     return new Promise((resolve) => {
                         const startTime = Date.now();
@@ -348,28 +299,22 @@ const UnifiedAppProvider = ({ children }) => {
                 ]);
 
                 if (subscription.subscriptionStatus?.capabilities) {
-                    const capabilities = subscription.subscriptionStatus.capabilities;
-                    setFeatureFlags((prev) => {
-                        const newFlags = {
-                            betaFeatures: capabilities.canUseAPI || false,
-                            advancedReports: capabilities.canExportReports || false,
-                            teamCollaboration: capabilities.canInviteTeamMembers || false,
-                            apiAccess: capabilities.canUseAPI || false,
-                            automation: capabilities.canCreateAutomatedTests || false,
-                        };
-                        if (JSON.stringify(prev) !== JSON.stringify(newFlags)) {
-                            return newFlags;
-                        }
-                        return prev;
-                    });
+                    setFeatureFlags((prev) => ({
+                        ...prev,
+                        betaFeatures: subscription.subscriptionStatus.capabilities.canUseAPI || false,
+                        advancedReports: subscription.subscriptionStatus.capabilities.canExportReports || false,
+                        teamCollaboration: subscription.subscriptionStatus.capabilities.canInviteTeamMembers || false,
+                        apiAccess: subscription.subscriptionStatus.capabilities.canUseAPI || false,
+                        automation: subscription.subscriptionStatus.capabilities.canCreateAutomatedTests || false,
+                        bugTracker: true,
+                    }));
                 }
 
                 if (typeof window !== 'undefined' && !localStorage.getItem('appPreferencesLoaded')) {
                     try {
                         const savedPreferences = localStorage.getItem('appPreferences');
                         if (savedPreferences) {
-                            const parsed = JSON.parse(savedPreferences);
-                            setAppPreferences((prev) => ({ ...prev, ...parsed }));
+                            setAppPreferences((prev) => ({ ...prev, ...JSON.parse(savedPreferences) }));
                         }
                         localStorage.setItem('appPreferencesLoaded', 'true');
                     } catch (error) {
@@ -407,7 +352,6 @@ const UnifiedAppProvider = ({ children }) => {
         pathname,
     ]);
 
-    // Initialization effect
     useEffect(() => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
         if (NO_AUTH_CHECK_PAGES.includes(pathname) && !token) {
@@ -431,7 +375,6 @@ const UnifiedAppProvider = ({ children }) => {
         }
     }, [isAuthenticated, initializeApp, pathname]);
 
-    // Save preferences with debouncing
     useEffect(() => {
         const timeoutId = setTimeout(() => {
             try {
@@ -443,26 +386,14 @@ const UnifiedAppProvider = ({ children }) => {
         return () => clearTimeout(timeoutId);
     }, [appPreferences]);
 
-    // Refresh all data
     const refreshAll = useCallback(async () => {
         const promises = [];
-        if (userProfile.refreshProfile) {
-            promises.push(userProfile.refreshProfile());
-        }
-        if (suite.refetchSuites) {
-            promises.push(suite.refetchSuites(true));
-        }
-        if (subscription.updateTrialStatusInDatabase) {
-            promises.push(subscription.updateTrialStatusInDatabase());
-        }
+        if (userProfile.refreshProfile) promises.push(userProfile.refreshProfile());
+        if (suite.refetchSuites) promises.push(suite.refetchSuites(true));
+        if (subscription.updateTrialStatusInDatabase) promises.push(subscription.updateTrialStatusInDatabase());
         await Promise.allSettled(promises);
-    }, [
-        userProfile.refreshProfile,
-        suite.refetchSuites,
-        subscription.updateTrialStatusInDatabase,
-    ]);
+    }, [userProfile, suite, subscription]);
 
-    // Sign out
     const signOut = useCallback(async () => {
         try {
             setNotifications([]);
@@ -485,144 +416,115 @@ const UnifiedAppProvider = ({ children }) => {
                 message: 'Failed to sign out. Please try again.',
             });
         }
-    }, [auth.signOut, addNotification, router]);
+    }, [auth, router, addNotification]);
 
-    // Clear error
     const clearError = useCallback(() => setError(null), []);
 
-    // Memoized context value
-    const value = useMemo(
-        () => ({
-            // Authentication
-            ...auth,
-            isAuthenticated,
-            loading: authLoadingOverride,
-
-            // User Profile
-            profile: userProfile.userProfile,
-            userProfile: userProfile.userProfile,
-            isLoading: userProfile.isLoading,
-            isUpdating: userProfile.isUpdating,
-            displayName: auth.displayName,
-            email: auth.email,
-            accountType: auth.accountType,
-            isAdmin: auth.isAdmin,
-            currentAccount: userProfile.currentAccount,
-            hasAdminPermission: auth.hasPermission('manage_organization'),
-            isNewUser: userProfile.isNewUser,
-            isProfileLoaded: !!userProfile.userProfile,
-            fetchUserProfile: userProfile.fetchUserProfile,
-            updateProfile: userProfile.updateProfile,
-            updateProfileField: userProfile.updateProfileField,
-            setupNewUserProfile: userProfile.setupNewUserProfile,
-            refreshUserProfile: userProfile.refreshProfile,
-            clearProfile: userProfile.clearProfile,
-            updateUserProfile: auth.updateUserProfile,
-
-            // Subscription
-            subscription: subscription.subscriptionStatus,
-            subscriptionStatus: subscription.subscriptionStatus,
-            hasFeatureAccess: subscription.hasFeatureAccess,
-            getFeatureLimits: subscription.getFeatureLimits,
-            updateTrialStatusInDatabase: subscription.updateTrialStatusInDatabase,
-            canCreateResource: subscription.canCreateResource,
-            getResourceLimit: subscription.getResourceLimit,
-            createCheckoutSession: subscription.createCheckoutSession,
-            cancelSubscription: subscription.cancelSubscription,
-            reactivateSubscription: subscription.reactivateSubscription,
-            getBillingHistory: subscription.getBillingHistory,
-            updatePaymentMethod: subscription.updatePaymentMethod,
-            billingConfig: subscription.billingConfig,
-            capabilities: subscription.capabilities,
-
-            // Test Suites
-            suites: suite.suites,
-            userTestSuites: suite.userTestSuites,
-            activeSuite: suite.activeSuite,
-            setActiveSuite: suite.setActiveSuite,
-            createTestSuite: suite.createTestSuite,
-            canCreateSuite: auth.canCreateSuite,
-            refetchSuites: suite.refetchSuites,
-            fetchUserSuites: suite.fetchUserSuites,
-            getSuiteLimit: suite.getSuiteLimit,
-            shouldFetchSuites: suite.shouldFetchSuites,
-
-            // Application State
-            isInitialized,
-            isLoading,
-            error,
-            accountSummary,
-            userCapabilities,
-
-            // Notifications
-            notifications,
-            addNotification,
-            removeNotification,
-            markNotificationAsRead,
-            clearAllNotifications,
-
-            // Navigation
-            activeModule,
-            breadcrumbs,
-            sidebarCollapsed,
-            setSidebarCollapsed,
-            navigateToModule,
-            updateBreadcrumbs,
-
-            // Features
-            featureFlags,
-            hasFeatureAccess,
-            checkFeatureLimit,
-            canCreateResource,
-            getResourceLimit,
-
-            // Preferences
-            appPreferences,
-            setAppPreferences,
-
-            // Utilities
-            refreshAll,
-            clearError,
-            signOut,
-        }),
-        [
-            auth,
-            isAuthenticated,
-            authLoadingOverride,
-            userProfile,
-            subscription,
-            suite,
-            isInitialized,
-            isLoading,
-            error,
-            accountSummary,
-            userCapabilities,
-            notifications,
-            addNotification,
-            removeNotification,
-            markNotificationAsRead,
-            clearAllNotifications,
-            activeModule,
-            breadcrumbs,
-            sidebarCollapsed,
-            navigateToModule,
-            updateBreadcrumbs,
-            featureFlags,
-            hasFeatureAccess,
-            checkFeatureLimit,
-            canCreateResource,
-            getResourceLimit,
-            appPreferences,
-            refreshAll,
-            clearError,
-            signOut,
-        ],
-    );
+    const value = useMemo(() => ({
+        ...auth,
+        user: auth.currentUser,
+        isAuthenticated,
+        loading: authLoadingOverride,
+        userProfile: userProfile.userProfile,
+        isLoading: userProfile.isLoading,
+        isUpdating: userProfile.isUpdating,
+        displayName: auth.displayName,
+        email: auth.email,
+        accountType: auth.accountType,
+        isAdmin: auth.isAdmin,
+        currentAccount: userProfile.currentAccount,
+        hasAdminPermission: auth.hasPermission?.('manage_organization'),
+        isNewUser: userProfile.isNewUser,
+        isProfileLoaded: !!userProfile.userProfile,
+        fetchUserProfile: userProfile.fetchUserProfile,
+        updateProfile: userProfile.updateProfile,
+        updateProfileField: userProfile.updateProfileField,
+        setupNewUserProfile: userProfile.setupNewUserProfile,
+        refreshUserProfile: userProfile.refreshProfile,
+        clearProfile: userProfile.clearProfile,
+        updateUserProfile: auth.updateUserProfile,
+        subscription: subscription.subscriptionStatus,
+        subscriptionStatus: subscription.subscriptionStatus,
+        hasFeatureAccess,
+        getFeatureLimits: subscription.getFeatureLimits,
+        updateTrialStatusInDatabase: subscription.updateTrialStatusInDatabase,
+        canCreateResource,
+        getResourceLimit,
+        createCheckoutSession: subscription.createCheckoutSession,
+        cancelSubscription: subscription.cancelSubscription,
+        reactivateSubscription: subscription.reactivateSubscription,
+        getBillingHistory: subscription.getBillingHistory,
+        updatePaymentMethod: subscription.updatePaymentMethod,
+        billingConfig: subscription.billingConfig,
+        capabilities: subscription.capabilities,
+        suites: suite.suites,
+        userTestSuites: suite.userTestSuites,
+        activeSuite: suite.activeSuite,
+        setActiveSuite: suite.setActiveSuite,
+        createTestSuite: suite.createTestSuite,
+        refetchSuites: suite.refetchSuites,
+        fetchUserSuites: suite.fetchUserSuites,
+        getSuiteLimit: suite.getSuiteLimit,
+        shouldFetchSuites: suite.shouldFetchSuites,
+        isInitialized,
+        isLoading,
+        error,
+        accountSummary,
+        userCapabilities,
+        notifications,
+        addNotification,
+        removeNotification,
+        markNotificationAsRead,
+        clearAllNotifications,
+        activeModule,
+        breadcrumbs,
+        sidebarCollapsed,
+        setSidebarCollapsed,
+        navigateToModule,
+        updateBreadcrumbs,
+        featureFlags,
+        appPreferences,
+        setAppPreferences,
+        refreshAll,
+        clearError,
+        signOut,
+        checkFeatureLimit,
+    }), [
+        auth,
+        isAuthenticated,
+        authLoadingOverride,
+        userProfile,
+        subscription,
+        suite,
+        isInitialized,
+        isLoading,
+        error,
+        accountSummary,
+        userCapabilities,
+        notifications,
+        addNotification,
+        removeNotification,
+        markNotificationAsRead,
+        clearAllNotifications,
+        activeModule,
+        breadcrumbs,
+        sidebarCollapsed,
+        navigateToModule,
+        updateBreadcrumbs,
+        featureFlags,
+        appPreferences,
+        hasFeatureAccess,
+        canCreateResource,
+        getResourceLimit,
+        refreshAll,
+        clearError,
+        signOut,
+        checkFeatureLimit,
+    ]);
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
-// Main AppProvider component
 export const AppProvider = ({ children }) => {
     return (
         <AuthProvider>
@@ -637,10 +539,9 @@ export const AppProvider = ({ children }) => {
     );
 };
 
-// Convenience hooks
 export const useAppAuth = () => {
-    const { currentUser, signIn, signOut, registerWithEmail, loading, authError } = useApp();
-    return { user: currentUser, signIn, signOut, signUp: registerWithEmail, loading, error: authError };
+    const { user, signIn, signOut, registerWithEmail, loading, authError } = useApp();
+    return { user, signIn, signOut, signUp: registerWithEmail, loading, error: authError };
 };
 
 export const useAppSubscription = () => {
@@ -682,7 +583,6 @@ export const useAppSuites = () => {
         activeSuite,
         setActiveSuite,
         createTestSuite,
-        canCreateSuite,
         refetchSuites,
     } = useApp();
     return {
@@ -690,16 +590,14 @@ export const useAppSuites = () => {
         activeSuite,
         setActiveSuite,
         createTestSuite,
-        canCreateSuite,
         refetchSuites,
     };
 };
 
 export const useAppProfile = () => {
-    const { userProfile, profile, refreshUserProfile, updateProfile, isLoading } = useApp();
+    const { userProfile, refreshUserProfile, updateProfile, isLoading } = useApp();
     return {
         userProfile,
-        profile,
         refreshUserProfile,
         updateProfile,
         loading: isLoading,

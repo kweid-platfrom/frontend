@@ -1,199 +1,391 @@
-import React, { useState } from "react";
-import { X, Bug, AlertCircle, Paperclip } from "lucide-react";
-import BugReportBasicInfo from "../../components/create-bug/BugReportBasicInfo";
-import BugReportAttachments from "../../components/create-bug/BugReportAttachments";
+import React, { useState, useCallback } from 'react';
+import { SparklesIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import BugReportAttachments from './BugReportAttachments';
+import AIPromptBugReport from '../AIPromptBugReport';
 
 const BugReportForm = ({
     formData,
     updateFormData,
     attachments,
     setAttachments,
-    recordings,
-    isLoadingRecordings,
-    error,
-    setError,
+    teamMembers,
     isSubmitting,
     onSubmit,
-    onClose
+    onClose,
 }) => {
-    const [activeTab, setActiveTab] = useState("basic");
+    const [activeTab, setActiveTab] = useState('manual');
 
-    const tabs = [
-        { id: "basic", label: "Basic Info", icon: Bug, shortLabel: "Info" },
-        { id: "attachments", label: "Attachments", icon: Paperclip, shortLabel: "Files" }
-    ];
-
-    const handleSubmit = (e) => {
+    const handleSubmit = useCallback((e) => {
         e.preventDefault();
         onSubmit();
-    };
+    }, [onSubmit]);
 
-    const goToNextTab = () => {
-        const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
-        if (currentIndex < tabs.length - 1) {
-            setActiveTab(tabs[currentIndex + 1].id);
+    const handleAIFormGeneration = useCallback((generatedForm) => {
+        // Update form data with AI generated content
+        Object.keys(generatedForm).forEach(key => {
+            updateFormData(key, generatedForm[key]);
+        });
+        
+        // Switch to manual tab to show the generated form
+        setActiveTab('manual');
+    }, [updateFormData]);
+
+    const tabs = [
+        {
+            id: 'manual',
+            name: 'Manual Entry',
+            icon: DocumentTextIcon,
+            description: 'Fill out the bug report form manually'
+        },
+        {
+            id: 'ai',
+            name: 'AI Generator',
+            icon: SparklesIcon,
+            description: 'Generate bug report from description or console errors'
         }
-    };
-
-    const goToPreviousTab = () => {
-        const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
-        if (currentIndex > 0) {
-            setActiveTab(tabs[currentIndex - 1].id);
-        }
-    };
-
-    const isFirstTab = activeTab === tabs[0].id;
-    const isLastTab = activeTab === tabs[tabs.length - 1].id;
+    ];
 
     return (
-        <>
-            {/* Header - Responsive */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 flex-shrink-0">
-                <div className="flex items-center space-x-2 sm:space-x-3">
-                    <div className="p-1.5 sm:p-2 bg-red-50 rounded-lg">
-                        <Bug className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
-                    </div>
-                    <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Report a Bug</h2>
-                </div>
-                <button
-                    onClick={() => !isSubmitting && onClose()}
-                    className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-                    disabled={isSubmitting}
-                    aria-label="Close"
-                >
-                    <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
-                </button>
+        <div className="flex flex-col h-full">
+            {/* Tab Navigation */}
+            <div className="flex-shrink-0 border-b border-gray-200 px-4 sm:px-6">
+                <nav className="-mb-px flex space-x-8">
+                    {tabs.map((tab) => {
+                        const Icon = tab.icon;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                                    activeTab === tab.id
+                                        ? 'border-teal-500 text-teal-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
+                                disabled={isSubmitting}
+                            >
+                                <div className="flex items-center">
+                                    <Icon className="h-5 w-5 mr-2" />
+                                    {tab.name}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </nav>
             </div>
 
-            {/* Tab Navigation - Mobile Friendly */}
-            <div className="flex border-b border-gray-200 px-4 sm:px-6 flex-shrink-0 overflow-x-auto">
-                {tabs.map((tab) => {
-                    const IconComponent = tab.icon;
-                    return (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors duration-200 whitespace-nowrap ${
-                                activeTab === tab.id
-                                    ? "border-[#00897B] text-[#00897B]"
-                                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                            }`}
-                        >
-                            <IconComponent className="h-4 w-4" />
-                            <span className="hidden sm:inline">{tab.label}</span>
-                            <span className="sm:hidden">{tab.shortLabel}</span>
-                            {tab.id === "attachments" && attachments.length > 0 && (
-                                <span className="bg-[#00897B] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                                    {attachments.length}
-                                </span>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
+            {/* Tab Content */}
+            <div className="flex-1 min-h-0">
+                {activeTab === 'manual' && (
+                    <div className="h-full flex flex-col">
+                        {/* Scrollable Form Content */}
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="p-4 sm:p-6">
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                                    {/* Title - Full Width */}
+                                    <div>
+                                        <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                                            Bug Title <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="title"
+                                            value={formData.title}
+                                            onChange={(e) => updateFormData('title', e.target.value)}
+                                            placeholder="Brief description of the bug"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            disabled={isSubmitting}
+                                            required
+                                        />
+                                    </div>
 
-            {/* Content - Scrollable with better mobile spacing */}
-            <div className="flex flex-col flex-1 min-h-0">
-                {/* Error Message */}
-                {error && (
-                    <div className="mx-4 sm:mx-6 mt-4 sm:mt-6">
-                        <div className="flex items-start space-x-3 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-red-700 text-sm">{error}</p>
+                                    {/* Description - Full Width */}
+                                    <div>
+                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                                            Description <span className="text-red-500">*</span>
+                                        </label>
+                                        <textarea
+                                            id="description"
+                                            value={formData.description}
+                                            onChange={(e) => updateFormData('description', e.target.value)}
+                                            placeholder="Detailed description of the bug"
+                                            rows={3}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* Two Column Layout - Actual and Expected Behavior */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div>
+                                            <label htmlFor="actualBehavior" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Actual Behavior <span className="text-red-500">*</span>
+                                            </label>
+                                            <textarea
+                                                id="actualBehavior"
+                                                value={formData.actualBehavior}
+                                                onChange={(e) => updateFormData('actualBehavior', e.target.value)}
+                                                placeholder="What actually happens"
+                                                rows={3}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                                disabled={isSubmitting}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="expectedBehavior" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Expected Behavior
+                                            </label>
+                                            <textarea
+                                                id="expectedBehavior"
+                                                value={formData.expectedBehavior}
+                                                onChange={(e) => updateFormData('expectedBehavior', e.target.value)}
+                                                placeholder="What should happen instead"
+                                                rows={3}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Steps to Reproduce - Full Width */}
+                                    <div>
+                                        <label htmlFor="stepsToReproduce" className="block text-sm font-medium text-gray-700 mb-2">
+                                            Steps to Reproduce
+                                        </label>
+                                        <textarea
+                                            id="stepsToReproduce"
+                                            value={formData.stepsToReproduce}
+                                            onChange={(e) => updateFormData('stepsToReproduce', e.target.value)}
+                                            placeholder="1. Navigate to...&#10;2. Click on...&#10;3. Observe..."
+                                            rows={3}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+
+                                    {/* Four Column Layout - Severity, Category, Environment, Frequency */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Severity <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                id="severity"
+                                                value={formData.severity}
+                                                onChange={(e) => updateFormData('severity', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                disabled={isSubmitting}
+                                                required
+                                            >
+                                                <option value="">Select severity</option>
+                                                <option value="Critical">Critical</option>
+                                                <option value="High">High</option>
+                                                <option value="Medium">Medium</option>
+                                                <option value="Low">Low</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Category <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                id="category"
+                                                value={formData.category}
+                                                onChange={(e) => updateFormData('category', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                disabled={isSubmitting}
+                                                required
+                                            >
+                                                <option value="">Select category</option>
+                                                <option value="UI/UX">UI/UX</option>
+                                                <option value="Functional">Functional</option>
+                                                <option value="Performance">Performance</option>
+                                                <option value="Security">Security</option>
+                                                <option value="Backend">Backend</option>
+                                                <option value="Integration">Integration</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="environment" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Environment
+                                            </label>
+                                            <select
+                                                id="environment"
+                                                value={formData.environment}
+                                                onChange={(e) => updateFormData('environment', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                <option value="Production">Production</option>
+                                                <option value="Staging">Staging</option>
+                                                <option value="Development">Development</option>
+                                                <option value="Testing">Testing</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Frequency
+                                            </label>
+                                            <select
+                                                id="frequency"
+                                                value={formData.frequency}
+                                                onChange={(e) => updateFormData('frequency', e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                <option value="Once">Once</option>
+                                                <option value="Sometimes">Sometimes</option>
+                                                <option value="Often">Often</option>
+                                                <option value="Always">Always</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Two Column Layout - Workaround and Assign To */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div>
+                                            <label htmlFor="workaround" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Workaround (Optional)
+                                            </label>
+                                            <textarea
+                                                id="workaround"
+                                                value={formData.workaround}
+                                                onChange={(e) => updateFormData('workaround', e.target.value)}
+                                                placeholder="Any temporary solutions or workarounds"
+                                                rows={3}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        {/* Assign To and Log Checkboxes */}
+                                        <div className="space-y-6">
+                                            {teamMembers.length > 0 && (
+                                                <div>
+                                                    <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-700 mb-2">
+                                                        Assign To
+                                                    </label>
+                                                    <select
+                                                        id="assignedTo"
+                                                        value={formData.assignedTo || ''}
+                                                        onChange={(e) => updateFormData('assignedTo', e.target.value)}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                        disabled={isSubmitting}
+                                                    >
+                                                        <option value="">Unassigned</option>
+                                                        {teamMembers.map(member => (
+                                                            <option key={member.id} value={member.id}>
+                                                                {member.name} ({member.email})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            {/* Log Checkboxes */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-3">
+                                                    Additional Information
+                                                </label>
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            id="hasConsoleLogs"
+                                                            checked={formData.hasConsoleLogs}
+                                                            onChange={(e) => updateFormData('hasConsoleLogs', e.target.checked)}
+                                                            className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                                            disabled={isSubmitting}
+                                                        />
+                                                        <label htmlFor="hasConsoleLogs" className="ml-2 block text-sm text-gray-700">
+                                                            Console errors are available
+                                                        </label>
+                                                    </div>
+
+                                                    <div className="flex items-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            id="hasNetworkLogs"
+                                                            checked={formData.hasNetworkLogs}
+                                                            onChange={(e) => updateFormData('hasNetworkLogs', e.target.checked)}
+                                                            className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                                            disabled={isSubmitting}
+                                                        />
+                                                        <label htmlFor="hasNetworkLogs" className="ml-2 block text-sm text-gray-700">
+                                                            Network logs are available
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Attachments Section */}
+                                    <div className="border-t pt-6">
+                                        <BugReportAttachments
+                                            attachments={attachments}
+                                            setAttachments={setAttachments}
+                                            isSubmitting={isSubmitting}
+                                        />
+                                    </div>
+
+                                    {/* Add some bottom spacing to ensure form content doesn't get cut off */}
+                                    <div className="pb-6"></div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* Fixed Bottom Section - Submit Only */}
+                        <div className="flex-shrink-0 bg-white border-t px-4 sm:px-6 py-4 shadow-lg">
+                            {/* Submit Button */}
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    onClick={handleSubmit}
+                                    className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                                        isSubmitting
+                                            ? 'bg-gray-400 cursor-not-allowed'
+                                            : 'bg-teal-600 hover:bg-teal-700'
+                                    }`}
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        'Submit Bug Report'
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {/* Scrollable Form Content */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                    {activeTab === "basic" && (
-                        <BugReportBasicInfo
-                            formData={formData}
-                            updateFormData={updateFormData}
+                {activeTab === 'ai' && (
+                    <div className="h-full overflow-y-auto p-4 sm:p-6">
+                        <AIPromptBugReport
+                            onFormGeneration={handleAIFormGeneration}
+                            isProcessing={isSubmitting}
                         />
-                    )}
-
-                    {activeTab === "attachments" && (
-                        <BugReportAttachments
-                            attachments={attachments}
-                            setAttachments={setAttachments}
-                            recordings={recordings}
-                            isLoadingRecordings={isLoadingRecordings}
-                            error={error}
-                            setError={setError}
-                            updateFormData={updateFormData}
-                        />
-                    )}
-                </div>
-
-                {/* Fixed Footer - Mobile Responsive */}
-                <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                    <div className="flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
-                        {/* Navigation Buttons */}
-                        <div className="flex space-x-2 w-full sm:w-auto">
-                            <button
-                                type="button"
-                                onClick={goToPreviousTab}
-                                disabled={isFirstTab || isSubmitting}
-                                className={`flex-1 sm:flex-none px-4 py-2 border border-gray-300 text-gray-700 rounded-lg transition-colors duration-200 ${
-                                    isFirstTab || isSubmitting
-                                        ? "opacity-50 cursor-not-allowed"
-                                        : "hover:bg-gray-50"
-                                }`}
-                            >
-                                Previous
-                            </button>
-                            
-                            {!isLastTab && (
-                                <button
-                                    type="button"
-                                    onClick={goToNextTab}
-                                    disabled={isSubmitting}
-                                    className="flex-1 sm:flex-none px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Next
-                                </button>
-                            )}
-                        </div>
-                        
-                        {/* Submit Button */}
-                        <button
-                            type="submit"
-                            onClick={handleSubmit}
-                            disabled={isSubmitting}
-                            className="w-full sm:w-auto bg-[#00897B] hover:bg-[#00796B] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 px-6 rounded-lg font-medium transition-all duration-200"
-                        >
-                            {isSubmitting ? (
-                                <div className="flex items-center justify-center space-x-2">
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    <span className="hidden sm:inline">Submitting...</span>
-                                    <span className="sm:hidden">...</span>
-                                </div>
-                            ) : (
-                                <>
-                                    <span className="hidden sm:inline">Submit Bug Report</span>
-                                    <span className="sm:hidden">Submit</span>
-                                </>
-                            )}
-                        </button>
                     </div>
-                    
-                    {/* Progress Indicator for Mobile */}
-                    <div className="sm:hidden mt-3 flex justify-center space-x-2">
-                        {tabs.map((tab) => (
-                            <div
-                                key={tab.id}
-                                className={`h-2 w-8 rounded-full transition-colors duration-200 ${
-                                    activeTab === tab.id
-                                        ? "bg-[#00897B]"
-                                        : "bg-gray-200"
-                                }`}
-                            />
-                        ))}
-                    </div>
-                </div>
+                )}
             </div>
-        </>
+        </div>
     );
 };
 

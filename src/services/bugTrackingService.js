@@ -1,355 +1,385 @@
-"use client"
-import { useState, useEffect, useCallback } from 'react';
-import { Timestamp } from 'firebase/firestore';
-import { useApp } from '../contexts/AppProvider';
-import firestoreService from '../services/firestoreService';
+import { Timestamp, where, orderBy } from 'firebase/firestore';
+import { calculateBugMetrics } from '../utils/calculateBugMetrics';
+import firestoreService from './firestoreService';
+import {
+    getTeamMemberName,
+    getPriorityFromSeverity,
+    getShortBugId,
+    isPastDue,
+    VALID_BUG_STATUSES,
+    VALID_BUG_SEVERITIES,
+    VALID_ENVIRONMENTS,
+} from '../utils/bugUtils';
 
-// Utility to get date range for filtering
-const getDateRange = (timeRange) => {
-    const now = new Date();
-    const ranges = {
-        '1d': new Date(now.getTime() - 24 * 60 * 60 * 1000),
-        '7d': new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-        '30d': new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-        '90d': new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-    };
-    return ranges[timeRange] || ranges['7d'];
-};
-
-// Convert Firebase Timestamp to Date
-const convertFirebaseDate = (timestamp) => {
-    if (!timestamp) return null;
-    if (typeof timestamp === 'string') return new Date(timestamp);
-    if (timestamp.toDate) return timestamp.toDate();
-    return timestamp;
-};
-
-// Calculate time difference in hours
-const calculateHoursDifference = (startDate, endDate) => {
-    if (!startDate || !endDate) return 0;
-    const start = convertFirebaseDate(startDate);
-    const end = convertFirebaseDate(endDate);
-    return Math.abs(end - start) / (1000 * 60 * 60);
-};
-
-// Calculate bug report completeness score
-const calculateReportCompleteness = (bug) => {
-    let score = 0;
-    const totalFields = 10;
-    if (bug.title?.trim()) score++;
-    if (bug.actualBehavior?.trim()) score++;
-    if (bug.expectedBehavior?.trim()) score++;
-    if (bug.stepsToReproduce?.trim()) score++;
-    if (bug.environment) score++;
-    if (bug.priority) score++;
-    if (bug.severity) score++;
-    if (bug.category) score++;
-    if (bug.hasAttachments || (bug.attachments?.length > 0)) score++;
-    if (bug.hasVideoEvidence || bug.hasConsoleLogs || bug.hasNetworkLogs) score++;
-    return Math.round((score / totalFields) * 100);
-};
-
-// Build query constraints for Firestore
-const buildQueryConstraints = (filters, dateField = 'createdAt') => {
-    const constraints = [];
-    if (filters.timeRange && filters.timeRange !== 'all') {
-        const fromDate = getDateRange(filters.timeRange);
-        constraints.push({ field: dateField, op: '>=', value: Timestamp.fromDate(fromDate) });
+class BugTrackingService {
+    constructor() {
+        this.firestoreService = firestoreService;
     }
-    ['priority', 'severity', 'status', 'source', 'team', 'component', 'environment'].forEach(field => {
-        if (filters[field] && filters[field] !== 'all') {
-            constraints.push({ field, op: '==', value: filters[field] });
+
+    // Get bugs collection path based on suite type
+    getBugsCollectionPath(suite, userId) {
+        if (!suite?.suite_id || !userId) {
+            throw new Error('Invalid suite or user configuration');
         }
-    });
-    return constraints;
-};
-
-// Fetch bug tracking metrics
-const fetchBugTrackingMetrics = async (filters = {}, suiteContext = {}, userCapabilities = {}) => {
-    try {
-        const { suiteId } = suiteContext;
-
-        if (!suiteId) {
-            throw new Error('No suite selected. Please select a suite to view bug metrics.');
+        if (suite.accountType === 'individual') {
+            return `individualAccounts/${userId}/testSuites/${suite.suite_id}/bugs`;
         }
-
-        if (!userCapabilities.canAccessBugs) {
-            throw new Error('Access denied: Bug tracking feature not available.');
+        if (!suite.org_id) {
+            throw new Error('Organization ID missing for organization suite');
         }
+        return `organizations/${suite.org_id}/testSuites/${suite.suite_id}/bugs`;
+    }
 
-        const bugsCollectionPath = `testSuites/${suiteId}/bugs`;
-        const constraints = buildQueryConstraints(filters);
-        const queryResult = await firestoreService.queryDocuments(
-            bugsCollectionPath,
-            [...constraints, { field: 'createdAt', order: 'desc' }],
-            'createdAt',
-            1000
-        );
+    // Get team members collection path
+    getTeamMembersCollectionPath(suite) {
+        if (!suite?.org_id) return null;
+        return `organizations/${suite.org_id}/members`;
+    }
 
-        if (!queryResult.success) {
-            throw new Error(queryResult.error.message);
-        }
+    // Get sprints collection path
+    getSprintsCollectionPath(suite) {
+        if (!suite?.suite_id || !suite?.org_id) return null;
+        return `organizations/${suite.org_id}/testSuites/${suite.suite_id}/sprints`;
+    }
 
-        const bugs = queryResult.data.map(bug => ({
-            ...bug,
-            createdAt: convertFirebaseDate(bug.createdAt),
-            updatedAt: convertFirebaseDate(bug.updatedAt),
-            resolvedAt: convertFirebaseDate(bug.resolvedAt)
-        }));
-
-        console.log(`Fetched ${bugs.length} bugs for suite ${suiteId}`);
-
-        const totalBugs = bugs.length;
-
-        // Calculate distributions
-        const statusCounts = bugs.reduce((acc, bug) => {
-            const status = bug.status || 'Open';
-            acc[status] = (acc[status] || 0) + 1;
-            return acc;
-        }, {});
-
-        const priorityCounts = bugs.reduce((acc, bug) => {
-            const priority = bug.priority || 'Medium';
-            acc[priority] = (acc[priority] || 0) + 1;
-            return acc;
-        }, {});
-
-        const severityCounts = bugs.reduce((acc, bug) => {
-            const severity = bug.severity || 'Medium';
-            acc[severity] = (acc[severity] || 0) + 1;
-            return acc;
-        }, {});
-
-        const sourceCounts = bugs.reduce((acc, bug) => {
-            const source = bug.source || 'manual';
-            acc[source] = (acc[source] || 0) + 1;
-            return acc;
-        }, {});
-
-        const environmentCounts = bugs.reduce((acc, bug) => {
-            const environment = bug.environment || 'Unknown';
-            acc[environment] = (acc[environment] || 0) + 1;
-            return acc;
-        }, {});
-
-        const assigneeCounts = bugs.reduce((acc, bug) => {
-            const assignee = bug.assignedTo || 'Unassigned';
-            acc[assignee] = (acc[assignee] || 0) + 1;
-            return acc;
-        }, {});
-
-        // Calculate resolved bugs and resolution time
-        const resolvedStatuses = ['Resolved', 'Closed', 'Fixed', 'Verified', 'Done'];
-        const resolvedBugs = bugs.filter(bug => resolvedStatuses.includes(bug.status));
-        const resolutionTimes = resolvedBugs
-            .filter(bug => bug.createdAt && bug.resolvedAt)
-            .map(bug => calculateHoursDifference(bug.createdAt, bug.resolvedAt));
-        const avgResolutionTime = resolutionTimes.length > 0
-            ? Math.round(resolutionTimes.reduce((sum, time) => sum + time, 0) / resolutionTimes.length)
-            : 0;
-        const bugResolutionRate = totalBugs > 0
-            ? Math.round((resolvedBugs.length / totalBugs) * 100)
-            : 0;
-
-        // Source metrics
-        const bugsFromScreenRecording = sourceCounts['screen-recording'] || 0;
-        const bugsFromManualTesting = sourceCounts['manual'] || 0;
-        const bugsFromAutomatedTesting = sourceCounts['automated'] || 0;
-
-        // Evidence metrics
-        const bugsWithVideoEvidence = bugs.filter(bug => bug.hasVideoEvidence).length;
-        const bugsWithNetworkLogs = bugs.filter(bug => bug.hasNetworkLogs).length;
-        const bugsWithConsoleLogs = bugs.filter(bug => bug.hasConsoleLogs).length;
-        const bugsWithAttachments = bugs.filter(bug => bug.hasAttachments || (bug.attachments?.length > 0)).length;
-
-        // Priority and severity metrics
-        const criticalBugs = priorityCounts['Critical'] || 0;
-        const highPriorityBugs = priorityCounts['High'] || 0;
-        const mediumPriorityBugs = priorityCounts['Medium'] || 0;
-        const lowPriorityBugs = priorityCounts['Low'] || 0;
-        const criticalSeverity = severityCounts['Critical'] || 0;
-        const highSeverity = severityCounts['High'] || 0;
-        const mediumSeverity = severityCounts['Medium'] || 0;
-        const lowSeverity = severityCounts['Low'] || 0;
-
-        // Quality metrics
-        const completenessScores = bugs.map(calculateReportCompleteness);
-        const avgBugReportCompleteness = completenessScores.length > 0
-            ? Math.round(completenessScores.reduce((sum, score) => sum + score, 0) / completenessScores.length)
-            : 0;
-        const bugsWithSteps = bugs.filter(bug => bug.stepsToReproduce?.trim()).length;
-        const bugReproductionRate = totalBugs > 0
-            ? Math.round((bugsWithSteps / totalBugs) * 100)
-            : 0;
-
-        // Recent activity metrics
-        const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const recentBugs = bugs.filter(bug => convertFirebaseDate(bug.createdAt) >= last24Hours).length;
-        const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const weeklyBugs = bugs.filter(bug => convertFirebaseDate(bug.createdAt) >= last7Days).length;
-        const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const monthlyBugs = bugs.filter(bug => convertFirebaseDate(bug.createdAt) >= last30Days).length;
-
-        // Report metrics
-        const weeklyReportsGenerated = Math.ceil(weeklyBugs / 10);
-        const monthlyReportsGenerated = Math.ceil(monthlyBugs / 20);
-        const avgBugsPerReport = weeklyReportsGenerated > 0
-            ? Math.round(weeklyBugs / weeklyReportsGenerated)
-            : 0;
-
-        // Trend analysis
-        const bugTrend = bugs.reduce((acc, bug) => {
-            const createdDate = convertFirebaseDate(bug.createdAt);
-            if (createdDate) {
-                const date = createdDate.toISOString().split('T')[0];
-                acc[date] = acc[date] || { reported: 0, resolved: 0 };
-                acc[date].reported++;
-                if (bug.resolvedAt) {
-                    const resolvedDate = convertFirebaseDate(bug.resolvedAt);
-                    if (resolvedDate) {
-                        const resolvedDateStr = resolvedDate.toISOString().split('T')[0];
-                        acc[resolvedDateStr] = acc[resolvedDateStr] || { reported: 0, resolved: 0 };
-                        acc[resolvedDateStr].resolved++;
-                    }
-                }
-            }
-            return acc;
-        }, {});
-
-        // Assignment metrics
-        const assignedBugs = bugs.filter(bug => bug.assignedTo?.trim()).length;
-        const unassignedBugs = totalBugs - assignedBugs;
-        const assignmentRate = totalBugs > 0
-            ? Math.round((assignedBugs / totalBugs) * 100)
-            : 0;
-
-        return {
-            totalBugs,
-            resolvedBugs: resolvedBugs.length,
-            activeBugs: totalBugs - resolvedBugs.length,
-            avgResolutionTime,
-            bugResolutionRate,
-            bugsFromScreenRecording,
-            bugsFromManualTesting,
-            bugsFromAutomatedTesting,
-            bugsWithVideoEvidence,
-            bugsWithNetworkLogs,
-            bugsWithConsoleLogs,
-            bugReportsWithAttachments: bugsWithAttachments,
-            criticalBugs,
-            highPriorityBugs,
-            mediumPriorityBugs,
-            lowPriorityBugs,
-            criticalSeverity,
-            highSeverity,
-            mediumSeverity,
-            lowSeverity,
-            assignedBugs,
-            unassignedBugs,
-            assignmentRate,
-            avgBugReportCompleteness,
-            bugReproductionRate,
-            weeklyReportsGenerated,
-            monthlyReportsGenerated,
-            avgBugsPerReport,
-            statusDistribution: statusCounts,
-            priorityDistribution: priorityCounts,
-            severityDistribution: severityCounts,
-            sourceDistribution: sourceCounts,
-            environmentDistribution: environmentCounts,
-            assigneeDistribution: assigneeCounts,
-            bugTrend,
-            recentlyReported: recentBugs,
-            weeklyBugs,
-            monthlyBugs,
-            openBugs: statusCounts['Open'] || 0,
-            inProgress: statusCounts['In Progress'] || 0,
-            closed: statusCounts['Closed'] || 0,
-            summary: {
-                totalItems: totalBugs,
-                criticalIssues: criticalBugs,
-                resolutionRate: bugResolutionRate,
-                suiteId,
-                lastUpdated: new Date()
-            }
+    // Create a bug
+    async createBug(suite, user, bugData) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
+        const bugId = `bug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const firestoreData = {
+            id: bugId,
+            suite_id: suite.suite_id,
+            created_by: user.uid,
+            reportedBy: user.displayName || user.email || 'Unknown User',
+            reportedByEmail: user.email || '',
+            title: bugData.title.trim(),
+            description: bugData.description.trim(),
+            actualBehavior: bugData.actualBehavior?.trim() || '',
+            stepsToReproduce: bugData.stepsToReproduce?.trim() || '',
+            expectedBehavior: bugData.expectedBehavior?.trim() || '',
+            workaround: bugData.workaround?.trim() || '',
+            status: bugData.status || 'New',
+            priority: bugData.priority || getPriorityFromSeverity(bugData.severity),
+            severity: bugData.severity || 'Medium',
+            category: bugData.category || '',
+            tags: bugData.tags || [bugData.category?.toLowerCase().replace(/\s+/g, '_')].filter(Boolean),
+            assignedTo: bugData.assignedTo || null,
+            source: bugData.source || 'manual',
+            environment: bugData.environment || 'Production',
+            browserInfo: bugData.browserInfo || {},
+            deviceInfo: bugData.deviceInfo || {},
+            userAgent: bugData.userAgent || navigator.userAgent,
+            frequency: bugData.frequency || 'Once',
+            hasConsoleLogs: bugData.hasConsoleLogs || false,
+            hasNetworkLogs: bugData.hasNetworkLogs || false,
+            hasAttachments: bugData.hasAttachments || (bugData.attachments?.length > 0),
+            attachments: bugData.attachments?.map(att => ({
+                name: att.name,
+                url: att.url || null,
+                type: att.type || null,
+                size: att.size || null,
+            })) || [],
+            resolution: bugData.resolution || '',
+            resolved_at: bugData.resolvedAt || null,
+            resolvedBy: bugData.resolvedBy || null,
+            resolvedByName: bugData.resolvedByName || null,
+            comments: bugData.comments || [],
+            version: 1,
+            searchTerms: [
+                bugData.title?.toLowerCase(),
+                bugData.description?.toLowerCase(),
+                bugData.category?.toLowerCase(),
+                bugData.severity?.toLowerCase(),
+                bugData.status?.toLowerCase(),
+                bugData.source?.toLowerCase(),
+                bugData.environment?.toLowerCase(),
+            ].filter(Boolean),
+            resolutionHistory: [],
+            commentCount: 0,
+            viewCount: 0,
+            lastActivity: Timestamp.now(),
+            lastActivityBy: user.uid,
+            created_at: Timestamp.now(),
+            updated_at: Timestamp.now(),
         };
-    } catch (error) {
-        console.error('Error fetching bug metrics:', error);
-        const errorMessage = error.message || 'Failed to fetch bug metrics';
-        if (errorMessage.includes('permission-denied') || errorMessage.includes('Access denied')) {
-            throw new Error('You do not have permission to view bugs for this suite');
+        const result = await this.firestoreService.createDocument(bugsCollectionPath, firestoreData);
+        if (!result.success) {
+            throw new Error(result.error?.message || 'Failed to create bug');
         }
-        if (errorMessage.includes('unauthenticated')) {
-            throw new Error('Authentication required. Please log in.');
-        }
-        if (errorMessage.includes('failed-precondition')) {
-            throw new Error('Database query failed. Please try again.');
-        }
-        if (errorMessage.includes('not-found')) {
-            throw new Error('Suite not found or you do not have access.');
-        }
-        throw new Error(errorMessage);
+        return result;
     }
-};
 
-// Main hook for bug tracking metrics
-export const useBugTrackingMetrics = (filters = {}) => {
-    const [metrics, setMetrics] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const { activeSuite, userCapabilities, addNotification, isAuthenticated } = useApp();
-
-    const fetchMetrics = useCallback(async () => {
-        if (!isAuthenticated) {
-            setMetrics(null);
-            setError('User not authenticated');
-            setLoading(false);
-            return;
+    // Update a bug
+    async updateBug(suite, userId, bugId, updates) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, userId);
+        const result = await this.firestoreService.updateDocument(bugsCollectionPath, bugId, {
+            ...updates,
+            updated_at: Timestamp.now(),
+            updated_by: userId,
+        });
+        if (!result.success) {
+            throw new Error(result.error?.message || 'Failed to update bug');
         }
-        if (!activeSuite?.id) {
-            setMetrics(null);
-            setError('No suite selected');
-            setLoading(false);
-            return;
+        return result;
+    }
+
+    // Fetch bugs
+    async fetchBugs(suite, user, filters = {}) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
+        const whereConstraints = [];
+        if (filters.timeRange && filters.timeRange !== 'all') {
+            const fromDate = new Date(Date.now() - ({
+                '1d': 24 * 60 * 60 * 1000,
+                '7d': 7 * 24 * 60 * 60 * 1000,
+                '30d': 30 * 24 * 60 * 60 * 1000,
+                '90d': 90 * 24 * 60 * 60 * 1000,
+            }[filters.timeRange] || 7 * 24 * 60 * 60 * 1000));
+            whereConstraints.push(where('created_at', '>=', Timestamp.fromDate(fromDate)));
         }
-
-        setLoading(true);
-        setError(null);
-        try {
-            const suiteContext = {
-                suiteId: activeSuite.id
-            };
-            const data = await fetchBugTrackingMetrics(filters, suiteContext, userCapabilities);
-            setMetrics(data);
-        } catch (err) {
-            setError(err.message);
-            addNotification({
-                type: 'error',
-                title: 'Bug Metrics Error',
-                message: err.message
-            });
-        } finally {
-            setLoading(false);
+        ['priority', 'severity', 'status', 'source', 'environment'].forEach(field => {
+            if (filters[field] && filters[field] !== 'all') {
+                whereConstraints.push(where(field, '==', filters[field]));
+            }
+        });
+        const orderConstraints = [orderBy('created_at', 'desc')];
+        const queryResult = await this.firestoreService.queryDocuments(
+            bugsCollectionPath,
+            [...whereConstraints, ...orderConstraints],
+            null,
+            1000,
+        );
+        if (!queryResult.success) {
+            throw new Error(queryResult.error?.message || 'Failed to fetch bugs');
         }
-    }, [filters, activeSuite?.id, userCapabilities, isAuthenticated, addNotification]);
+        return queryResult.data.map(doc => ({
+            id: doc.id,
+            ...doc,
+            createdAt: doc.created_at,
+            updatedAt: doc.updated_at,
+            resolvedAt: doc.resolved_at,
+        }));
+    }
 
-    useEffect(() => {
-        fetchMetrics();
-    }, [fetchMetrics]);
+    // Subscribe to bugs
+    subscribeToBugs(suite, user, callback, errorCallback) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
+        return this.firestoreService.subscribeToCollection(
+            bugsCollectionPath,
+            [orderBy('created_at', 'desc')],
+            (docs) => {
+                const bugsData = docs.map(doc => ({
+                    id: doc.id,
+                    ...doc,
+                    createdAt: doc.created_at,
+                    updatedAt: doc.updated_at,
+                    resolvedAt: doc.resolved_at,
+                }));
+                callback(bugsData);
+            },
+            (err) => {
+                const message = err.code === 'permission-denied'
+                    ? 'You don’t have permission to access bugs in this suite'
+                    : 'Failed to load bugs';
+                errorCallback?.({ message, originalError: err });
+            },
+        );
+    }
 
-    const refetch = useCallback(() => fetchMetrics(), [fetchMetrics]);
+    // Fetch team members
+    async fetchTeamMembers(suite) {
+        const teamMembersCollectionPath = this.getTeamMembersCollectionPath(suite);
+        if (!teamMembersCollectionPath) {
+            return [];
+        }
+        const result = await this.firestoreService.queryDocuments(teamMembersCollectionPath);
+        if (!result.success) {
+            throw new Error(result.error?.message || 'Failed to fetch team members');
+        }
+        return result.data.map(doc => ({
+            id: doc.id,
+            name: getTeamMemberName(doc),
+            ...doc,
+        }));
+    }
 
-    return {
-        metrics,
-        loading,
-        error,
-        refetch,
-        canRead: userCapabilities?.canAccessBugs,
-        canWrite: userCapabilities?.canCreateBugs,
-        canModify: userCapabilities?.canCreateBugs,
-        canViewAnalytics: userCapabilities?.canViewBugAnalytics,
-        canExportReports: userCapabilities?.canExportReports
-    };
-};
+    // Subscribe to team members
+    subscribeToTeamMembers(suite, callback, errorCallback) {
+        const teamMembersCollectionPath = this.getTeamMembersCollectionPath(suite);
+        if (!teamMembersCollectionPath) {
+            callback([]);
+            return null;
+        }
+        return this.firestoreService.subscribeToCollection(
+            teamMembersCollectionPath,
+            [],
+            (docs) => {
+                callback(docs.map(doc => ({
+                    id: doc.id,
+                    name: getTeamMemberName(doc),
+                    ...doc,
+                })));
+            },
+            (err) => {
+                const message = err.code === 'permission-denied'
+                    ? 'You don’t have permission to access team members'
+                    : 'Failed to load team members';
+                errorCallback?.({ message, originalError: err });
+            },
+        );
+    }
 
-export { fetchBugTrackingMetrics };
+    // Fetch sprints
+    async fetchSprints(suite) {
+        const sprintsCollectionPath = this.getSprintsCollectionPath(suite);
+        if (!sprintsCollectionPath) {
+            return [];
+        }
+        const result = await this.firestoreService.queryDocuments(sprintsCollectionPath);
+        if (!result.success) {
+            throw new Error(result.error?.message || 'Failed to fetch sprints');
+        }
+        return result.data.map(doc => ({
+            id: doc.id,
+            ...doc,
+        }));
+    }
+
+    // Subscribe to sprints
+    subscribeToSprints(suite, callback, errorCallback) {
+        const sprintsCollectionPath = this.getSprintsCollectionPath(suite);
+        if (!sprintsCollectionPath) {
+            callback([]);
+            return null;
+        }
+        return this.firestoreService.subscribeToCollection(
+            sprintsCollectionPath,
+            [orderBy('created_at', 'desc')],
+            (docs) => {
+                callback(docs.map(doc => ({
+                    id: doc.id,
+                    ...doc,
+                })));
+            },
+            (err) => {
+                const message = err.code === 'permission-denied'
+                    ? 'You don’t have permission to access sprints'
+                    : 'Failed to load sprints';
+                errorCallback?.({ message, originalError: err });
+            },
+        );
+    }
+
+    // Create a sprint
+    async createSprint(suite, sprintData) {
+        const sprintsCollectionPath = this.getSprintsCollectionPath(suite);
+        if (!sprintsCollectionPath) {
+            throw new Error('Invalid suite configuration');
+        }
+        const result = await this.firestoreService.createDocument(sprintsCollectionPath, sprintData);
+        if (!result.success) {
+            throw new Error(result.error?.message || 'Failed to create sprint');
+        }
+        return result;
+    }
+
+    // Fetch bug tracking metrics
+    async fetchBugTrackingMetrics(suite, user, filters = {}) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
+        const whereConstraints = [];
+        if (filters.timeRange && filters.timeRange !== 'all') {
+            const fromDate = new Date(Date.now() - ({
+                '1d': 24 * 60 * 60 * 1000,
+                '7d': 7 * 24 * 60 * 60 * 1000,
+                '30d': 30 * 24 * 60 * 60 * 1000,
+                '90d': 90 * 24 * 60 * 60 * 1000,
+            }[filters.timeRange] || 7 * 24 * 60 * 60 * 1000));
+            whereConstraints.push(where('created_at', '>=', Timestamp.fromDate(fromDate)));
+        }
+        ['priority', 'severity', 'status', 'source', 'environment'].forEach(field => {
+            if (filters[field] && filters[field] !== 'all') {
+                whereConstraints.push(where(field, '==', filters[field]));
+            }
+        });
+        const orderConstraints = [orderBy('created_at', 'desc')];
+        const queryResult = await this.firestoreService.queryDocuments(
+            bugsCollectionPath,
+            [...whereConstraints, ...orderConstraints],
+            null,
+            1000,
+        );
+        if (!queryResult.success) {
+            throw new Error(queryResult.error?.message || 'Failed to fetch bug metrics');
+        }
+        const bugs = queryResult.data.map(doc => ({
+            id: doc.id,
+            ...doc,
+            createdAt: doc.created_at,
+            updatedAt: doc.updated_at,
+            resolvedAt: doc.resolved_at,
+        }));
+        console.log(`Fetched ${bugs.length} bugs for suite ${suite.suite_id}`);
+        return calculateBugMetrics(bugs);
+    }
+
+    // Export bugs
+    async exportBugs(suite, user) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
+        const result = await this.firestoreService.queryDocuments(bugsCollectionPath, [orderBy('created_at', 'desc')]);
+        if (!result.success) {
+            throw new Error(result.error?.message || 'Failed to export bugs');
+        }
+        const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bugs-${suite.suite_id}-${new Date().toISOString()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return { success: true };
+    }
+
+    // Update bug status
+    async updateBugStatus(suite, userId, bugId, status) {
+        if (!VALID_BUG_STATUSES.includes(status)) {
+            throw new Error('Invalid bug status');
+        }
+        return await this.updateBug(suite, userId, bugId, { status });
+    }
+
+    // Update bug severity
+    async updateBugSeverity(suite, userId, bugId, severity) {
+        if (!VALID_BUG_SEVERITIES.includes(severity)) {
+            throw new Error('Invalid bug severity');
+        }
+        const priority = getPriorityFromSeverity(severity);
+        return await this.updateBug(suite, userId, bugId, { severity, priority });
+    }
+
+    // Update bug assignment
+    async updateBugAssignment(suite, userId, bugId, assignedTo) {
+        return await this.updateBug(suite, userId, bugId, { assignedTo: assignedTo || null });
+    }
+
+    // Update bug environment
+    async updateBugEnvironment(suite, userId, bugId, environment) {
+        if (!VALID_ENVIRONMENTS.includes(environment)) {
+            throw new Error('Invalid environment');
+        }
+        return await this.updateBug(suite, userId, bugId, { environment });
+    }
+
+    // Format date
+    formatDate(date) {
+        if (!date) return '-';
+        return new Date(date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
+    }
+}
+
+// Create and export singleton instance
+const bugTrackingService = new BugTrackingService();
+export default bugTrackingService;
+export { BugTrackingService, VALID_BUG_STATUSES, VALID_BUG_SEVERITIES, VALID_ENVIRONMENTS, getShortBugId, isPastDue };

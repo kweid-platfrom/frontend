@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import {
     GripVertical,
@@ -54,6 +56,17 @@ const BugTableRow = ({
     onTitleChange,
     onTitleKeyDown,
 }) => {
+    // Ensure isUpdating is a Set - handle cases where it might be an array or undefined
+    const updatingSet = React.useMemo(() => {
+        if (isUpdating instanceof Set) {
+            return isUpdating;
+        }
+        if (Array.isArray(isUpdating)) {
+            return new Set(isUpdating);
+        }
+        return new Set();
+    }, [isUpdating]);
+
     const getSourceIcon = (source) => {
         switch (source) {
             case 'manual':
@@ -67,12 +80,7 @@ const BugTableRow = ({
 
     const handleSeverityChange = async (bugId, newSeverity, event) => {
         event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
+        if (updatingSet.has(bugId)) return;
         if (onUpdateBugSeverity) {
             try {
                 await onUpdateBugSeverity(bugId, newSeverity);
@@ -84,16 +92,10 @@ const BugTableRow = ({
 
     const handleStatusChange = async (bugId, newStatus, event) => {
         event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
+        if (updatingSet.has(bugId)) return;
         if (onUpdateBugStatus) {
             try {
                 await onUpdateBugStatus(bugId, newStatus);
-                console.log(`[DEBUG] Status update completed for bug ${bugId}`);
             } catch (error) {
                 console.error('Failed to update status:', error);
             }
@@ -102,12 +104,7 @@ const BugTableRow = ({
 
     const handleAssignmentChange = async (bugId, newAssignee, event) => {
         event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
+        if (updatingSet.has(bugId)) return;
         if (onUpdateBugAssignment) {
             try {
                 await onUpdateBugAssignment(bugId, newAssignee);
@@ -119,12 +116,7 @@ const BugTableRow = ({
 
     const handleEnvironmentChange = async (bugId, newEnvironment, event) => {
         event.stopPropagation();
-
-        if (isUpdating.has(bugId)) {
-            console.log(`Update already in progress for bug ${bugId}`);
-            return;
-        }
-
+        if (updatingSet.has(bugId)) return;
         if (onUpdateBugEnvironment) {
             try {
                 await onUpdateBugEnvironment(bugId, newEnvironment);
@@ -147,7 +139,6 @@ const BugTableRow = ({
         }
     };
 
-    // New handler for the chat icon that opens BugDetailsPanel
     const handleChatIconClick = (event) => {
         event.stopPropagation();
         if (onShowBugDetails) {
@@ -158,7 +149,7 @@ const BugTableRow = ({
     const totalAttachments = bug?.attachments?.length || 0;
     const evidenceCount = getEvidenceCount(bug);
     const assignedUser = getAssignedUser(bug);
-    const bugIsUpdating = bug?.id && isUpdating.has(bug.id);
+    const bugIsUpdating = bug?.id && updatingSet.has(bug.id);
     const isEditing = editingTitle === bug?.id;
     const isSelected = selectedIds.includes(bug.id);
     const ROW_HEIGHT = 'h-12';
@@ -174,10 +165,9 @@ const BugTableRow = ({
             className={rowClassName}
             draggable={true}
             onDragStart={(e) => onDragStart && onDragStart(e, bug)}
-            // Removed onClick handler completely to prevent unwanted panel opening
         >
             {/* Checkbox - Sticky */}
-            <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-10 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
+            <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center justify-center h-full">
                     {isSelected ? (
                         <CheckSquare
@@ -194,7 +184,7 @@ const BugTableRow = ({
             </td>
 
             {/* Bug Title - Sticky */}
-            <td className={`px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200 sticky left-10 bg-white z-10 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
+            <td className={`px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200 sticky left-10 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center space-x-2 h-full">
                     <div className="flex-1 min-w-0">
                         {isEditing ? (
@@ -216,7 +206,6 @@ const BugTableRow = ({
                                 >
                                     {bug.title}
                                 </div>
-                                {/* Comments count */}
                                 {bug.comments && bug.comments.length > 0 && (
                                     <div className="flex items-center text-xs text-gray-400">
                                         <MessageSquare className="h-3 w-3 mr-1 flex-shrink-0" />
@@ -273,10 +262,7 @@ const BugTableRow = ({
                 <div className="flex items-center justify-center px-2">
                     <select
                         value={bug?.status || 'New'}
-                        onChange={(e) => {
-                            console.log(`[DEBUG] Status dropdown change detected:`, e.target.value);
-                            handleStatusChange(bug.id, e.target.value, e);
-                        }}
+                        onChange={(e) => handleStatusChange(bug.id, e.target.value, e)}
                         disabled={bugIsUpdating}
                         className={`text-xs px-2 py-1 rounded border-none focus:ring focus:ring-teal-700 cursor-pointer w-full ${getStatusColor(bug?.status)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
@@ -293,9 +279,7 @@ const BugTableRow = ({
                 <div className="flex items-center">
                     <select
                         value={assignedUser || ''}
-                        onChange={(e) => {
-                            handleAssignmentChange(bug.id, e.target.value, e);
-                        }}
+                        onChange={(e) => handleAssignmentChange(bug.id, e.target.value, e)}
                         disabled={bugIsUpdating}
                         className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-1 focus:ring-[#00897B] focus:border-[#00897B] w-full cursor-pointer bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
@@ -324,9 +308,7 @@ const BugTableRow = ({
                 <div className="flex items-center">
                     <select
                         value={bug?.severity || 'Low'}
-                        onChange={(e) => {
-                            handleSeverityChange(bug.id, e.target.value, e);
-                        }}
+                        onChange={(e) => handleSeverityChange(bug.id, e.target.value, e)}
                         disabled={bugIsUpdating}
                         className={`text-xs px-2 py-1 rounded border-none focus:ring-1 focus:ring-[#00897B] cursor-pointer w-full ${getSeverityColor(bug?.severity)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
@@ -394,9 +376,7 @@ const BugTableRow = ({
                 <div className="flex items-center">
                     <select
                         value={bug?.environment || 'Unknown'}
-                        onChange={(e) => {
-                            handleEnvironmentChange(bug.id, e.target.value, e);
-                        }}
+                        onChange={(e) => handleEnvironmentChange(bug.id, e.target.value, e)}
                         disabled={bugIsUpdating}
                         className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-2 focus:ring-[#00897B] focus:border-[#00897B] cursor-pointer w-full bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}

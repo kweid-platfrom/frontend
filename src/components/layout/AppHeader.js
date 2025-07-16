@@ -19,9 +19,10 @@ import {
     UserPlus,
     FileText,
     Plus,
-    MonitorSpeaker
+    MonitorSpeaker,
 } from 'lucide-react';
 import CreateTestSuiteModal from '../../components/modals/CreateTestSuiteModal';
+import BugReportButton from '../modals/BugReportButton';
 
 const AppHeader = ({ 
     activeSuite, 
@@ -29,7 +30,6 @@ const AppHeader = ({
     onMenuClick, 
     onSuiteChange,
     suites = [],
-    setShowBugForm,
     setActivePage,
     hasAdminPermission = false,
     isAdmin = false,
@@ -142,11 +142,6 @@ const AppHeader = ({
     const handleSettingsClick = () => {
         setShowUserMenu(false);
         setActivePage?.('settings');
-    };
-
-    const handleBugReportClick = () => {
-        console.log('Bug report clicked');
-        setShowBugForm?.(true);
     };
 
     const handleRunTests = () => {
@@ -373,15 +368,9 @@ const AppHeader = ({
                     </div>
                     <div className="flex items-center space-x-2">
                         <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
-                            <button
-                                onClick={handleBugReportClick}
-                                className="text-gray-700 px-3 py-2 text-sm rounded-md flex items-center space-x-2 hover:bg-red-100 hover:text-red-700 transition-colors"
-                                title="Report Bug"
-                                aria-label="Report a bug"
-                            >
-                                <FileText className="h-4 w-4" />
-                                <span className="hidden lg:inline">Report Bug</span>
-                            </button>
+                            {/* Replace the old bug report button with the BugReportButton component */}
+                            <BugReportButton className="!bg-transparent !border-0 !text-gray-700 hover:!bg-red-100 hover:!text-red-700 !rounded-md !px-3 !py-2" />
+                            
                             <button
                                 onClick={handleRunTests}
                                 className="text-gray-700 px-3 py-2 text-sm rounded-md flex items-center space-x-2 hover:bg-green-100 hover:text-green-700 transition-colors"

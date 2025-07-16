@@ -1,10 +1,10 @@
-// components/BugDetailsPanel.js
+'use client';
+
 import React, { useState, useEffect } from "react";
 import { doc, updateDoc, arrayUnion, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db } from "../../config/firebase";
-import { useSuite } from '../../context/SuiteContext';
-import { useAuth } from '../../context/AuthProvider';
-import { toast } from "sonner";
+import { useSuite } from '../../contexts/SuiteContext';
+import { useApp } from '../../contexts/AppProvider';
 import BugComments from "../bug-report/BugComments";
 import EditableField from "../bugview/EditableField";
 import AttachmentsList from "../bugview/AttachmentsList";
@@ -14,13 +14,14 @@ import {
     Paperclip, X
 } from "lucide-react";
 
-const BugItemDetails = ({ 
+const BugDetailsPanel = ({ 
     bug, 
     teamMembers, 
     sprints, 
-    onBugUpdate, 
+    onUpdateBug, 
     formatDate,
-    onClose 
+    onClose,
+    permissions,
 }) => {
     const [editedBug, setEditedBug] = useState({ ...bug });
     const [comments, setComments] = useState(bug.messages || []);
@@ -29,16 +30,14 @@ const BugItemDetails = ({
     const [tempValues, setTempValues] = useState({});
 
     const { activeSuite } = useSuite();
-    const { hasPermission, user } = useAuth();
+    const { user, addNotification } = useApp();
 
-    // Default formatDate function if not provided
     const defaultFormatDate = (timestamp) => {
         if (!timestamp) return 'N/A';
         
         try {
             let date;
             if (timestamp?.toDate) {
-                // Firestore Timestamp
                 date = timestamp.toDate();
             } else if (timestamp instanceof Date) {
                 date = timestamp;
@@ -61,10 +60,8 @@ const BugItemDetails = ({
         }
     };
 
-    // Use provided formatDate or fallback to default
     const safeFormatDate = formatDate && typeof formatDate === 'function' ? formatDate : defaultFormatDate;
 
-    // Listen for real-time updates to this specific bug using the correct subcollection path
     useEffect(() => {
         if (!activeSuite?.suite_id || !bug.id) return;
 
@@ -79,18 +76,30 @@ const BugItemDetails = ({
         }, (error) => {
             console.error("Error listening to bug updates:", error);
             if (error.code === 'permission-denied') {
-                toast.error("You do not have permission to view this bug");
+                addNotification({
+                    type: 'error',
+                    title: 'Permission Denied',
+                    message: 'You do not have permission to view this bug'
+                });
             } else {
-                toast.error("Error loading bug data: " + error.message);
+                addNotification({
+                    type: 'error',
+                    title: 'Error Loading Bug',
+                    message: `Error loading bug data: ${error.message}`
+                });
             }
         });
 
         return () => unsubscribe();
-    }, [bug.id, activeSuite?.suite_id]);
+    }, [bug.id, activeSuite?.suite_id, addNotification]);
 
     const handleFieldEdit = (field, value) => {
-        if (!hasPermission('write_bugs')) {
-            toast.error('You do not have permission to edit bugs');
+        if (!permissions.canUpdateBugs) {
+            addNotification({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'You do not have permission to edit bugs'
+            });
             return;
         }
         setEditingField(field);
@@ -98,13 +107,21 @@ const BugItemDetails = ({
     };
 
     const handleFieldSave = async (field) => {
-        if (!hasPermission('write_bugs')) {
-            toast.error('You do not have permission to edit bugs');
+        if (!permissions.canUpdateBugs) {
+            addNotification({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'You do not have permission to edit bugs'
+            });
             return;
         }
 
         if (!activeSuite?.suite_id) {
-            toast.error('No active suite selected');
+            addNotification({
+                type: 'error',
+                title: 'No Active Suite',
+                message: 'No active suite selected'
+            });
             return;
         }
 
@@ -114,18 +131,15 @@ const BugItemDetails = ({
             
             let updateData = { [field]: tempValues[field] };
             
-            // Handle date fields
             if (field === 'dueDate' && tempValues[field]) {
                 updateData[field] = new Date(tempValues[field]);
             }
 
-            // Update the bug data with serverTimestamp
             await updateDoc(bugRef, {
                 ...updateData,
                 updatedAt: serverTimestamp()
             });
 
-            // Add to activity log
             await updateDoc(bugRef, {
                 activityLog: arrayUnion({
                     action: `updated ${field}`,
@@ -134,19 +148,31 @@ const BugItemDetails = ({
                 })
             });
 
-            if (onBugUpdate) {
-                onBugUpdate({ ...editedBug, ...updateData });
+            if (onUpdateBug) {
+                onUpdateBug({ ...editedBug, ...updateData });
             }
             
-            toast.success(`${field} updated successfully!`);
+            addNotification({
+                type: 'success',
+                title: 'Bug Updated',
+                message: `${field} updated successfully`
+            });
             setEditingField(null);
             setTempValues({});
         } catch (error) {
             console.error(`Error updating ${field}:`, error);
             if (error.code === 'permission-denied') {
-                toast.error('You do not have permission to update this bug');
+                addNotification({
+                    type: 'error',
+                    title: 'Permission Denied',
+                    message: 'You do not have permission to update this bug'
+                });
             } else {
-                toast.error(`Error updating ${field}: ${error.message}`);
+                addNotification({
+                    type: 'error',
+                    title: 'Update Failed',
+                    message: `Error updating ${field}: ${error.message}`
+                });
             }
         } finally {
             setLoading(false);
@@ -161,13 +187,21 @@ const BugItemDetails = ({
     const handleAddComment = async (commentText, attachments = []) => {
         if (!commentText.trim() && attachments.length === 0) return;
 
-        if (!hasPermission('write_bugs')) {
-            toast.error('You do not have permission to add comments');
+        if (!permissions.canUpdateBugs) {
+            addNotification({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'You do not have permission to add comments'
+            });
             return;
         }
 
         if (!activeSuite?.suite_id) {
-            toast.error('No active suite selected');
+            addNotification({
+                type: 'error',
+                title: 'No Active Suite',
+                message: 'No active suite selected'
+            });
             return;
         }
 
@@ -195,13 +229,25 @@ const BugItemDetails = ({
                 })
             });
             
-            toast.success("Comment added successfully");
+            addNotification({
+                type: 'success',
+                title: 'Comment Added',
+                message: 'Comment added successfully'
+            });
         } catch (error) {
             console.error("Error sending message:", error);
             if (error.code === 'permission-denied') {
-                toast.error('You do not have permission to add comments');
+                addNotification({
+                    type: 'error',
+                    title: 'Permission Denied',
+                    message: 'You do not have permission to add comments'
+                });
             } else {
-                toast.error(`Error sending message: ${error.message}`);
+                addNotification({
+                    type: 'error',
+                    title: 'Comment Failed',
+                    message: `Error sending message: ${error.message}`
+                });
             }
         } finally {
             setLoading(false);
@@ -241,17 +287,14 @@ const BugItemDetails = ({
         onSave: handleFieldSave,
         onCancel: handleFieldCancel,
         setTempValues,
-        disabled: !hasPermission('write_bugs')
+        disabled: !permissions.canUpdateBugs
     };
 
     return (
         <div className="h-full flex flex-col bg-white shadow-xl">
-            {/* Header */}
             <div className="flex-shrink-0 px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-start justify-between">
-                    {/* Left side - Title and Bug Info */}
                     <div className="flex-1 space-y-3 min-w-0">
-                        {/* Bug Title - Editable */}
                         <div className="pr-4 font-semibold text-2xl">
                             <EditableField
                                 field="title"
@@ -262,8 +305,6 @@ const BugItemDetails = ({
                                 {...editableFieldProps}
                             />
                         </div>
-                        
-                        {/* Bug Metadata */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-3">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-teal-800">
@@ -273,15 +314,12 @@ const BugItemDetails = ({
                                     Created {safeFormatDate(editedBug.createdAt)}
                                 </span>
                             </div>
-                            
                             <div className="flex items-center text-xs text-gray-500">
                                 <User className="h-3 w-3 mr-1" />
                                 <span>Reporter: {editedBug.reporter}</span>
                             </div>
                         </div>
                     </div>
-
-                    {/* Right side - Close Button */}
                     <div className="flex-shrink-0 ml-4">
                         <button
                             onClick={onClose}
@@ -293,11 +331,8 @@ const BugItemDetails = ({
                     </div>
                 </div>
             </div>
-
-            {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto pb-4">
                 <div className="px-6 py-6 space-y-8">
-                    {/* Description */}
                     <div className="space-y-3">
                         <h3 className="text-base font-semibold text-gray-900 flex items-center">
                             Description
@@ -312,8 +347,6 @@ const BugItemDetails = ({
                             />
                         </div>
                     </div>
-
-                    {/* Bug Details Grid */}
                     <div className="space-y-6">
                         <h3 className="text-base font-semibold text-gray-900">Details</h3>
                         <div className="grid grid-cols-1 gap-6">
@@ -329,7 +362,6 @@ const BugItemDetails = ({
                                         {...editableFieldProps}
                                     />
                                 </div>
-
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-gray-700">Severity</h4>
                                     <EditableField
@@ -342,7 +374,6 @@ const BugItemDetails = ({
                                     />
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-gray-700">Assignee</h4>
@@ -355,7 +386,6 @@ const BugItemDetails = ({
                                         {...editableFieldProps}
                                     />
                                 </div>
-
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-gray-700">Sprint</h4>
                                     <EditableField
@@ -367,7 +397,6 @@ const BugItemDetails = ({
                                     />
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-gray-700">Due Date</h4>
@@ -379,7 +408,6 @@ const BugItemDetails = ({
                                         {...editableFieldProps}
                                     />
                                 </div>
-
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-gray-700">Environment</h4>
                                     <EditableField
@@ -393,8 +421,6 @@ const BugItemDetails = ({
                             </div>
                         </div>
                     </div>
-
-                    {/* Steps to Reproduce */}
                     <div className="space-y-3">
                         <h3 className="text-base font-semibold text-gray-900">Steps to Reproduce</h3>
                         <div className="bg-gray-50 rounded-lg p-4">
@@ -402,13 +428,11 @@ const BugItemDetails = ({
                                 field="stepsToReproduce"
                                 value={editedBug.stepsToReproduce}
                                 type="textarea"
-                                placeholder="1. Step one&#10;2. Step two&#10;3. Step three..."
+                                placeholder="1. Step one\n2. Step two\n3. Step three..."
                                 {...editableFieldProps}
                             />
                         </div>
                     </div>
-
-                    {/* Expected vs Actual Results */}
                     <div className="space-y-6">
                         <h3 className="text-base font-semibold text-gray-900">Results</h3>
                         <div className="grid grid-cols-1 gap-6">
@@ -424,7 +448,6 @@ const BugItemDetails = ({
                                     />
                                 </div>
                             </div>
-
                             <div className="space-y-3">
                                 <h4 className="text-sm font-medium text-gray-700">Actual Result</h4>
                                 <div className="bg-red-50 rounded-lg p-4 border border-red-200">
@@ -439,8 +462,6 @@ const BugItemDetails = ({
                             </div>
                         </div>
                     </div>
-
-                    {/* Attachments */}
                     {editedBug.attachments && editedBug.attachments.length > 0 && (
                         <div className="space-y-3">
                             <h3 className="text-base font-semibold text-gray-900 flex items-center">
@@ -450,20 +471,14 @@ const BugItemDetails = ({
                             <AttachmentsList attachments={editedBug.attachments} />
                         </div>
                     )}
-
-                    {/* Activity Log */}
                     {editedBug.activityLog && editedBug.activityLog.length > 0 && (
                         <ActivityLog activities={editedBug.activityLog} formatDate={safeFormatDate} />
                     )}
-
-                    {/* Comments Section Header */}
                     <div className="space-y-3">
                         <h3 className="text-base font-semibold text-gray-900">Comments</h3>
                     </div>
                 </div>
             </div>
-
-            {/* Sticky Comments Section */}
             <div className="flex-shrink-0 border-t border-gray-200 bg-white">
                 <div className="px-6">
                     <BugComments
@@ -472,7 +487,7 @@ const BugItemDetails = ({
                         loading={loading}
                         formatDate={safeFormatDate}
                         teamMembers={teamMembers}
-                        disabled={!hasPermission('write_bugs')}
+                        disabled={!permissions.canUpdateBugs}
                     />
                 </div>
             </div>
@@ -480,4 +495,4 @@ const BugItemDetails = ({
     );
 };
 
-export default BugItemDetails;
+export default BugDetailsPanel;

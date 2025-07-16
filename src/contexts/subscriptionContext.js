@@ -1,5 +1,4 @@
-// contexts/subscriptionContext.js
-'use client'
+'use client';
 import { createContext, useContext, useMemo, useCallback, useState, useEffect } from 'react';
 import { useUserProfile } from './userProfileContext';
 import { useAuth } from './AuthProvider';
@@ -20,10 +19,10 @@ export const useSubscription = () => {
 };
 
 // Helper function to safely get default capabilities
-const getDefaultCapabilities = (accountType = 'individual') => {
+const getDefaultCapabilities = (accountType = 'individual', hasSuiteAccess = false) => {
     try {
         const result = accountService.getDefaultCapabilities(accountType);
-        return result.success ? result.data : {
+        const baseCapabilities = result.success ? result.data : {
             maxSuites: 5,
             maxTestSuites: 5,
             maxTestScripts: 20,
@@ -37,7 +36,15 @@ const getDefaultCapabilities = (accountType = 'individual') => {
             canCreateRecordings: true,
             canCreateTestScripts: true,
             maxStorageGB: 1,
-            supportLevel: 'community'
+            supportLevel: 'community',
+            canAccessBugs: true, // Default to true for suite access
+            canViewSuite: true, // Default to true for individual accounts
+        };
+        // Ensure canAccessBugs is true if user has suite access
+        return {
+            ...baseCapabilities,
+            canAccessBugs: hasSuiteAccess ? true : baseCapabilities.canAccessBugs,
+            canViewSuite: hasSuiteAccess ? true : baseCapabilities.canViewSuite,
         };
     } catch (error) {
         console.error('Error getting default capabilities:', error);
@@ -55,7 +62,9 @@ const getDefaultCapabilities = (accountType = 'individual') => {
             canCreateRecordings: true,
             canCreateTestScripts: true,
             maxStorageGB: 1,
-            supportLevel: 'community'
+            supportLevel: 'community',
+            canAccessBugs: hasSuiteAccess, // Default to suite access
+            canViewSuite: hasSuiteAccess,
         };
     }
 };
@@ -71,19 +80,32 @@ const getDefaultPlan = (accountType = 'individual') => {
 };
 
 // Helper function to safely check feature access
-const safeHasFeatureAccess = (capabilities, userProfile, feature) => {
+const safeHasFeatureAccess = (capabilities, userProfile, feature, hasSuiteAccess = false) => {
     try {
         if (!capabilities || !userProfile) return false;
-        
+
         const featureMap = {
             'teamCollaboration': 'canInviteTeamMembers',
             'advancedReporting': 'canExportReports',
             'automatedTesting': 'canCreateAutomatedTests',
             'recordings': 'canCreateRecordings',
-            'testScripts': 'canCreateTestScripts'
+            'testScripts': 'canCreateTestScripts',
+            'canAccessBugs': 'canAccessBugs',
+            'canViewSuite': 'canViewSuite',
         };
-        
+
         const capabilityKey = featureMap[feature] || feature;
+
+        // For canAccessBugs, check suite access and role restrictions
+        if (capabilityKey === 'canAccessBugs' && hasSuiteAccess) {
+            // Check for role-based restrictions in organization accounts
+            if (userProfile.accountType === 'organization' && userProfile.orgRole) {
+                const restrictiveRoles = ['viewer']; // Roles that cannot access bugs
+                return !restrictiveRoles.includes(userProfile.orgRole);
+            }
+            return true; // Suite access grants canAccessBugs unless restricted
+        }
+
         return capabilities[capabilityKey] === true;
     } catch (error) {
         console.error('Error checking feature access:', error);
@@ -93,7 +115,6 @@ const safeHasFeatureAccess = (capabilities, userProfile, feature) => {
 
 // CENTRALIZED: Get feature limits with trial support
 const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilities) => {
-    // Default limits for unauthenticated or missing data
     const defaultLimits = {
         suites: 1,
         testSuites: 1,
@@ -107,20 +128,17 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
         maxRecordings: 5,
         maxMonthlyExports: 5,
         maxTeamMembers: 1,
-        maxStorageGB: 1
+        maxStorageGB: 1,
     };
 
     if (!subscriptionStatus || !userProfile) {
         return defaultLimits;
     }
 
-    const isTrialActive = subscriptionStatus.isTrial || 
-        subscriptionStatus.subscriptionStatus === 'trial';
+    const isTrialActive = subscriptionStatus.isTrial || subscriptionStatus.subscriptionStatus === 'trial';
 
-    // TRIAL LIMITS: Enhanced limits during trial
     if (isTrialActive) {
         const accountType = userProfile.accountType || 'individual';
-
         if (accountType === 'organization') {
             const orgType = subscriptionStatus.subscriptionPlan || 'organization_trial';
             if (orgType.includes('enterprise')) {
@@ -137,7 +155,7 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
                     maxRecordings: -1,
                     maxMonthlyExports: -1,
                     maxTeamMembers: -1,
-                    maxStorageGB: -1
+                    maxStorageGB: -1,
                 };
             } else {
                 return {
@@ -153,7 +171,7 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
                     maxRecordings: -1,
                     maxMonthlyExports: -1,
                     maxTeamMembers: 10,
-                    maxStorageGB: 10
+                    maxStorageGB: 10,
                 };
             }
         } else {
@@ -170,12 +188,11 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
                 maxRecordings: -1,
                 maxMonthlyExports: -1,
                 maxTeamMembers: 5,
-                maxStorageGB: 5
+                maxStorageGB: 5,
             };
         }
     }
 
-    // PAID SUBSCRIPTION LIMITS: Use capabilities from subscription
     if (capabilities && subscriptionStatus.isValid) {
         return {
             suites: capabilities.maxSuites || capabilities.maxTestSuites || 1,
@@ -190,11 +207,10 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
             maxRecordings: capabilities.maxRecordings || 5,
             maxMonthlyExports: capabilities.maxMonthlyExports || 5,
             maxTeamMembers: capabilities.maxTeamMembers || 1,
-            maxStorageGB: capabilities.maxStorageGB || 1
+            maxStorageGB: capabilities.maxStorageGB || 1,
         };
     }
 
-    // FREE PLAN LIMITS: Based on account type
     const accountType = userProfile.accountType || 'individual';
     if (accountType === 'organization') {
         return {
@@ -210,7 +226,7 @@ const getFeatureLimitsFromStatus = (subscriptionStatus, userProfile, capabilitie
             maxRecordings: 25,
             maxMonthlyExports: 10,
             maxTeamMembers: 5,
-            maxStorageGB: 5
+            maxStorageGB: 5,
         };
     }
 
@@ -227,70 +243,80 @@ export const SubscriptionProvider = ({ children }) => {
     // Helper function to calculate trial days remaining
     const calculateTrialDaysRemaining = (trialEndDate) => {
         if (!trialEndDate) return 0;
-        
         const endDate = trialEndDate instanceof Date ? trialEndDate : new Date(trialEndDate);
         const now = new Date();
         const diffTime = endDate.getTime() - now.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
         return Math.max(0, diffDays);
     };
 
     // Helper function to check if subscription is active
     const isSubscriptionActive = (profile) => {
         if (!profile) return false;
-        
         const { subscriptionStatus, subscriptionEndDate, isTrialActive } = profile;
-        
         if (isTrialActive) return true;
-        
         if (subscriptionStatus === 'active') {
             if (!subscriptionEndDate) return true;
-            
             const endDate = subscriptionEndDate instanceof Date ? subscriptionEndDate : new Date(subscriptionEndDate);
             return endDate.getTime() > Date.now();
         }
-        
         return false;
     };
 
-    // MOVED BEFORE subscriptionStatus: Update trial status in database
+    // Check suite access
+    const checkSuiteAccess = useCallback(async (userId, suiteId) => {
+        if (!userId || !suiteId) return false;
+        try {
+            const suiteRef = doc(db, `individualAccounts/${userId}/testSuites`, suiteId);
+            const suiteSnap = await getDoc(suiteRef);
+            if (suiteSnap.exists()) return true;
+
+            const orgSuiteRef = doc(db, `organizations/${userProfile?.orgId}/testSuites`, suiteId);
+            const orgSuiteSnap = await getDoc(orgSuiteRef);
+            if (orgSuiteSnap.exists()) {
+                const memberRef = doc(db, `organizations/${userProfile?.orgId}/members`, userId);
+                const memberSnap = await getDoc(memberRef);
+                if (memberSnap.exists()) {
+                    const memberData = memberSnap.data();
+                    return !['viewer'].includes(memberData.role); // Non-viewer roles have access
+                }
+            }
+            return false;
+        } catch (error) {
+            console.error('Error checking suite access:', error);
+            return false;
+        }
+    }, [userProfile]);
+
+    // Update trial status in database
     const updateTrialStatusInDatabase = useCallback(async () => {
         if (!user || !userProfile) return userProfile;
-
         try {
             setIsLoading(true);
             const userDocRef = doc(db, 'users', user.uid);
             const userDoc = await getDoc(userDocRef);
-            
             if (!userDoc.exists()) {
                 console.error('User document not found');
                 return userProfile;
             }
-
             const currentData = userDoc.data();
             const now = new Date();
-            
             let needsUpdate = false;
             const updateData = {};
 
             if (currentData.isTrialActive && currentData.trialEndDate) {
-                const trialEndDate = currentData.trialEndDate instanceof Date 
-                    ? currentData.trialEndDate 
+                const trialEndDate = currentData.trialEndDate instanceof Date
+                    ? currentData.trialEndDate
                     : new Date(currentData.trialEndDate);
-                    
                 const trialDaysRemaining = calculateTrialDaysRemaining(trialEndDate);
-                
                 if (trialDaysRemaining <= 0) {
                     updateData.isTrialActive = false;
                     updateData.trialDaysRemaining = 0;
-                    
                     if (currentData.subscriptionStatus !== 'active' || !currentData.subscriptionEndDate || new Date(currentData.subscriptionEndDate) <= now) {
                         const accountType = currentData.accountType || 'individual';
                         updateData.subscriptionPlan = getDefaultPlan(accountType);
                         updateData.subscriptionStatus = 'inactive';
                     }
-                    
                     needsUpdate = true;
                 } else {
                     updateData.trialDaysRemaining = trialDaysRemaining;
@@ -299,10 +325,9 @@ export const SubscriptionProvider = ({ children }) => {
             }
 
             if (currentData.subscriptionStatus === 'active' && currentData.subscriptionEndDate) {
-                const subscriptionEndDate = currentData.subscriptionEndDate instanceof Date 
-                    ? currentData.subscriptionEndDate 
+                const subscriptionEndDate = currentData.subscriptionEndDate instanceof Date
+                    ? currentData.subscriptionEndDate
                     : new Date(currentData.subscriptionEndDate);
-                    
                 if (subscriptionEndDate <= now && !currentData.isTrialActive) {
                     const accountType = currentData.accountType || 'individual';
                     updateData.subscriptionPlan = getDefaultPlan(accountType);
@@ -313,17 +338,13 @@ export const SubscriptionProvider = ({ children }) => {
 
             if (needsUpdate) {
                 updateData.updatedAt = serverTimestamp();
-                
                 console.log('Updating subscription status:', updateData);
                 await updateDoc(userDocRef, updateData);
-                
                 if (refreshUserProfile) {
                     await refreshUserProfile();
                 }
             }
-            
             return { ...currentData, ...updateData };
-            
         } catch (error) {
             console.error('Error updating trial status:', error);
             return userProfile;
@@ -340,7 +361,6 @@ export const SubscriptionProvider = ({ children }) => {
             setSubscription(null);
             return;
         }
-
         setIsLoading(true);
         try {
             console.log('Loading subscription for:', userId);
@@ -362,8 +382,7 @@ export const SubscriptionProvider = ({ children }) => {
     // Memoized subscription status with trial logic
     const subscriptionStatus = useMemo(() => {
         const defaultAccountType = userProfile?.accountType || 'individual';
-        const defaultCapabilities = getDefaultCapabilities(defaultAccountType);
-        
+        const defaultCapabilities = getDefaultCapabilities(defaultAccountType, userProfile?.suiteAccess || false);
         const defaultStatus = {
             isValid: false,
             isExpired: true,
@@ -374,23 +393,18 @@ export const SubscriptionProvider = ({ children }) => {
             capabilities: defaultCapabilities,
             showTrialBanner: false,
             showUpgradePrompt: true,
-            profile: null
+            profile: null,
         };
-
         if (!userProfile || capabilitiesLoading) {
             return defaultStatus;
         }
-
         const isActive = isSubscriptionActive(userProfile);
         const isTrialActive = userProfile.isTrialActive || false;
         const trialDaysRemaining = isTrialActive ? calculateTrialDaysRemaining(userProfile.trialEndDate) : 0;
-        
-        const userCapabilities = capabilities || getDefaultCapabilities(userProfile.accountType);
-        
+        const userCapabilities = capabilities || getDefaultCapabilities(userProfile.accountType, userProfile?.suiteAccess || false);
         if (isTrialActive && trialDaysRemaining <= 0) {
             updateTrialStatusInDatabase();
         }
-
         return {
             isValid: isActive || isTrialActive,
             isExpired: !isActive && !isTrialActive,
@@ -404,7 +418,7 @@ export const SubscriptionProvider = ({ children }) => {
             profile: userProfile,
             billingCycle: userProfile.billingCycle || null,
             nextBillingDate: userProfile.nextBillingDate || null,
-            willCancelAt: userProfile.willCancelAt || null
+            willCancelAt: userProfile.willCancelAt || null,
         };
     }, [userProfile, capabilities, capabilitiesLoading, updateTrialStatusInDatabase]);
 
@@ -417,7 +431,6 @@ export const SubscriptionProvider = ({ children }) => {
     const canCreateResource = useCallback((resourceType, currentCount = 0) => {
         const limits = getFeatureLimits();
         const limit = limits[resourceType] || limits[`max${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}`];
-        
         if (limit === -1) return true; // Unlimited
         return currentCount < limit;
     }, [getFeatureLimits]);
@@ -429,31 +442,32 @@ export const SubscriptionProvider = ({ children }) => {
     }, [getFeatureLimits]);
 
     // Feature access check using accountService structure
-    const hasFeatureAccess = useCallback((featureName) => {
-        if (!capabilities || capabilitiesLoading) return false;
-
-        try {
-            return safeHasFeatureAccess(capabilities, userProfile, featureName);
-        } catch (error) {
-            console.error(`Error checking feature access for ${featureName}:`, error);
-            return false;
-        }
-    }, [capabilities, userProfile, capabilitiesLoading]);
+    const hasFeatureAccess = useCallback(
+        (featureName) => {
+            if (!capabilities || capabilitiesLoading) return false;
+            try {
+                return safeHasFeatureAccess(capabilities, userProfile, featureName, userProfile?.suiteAccess || false);
+            } catch (error) {
+                console.error(`Error checking feature access for ${featureName}:`, error);
+                return false;
+            }
+        },
+        [capabilities, userProfile, capabilitiesLoading],
+    );
 
     // Billing and subscription management methods
     const createCheckoutSession = useCallback(async (planId, billingCycle = 'monthly', successUrl, cancelUrl) => {
         if (!user) {
             return { success: false, error: 'User not authenticated' };
         }
-
         setIsLoading(true);
         try {
             const result = await subscriptionService.createCheckoutSession(
-                user.uid, 
-                planId, 
-                billingCycle, 
-                successUrl, 
-                cancelUrl
+                user.uid,
+                planId,
+                billingCycle,
+                successUrl,
+                cancelUrl,
             );
             return result;
         } catch (error) {
@@ -468,15 +482,12 @@ export const SubscriptionProvider = ({ children }) => {
         if (!user) {
             return { success: false, error: 'User not authenticated' };
         }
-
         setIsLoading(true);
         try {
             const result = await subscriptionService.cancelSubscription(user.uid, immediate);
-            
             if (result.success && refreshUserProfile) {
                 await refreshUserProfile();
             }
-            
             return result;
         } catch (error) {
             console.error('Error cancelling subscription:', error);
@@ -490,15 +501,12 @@ export const SubscriptionProvider = ({ children }) => {
         if (!user) {
             return { success: false, error: 'User not authenticated' };
         }
-
         setIsLoading(true);
         try {
             const result = await subscriptionService.reactivateSubscription(user.uid);
-            
             if (result.success && refreshUserProfile) {
                 await refreshUserProfile();
             }
-            
             return result;
         } catch (error) {
             console.error('Error reactivating subscription:', error);
@@ -512,7 +520,6 @@ export const SubscriptionProvider = ({ children }) => {
         if (!user) {
             return { success: false, error: 'User not authenticated' };
         }
-
         try {
             return await subscriptionService.getBillingHistory(user.uid);
         } catch (error) {
@@ -525,15 +532,12 @@ export const SubscriptionProvider = ({ children }) => {
         if (!user) {
             return { success: false, error: 'User not authenticated' };
         }
-
         setIsLoading(true);
         try {
             const result = await subscriptionService.updatePaymentMethod(user.uid, paymentMethodData);
-            
             if (result.success && refreshUserProfile) {
                 await refreshUserProfile();
             }
-            
             return result;
         } catch (error) {
             console.error('Error updating payment method:', error);
@@ -561,37 +565,25 @@ export const SubscriptionProvider = ({ children }) => {
     }, [user?.uid, userProfile, loadSubscription, updateTrialStatusInDatabase, setSubscription]);
 
     const value = {
-        // Subscription status and capabilities
         subscriptionStatus,
         hasFeatureAccess,
         getFeatureLimits,
         updateTrialStatusInDatabase,
         isLoading: isLoading || capabilitiesLoading,
         error: capabilitiesError,
-        
-        // CENTRALIZED: Resource management functions
         canCreateResource,
         getResourceLimit,
-        
-        // Billing and subscription management
         createCheckoutSession,
         cancelSubscription,
         reactivateSubscription,
         getBillingHistory,
         updatePaymentMethod,
-        
-        // Billing configuration
         billingConfig: subscriptionService.BILLING_CONFIG,
-        
-        // Expose capabilities for debugging/direct access
-        capabilities
+        capabilities,
+        checkSuiteAccess,
     };
 
-    return (
-        <SubscriptionContext.Provider value={value}>
-            {children}
-        </SubscriptionContext.Provider>
-    );
+    return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;
 };
 
 export default SubscriptionProvider;
