@@ -1,106 +1,33 @@
-// components/TestCases/TestCaseTable.js
-'use client'
+'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
-import { 
-    Edit3, 
-    Copy, 
-    Trash2, 
-    Play, 
-    Eye, 
+import {
+    Edit3,
+    Copy,
+    Trash2,
+    Play,
+    Eye,
     CheckSquare,
     Square,
     ChevronUp,
     ChevronDown
 } from 'lucide-react';
-import { db } from '../../config/firebase';
-import {
-    collection,
-    query,
-    getDocs,
-    doc,
-    deleteDoc,
-    updateDoc,
-    addDoc,
-    orderBy,
-    serverTimestamp
-} from 'firebase/firestore';
-import { useSuite } from '../../context/SuiteContext';
-import { useAuth } from '../../context/AuthProvider';
 
-export default function TestCaseTable({ 
-    onEdit, 
-    onDelete, 
-    onDuplicate, 
+export default function TestCaseTable({
+    testCases = [],
+    loading,
+    onEdit,
+    onDelete,
+    onDuplicate,
     onBulkAction,
     onView,
-    onRun,
-    refreshTrigger = 0
+    onRun
 }) {
-    const [testCases, setTestCases] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
-    const [error, setError] = useState(null);
-    
-    const { activeSuite } = useSuite();
-    const { currentUser, hasPermission } = useAuth();
 
-    // Fetch test cases from Firestore subcollection
-    const fetchTestCases = useCallback(async () => {
-        if (!activeSuite?.id) {
-            setTestCases([]);
-            setLoading(false);
-            return;
-        }
-
-        try {
-            setLoading(true);
-            setError(null);
-
-            // Query the subcollection: suites/{suiteId}/testCases
-            const testCasesRef = collection(db, 'suites', activeSuite.id, 'testCases');
-            const q = query(
-                testCasesRef,
-                orderBy('createdAt', 'desc')
-            );
-
-            const querySnapshot = await getDocs(q);
-            const testCaseList = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate(),
-                updatedAt: doc.data().updatedAt?.toDate()
-            }));
-
-            setTestCases(testCaseList);
-            
-            if (testCaseList.length === 0) {
-                toast.info('No test cases found for this suite');
-            } else {
-                toast.success(`Loaded ${testCaseList.length} test case${testCaseList.length > 1 ? 's' : ''}`);
-            }
-        } catch (error) {
-            console.error('Error fetching test cases:', error);
-            const errorMessage = error.code === 'permission-denied' 
-                ? 'You do not have permission to view test cases for this suite'
-                : 'Failed to load test cases. Please try again.';
-            
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    }, [activeSuite?.id]);
-
-    // Fetch test cases on component mount and when activeSuite changes
-    useEffect(() => {
-        fetchTestCases();
-    }, [fetchTestCases, refreshTrigger]);
-
-    // Handle select all checkbox
     const handleSelectAll = (checked) => {
         if (checked) {
             setSelectedIds(testCases.map(tc => tc.id));
@@ -111,7 +38,6 @@ export default function TestCaseTable({
         }
     };
 
-    // Handle individual item selection
     const handleSelectItem = (id, checked) => {
         if (checked) {
             setSelectedIds(prev => {
@@ -122,14 +48,10 @@ export default function TestCaseTable({
                 return newSelection;
             });
         } else {
-            setSelectedIds(prev => {
-                const newSelection = prev.filter(selectedId => selectedId !== id);
-                return newSelection;
-            });
+            setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
         }
     };
 
-    // Handle sorting
     const handleSort = (key) => {
         let direction = 'asc';
         if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -139,12 +61,10 @@ export default function TestCaseTable({
         toast.info(`Sorted by ${key} (${direction}ending)`);
     };
 
-    // Sort test cases
     const sortedTestCases = [...testCases].sort((a, b) => {
         if (sortConfig.key) {
             const aValue = a[sortConfig.key];
             const bValue = b[sortConfig.key];
-            
             if (aValue < bValue) {
                 return sortConfig.direction === 'asc' ? -1 : 1;
             }
@@ -155,48 +75,29 @@ export default function TestCaseTable({
         return 0;
     });
 
-    // Handle individual test case deletion
-    const handleDelete = async (testCaseId, testCaseTitle) => {
-        if (!hasPermission('write_tests')) {
-            toast.error('You do not have permission to delete test cases');
-            return;
-        }
-
-        // Show confirmation toast
+    const handleDelete = (testCaseId, testCaseTitle) => {
         toast.custom((t) => (
-            <div className="flex flex-col gap-2 p-4 bg-white border border-red-200 rounded-lg shadow-lg">
+            <div className="flex flex-col gap-2 p-4 bg-white border border-gray-300 rounded-lg shadow-sm">
                 <div className="flex items-center gap-2">
                     <Trash2 className="w-4 h-4 text-red-600" />
                     <span className="font-medium text-gray-900">Delete Test Case</span>
                 </div>
                 <p className="text-sm text-gray-600">
-                    Are you sure you want to delete &quot;{testCaseTitle}&quot;?
+                    Are you sure you want to delete `{testCaseTitle}`?
                 </p>
                 <div className="flex gap-2 mt-2">
                     <button
-                        onClick={async () => {
+                        onClick={() => {
                             toast.dismiss(t);
-                            try {
-                                toast.loading('Deleting test case...', { id: 'delete-toast' });
-                                
-                                // Delete from subcollection
-                                await deleteDoc(doc(db, 'suites', activeSuite.id, 'testCases', testCaseId));
-                                await fetchTestCases(); // Refresh the list
-                                
-                                toast.success('Test case deleted successfully', { id: 'delete-toast' });
-                                if (onDelete) onDelete(testCaseId);
-                            } catch (error) {
-                                console.error('Error deleting test case:', error);
-                                toast.error('Failed to delete test case', { id: 'delete-toast' });
-                            }
+                            if (onDelete) onDelete(testCaseId);
                         }}
-                        className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                     >
                         Delete
                     </button>
                     <button
                         onClick={() => toast.dismiss(t)}
-                        className="px-3 py-1 bg-gray-200 text-gray-800 text-sm rounded hover:bg-gray-300"
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                     >
                         Cancel
                     </button>
@@ -205,95 +106,14 @@ export default function TestCaseTable({
         ), { duration: Infinity });
     };
 
-    // Handle test case duplication
-    const handleDuplicate = async (testCase) => {
-        if (!hasPermission('write_tests')) {
-            toast.error('You do not have permission to duplicate test cases');
-            return;
-        }
-
-        try {
-            toast.loading('Duplicating test case...', { id: 'duplicate-toast' });
-            
-            const duplicatedTestCase = {
-                ...testCase,
-                title: `${testCase.title} (Copy)`,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                createdBy: currentUser.uid,
-                status: 'draft'
-            };
-            
-            // Remove the original id
-            delete duplicatedTestCase.id;
-            
-            // Add to subcollection
-            await addDoc(collection(db, 'suites', activeSuite.id, 'testCases'), duplicatedTestCase);
-            await fetchTestCases(); // Refresh the list
-            
-            toast.success(`Test case "${testCase.title}" duplicated successfully`, { id: 'duplicate-toast' });
-            if (onDuplicate) onDuplicate(testCase);
-        } catch (error) {
-            console.error('Error duplicating test case:', error);
-            toast.error('Failed to duplicate test case', { id: 'duplicate-toast' });
-        }
+    const handleDuplicate = (testCase) => {
+        if (onDuplicate) onDuplicate(testCase);
     };
 
-    // Handle bulk actions
-    const handleBulkAction = async (action, ids) => {
-        if (!hasPermission('write_tests')) {
-            toast.error('You do not have permission to perform bulk actions');
-            return;
-        }
-
-        const actionLabels = {
-            activate: 'Activating',
-            archive: 'Archiving',
-            delete: 'Deleting'
-        };
-
-        try {
-            toast.loading(`${actionLabels[action]} ${ids.length} test case${ids.length > 1 ? 's' : ''}...`, { 
-                id: 'bulk-action-toast' 
-            });
-            
-            const promises = ids.map(async (id) => {
-                const testCaseRef = doc(db, 'suites', activeSuite.id, 'testCases', id);
-                
-                switch (action) {
-                    case 'activate':
-                        return updateDoc(testCaseRef, { 
-                            status: 'active', 
-                            updatedAt: serverTimestamp() 
-                        });
-                    case 'archive':
-                        return updateDoc(testCaseRef, { 
-                            status: 'archived', 
-                            updatedAt: serverTimestamp() 
-                        });
-                    case 'delete':
-                        return deleteDoc(testCaseRef);
-                    default:
-                        return Promise.resolve();
-                }
-            });
-
-            await Promise.all(promises);
-            await fetchTestCases(); // Refresh the list
-            setSelectedIds([]); // Clear selection
-            
-            toast.success(`Successfully ${action}d ${ids.length} test case${ids.length > 1 ? 's' : ''}`, { 
-                id: 'bulk-action-toast' 
-            });
-            
-            if (onBulkAction) onBulkAction(action, ids);
-        } catch (error) {
-            console.error(`Error performing bulk ${action}:`, error);
-            toast.error(`Failed to ${action} test cases`, { id: 'bulk-action-toast' });
-        }
+    const handleBulkActionClick = (action) => {
+        if (onBulkAction) onBulkAction(action, selectedIds);
     };
 
-    // Get status badge styling
     const getStatusBadge = (status) => {
         const statusConfig = {
             active: 'bg-green-100 text-green-800 border-green-200',
@@ -304,7 +124,6 @@ export default function TestCaseTable({
         return statusConfig[status] || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
-    // Get priority badge styling
     const getPriorityBadge = (priority) => {
         const priorityConfig = {
             high: 'bg-red-100 text-red-800 border-red-200',
@@ -314,17 +133,15 @@ export default function TestCaseTable({
         return priorityConfig[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
-    // Get sort icon
     const getSortIcon = (columnKey) => {
         if (sortConfig.key !== columnKey) {
             return <ChevronUp className="w-3 h-3 text-gray-400" />;
         }
-        return sortConfig.direction === 'asc' ? 
-            <ChevronUp className="w-3 h-3 text-gray-600" /> : 
+        return sortConfig.direction === 'asc' ?
+            <ChevronUp className="w-3 h-3 text-gray-600" /> :
             <ChevronDown className="w-3 h-3 text-gray-600" />;
     };
 
-    // Loading state
     if (loading) {
         return (
             <div className="p-8 text-center">
@@ -334,47 +151,18 @@ export default function TestCaseTable({
         );
     }
 
-    // Error state
-    if (error) {
-        return (
-            <div className="p-8 text-center">
-                <div className="text-red-200 text-6xl mb-4"></div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Test Cases</h3>
-                <p className="text-gray-600 mb-4">{error}</p>
-                <button 
-                    onClick={() => {
-                        toast.loading('Retrying...', { id: 'retry-toast' });
-                        fetchTestCases().then(() => {
-                            toast.success('Successfully refreshed test cases', { id: 'retry-toast' });
-                        });
-                    }}
-                    className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
-                >
-                    Try Again
-                </button>
-            </div>
-        );
-    }
-
-    // Empty state
     if (testCases.length === 0) {
         return (
             <div className="p-8 text-center">
                 <div className="text-gray-400 text-6xl mb-4">📋</div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No test cases found</h3>
-                <p className="text-gray-600">
-                    {activeSuite ? 
-                        'Create your first test case to get started' : 
-                        'Select a suite to view test cases'
-                    }
-                </p>
+                <p className="text-gray-600">Create a test case to get started</p>
             </div>
         );
     }
 
     return (
         <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
-            {/* Bulk Actions Bar */}
             {selectedIds.length > 0 && (
                 <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
                     <div className="flex items-center justify-between">
@@ -383,23 +171,20 @@ export default function TestCaseTable({
                         </span>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => handleBulkAction('activate', selectedIds)}
-                                className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
-                                disabled={!hasPermission('write_tests')}
+                                onClick={() => handleBulkActionClick('activate')}
+                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                             >
                                 Activate
                             </button>
                             <button
-                                onClick={() => handleBulkAction('archive', selectedIds)}
-                                className="px-3 py-1 bg-yellow-600 text-white text-sm rounded-md hover:bg-yellow-700 transition-colors"
-                                disabled={!hasPermission('write_tests')}
+                                onClick={() => handleBulkActionClick('archive')}
+                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                             >
                                 Archive
                             </button>
                             <button
-                                onClick={() => handleBulkAction('delete', selectedIds)}
-                                className="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
-                                disabled={!hasPermission('write_tests')}
+                                onClick={() => handleBulkActionClick('delete')}
+                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                             >
                                 Delete
                             </button>
@@ -408,7 +193,6 @@ export default function TestCaseTable({
                 </div>
             )}
 
-            {/* Table */}
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -416,19 +200,19 @@ export default function TestCaseTable({
                             <th className="px-6 py-3 text-left border-r border-gray-200">
                                 <div className="flex items-center">
                                     {selectedIds.length === testCases.length ? (
-                                        <CheckSquare 
-                                            className="w-4 h-4 text-teal-600 cursor-pointer" 
+                                        <CheckSquare
+                                            className="w-4 h-4 text-teal-600 cursor-pointer"
                                             onClick={() => handleSelectAll(false)}
                                         />
                                     ) : (
-                                        <Square 
-                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600" 
+                                        <Square
+                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
                                             onClick={() => handleSelectAll(true)}
                                         />
                                     )}
                                 </div>
                             </th>
-                            <th 
+                            <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
                                 onClick={() => handleSort('title')}
                             >
@@ -437,7 +221,7 @@ export default function TestCaseTable({
                                     {getSortIcon('title')}
                                 </div>
                             </th>
-                            <th 
+                            <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
                                 onClick={() => handleSort('status')}
                             >
@@ -446,7 +230,7 @@ export default function TestCaseTable({
                                     {getSortIcon('status')}
                                 </div>
                             </th>
-                            <th 
+                            <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
                                 onClick={() => handleSort('priority')}
                             >
@@ -461,7 +245,7 @@ export default function TestCaseTable({
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
                                 Assignee
                             </th>
-                            <th 
+                            <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
                                 onClick={() => handleSort('updatedAt')}
                             >
@@ -481,13 +265,13 @@ export default function TestCaseTable({
                                 <td className="px-6 py-4 border-r border-gray-200">
                                     <div className="flex items-center">
                                         {selectedIds.includes(testCase.id) ? (
-                                            <CheckSquare 
-                                                className="w-4 h-4 text-teal-600 cursor-pointer" 
+                                            <CheckSquare
+                                                className="w-4 h-4 text-teal-600 cursor-pointer"
                                                 onClick={() => handleSelectItem(testCase.id, false)}
                                             />
                                         ) : (
-                                            <Square 
-                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600" 
+                                            <Square
+                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
                                                 onClick={() => handleSelectItem(testCase.id, true)}
                                             />
                                         )}
@@ -531,7 +315,7 @@ export default function TestCaseTable({
                                     {testCase.assignee || 'Unassigned'}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-500 border-r border-gray-200">
-                                    {testCase.updatedAt ? 
+                                    {testCase.updatedAt ?
                                         formatDistanceToNow(testCase.updatedAt, { addSuffix: true }) :
                                         'Never'
                                     }
@@ -540,52 +324,49 @@ export default function TestCaseTable({
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => {
-                                                if (onView) onView(testCase);
-                                                toast.info(`Viewing "${testCase.title}"`);
+                                                if (onView) {
+                                                    onView(testCase);
+                                                    toast.info(`Viewing "${testCase.title}"`);
+                                                }
                                             }}
-                                            className="p-1 text-teal-600 hover:text-teal-900 hover:bg-blue-50 rounded transition-colors"
-                                            title="View Test Case"
+                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                                         >
                                             <Eye className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={() => {
-                                                if (onRun) onRun(testCase);
-                                                toast.loading(`Running "${testCase.title}"...`);
+                                                if (onRun) {
+                                                    onRun(testCase);
+                                                    toast.loading(`Running "${testCase.title}"...`);
+                                                }
                                             }}
-                                            className="p-1 text-green-600 hover:text-green-900 hover:bg-green-50 rounded transition-colors"
-                                            title="Run Test Case"
+                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                                         >
                                             <Play className="w-4 h-4" />
                                         </button>
-                                        {hasPermission('write_tests') && (
-                                            <>
-                                                <button
-                                                    onClick={() => {
-                                                        if (onEdit) onEdit(testCase);
-                                                        toast.info(`Editing "${testCase.title}"`);
-                                                    }}
-                                                    className="p-1 text-teal-600 hover:text-teal-900 hover:bg-teal-50 rounded transition-colors"
-                                                    title="Edit Test Case"
-                                                >
-                                                    <Edit3 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDuplicate(testCase)}
-                                                    className="p-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
-                                                    title="Duplicate Test Case"
-                                                >
-                                                    <Copy className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(testCase.id, testCase.title)}
-                                                    className="p-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-                                                    title="Delete Test Case"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </>
-                                        )}
+                                        <button
+                                            onClick={() => {
+                                                if (onEdit) {
+                                                    onEdit(testCase);
+                                                    toast.info(`Editing "${testCase.title}"`);
+                                                }
+                                            }}
+                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                                        >
+                                            <Edit3 className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDuplicate(testCase)}
+                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(testCase.id, testCase.title)}
+                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 </td>
                             </tr>

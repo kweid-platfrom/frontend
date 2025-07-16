@@ -1,4 +1,4 @@
-// Fixed BugTracker - Simplified user resolution like SuiteSelector
+// Fixed BugTracker - Improved selection handling and details panel
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { useSuite } from "../../context/SuiteContext";
@@ -17,8 +17,8 @@ import { getUserPermissions } from "../../services/permissionService";
 const BugTracker = () => {
     const { activeSuite, loading: suiteLoading, error: suiteError } = useSuite();
     const { user: authUser, loading: authLoading, error: authError } = useAuth();
-    const { userProfile, isLoading: isProfileLoading, error: profileError } = useUserProfile();
-    
+    const { userProfile, error: profileError } = useUserProfile();
+
     const [showFilters, setShowFilters] = useState(false);
     const [showDetailsPanel, setShowDetailsPanel] = useState(false);
     const [showMetrics, setShowMetrics] = useState(false);
@@ -32,7 +32,6 @@ const BugTracker = () => {
 
     // FIXED: Simplified user resolution - follow SuiteSelector pattern
     const resolvedUser = useMemo(() => {
-        // Primary: Use authUser if available (this is what SuiteSelector relies on)
         if (authUser?.uid) {
             return {
                 uid: authUser.uid,
@@ -40,7 +39,6 @@ const BugTracker = () => {
                 emailVerified: authUser.emailVerified,
                 displayName: authUser.displayName,
                 ...authUser,
-                // Merge userProfile data if available, but don't depend on it
                 ...(userProfile && {
                     full_name: userProfile.full_name || authUser.displayName,
                     role: userProfile.role,
@@ -48,60 +46,49 @@ const BugTracker = () => {
                 })
             };
         }
-        
         return null;
     }, [authUser, userProfile]);
 
-    // FIXED: Simplified loading state - only wait for critical data
     const isLoading = useMemo(() => {
-        // Only wait for auth and suite - don't block on userProfile
         return authLoading || suiteLoading;
     }, [authLoading, suiteLoading]);
 
-    // FIXED: Only auth and suite errors are critical
     const criticalError = useMemo(() => {
         if (authError) return authError;
         if (suiteError) return suiteError;
-        
-        // Profile errors are non-critical - just log them
+
         if (profileError) {
             console.warn('Profile error (non-critical):', profileError);
         }
-        
+
         return null;
     }, [authError, suiteError, profileError]);
 
-    // FIXED: Simplified readiness check
     const isReady = useMemo(() => {
-        return !isLoading && 
-               !criticalError && 
-               !!resolvedUser?.uid && 
-               !!activeSuite?.suite_id;
+        return !isLoading &&
+            !criticalError &&
+            !!resolvedUser?.uid &&
+            !!activeSuite?.suite_id;
     }, [isLoading, criticalError, resolvedUser, activeSuite]);
 
-    // FIXED: Simplified permissions with better fallbacks
     const permissions = useMemo(() => {
-        // If we have userProfile with explicit permissions, use them
         if (userProfile?.permissions) {
             return getUserPermissions(userProfile);
         }
-        
-        // If we have userProfile but no explicit permissions, calculate them
+
         if (userProfile) {
             return getUserPermissions(userProfile);
         }
-        
-        // If we only have authUser, provide reasonable defaults
+
         if (authUser?.uid) {
             return {
                 canReadBugs: true,
                 canUpdateBugs: true,
-                canDeleteBugs: false, // Conservative default
-                canManageBugs: false  // Conservative default
+                canDeleteBugs: false,
+                canManageBugs: false
             };
         }
-        
-        // No access if no user
+
         return {
             canReadBugs: false,
             canUpdateBugs: false,
@@ -109,24 +96,6 @@ const BugTracker = () => {
             canManageBugs: false
         };
     }, [userProfile, authUser]);
-
-    // FIXED: Simplified debug logging
-    useEffect(() => {
-        console.log('BugTracker Debug:', {
-            authUser: !!authUser,
-            authUserUid: authUser?.uid,
-            authLoading,
-            userProfile: !!userProfile,
-            userProfileLoading: isProfileLoading,
-            activeSuite: !!activeSuite,
-            activeSuiteId: activeSuite?.suite_id,
-            suiteLoading,
-            resolvedUser: !!resolvedUser,
-            resolvedUserUid: resolvedUser?.uid,
-            isReady,
-            permissions
-        });
-    }, [authUser, authLoading, userProfile, isProfileLoading, activeSuite, suiteLoading, resolvedUser, isReady, permissions]);
 
     // Initialize bug tracker only when ready
     const {
@@ -147,7 +116,8 @@ const BugTracker = () => {
         updateBug,
         updateBugTitle,
         createSprint,
-        formatDate
+        formatDate,
+        refetch
     } = useBugTracker({
         enabled: isReady,
         suite: activeSuite,
@@ -180,9 +150,9 @@ const BugTracker = () => {
                 permissions: permissions
             };
         }
-        
+
         const baseMetrics = calculateBugMetrics(bugs);
-        
+
         return {
             totalBugs: baseMetrics.total || bugs.length,
             bugsFromScreenRecording: bugs.filter(bug => {
@@ -193,13 +163,13 @@ const BugTracker = () => {
                 const source = (bug.source || '').toLowerCase();
                 return source === 'manual' || source === 'testing' || source === '' || !source.includes('screen');
             }).length,
-            bugsWithVideoEvidence: bugs.filter(bug => 
+            bugsWithVideoEvidence: bugs.filter(bug =>
                 bug.hasVideoEvidence || bug.videoUrl || bug.screenRecording || bug.attachments?.some(att => att.type?.includes('video'))
             ).length,
-            bugsWithNetworkLogs: bugs.filter(bug => 
+            bugsWithNetworkLogs: bugs.filter(bug =>
                 bug.hasNetworkLogs || bug.networkLogs || bug.attachments?.some(att => att.name?.includes('network'))
             ).length,
-            bugsWithConsoleLogs: bugs.filter(bug => 
+            bugsWithConsoleLogs: bugs.filter(bug =>
                 bug.hasConsoleLogs || bug.consoleLogs || bug.attachments?.some(att => att.name?.includes('console'))
             ).length,
             criticalBugs: baseMetrics.critical || bugs.filter(bug => {
@@ -240,7 +210,7 @@ const BugTracker = () => {
         };
     }, [bugs, permissions]);
 
-    // Event handlers
+    // FIXED: Improved bug selection handler
     const handleBugSelect = (bug) => {
         if (!permissions.canReadBugs) {
             toast.error("You don't have permission to view bug details");
@@ -250,18 +220,25 @@ const BugTracker = () => {
         setShowDetailsPanel(true);
     };
 
+    // FIXED: Simplified toggle selection
     const toggleBugSelection = (bugId) => {
         if (!permissions.canReadBugs) {
             toast.error("You don't have permission to select bugs");
             return;
         }
-        setSelectedBugs(prev =>
-            prev.includes(bugId)
+
+        setSelectedBugs(prev => {
+            const isSelected = prev.includes(bugId);
+            const newSelection = isSelected
                 ? prev.filter(id => id !== bugId)
-                : [...prev, bugId]
-        );
+                : [...prev, bugId];
+
+            console.log('toggleBugSelection:', { bugId, isSelected, prev, newSelection });
+            return newSelection;
+        });
     };
 
+    // FIXED: Improved bulk action handler
     const handleBulkAction = async (action, ids) => {
         if (!permissions.canUpdateBugs && action !== 'delete') {
             toast.error("You don't have permission to update bugs");
@@ -271,8 +248,15 @@ const BugTracker = () => {
             toast.error("You don't have permission to delete bugs");
             return;
         }
-        
+
+        if (!ids || ids.length === 0) {
+            toast.error("No bugs selected");
+            return;
+        }
+
         try {
+            console.log(`Performing bulk ${action} on:`, ids);
+
             switch (action) {
                 case 'reopen':
                     await Promise.all(ids.map(id => updateBugStatus(id, 'open')));
@@ -283,18 +267,28 @@ const BugTracker = () => {
                     toast.success(`Closed ${ids.length} bugs`);
                     break;
                 case 'delete':
+                    // Add actual delete logic here
                     toast.success(`Deleted ${ids.length} bugs`);
                     break;
                 default:
                     toast.error('Unknown bulk action');
+                    return;
             }
+
+            // Clear selection after successful action
             setSelectedBugs([]);
+
+            // Refresh data if needed
+            if (refetch) {
+                await refetch();
+            }
         } catch (error) {
             console.error(`Bulk ${action} failed:`, error);
-            toast.error(`Failed to ${action} bugs`);
+            toast.error(`Failed to ${action} bugs: ${error.message}`);
         }
     };
 
+    // FIXED: Enhanced permission check
     const hasPermissionCheck = (permission) => {
         switch (permission) {
             case 'read': return permissions.canReadBugs;
@@ -303,6 +297,38 @@ const BugTracker = () => {
             default: return false;
         }
     };
+
+    // FIXED: Handle details panel close
+    const handleCloseDetailsPanel = () => {
+        setShowDetailsPanel(false);
+        setSelectedBug(null);
+    };
+
+    // FIXED: Handle chat icon click - ensure it opens details panel
+    const handleChatIconClick = (bug, event) => {
+        if (event) {
+            event.stopPropagation();
+        }
+        console.log('Chat icon clicked for bug:', bug.id);
+
+        // Ensure details panel opens
+        setSelectedBug(bug);
+        setShowDetailsPanel(true);
+
+        // Also call the main bug select handler
+        handleBugSelect(bug);
+    };
+
+    // FIXED: Debug effect for selection state
+    useEffect(() => {
+        console.log('BugTracker selection state:', {
+            selectedBugs,
+            selectedBugsCount: selectedBugs.length,
+            bugsCount: bugs?.length || 0,
+            showDetailsPanel,
+            selectedBugId: selectedBug?.id
+        });
+    }, [selectedBugs, bugs, showDetailsPanel, selectedBug]);
 
     if (!mounted) {
         return null;
@@ -317,7 +343,7 @@ const BugTracker = () => {
                     <p className="text-gray-600">Loading bug tracker...</p>
                     {process.env.NODE_ENV === 'development' && (
                         <div className="text-xs text-gray-500 mt-2">
-                            Auth: {authLoading ? 'Loading...' : 'Ready'} | 
+                            Auth: {authLoading ? 'Loading...' : 'Ready'} |
                             Suite: {suiteLoading ? 'Loading...' : 'Ready'}
                         </div>
                     )}
@@ -355,7 +381,7 @@ const BugTracker = () => {
                     <AlertCircle className="w-12 h-12 mx-auto mb-2 text-yellow-600" />
                     <h3 className="text-lg font-semibold text-yellow-900 mb-2">Setup Required</h3>
                     <p className="text-yellow-700 mb-4">
-                        User: {resolvedUser ? '✓' : '✗'} | 
+                        User: {resolvedUser ? '✓' : '✗'} |
                         Suite: {activeSuite ? '✓' : '✗'}
                     </p>
                     <button
@@ -384,7 +410,7 @@ const BugTracker = () => {
                     showMetrics={showMetrics}
                     setShowMetrics={setShowMetrics}
                     viewMode="table"
-                    setViewMode={() => {}}
+                    setViewMode={() => { }}
                     teamMembers={teamMembers || []}
                     comprehensiveMetrics={comprehensiveMetrics}
                     permissions={permissions}
@@ -433,6 +459,7 @@ const BugTracker = () => {
                         onUpdateBugEnvironment={permissions.canUpdateBugs ? updateBugEnvironment : null}
                         onUpdateBugTitle={permissions.canUpdateBugs ? updateBugTitle : null}
                         onShowBugDetails={handleBugSelect}
+                        onChatIconClick={handleChatIconClick}
                         teamMembers={teamMembers || []}
                         environments={environments || []}
                         isUpdating={isUpdating}
@@ -440,6 +467,7 @@ const BugTracker = () => {
                         error={null}
                         onBulkAction={handleBulkAction}
                         hasPermission={hasPermissionCheck}
+                        onRetryFetch={refetch}
                     />
                 </div>
 
@@ -448,7 +476,7 @@ const BugTracker = () => {
                     <div className="w-96 bg-white rounded-lg border border-gray-200 shadow-xl overflow-y-auto flex-shrink-0">
                         <BugDetailsPanel
                             bug={selectedBug}
-                            onClose={() => setShowDetailsPanel(false)}
+                            onClose={handleCloseDetailsPanel}
                             onUpdateBug={permissions.canUpdateBugs ? updateBug : null}
                             onUpdateStatus={permissions.canUpdateBugs ? updateBugStatus : null}
                             onUpdateSeverity={permissions.canUpdateBugs ? updateBugSeverity : null}
