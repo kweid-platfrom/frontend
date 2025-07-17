@@ -32,6 +32,7 @@
     "firebase": "^11.4.0",
     "firebase-admin": "^13.4.0",
     "firestore": "^1.1.6",
+    "framer-motion": "^12.23.6",
     "googleapis": "^146.0.0",
     "jspdf": "^3.0.1",
     "keyword-extractor": "^0.0.28",

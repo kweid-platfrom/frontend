@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/contexts/AppProvider';
@@ -16,7 +16,7 @@ export default function BugTrackerPage() {
     const { addNotification, user, userCapabilities, isAuthenticated, isLoading: appLoading } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
     const router = useRouter();
-    const { bugs, filteredBugs, setFilters, exportBugs, updateBugStatus, deleteBugs } = useBugTracker({
+    const { bugs, filteredBugs, setFilters, exportBugs, updateBugStatus, updateBugSeverity, updateBugPriority, updateBugAssignment, updateBugEnvironment, deleteBugs } = useBugTracker({
         enabled: isAuthenticated && !!activeSuite?.suite_id && !!user?.uid && !appLoading && !suiteLoading,
         suite: activeSuite,
         user
@@ -43,16 +43,16 @@ export default function BugTrackerPage() {
         { value: 'month', label: 'Month' }
     ];
 
-    const toggleBugSelection = useCallback((bugId) => {
+    const toggleBugSelection = useCallback((id, checked) => {
         if (!userCapabilities.canViewBugs) {
             toast.error("You don't have permission to select bugs");
             return;
         }
         setSelectedBugs(prev => {
-            const isSelected = prev.includes(bugId);
-            const newSelection = isSelected
-                ? prev.filter(id => id !== bugId)
-                : [...prev, bugId];
+            const newSelection = checked
+                ? [...new Set([...prev, id])]
+                : prev.filter(selectedId => selectedId !== id);
+            console.log('BugTrackerPage toggleBugSelection:', { id, checked, newSelection });
             toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
             return newSelection;
         });
@@ -277,6 +277,11 @@ export default function BugTrackerPage() {
                     setSubGroupBy={setSubGroupBy}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
+                    onUpdateBugStatus={updateBugStatus}
+                    onUpdateBugSeverity={updateBugSeverity}
+                    onUpdateBugPriority={updateBugPriority}
+                    onUpdateBugAssignment={updateBugAssignment}
+                    onUpdateBugEnvironment={updateBugEnvironment}
                 />
             </div>
         </PageLayout>

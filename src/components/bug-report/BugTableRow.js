@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React from 'react';
 import {
@@ -22,18 +22,18 @@ import {
     getStatusColor,
     getSeverityColor,
     getPriorityColor,
-    getFrequencyColor,
     getSourceColor,
     getPriorityFromSeverity,
     isPastDue,
     formatDate,
     getTeamMemberName,
-    getAssignedUser,
     getEvidenceCount,
-    getShortBugId,
     VALID_BUG_STATUSES,
     VALID_BUG_SEVERITIES
 } from '../../utils/bugUtils';
+
+// Add frequency options
+const VALID_FREQUENCIES = ['Always', 'Often', 'Sometimes', 'Rarely', 'Once'];
 
 const BugTableRow = ({
     bug,
@@ -43,20 +43,16 @@ const BugTableRow = ({
     onDragStart,
     onUpdateBugStatus,
     onUpdateBugSeverity,
+    onUpdateBugPriority,
     onUpdateBugAssignment,
     onUpdateBugEnvironment,
+    onUpdateBugFrequency, // Add this new prop
     onShowBugDetails,
+    onChatClick, // Add this prop from BugTable
     teamMembers = [],
     environments = [],
     isUpdating = new Set(),
-    editingTitle,
-    titleValue,
-    onTitleEdit,
-    onTitleSave,
-    onTitleChange,
-    onTitleKeyDown,
 }) => {
-    // Ensure isUpdating is a Set - handle cases where it might be an array or undefined
     const updatingSet = React.useMemo(() => {
         if (isUpdating instanceof Set) {
             return isUpdating;
@@ -78,84 +74,207 @@ const BugTableRow = ({
         }
     };
 
+    // Helper function to get user's first name from email or name
+    const getFirstName = (user) => {
+        if (!user) return 'Unknown';
+        if (typeof user === 'string') {
+            // If it's an email, extract the part before @
+            if (user.includes('@')) {
+                return user.split('@')[0];
+            }
+            // If it's a name, get the first word
+            return user.split(' ')[0];
+        }
+        if (user.displayName) {
+            return user.displayName.split(' ')[0];
+        }
+        if (user.email) {
+            return user.email.split('@')[0];
+        }
+        return 'Unknown';
+    };
+
+    // Helper function to generate user-friendly bug ID
+    const getUserFriendlyBugId = (bugId) => {
+        if (!bugId) return 'Unknown';
+        // Take last 6 characters and prefix with BUG-
+        return `BUG-${bugId.slice(-6).toUpperCase()}`;
+    };
+
+    // Helper function to format date properly
+    const formatDateSafe = (date) => {
+        if (!date) return 'Not set';
+        try {
+            if (date.toDate) {
+                // Firestore timestamp
+                return formatDate(date.toDate());
+            }
+            if (date instanceof Date) {
+                return formatDate(date);
+            }
+            if (typeof date === 'string') {
+                return formatDate(new Date(date));
+            }
+            return 'Invalid date';
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'Invalid date';
+        }
+    };
+
     const handleSeverityChange = async (bugId, newSeverity, event) => {
         event.stopPropagation();
         if (updatingSet.has(bugId)) return;
+        
+        console.log('Updating severity:', { bugId, newSeverity });
+        
         if (onUpdateBugSeverity) {
             try {
                 await onUpdateBugSeverity(bugId, newSeverity);
+                const newPriority = getPriorityFromSeverity(newSeverity);
+                if (onUpdateBugPriority) {
+                    await onUpdateBugPriority(bugId, newPriority);
+                }
             } catch (error) {
                 console.error('Failed to update severity:', error);
             }
+        } else {
+            console.warn('onUpdateBugSeverity function not provided');
         }
     };
 
     const handleStatusChange = async (bugId, newStatus, event) => {
         event.stopPropagation();
         if (updatingSet.has(bugId)) return;
+        
+        console.log('Updating status:', { bugId, newStatus });
+        
         if (onUpdateBugStatus) {
             try {
                 await onUpdateBugStatus(bugId, newStatus);
             } catch (error) {
                 console.error('Failed to update status:', error);
             }
+        } else {
+            console.warn('onUpdateBugStatus function not provided');
         }
     };
 
     const handleAssignmentChange = async (bugId, newAssignee, event) => {
         event.stopPropagation();
         if (updatingSet.has(bugId)) return;
+        
+        console.log('Updating assignment:', { bugId, newAssignee });
+        
         if (onUpdateBugAssignment) {
             try {
                 await onUpdateBugAssignment(bugId, newAssignee);
             } catch (error) {
                 console.error('Failed to update assignment:', error);
             }
+        } else {
+            console.warn('onUpdateBugAssignment function not provided');
         }
     };
 
     const handleEnvironmentChange = async (bugId, newEnvironment, event) => {
         event.stopPropagation();
         if (updatingSet.has(bugId)) return;
+        
+        console.log('Updating environment:', { bugId, newEnvironment });
+        
         if (onUpdateBugEnvironment) {
             try {
                 await onUpdateBugEnvironment(bugId, newEnvironment);
             } catch (error) {
                 console.error('Failed to update environment:', error);
             }
+        } else {
+            console.warn('onUpdateBugEnvironment function not provided');
+        }
+    };
+
+    const handleFrequencyChange = async (bugId, newFrequency, event) => {
+        event.stopPropagation();
+        if (updatingSet.has(bugId)) return;
+        
+        console.log('Updating frequency:', { bugId, newFrequency });
+        
+        if (onUpdateBugFrequency) {
+            try {
+                await onUpdateBugFrequency(bugId, newFrequency);
+            } catch (error) {
+                console.error('Failed to update frequency:', error);
+            }
+        } else {
+            console.warn('onUpdateBugFrequency function not provided');
         }
     };
 
     const handleCheckboxClick = (event) => {
         event.stopPropagation();
-        const isChecked = selectedIds.includes(bug.id);
-        onToggleSelection(bug.id, !isChecked);
-    };
-
-    const handleTitleClick = (event) => {
-        event.stopPropagation();
-        if (onTitleEdit) {
-            onTitleEdit(bug.id, bug.title);
+        if (onToggleSelection) {
+            const isChecked = selectedIds.includes(bug.id);
+            onToggleSelection(bug.id, !isChecked);
         }
     };
 
     const handleChatIconClick = (event) => {
         event.stopPropagation();
-        if (onShowBugDetails) {
+        event.preventDefault();
+        
+        console.log('Chat icon clicked for bug:', bug);
+        
+        if (!bug || !bug.id) {
+            console.error('Invalid bug object in handleChatIconClick:', bug);
+            return;
+        }
+        
+        // Use onChatClick if provided, otherwise fall back to onShowBugDetails
+        if (onChatClick) {
+            onChatClick(bug, event);
+        } else if (onShowBugDetails) {
+            onShowBugDetails(bug);
+        } else {
+            console.warn('Neither onChatClick nor onShowBugDetails function provided');
+        }
+    };
+
+    const handleRowClick = (event) => {
+        if (event.target.tagName === 'SELECT' || 
+            event.target.tagName === 'INPUT' || 
+            event.target.tagName === 'BUTTON' ||
+            event.target.closest('button') ||
+            event.target.closest('select') ||
+            event.target.closest('input')) {
+            return;
+        }
+        if (onShowBugDetails && bug) {
             onShowBugDetails(bug);
         }
     };
 
     const totalAttachments = bug?.attachments?.length || 0;
     const evidenceCount = getEvidenceCount(bug);
-    const assignedUser = getAssignedUser(bug);
+    
+    // Fix assigned user logic - get current assignee or default to creator
+    const getAssignedUser = () => {
+        if (bug.assignedTo) return bug.assignedTo;
+        if (bug.created_by) return bug.created_by;
+        if (bug.reportedByEmail) return bug.reportedByEmail;
+        return '';
+    };
+    
+    const assignedUser = getAssignedUser();
     const bugIsUpdating = bug?.id && updatingSet.has(bug.id);
-    const isEditing = editingTitle === bug?.id;
     const isSelected = selectedIds.includes(bug.id);
     const ROW_HEIGHT = 'h-12';
     const CELL_VERTICAL_ALIGN = 'align-middle';
+    
+    // Fix reporter name - get first name properly
+    const reporterName = getFirstName(bug.created_by || bug.reportedByEmail);
 
-    const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${
+    const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors cursor-pointer ${
         selectedBug?.id === bug?.id ? 'bg-blue-50' : ''
     } ${isSelected ? 'bg-blue-50' : ''} ${bugIsUpdating ? 'opacity-60' : ''}`;
 
@@ -165,78 +284,58 @@ const BugTableRow = ({
             className={rowClassName}
             draggable={true}
             onDragStart={(e) => onDragStart && onDragStart(e, bug)}
+            onClick={handleRowClick}
         >
-            {/* Checkbox - Sticky */}
             <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center justify-center h-full">
                     {isSelected ? (
                         <CheckSquare
-                            className="w-4 h-4 text-teal-600 cursor-pointer"
+                            className="w-4 h-4 text-teal-600 cursor-pointer hover:text-teal-700 transition-colors"
                             onClick={handleCheckboxClick}
                         />
                     ) : (
                         <Square
-                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600 transition-colors"
                             onClick={handleCheckboxClick}
                         />
                     )}
                 </div>
             </td>
-
-            {/* Bug Title - Sticky */}
             <td className={`px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200 sticky left-10 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center space-x-2 h-full">
                     <div className="flex-1 min-w-0">
-                        {isEditing ? (
-                            <input
-                                type="text"
-                                value={titleValue || ''}
-                                onChange={(e) => onTitleChange && onTitleChange(e.target.value)}
-                                onBlur={() => onTitleSave && onTitleSave(bug.id)}
-                                onKeyDown={(e) => onTitleKeyDown && onTitleKeyDown(e, bug.id)}
-                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#00897B] focus:border-transparent"
-                                autoFocus
-                            />
-                        ) : (
-                            <div className="flex flex-col justify-center space-y-1">
-                                <div
-                                    className="font-medium text-gray-900 truncate text-sm leading-tight cursor-pointer hover:text-[#00897B] transition-colors"
-                                    onClick={handleTitleClick}
-                                    title={bug.title}
-                                >
-                                    {bug.title}
-                                </div>
-                                {bug.comments && bug.comments.length > 0 && (
-                                    <div className="flex items-center text-xs text-gray-400">
-                                        <MessageSquare className="h-3 w-3 mr-1 flex-shrink-0" />
-                                        <span className="flex-shrink-0">{bug.comments.length} comment{bug.comments.length !== 1 ? 's' : ''}</span>
-                                    </div>
-                                )}
+                        <div className="flex flex-col justify-center space-y-1">
+                            <div
+                                className="font-medium text-gray-900 truncate text-sm leading-tight cursor-pointer hover:text-[#00897B] transition-colors"
+                                title={bug.title}
+                            >
+                                {bug.title}
                             </div>
-                        )}
+                            {bug.comments && bug.comments.length > 0 && (
+                                <div className="flex items-center text-xs text-gray-400">
+                                    <MessageSquare className="h-3 w-3 mr-1 flex-shrink-0" />
+                                    <span className="flex-shrink-0">{bug.comments.length} comment{bug.comments.length !== 1 ? 's' : ''}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    {!isEditing && (
-                        <button
-                            onClick={handleChatIconClick}
-                            className="flex-shrink-0 p-1 text-gray-400 hover:text-[#00897B] transition-colors"
-                            title="View bug details"
-                        >
-                            <MessageSquare className="w-4 h-4" />
-                        </button>
-                    )}
+                    <button
+                        onClick={handleChatIconClick}
+                        className="flex-shrink-0 p-1 text-gray-400 hover:text-[#00897B] hover:bg-teal-50 rounded transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-200"
+                        title="View bug details"
+                        aria-label="View bug details"
+                    >
+                        <MessageSquare className="w-4 h-4" />
+                    </button>
                 </div>
             </td>
-
-            {/* Bug ID */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200 w-20 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center justify-center h-full">
-                    <span className="font-mono text-xs px-2 py-1 rounded">
-                        #{getShortBugId(bug.id)}
+                    <span className="font-mono text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                        {getUserFriendlyBugId(bug.id)}
                     </span>
                 </div>
             </td>
-
-            {/* Tags Column */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-32 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center justify-center h-full">
                     {bug.tags && bug.tags.length > 0 ? (
@@ -256,15 +355,13 @@ const BugTableRow = ({
                     )}
                 </div>
             </td>
-
-            {/* Status Column - Editable Dropdown */}
             <td className={`whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center justify-center px-2">
                     <select
                         value={bug?.status || 'New'}
                         onChange={(e) => handleStatusChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating}
-                        className={`text-xs px-2 py-1 rounded border-none focus:ring focus:ring-teal-700 cursor-pointer w-full ${getStatusColor(bug?.status)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={bugIsUpdating || !onUpdateBugStatus}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getStatusColor(bug?.status)} ${(bugIsUpdating || !onUpdateBugStatus) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_BUG_STATUSES.map(status => (
@@ -273,28 +370,24 @@ const BugTableRow = ({
                     </select>
                 </div>
             </td>
-
-            {/* Assigned To Column - Editable Dropdown */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200 w-32 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <select
-                        value={assignedUser || ''}
+                        value={assignedUser}
                         onChange={(e) => handleAssignmentChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating}
-                        className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-1 focus:ring-[#00897B] focus:border-[#00897B] w-full cursor-pointer bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={bugIsUpdating || !onUpdateBugAssignment}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white ${(bugIsUpdating || !onUpdateBugAssignment) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Unassigned</option>
                         {teamMembers.map((member) => (
-                            <option key={member.id} value={member.email || member.id}>
+                            <option key={member.id || member.email} value={member.email || member.id}>
                                 {getTeamMemberName(member.id, teamMembers)}
                             </option>
                         ))}
                     </select>
                 </div>
             </td>
-
-            {/* Priority Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-20 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(getPriorityFromSeverity(bug.severity))}`}>
@@ -302,15 +395,13 @@ const BugTableRow = ({
                     </span>
                 </div>
             </td>
-
-            {/* Severity Column - Editable Dropdown */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <select
                         value={bug?.severity || 'Low'}
                         onChange={(e) => handleSeverityChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating}
-                        className={`text-xs px-2 py-1 rounded border-none focus:ring-1 focus:ring-[#00897B] cursor-pointer w-full ${getSeverityColor(bug?.severity)} ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={bugIsUpdating || !onUpdateBugSeverity}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getSeverityColor(bug?.severity)} ${(bugIsUpdating || !onUpdateBugSeverity) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_BUG_SEVERITIES.map(severity => (
@@ -319,8 +410,6 @@ const BugTableRow = ({
                     </select>
                 </div>
             </td>
-
-            {/* Evidence Column */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <div className="flex items-center space-x-1">
@@ -351,17 +440,13 @@ const BugTableRow = ({
                     </div>
                 </div>
             </td>
-
-            {/* Reporter Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
-                    <div className="truncate w-full text-center" title={bug.reportedByEmail}>
-                        {bug.reportedByEmail?.split('@')[0] || 'Unknown'}
+                    <div className="truncate w-full text-center" title={bug.created_by || bug.reportedByEmail}>
+                        {reporterName}
                     </div>
                 </div>
             </td>
-
-            {/* Source Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <div className={`inline-flex items-center px-2 py-1 rounded text-xs ${getSourceColor(bug.source)}`}>
@@ -370,15 +455,13 @@ const BugTableRow = ({
                     </div>
                 </div>
             </td>
-
-            {/* Environment Column - Editable Dropdown */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <select
-                        value={bug?.environment || 'Unknown'}
+                        value={bug?.environment || 'Production'}
                         onChange={(e) => handleEnvironmentChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating}
-                        className={`text-xs px-2 py-1 rounded border-gray-300 focus:ring-2 focus:ring-[#00897B] focus:border-[#00897B] cursor-pointer w-full bg-white ${bugIsUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={bugIsUpdating || !onUpdateBugEnvironment}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white ${(bugIsUpdating || !onUpdateBugEnvironment) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {environments.map(env => (
@@ -387,8 +470,6 @@ const BugTableRow = ({
                     </select>
                 </div>
             </td>
-
-            {/* Device/Browser Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-xs text-gray-900 border-r border-gray-200 w-32 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <div className="flex items-center w-full">
@@ -400,14 +481,12 @@ const BugTableRow = ({
                     </div>
                 </div>
             </td>
-
-            {/* Due Date Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-sm border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     {bug.dueDate ? (
                         <div className={`flex items-center ${isPastDue(bug.dueDate) ? 'text-red-600' : 'text-gray-900'}`}>
                             <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
-                            <span className="text-xs">{formatDate(bug.dueDate)}</span>
+                            <span className="text-xs">{formatDateSafe(bug.dueDate)}</span>
                             {isPastDue(bug.dueDate) && (
                                 <AlertTriangle className="h-3 w-3 ml-1 text-red-500 flex-shrink-0" />
                             )}
@@ -417,27 +496,29 @@ const BugTableRow = ({
                     )}
                 </div>
             </td>
-
-            {/* Created Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap text-xs text-gray-500 border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <div className="flex items-center">
                         <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{formatDate(bug.createdAt)}</span>
+                        <span className="truncate">{formatDateSafe(bug.createdAt)}</span>
                     </div>
                 </div>
             </td>
-
-            {/* Frequency Column - Read Only */}
             <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${getFrequencyColor(bug.frequency)}`}>
-                        {bug.frequency || 'Unknown'}
-                    </span>
+                    <select
+                        value={bug?.frequency || 'Sometimes'}
+                        onChange={(e) => handleFrequencyChange(bug.id, e.target.value, e)}
+                        disabled={bugIsUpdating || !onUpdateBugFrequency}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white ${(bugIsUpdating || !onUpdateBugFrequency) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {VALID_FREQUENCIES.map(freq => (
+                            <option key={freq} value={freq}>{freq}</option>
+                        ))}
+                    </select>
                 </div>
             </td>
-
-            {/* Drag Handle */}
             <td className={`px-4 py-3 whitespace-nowrap w-8 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
                     <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />

@@ -6,19 +6,19 @@ import { useApp } from '@/contexts/AppProvider';
 import { useSuite } from '@/contexts/SuiteContext';
 import { useBugTracker } from '../hooks/useBugTracker';
 import BugTable from './bug-report/BugTable';
-import BugDetailsPanel from './bug-report/BugDetailsPanel';
+import BugDetailsModal from './modals/BugDetailsModal';
 import BugFilters from './bug-report/BugFilters';
 import firestoreService from '../services/firestoreService';
 
 const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
     const { user: resolvedUser, userCapabilities, isAuthenticated, isLoading: appLoading, addNotification } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
-    const { teamMembers, sprints, environments, filters, setFilters, isUpdating, error, loading, updateBugStatus, updateBugSeverity, updateBugAssignment, updateBugEnvironment, updateBug, updateBugTitle, createSprint, formatDate, refetchBugs } = useBugTracker({
+    const { teamMembers, sprints, environments, filters, setFilters, isUpdating, error, loading, updateBugStatus, updateBugSeverity, updateBugAssignment, updateBugEnvironment, updateBug, updateBugTitle, refetchBugs } = useBugTracker({
         enabled: isAuthenticated && !!resolvedUser?.uid && !!activeSuite?.suite_id && !appLoading && !suiteLoading,
         suite: activeSuite,
         user: resolvedUser
     });
-    const [showDetailsPanel, setShowDetailsPanel] = useState(false);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [selectedBug, setSelectedBug] = useState(null);
     const [selectedBugs, setSelectedBugs] = useState([]);
     const [mounted, setMounted] = useState(false);
@@ -37,7 +37,33 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
             return;
         }
         setSelectedBug(bug);
-        setShowDetailsPanel(true);
+        setShowDetailsModal(true);
+    };
+
+    const handleChatIconClick = (bug, event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        if (!userCapabilities.canViewBugs) {
+            addNotification({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'You don’t have permission to view bug details'
+            });
+            return;
+        }
+        if (!bug || !bug.id) {
+            console.error('Invalid bug object passed to chat icon click');
+            return;
+        }
+        setSelectedBug(bug);
+        setShowDetailsModal(true);
+        addNotification({
+            type: 'success',
+            title: 'Bug Details',
+            message: `Opening details for Bug #${bug.id.slice(-6)}`
+        });
     };
 
     const toggleBugSelection = (bugId) => {
@@ -136,7 +162,7 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
                 </div>
             )}
             <div className="flex-1 flex gap-6 overflow-hidden p-6">
-                <div className={`${showDetailsPanel ? 'flex-1' : 'w-full'} overflow-auto`}>
+                <div className="w-full overflow-auto">
                     <BugTable
                         bugs={filteredBugs || []}
                         selectedBugs={selectedBugs}
@@ -157,21 +183,16 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
                         loading={loading}
                         error={error}
                         onBulkAction={(userCapabilities.canUpdateBugs || userCapabilities.canDeleteBugs) ? handleBulkAction : null}
+                        onChatIconClick={userCapabilities.canViewBugs ? handleChatIconClick : null}
                     />
                 </div>
-                {showDetailsPanel && selectedBug && userCapabilities.canViewBugs && (
-                    <div className="w-96 bg-white rounded-lg border border-gray-200 shadow-xl overflow-y-auto flex-shrink-0">
-                        <BugDetailsPanel
-                            bug={selectedBug}
-                            onClose={() => setShowDetailsPanel(false)}
-                            onUpdateBug={userCapabilities.canUpdateBugs ? updateBug : null}
-                            teamMembers={teamMembers || []}
-                            environments={environments || []}
-                            sprints={sprints || []}
-                            onCreateSprint={userCapabilities.canManageBugs ? createSprint : null}
-                            formatDate={formatDate}
-                        />
-                    </div>
+                {showDetailsModal && selectedBug && userCapabilities.canViewBugs && (
+                    <BugDetailsModal
+                        bug={selectedBug}
+                        teamMembers={teamMembers || []}
+                        onUpdateBug={userCapabilities.canUpdateBugs ? updateBug : null}
+                        onClose={() => setShowDetailsModal(false)}
+                    />
                 )}
             </div>
         </div>

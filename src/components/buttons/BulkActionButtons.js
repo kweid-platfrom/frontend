@@ -2,7 +2,6 @@ import React from 'react';
 import { toast } from 'sonner';
 
 const BulkActionButtons = ({ selectedIds, onBulkAction }) => {
-    // Define configurable actions
     const actions = [
         { label: 'Reopen', action: 'reopen', disabled: !onBulkAction },
         { label: 'Close', action: 'close', disabled: !onBulkAction },
@@ -33,7 +32,7 @@ const BulkActionButtons = ({ selectedIds, onBulkAction }) => {
     }
 
     return (
-        <div className="bg-teal-50 border-b border-teal-200 px-6 py-3 z-10">
+        <div className="bg-teal-50 border-b border-teal-200 py-3 z-10 w-full">
             <div className="flex items-center justify-between">
                 <span className="text-sm text-teal-700 font-medium">
                     {selectedIds.length} bug{selectedIds.length > 1 ? 's' : ''} selected
@@ -43,7 +42,7 @@ const BulkActionButtons = ({ selectedIds, onBulkAction }) => {
                         <button
                             key={action}
                             onClick={() => handleActionClick(action)}
-                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                             disabled={disabled}
                         >
                             {label}

@@ -1,18 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
-import { doc, updateDoc, arrayUnion, serverTimestamp, onSnapshot } from "firebase/firestore";
-import { db } from "../../config/firebase";
-import { useSuite } from '../../contexts/SuiteContext';
-import { useApp } from '../../contexts/AppProvider';
 import BugComments from "../bug-report/BugComments";
 import EditableField from "../bugview/EditableField";
 import AttachmentsList from "../bugview/AttachmentsList";
 import ActivityLog from "../bugview/ActivityLog";
-import { 
-    Calendar, User, Flag, AlertCircle, 
-    Paperclip, X
-} from "lucide-react";
+import { Calendar, User, Flag, AlertCircle, Paperclip, X } from "lucide-react";
 
 const BugDetailsPanel = ({ 
     bug, 
@@ -21,32 +14,17 @@ const BugDetailsPanel = ({
     onUpdateBug, 
     formatDate,
     onClose,
-    permissions, // Now received from parent - no need to check auth here
+    permissions,
 }) => {
     const [editedBug, setEditedBug] = useState({ ...bug });
     const [comments, setComments] = useState(bug.messages || []);
-    const [loading, setLoading] = useState(false);
     const [editingField, setEditingField] = useState(null);
     const [tempValues, setTempValues] = useState({});
 
-    const { activeSuite } = useSuite();
-    const { user, addNotification } = useApp();
-
     const defaultFormatDate = (timestamp) => {
         if (!timestamp) return 'N/A';
-        
         try {
-            let date;
-            if (timestamp?.toDate) {
-                date = timestamp.toDate();
-            } else if (timestamp instanceof Date) {
-                date = timestamp;
-            } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-                date = new Date(timestamp);
-            } else {
-                return 'Invalid Date';
-            }
-            
+            let date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
             return date.toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'short',
@@ -60,31 +38,7 @@ const BugDetailsPanel = ({
         }
     };
 
-    const safeFormatDate = formatDate && typeof formatDate === 'function' ? formatDate : defaultFormatDate;
-
-    // Real-time updates - simplified without redundant auth checks
-    useEffect(() => {
-        if (!activeSuite?.suite_id || !bug.id) return;
-
-        const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bug.id);
-        
-        const unsubscribe = onSnapshot(bugRef, (docSnapshot) => {
-            if (docSnapshot.exists()) {
-                const bugData = docSnapshot.data();
-                setEditedBug({ id: docSnapshot.id, ...bugData });
-                setComments(bugData.messages || []);
-            }
-        }, (error) => {
-            console.error("Error listening to bug updates:", error);
-            addNotification({
-                type: 'error',
-                title: 'Error Loading Bug',
-                message: 'Failed to load real-time updates'
-            });
-        });
-
-        return () => unsubscribe();
-    }, [bug.id, activeSuite?.suite_id, addNotification]);
+    const safeFormatDate = formatDate || defaultFormatDate;
 
     // Sync with parent bug updates
     useEffect(() => {
@@ -93,72 +47,25 @@ const BugDetailsPanel = ({
     }, [bug]);
 
     const handleFieldEdit = (field, value) => {
-        if (!permissions.canUpdateBugs) {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You do not have permission to edit bugs'
-            });
-            return;
-        }
+        if (!permissions.canUpdateBugs) return;
         setEditingField(field);
         setTempValues({ ...tempValues, [field]: value });
     };
 
     const handleFieldSave = async (field) => {
-        if (!permissions.canUpdateBugs) {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You do not have permission to edit bugs'
-            });
-            return;
-        }
-
+        if (!permissions.canUpdateBugs) return;
         try {
-            setLoading(true);
-            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bug.id);
-            
             let updateData = { [field]: tempValues[field] };
-            
             if (field === 'dueDate' && tempValues[field]) {
                 updateData[field] = new Date(tempValues[field]);
             }
-
-            await updateDoc(bugRef, {
-                ...updateData,
-                updatedAt: serverTimestamp()
-            });
-
-            await updateDoc(bugRef, {
-                activityLog: arrayUnion({
-                    action: `updated ${field}`,
-                    user: user?.displayName || user?.email || user?.uid,
-                    createdAt: serverTimestamp()
-                })
-            });
-
-            // Update parent component
-            if (onUpdateBug) {
-                onUpdateBug({ ...editedBug, ...updateData });
-            }
-            
-            addNotification({
-                type: 'success',
-                title: 'Bug Updated',
-                message: `${field} updated successfully`
-            });
+            const updatedBug = { ...editedBug, ...updateData };
+            setEditedBug(updatedBug);
+            onUpdateBug(updatedBug);
             setEditingField(null);
             setTempValues({});
         } catch (error) {
             console.error(`Error updating ${field}:`, error);
-            addNotification({
-                type: 'error',
-                title: 'Update Failed',
-                message: `Error updating ${field}: ${error.message}`
-            });
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -169,54 +76,20 @@ const BugDetailsPanel = ({
 
     const handleAddComment = async (commentText, attachments = []) => {
         if (!commentText.trim() && attachments.length === 0) return;
-
-        if (!permissions.canUpdateBugs) {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You do not have permission to add comments'
-            });
-            return;
-        }
-
-        setLoading(true);
-        const newMessage = {
-            text: commentText,
-            user: user?.displayName || user?.email || user?.uid,
-            createdAt: serverTimestamp(),
-            attachments: attachments,
-            id: Date.now().toString()
-        };
-
+        if (!permissions.canUpdateBugs) return;
         try {
-            const bugRef = doc(db, 'testSuites', activeSuite.suite_id, 'bugs', bug.id);
-            
-            await updateDoc(bugRef, {
-                messages: arrayUnion(newMessage)
-            });
-
-            await updateDoc(bugRef, {
-                activityLog: arrayUnion({
-                    action: "commented",
-                    user: user?.displayName || user?.email || user?.uid,
-                    createdAt: serverTimestamp()
-                })
-            });
-            
-            addNotification({
-                type: 'success',
-                title: 'Comment Added',
-                message: 'Comment added successfully'
-            });
+            const newMessage = {
+                text: commentText,
+                user: bug.reporter || 'Unknown',
+                createdAt: new Date(),
+                attachments,
+                id: Date.now().toString()
+            };
+            const updatedComments = [...comments, newMessage];
+            setComments(updatedComments);
+            onUpdateBug({ ...editedBug, messages: updatedComments });
         } catch (error) {
-            console.error("Error sending message:", error);
-            addNotification({
-                type: 'error',
-                title: 'Comment Failed',
-                message: `Error sending message: ${error.message}`
-            });
-        } finally {
-            setLoading(false);
+            console.error("Error adding comment:", error);
         }
     };
 
@@ -248,7 +121,6 @@ const BugDetailsPanel = ({
     const editableFieldProps = {
         editingField,
         tempValues,
-        loading,
         onEdit: handleFieldEdit,
         onSave: handleFieldSave,
         onCancel: handleFieldCancel,
@@ -257,7 +129,7 @@ const BugDetailsPanel = ({
     };
 
     return (
-        <div className="h-full flex flex-col bg-white shadow-xl">
+        <div className="h-full flex flex-col bg-white shadow-xl w-96 rounded-lg border border-gray-200 overflow-y-auto flex-shrink-0">
             <div className="flex-shrink-0 px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-start justify-between">
                     <div className="flex-1 space-y-3 min-w-0">
@@ -450,7 +322,6 @@ const BugDetailsPanel = ({
                     <BugComments
                         comments={comments}
                         onAddComment={handleAddComment}
-                        loading={loading}
                         formatDate={safeFormatDate}
                         teamMembers={teamMembers}
                         disabled={!permissions.canUpdateBugs}
