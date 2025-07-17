@@ -1,8 +1,8 @@
-"use client";
+'use client'
 
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppProvider';
-import { useSuite } from '@/contexts/SuiteContext';
+import { SuiteProvider, useSuite } from '@/contexts/SuiteContext';
 import PageLayout from '@/components/layout/PageLayout';
 import TestCaseTable from '@/components/testCase/TestCaseTable';
 import TestCaseModal from '@/components/testCase/TestCaseModal';
@@ -12,7 +12,7 @@ import AIGenerationModal from '@/components/testCase/AIGenerationModal';
 import TraceabilityComponent from '@/components/testCase/TraceabilityMatrix';
 import testCaseService from '@/services/testCaseService';
 
-export default function TestCasesPage() {
+function TestCasesPageContent() {
     const { addNotification, isLoading: appLoading } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
     const [testCases, setTestCases] = useState([]);
@@ -96,6 +96,35 @@ export default function TestCasesPage() {
         setFilteredTestCases(filtered);
     }, [testCases, filters]);
 
+    const handleSaveTestCase = useCallback(async (testCaseData) => {
+        try {
+            const result = selectedTestCase
+                ? await testCaseService.updateTestCase(activeSuite.id, selectedTestCase.id, testCaseData)
+                : await testCaseService.createTestCase(activeSuite.id, testCaseData);
+            if (result.success) {
+                addNotification({
+                    type: 'success',
+                    title: 'Success',
+                    message: selectedTestCase ? 'Test case updated successfully' : 'Test case created successfully'
+                });
+                setIsModalOpen(false);
+                await loadTestCases();
+            } else {
+                addNotification({
+                    type: 'error',
+                    title: 'Error',
+                    message: result.error.message || 'Failed to save test case'
+                });
+            }
+        } catch {
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to save test case'
+            });
+        }
+    }, [activeSuite?.id, selectedTestCase, addNotification, loadTestCases]);
+
     useEffect(() => {
         if (!appLoading && !suiteLoading) {
             loadTestCases();
@@ -107,6 +136,14 @@ export default function TestCasesPage() {
     }, [testCases, filters, applyFilters]);
 
     const handleCreateTestCase = () => {
+        if (!activeSuite?.id) {
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: 'Please select a suite first'
+            });
+            return;
+        }
         setSelectedTestCase(null);
         setIsModalOpen(true);
     };
@@ -141,35 +178,6 @@ export default function TestCasesPage() {
                     message: 'Failed to delete test case'
                 });
             }
-        }
-    };
-
-    const handleSaveTestCase = async (testCaseData) => {
-        try {
-            const result = selectedTestCase
-                ? await testCaseService.updateTestCase(activeSuite.id, selectedTestCase.id, testCaseData)
-                : await testCaseService.createTestCase(activeSuite.id, testCaseData);
-            if (result.success) {
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: selectedTestCase ? 'Test case updated successfully' : 'Test case created successfully'
-                });
-                setIsModalOpen(false);
-                await loadTestCases();
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: result.error.message || 'Failed to save test case'
-                });
-            }
-        } catch {
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: 'Failed to save test case'
-            });
         }
     };
 
@@ -333,6 +341,7 @@ export default function TestCasesPage() {
                     />
                 </div>
 
+                {/* Remove the SuiteProvider wrapper around TestCaseModal */}
                 {isModalOpen && (
                     <TestCaseModal
                         testCase={selectedTestCase}
@@ -363,5 +372,17 @@ export default function TestCasesPage() {
                 )}
             </div>
         </PageLayout>
+    );
+}
+
+export default function TestCasesPage() {
+    const { user, isLoading: appLoading } = useApp();
+    if (appLoading || !user) {
+        return null;
+    }
+    return (
+        <SuiteProvider user={user}>
+            <TestCasesPageContent />
+        </SuiteProvider>
     );
 }

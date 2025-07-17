@@ -33,7 +33,7 @@ class ErrorBoundary extends React.Component {
                         </p>
                         <button
                             onClick={() => window.location.reload()}
-                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            className="inline-flex items-center px-3 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
                         >
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh Page

@@ -1,5 +1,5 @@
-// Fixed BugTracker - Improved selection handling and details panel
-import React, { useState, useMemo, useEffect } from "react";
+// Fixed BugTracker - Improved state management and chat icon functionality
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { useSuite } from "../../context/SuiteContext";
 import { useAuth } from "../../context/AuthProvider";
@@ -19,18 +19,24 @@ const BugTracker = () => {
     const { user: authUser, loading: authLoading, error: authError } = useAuth();
     const { userProfile, error: profileError } = useUserProfile();
 
+    // UI State
     const [showFilters, setShowFilters] = useState(false);
     const [showDetailsPanel, setShowDetailsPanel] = useState(false);
     const [showMetrics, setShowMetrics] = useState(false);
+    
+    // Selection State - Fixed with proper state management
     const [selectedBug, setSelectedBug] = useState(null);
     const [selectedBugs, setSelectedBugs] = useState([]);
+    
+    // Component State
     const [mounted, setMounted] = useState(false);
+    const [detailsPanelKey, setDetailsPanelKey] = useState(0);
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // FIXED: Simplified user resolution - follow SuiteSelector pattern
+    // FIXED: Simplified user resolution
     const resolvedUser = useMemo(() => {
         if (authUser?.uid) {
             return {
@@ -56,11 +62,9 @@ const BugTracker = () => {
     const criticalError = useMemo(() => {
         if (authError) return authError;
         if (suiteError) return suiteError;
-
         if (profileError) {
             console.warn('Profile error (non-critical):', profileError);
         }
-
         return null;
     }, [authError, suiteError, profileError]);
 
@@ -75,11 +79,9 @@ const BugTracker = () => {
         if (userProfile?.permissions) {
             return getUserPermissions(userProfile);
         }
-
         if (userProfile) {
             return getUserPermissions(userProfile);
         }
-
         if (authUser?.uid) {
             return {
                 canReadBugs: true,
@@ -88,7 +90,6 @@ const BugTracker = () => {
                 canManageBugs: false
             };
         }
-
         return {
             canReadBugs: false,
             canUpdateBugs: false,
@@ -123,6 +124,181 @@ const BugTracker = () => {
         suite: activeSuite,
         user: resolvedUser
     });
+
+    // FIXED: Enhanced bug selection handler with proper state management
+const handleBugSelect = useCallback((bug) => {
+    if (!permissions.canReadBugs) {
+        toast.error("You don't have permission to view bug details");
+        return;
+    }
+    
+    console.log('handleBugSelect called with:', bug?.id);
+    
+    // Ensure we have a valid bug
+    if (!bug || !bug.id) {
+        console.error('Invalid bug object passed to handleBugSelect');
+        return;
+    }
+    
+    // Update selected bug and show details panel
+    setSelectedBug(prev => {
+        // Only update if bug is different to prevent unnecessary re-renders
+        if (prev?.id !== bug.id) {
+            setShowDetailsPanel(true);
+            setDetailsPanelKey(prevKey => prevKey + 1); // Force re-render
+            return bug;
+        }
+        return prev;
+    });
+}, [permissions.canReadBugs]);
+
+    // FIXED: Improved chat icon click handler
+    const handleChatIconClick = useCallback((bug, event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
+        console.log('Chat icon clicked for bug:', bug?.id);
+        
+        if (!permissions.canReadBugs) {
+            toast.error("You don't have permission to view bug details");
+            return;
+        }
+
+        // Ensure we have a valid bug
+        if (!bug || !bug.id) {
+            console.error('Invalid bug object passed to chat icon click');
+            return;
+        }
+
+        // Set the selected bug and show details panel
+        setSelectedBug(bug);
+        setShowDetailsPanel(true);
+        setDetailsPanelKey(prev => prev + 1); // Force re-render
+        
+        // Show success message
+        toast.success(`Opening details for Bug #${bug.id.slice(-6)}`);
+    }, [permissions.canReadBugs]);
+
+    // FIXED: Improved toggle selection with proper state management
+    const toggleBugSelection = useCallback((bugId) => {
+        if (!permissions.canReadBugs) {
+            toast.error("You don't have permission to select bugs");
+            return;
+        }
+
+        if (!bugId) {
+            console.error('Invalid bugId passed to toggleBugSelection');
+            return;
+        }
+
+        setSelectedBugs(prev => {
+            const isSelected = prev.includes(bugId);
+            const newSelection = isSelected
+                ? prev.filter(id => id !== bugId)
+                : [...prev, bugId];
+
+            console.log('toggleBugSelection:', { 
+                bugId, 
+                isSelected, 
+                previousCount: prev.length, 
+                newCount: newSelection.length 
+            });
+            
+            return newSelection;
+        });
+    }, [permissions.canReadBugs]);
+
+    // FIXED: Enhanced bulk action handler
+    const handleBulkAction = useCallback(async (action, ids) => {
+        if (!permissions.canUpdateBugs && action !== 'delete') {
+            toast.error("You don't have permission to update bugs");
+            return;
+        }
+        if (!permissions.canDeleteBugs && action === 'delete') {
+            toast.error("You don't have permission to delete bugs");
+            return;
+        }
+
+        if (!ids || ids.length === 0) {
+            toast.error("No bugs selected");
+            return;
+        }
+
+        try {
+            console.log(`Performing bulk ${action} on:`, ids);
+
+            switch (action) {
+                case 'reopen':
+                    await Promise.all(ids.map(id => updateBugStatus(id, 'open')));
+                    toast.success(`Reopened ${ids.length} bugs`);
+                    break;
+                case 'close':
+                    await Promise.all(ids.map(id => updateBugStatus(id, 'closed')));
+                    toast.success(`Closed ${ids.length} bugs`);
+                    break;
+                case 'delete':
+                    // Add actual delete logic here
+                    toast.success(`Deleted ${ids.length} bugs`);
+                    break;
+                default:
+                    toast.error('Unknown bulk action');
+                    return;
+            }
+
+            // Clear selection after successful action
+            setSelectedBugs([]);
+
+            // Refresh data if needed
+            if (refetch) {
+                await refetch();
+            }
+        } catch (error) {
+            console.error(`Bulk ${action} failed:`, error);
+            toast.error(`Failed to ${action} bugs: ${error.message}`);
+        }
+    }, [permissions, updateBugStatus, refetch]);
+
+    // FIXED: Enhanced permission check
+    const hasPermissionCheck = useCallback((permission) => {
+        switch (permission) {
+            case 'read': return permissions.canReadBugs;
+            case 'write': return permissions.canUpdateBugs;
+            case 'admin': return permissions.canDeleteBugs || permissions.canManageBugs;
+            default: return false;
+        }
+    }, [permissions]);
+
+    // FIXED: Handle details panel close with proper state cleanup
+    const handleCloseDetailsPanel = useCallback(() => {
+        console.log('Closing details panel');
+        setShowDetailsPanel(false);
+        setSelectedBug(null);
+        setDetailsPanelKey(prev => prev + 1); // Force re-render
+    }, []);
+
+    // FIXED: Enhanced bug update handler
+    const handleUpdateBug = useCallback(async (updatedBug) => {
+        if (!permissions.canUpdateBugs) {
+            toast.error("You don't have permission to update bugs");
+            return;
+        }
+
+        try {
+            await updateBug(updatedBug.id, updatedBug);
+            
+            // Update the selected bug if it's currently selected
+            if (selectedBug && selectedBug.id === updatedBug.id) {
+                setSelectedBug(updatedBug);
+            }
+            
+            toast.success('Bug updated successfully');
+        } catch (error) {
+            console.error('Error updating bug:', error);
+            toast.error(`Failed to update bug: ${error.message}`);
+        }
+    }, [permissions.canUpdateBugs, updateBug, selectedBug]);
 
     // Calculate metrics
     const comprehensiveMetrics = useMemo(() => {
@@ -210,115 +386,6 @@ const BugTracker = () => {
         };
     }, [bugs, permissions]);
 
-    // FIXED: Improved bug selection handler
-    const handleBugSelect = (bug) => {
-        if (!permissions.canReadBugs) {
-            toast.error("You don't have permission to view bug details");
-            return;
-        }
-        setSelectedBug(bug);
-        setShowDetailsPanel(true);
-    };
-
-    // FIXED: Simplified toggle selection
-    const toggleBugSelection = (bugId) => {
-        if (!permissions.canReadBugs) {
-            toast.error("You don't have permission to select bugs");
-            return;
-        }
-
-        setSelectedBugs(prev => {
-            const isSelected = prev.includes(bugId);
-            const newSelection = isSelected
-                ? prev.filter(id => id !== bugId)
-                : [...prev, bugId];
-
-            console.log('toggleBugSelection:', { bugId, isSelected, prev, newSelection });
-            return newSelection;
-        });
-    };
-
-    // FIXED: Improved bulk action handler
-    const handleBulkAction = async (action, ids) => {
-        if (!permissions.canUpdateBugs && action !== 'delete') {
-            toast.error("You don't have permission to update bugs");
-            return;
-        }
-        if (!permissions.canDeleteBugs && action === 'delete') {
-            toast.error("You don't have permission to delete bugs");
-            return;
-        }
-
-        if (!ids || ids.length === 0) {
-            toast.error("No bugs selected");
-            return;
-        }
-
-        try {
-            console.log(`Performing bulk ${action} on:`, ids);
-
-            switch (action) {
-                case 'reopen':
-                    await Promise.all(ids.map(id => updateBugStatus(id, 'open')));
-                    toast.success(`Reopened ${ids.length} bugs`);
-                    break;
-                case 'close':
-                    await Promise.all(ids.map(id => updateBugStatus(id, 'closed')));
-                    toast.success(`Closed ${ids.length} bugs`);
-                    break;
-                case 'delete':
-                    // Add actual delete logic here
-                    toast.success(`Deleted ${ids.length} bugs`);
-                    break;
-                default:
-                    toast.error('Unknown bulk action');
-                    return;
-            }
-
-            // Clear selection after successful action
-            setSelectedBugs([]);
-
-            // Refresh data if needed
-            if (refetch) {
-                await refetch();
-            }
-        } catch (error) {
-            console.error(`Bulk ${action} failed:`, error);
-            toast.error(`Failed to ${action} bugs: ${error.message}`);
-        }
-    };
-
-    // FIXED: Enhanced permission check
-    const hasPermissionCheck = (permission) => {
-        switch (permission) {
-            case 'read': return permissions.canReadBugs;
-            case 'write': return permissions.canUpdateBugs;
-            case 'admin': return permissions.canDeleteBugs || permissions.canManageBugs;
-            default: return false;
-        }
-    };
-
-    // FIXED: Handle details panel close
-    const handleCloseDetailsPanel = () => {
-        setShowDetailsPanel(false);
-        setSelectedBug(null);
-    };
-
-    // FIXED: Handle chat icon click - ensure it opens details panel
-    const handleChatIconClick = (bug, event) => {
-        if (event) {
-            event.stopPropagation();
-        }
-        console.log('Chat icon clicked for bug:', bug.id);
-
-        // Ensure details panel opens
-        setSelectedBug(bug);
-        setShowDetailsPanel(true);
-
-        // Also call the main bug select handler
-        handleBugSelect(bug);
-    };
-
     // FIXED: Debug effect for selection state
     useEffect(() => {
         console.log('BugTracker selection state:', {
@@ -326,9 +393,32 @@ const BugTracker = () => {
             selectedBugsCount: selectedBugs.length,
             bugsCount: bugs?.length || 0,
             showDetailsPanel,
-            selectedBugId: selectedBug?.id
+            selectedBugId: selectedBug?.id,
+            detailsPanelKey
         });
-    }, [selectedBugs, bugs, showDetailsPanel, selectedBug]);
+    }, [selectedBugs, bugs, showDetailsPanel, selectedBug, detailsPanelKey]);
+
+    // FIXED: Clear selection when filtered bugs change
+    useEffect(() => {
+        if (filteredBugs && selectedBugs.length > 0) {
+            const filteredBugIds = filteredBugs.map(bug => bug.id);
+            const validSelections = selectedBugs.filter(id => filteredBugIds.includes(id));
+            
+            if (validSelections.length !== selectedBugs.length) {
+                setSelectedBugs(validSelections);
+            }
+        }
+    }, [filteredBugs, selectedBugs]);
+
+    // FIXED: Ensure selected bug is updated when bugs change
+    useEffect(() => {
+        if (selectedBug && bugs) {
+            const updatedBug = bugs.find(bug => bug.id === selectedBug.id);
+            if (updatedBug && JSON.stringify(updatedBug) !== JSON.stringify(selectedBug)) {
+                setSelectedBug(updatedBug);
+            }
+        }
+    }, [bugs, selectedBug]);
 
     if (!mounted) {
         return null;
@@ -475,9 +565,10 @@ const BugTracker = () => {
                 {showDetailsPanel && selectedBug && (
                     <div className="w-96 bg-white rounded-lg border border-gray-200 shadow-xl overflow-y-auto flex-shrink-0">
                         <BugDetailsPanel
+                            key={`bug-details-${selectedBug.id}-${detailsPanelKey}`}
                             bug={selectedBug}
                             onClose={handleCloseDetailsPanel}
-                            onUpdateBug={permissions.canUpdateBugs ? updateBug : null}
+                            onUpdateBug={permissions.canUpdateBugs ? handleUpdateBug : null}
                             onUpdateStatus={permissions.canUpdateBugs ? updateBugStatus : null}
                             onUpdateSeverity={permissions.canUpdateBugs ? updateBugSeverity : null}
                             onUpdateAssignment={permissions.canUpdateBugs ? updateBugAssignment : null}

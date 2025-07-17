@@ -4,18 +4,19 @@ import { useRouter } from 'next/navigation';
 import { useApp } from '@/contexts/AppProvider';
 import { useSuite } from '@/contexts/SuiteContext';
 import PageLayout from '@/components/layout/PageLayout';
-import BugTracker from '../../components/BugTracker';
+import BugTracker from '@/components/BugTracker';
 import { FileText, Download, Filter, List, Table, Calendar, User, Flag, AlertTriangle, Clock } from 'lucide-react';
-import BugReportButton from '../../components/modals/BugReportButton';
-import { useBugTracker } from '../../hooks/useBugTracker';
+import BugReportButton from '@/components/modals/BugReportButton';
+import { useBugTracker } from '@/hooks/useBugTracker';
 import { BugAntIcon } from "@heroicons/react/24/outline";
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 
 export default function BugTrackerPage() {
     const { addNotification, user, userCapabilities, isAuthenticated, isLoading: appLoading } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
     const router = useRouter();
-    const { bugs, filteredBugs, setFilters, exportBugs } = useBugTracker({
+    const { bugs, filteredBugs, setFilters, exportBugs, updateBugStatus, deleteBugs } = useBugTracker({
         enabled: isAuthenticated && !!activeSuite?.suite_id && !!user?.uid && !appLoading && !suiteLoading,
         suite: activeSuite,
         user
@@ -25,6 +26,7 @@ export default function BugTrackerPage() {
     const [groupBy, setGroupBy] = useState('none');
     const [subGroupBy, setSubGroupBy] = useState('none');
     const [viewMode, setViewMode] = useState('table');
+    const [selectedBugs, setSelectedBugs] = useState([]);
 
     const groupingOptions = [
         { value: 'none', label: 'No Grouping', icon: List },
@@ -40,6 +42,59 @@ export default function BugTrackerPage() {
         { value: 'week', label: 'Week' },
         { value: 'month', label: 'Month' }
     ];
+
+    const toggleBugSelection = useCallback((bugId) => {
+        if (!userCapabilities.canViewBugs) {
+            toast.error("You don't have permission to select bugs");
+            return;
+        }
+        setSelectedBugs(prev => {
+            const isSelected = prev.includes(bugId);
+            const newSelection = isSelected
+                ? prev.filter(id => id !== bugId)
+                : [...prev, bugId];
+            toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
+            return newSelection;
+        });
+    }, [userCapabilities]);
+
+    const handleBulkAction = useCallback(async (action, ids) => {
+        if (!userCapabilities.canUpdateBugs && action !== 'delete') {
+            toast.error("You don't have permission to update bugs");
+            return;
+        }
+        if (!userCapabilities.canDeleteBugs && action === 'delete') {
+            toast.error("You don't have permission to delete bugs");
+            return;
+        }
+        if (!ids || ids.length === 0) {
+            toast.error("No bugs selected");
+            return;
+        }
+        try {
+            if (action === 'delete') {
+                if (!window.confirm(`Are you sure you want to delete ${ids.length} bug${ids.length > 1 ? 's' : ''}?`)) {
+                    return;
+                }
+                await deleteBugs(activeSuite.suite_id, ids);
+            } else {
+                await Promise.all(ids.map(id => updateBugStatus(id, action === 'reopen' ? 'open' : 'closed')));
+            }
+            setSelectedBugs([]);
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: `${ids.length} bug${ids.length > 1 ? 's' : ''} ${action}d successfully`
+            });
+        } catch (error) {
+            console.error(`Error performing bulk ${action}:`, error);
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to ${action} bugs: ${error.message}`
+            });
+        }
+    }, [userCapabilities, activeSuite, updateBugStatus, deleteBugs, addNotification]);
 
     if (appLoading || suiteLoading) {
         return null;
@@ -209,6 +264,9 @@ export default function BugTrackerPage() {
                 <BugTracker
                     bugs={bugs || []}
                     filteredBugs={filteredBugs || []}
+                    selectedBugs={selectedBugs}
+                    onToggleSelection={toggleBugSelection}
+                    onBulkAction={handleBulkAction}
                     showFilters={showFilters}
                     setShowFilters={setShowFilters}
                     showMetrics={showMetrics}

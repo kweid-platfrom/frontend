@@ -21,7 +21,7 @@ const BugDetailsPanel = ({
     onUpdateBug, 
     formatDate,
     onClose,
-    permissions,
+    permissions, // Now received from parent - no need to check auth here
 }) => {
     const [editedBug, setEditedBug] = useState({ ...bug });
     const [comments, setComments] = useState(bug.messages || []);
@@ -62,6 +62,7 @@ const BugDetailsPanel = ({
 
     const safeFormatDate = formatDate && typeof formatDate === 'function' ? formatDate : defaultFormatDate;
 
+    // Real-time updates - simplified without redundant auth checks
     useEffect(() => {
         if (!activeSuite?.suite_id || !bug.id) return;
 
@@ -75,23 +76,21 @@ const BugDetailsPanel = ({
             }
         }, (error) => {
             console.error("Error listening to bug updates:", error);
-            if (error.code === 'permission-denied') {
-                addNotification({
-                    type: 'error',
-                    title: 'Permission Denied',
-                    message: 'You do not have permission to view this bug'
-                });
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error Loading Bug',
-                    message: `Error loading bug data: ${error.message}`
-                });
-            }
+            addNotification({
+                type: 'error',
+                title: 'Error Loading Bug',
+                message: 'Failed to load real-time updates'
+            });
         });
 
         return () => unsubscribe();
     }, [bug.id, activeSuite?.suite_id, addNotification]);
+
+    // Sync with parent bug updates
+    useEffect(() => {
+        setEditedBug({ ...bug });
+        setComments(bug.messages || []);
+    }, [bug]);
 
     const handleFieldEdit = (field, value) => {
         if (!permissions.canUpdateBugs) {
@@ -112,15 +111,6 @@ const BugDetailsPanel = ({
                 type: 'error',
                 title: 'Permission Denied',
                 message: 'You do not have permission to edit bugs'
-            });
-            return;
-        }
-
-        if (!activeSuite?.suite_id) {
-            addNotification({
-                type: 'error',
-                title: 'No Active Suite',
-                message: 'No active suite selected'
             });
             return;
         }
@@ -148,6 +138,7 @@ const BugDetailsPanel = ({
                 })
             });
 
+            // Update parent component
             if (onUpdateBug) {
                 onUpdateBug({ ...editedBug, ...updateData });
             }
@@ -161,19 +152,11 @@ const BugDetailsPanel = ({
             setTempValues({});
         } catch (error) {
             console.error(`Error updating ${field}:`, error);
-            if (error.code === 'permission-denied') {
-                addNotification({
-                    type: 'error',
-                    title: 'Permission Denied',
-                    message: 'You do not have permission to update this bug'
-                });
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Update Failed',
-                    message: `Error updating ${field}: ${error.message}`
-                });
-            }
+            addNotification({
+                type: 'error',
+                title: 'Update Failed',
+                message: `Error updating ${field}: ${error.message}`
+            });
         } finally {
             setLoading(false);
         }
@@ -192,15 +175,6 @@ const BugDetailsPanel = ({
                 type: 'error',
                 title: 'Permission Denied',
                 message: 'You do not have permission to add comments'
-            });
-            return;
-        }
-
-        if (!activeSuite?.suite_id) {
-            addNotification({
-                type: 'error',
-                title: 'No Active Suite',
-                message: 'No active suite selected'
             });
             return;
         }
@@ -236,19 +210,11 @@ const BugDetailsPanel = ({
             });
         } catch (error) {
             console.error("Error sending message:", error);
-            if (error.code === 'permission-denied') {
-                addNotification({
-                    type: 'error',
-                    title: 'Permission Denied',
-                    message: 'You do not have permission to add comments'
-                });
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Comment Failed',
-                    message: `Error sending message: ${error.message}`
-                });
-            }
+            addNotification({
+                type: 'error',
+                title: 'Comment Failed',
+                message: `Error sending message: ${error.message}`
+            });
         } finally {
             setLoading(false);
         }

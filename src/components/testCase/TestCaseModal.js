@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
-import testCaseService from '../../services/testCaseService';
+import { useApp } from '@/contexts/AppProvider';
+import { useSuite } from '@/contexts/SuiteContext';
+import testCaseService from '@/services/testCaseService';
 
-export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
-    const { user, userProfile, activeSuite } = useSuite();
-    
+export default function TestCaseModal({ testCase, onClose, onSave }) {
+    const { addNotification, user: appUser } = useApp();
+    const { userProfile, activeSuite, isLoading: suiteLoading } = useSuite();
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -25,7 +26,16 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
     const [tagInput, setTagInput] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const effectiveSuiteId = suiteId || activeSuite?.id;
+    const user = appUser;
+
+    useEffect(() => {
+        console.log('TestCaseModal: Context values', {
+            appUser: appUser ? { uid: appUser.uid, email: appUser.email } : null,
+            userProfile,
+            activeSuite: activeSuite ? { id: activeSuite.id, name: activeSuite.name } : null,
+            suiteLoading
+        });
+    }, [appUser, userProfile, activeSuite, suiteLoading]);
 
     useEffect(() => {
         if (testCase) {
@@ -35,6 +45,26 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
             });
         }
     }, [testCase]);
+
+    // Reset form to initial state
+    const resetForm = () => {
+        setFormData({
+            title: '',
+            description: '',
+            priority: 'medium',
+            status: 'draft',
+            assignee: '',
+            tags: [],
+            preconditions: '',
+            testSteps: [{ action: '', expectedResult: '' }],
+            automationStatus: 'none',
+            executionType: 'manual',
+            estimatedTime: '',
+            environment: '',
+            testData: ''
+        });
+        setTagInput('');
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -70,7 +100,7 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
     const handleUpdateTestStep = (index, field, value) => {
         setFormData(prev => ({
             ...prev,
-            testSteps: prev.testSteps.map((step, i) => 
+            testSteps: prev.testSteps.map((step, i) =>
                 i === index ? { ...step, [field]: value } : step
             )
         }));
@@ -87,32 +117,38 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        if (!user?.uid) {
-            toast.error('Please log in to save test cases');
+
+        if (!user) {
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: 'User not authenticated'
+            });
             return;
         }
 
-        if (!effectiveSuiteId) {
-            toast.error('Please select a suite first');
+        if (!activeSuite?.id) {
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: 'No test suite selected'
+            });
             return;
         }
 
         setLoading(true);
-        
+
         try {
             if (!formData.title.trim()) {
-                toast.error('Test case title is required');
-                return;
+                throw new Error('Test case title is required');
             }
 
-            const validTestSteps = formData.testSteps.filter(step => 
+            const validTestSteps = formData.testSteps.filter(step =>
                 step.action.trim() || step.expectedResult.trim()
             );
 
             if (validTestSteps.length === 0) {
-                toast.error('At least one test step with action or expected result is required');
-                return;
+                throw new Error('At least one test step with action or expected result is required');
             }
 
             const dataToSave = {
@@ -132,23 +168,49 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
 
             let result;
             if (testCase) {
-                result = await testCaseService.updateTestCase(effectiveSuiteId, testCase.id, dataToSave);
-            } else {
-                result = await testCaseService.createTestCase(effectiveSuiteId, dataToSave, user, userProfile);
-            }
-
-            if (result.success) {
-                if (onSave) {
+                // For updates, close modal after saving
+                result = await testCaseService.updateTestCase(activeSuite.id, testCase.id, dataToSave);
+                if (result.success) {
                     await onSave(result.data);
+                    addNotification({
+                        type: 'success',
+                        title: 'Success',
+                        message: 'Test case updated successfully'
+                    });
+                } else {
+                    throw new Error(result.error.message || 'Failed to update test case');
                 }
-                toast.success(testCase ? 'Test case updated successfully' : 'Test case created successfully');
-                onClose();
             } else {
-                throw new Error(result.error.message);
+                // For new test cases, keep modal open and reset form
+                result = await testCaseService.createTestCase(activeSuite.id, dataToSave, user, userProfile);
+                if (result.success) {
+                    // Call onSave to update the parent component's state
+                    await onSave(result.data);
+                    
+                    // Reset form for creating another test case
+                    resetForm();
+                    
+                    addNotification({
+                        type: 'success',
+                        title: 'Success',
+                        message: 'Test case created successfully. You can create another one.'
+                    });
+                } else {
+                    throw new Error(result.error.message || 'Failed to create test case');
+                }
             }
         } catch (error) {
-            console.error('Error saving test case:', error);
-            toast.error(error.message || 'Failed to save test case');
+            console.error('TestCaseModal error:', {
+                suiteId: activeSuite?.id,
+                testCaseId: testCase?.id,
+                errorMessage: error.message,
+                user: user ? { uid: user.uid, email: user.email } : null
+            });
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: error.message || 'Failed to save test case'
+            });
         } finally {
             setLoading(false);
         }
@@ -161,12 +223,40 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
         }
     };
 
+    if (suiteLoading) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Loading...</h2>
+                    <p className="text-gray-600 mb-4">Please wait while we load your session.</p>
+                </div>
+            </div>
+        );
+    }
+
     if (!user) {
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
                     <h2 className="text-lg font-semibold text-gray-900 mb-4">Authentication Required</h2>
                     <p className="text-gray-600 mb-4">Please log in to create or edit test cases.</p>
+                    <button
+                        onClick={onClose}
+                        className="w-full px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!activeSuite?.id) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">No Suite Selected</h2>
+                    <p className="text-gray-600 mb-4">Please select a test suite to create or edit test cases.</p>
                     <button
                         onClick={onClose}
                         className="w-full px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
@@ -194,11 +284,9 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
                             ×
                         </button>
                     </div>
-                    {effectiveSuiteId && (
-                        <p className="text-sm text-gray-500 mt-1">
-                            Suite: {activeSuite?.name || effectiveSuiteId}
-                        </p>
-                    )}
+                    <p className="text-sm text-gray-500 mt-1">
+                        Suite: {activeSuite?.name || activeSuite.id}
+                    </p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
@@ -482,7 +570,7 @@ export default function TestCaseModal({ testCase, onClose, onSave, suiteId }) {
                         <button
                             type="submit"
                             onClick={handleSubmit}
-                            disabled={loading || !user || !effectiveSuiteId}
+                            disabled={loading || !user || !activeSuite?.id}
                             className="w-full sm:w-auto px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 text-sm"
                         >
                             {loading ? 'Saving...' : (testCase ? 'Update' : 'Create')} Test Case

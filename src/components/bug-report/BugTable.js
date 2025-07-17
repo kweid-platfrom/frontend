@@ -1,14 +1,14 @@
-// src/components/BugTable.js
 'use client';
 
-import React, { useState, } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { CheckSquare, Square } from 'lucide-react';
 import BugTableRow from './BugTableRow';
+import BulkActionButtons from '../buttons/BulkActionButtons';
 
 const BugTable = ({
     bugs = [],
-    selectedBugs = [], // Changed from selectedIds to match parent
+    selectedBugs = [],
     onBugSelect,
     onUpdateBugStatus,
     onUpdateBugSeverity,
@@ -29,11 +29,17 @@ const BugTable = ({
 }) => {
     const [editingTitle, setEditingTitle] = useState(null);
     const [titleValue, setTitleValue] = useState('');
+    const [selectedIds, setSelectedIds] = useState(Array.isArray(selectedBugs) ? selectedBugs : []);
 
-    // FIXED: Ensure selectedBugs is always an array
-    const selectedIds = Array.isArray(selectedBugs) ? selectedBugs : [];
+    // Debug logging for props and state
+    useEffect(() => {
+        console.log('BugTable props:', { selectedBugs, selectedIds, onBulkAction: !!onBulkAction, bugsLength: bugs.length });
+    }, [selectedBugs, selectedIds, onBulkAction, bugs]);
 
-    console.log('BugTable render:', { selectedIds, selectedBugs, bugsLength: bugs.length });
+    // Sync local state with prop changes
+    useEffect(() => {
+        setSelectedIds(Array.isArray(selectedBugs) ? selectedBugs : []);
+    }, [selectedBugs]);
 
     const handleSelectAll = (checked) => {
         if (!onToggleSelection) {
@@ -42,33 +48,30 @@ const BugTable = ({
         }
         if (checked) {
             const allIds = bugs.map(bug => bug.id);
+            setSelectedIds(allIds);
             allIds.forEach(id => onToggleSelection(id));
+            toast.info(`Selected all ${bugs.length} bugs`);
         } else {
-            selectedIds.forEach(id => onToggleSelection(id));
+            setSelectedIds([]);
+            bugs.forEach(bug => onToggleSelection(bug.id));
+            toast.info('Cleared selection');
         }
     };
 
-    const handleSelectItem = (id) => {
+    const handleSelectItem = (id, checked) => {
         if (!onToggleSelection) {
             toast.error('You do not have permission to select bugs');
             return;
         }
-        console.log('handleSelectItem called with:', id);
+        setSelectedIds(prev => {
+            const newSelection = checked
+                ? [...prev, id]
+                : prev.filter(selectedId => selectedId !== id);
+            console.log('handleSelectItem:', { id, checked, newSelection });
+            toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
+            return newSelection;
+        });
         onToggleSelection(id);
-    };
-
-    const handleBulkAction = async (action, ids) => {
-        if (!onBulkAction) {
-            toast.error('You do not have permission to perform this action');
-            return;
-        }
-        try {
-            await onBulkAction(action, ids);
-            // Don't clear selection here - let parent handle it
-        } catch (error) {
-            console.error(`Error performing bulk ${action}:`, error);
-            toast.error(`Failed to ${action} bugs`);
-        }
     };
 
     const handleTitleEdit = (bugId, currentTitle) => {
@@ -84,8 +87,10 @@ const BugTable = ({
         if (onUpdateBugTitle && titleValue.trim()) {
             try {
                 await onUpdateBugTitle(bugId, titleValue.trim());
+                toast.info('Bug title updated');
             } catch (error) {
                 console.error('Failed to update title:', error);
+                toast.error('Failed to update bug title');
             }
         }
         setEditingTitle(null);
@@ -113,37 +118,29 @@ const BugTable = ({
     const handleShowBugDetails = (bug) => {
         if (onShowBugDetails) {
             onShowBugDetails(bug);
+            toast.info(`Viewing "${bug.title}"`);
         } else if (onBugSelect) {
             onBugSelect(bug);
         }
     };
 
-    // FIXED: Enhanced chat icon click handler
     const handleChatIconClick = (bug, event) => {
         if (event) {
             event.stopPropagation();
             event.preventDefault();
         }
-        console.log('Chat icon clicked in BugTable for bug:', bug.id);
-
-        // FIXED: Ensure details panel opens
         if (onShowBugDetails) {
             onShowBugDetails(bug);
         }
-        
-        // Call the parent's chat handler
         if (onChatIconClick) {
             onChatIconClick(bug, event);
         }
-
-        // Fallback to onBugSelect
         if (onBugSelect) {
             onBugSelect(bug);
         }
     };
 
     const handleRowClick = (bug) => {
-        // Handle row click to show details
         handleShowBugDetails(bug);
     };
 
@@ -185,44 +182,14 @@ const BugTable = ({
 
     return (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            {/* FIXED: Force show bulk actions when items are selected */}
-            {selectedIds && selectedIds.length > 0 && onBulkAction && (
-                <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-teal-700 font-medium">
-                            {selectedIds.length} bug{selectedIds.length > 1 ? 's' : ''} selected
-                        </span>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => handleBulkAction('reopen', selectedIds)}
-                                className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full hover:bg-green-200 transition-colors border border-green-300"
-                                disabled={!onBulkAction}
-                            >
-                                Reopen
-                            </button>
-                            <button
-                                onClick={() => handleBulkAction('close', selectedIds)}
-                                className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full hover:bg-blue-200 transition-colors border border-blue-300"
-                                disabled={!onBulkAction}
-                            >
-                                Close
-                            </button>
-                            <button
-                                onClick={() => handleBulkAction('delete', selectedIds)}
-                                className="px-3 py-1 bg-red-100 text-red-700 text-xs rounded-full hover:bg-red-200 transition-colors border border-red-300"
-                                disabled={!onBulkAction}
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <BulkActionButtons
+                selectedIds={selectedIds}
+                onBulkAction={onBulkAction}
+            />
             <div className="overflow-x-auto">
-                <table className="divide-y divide-gray-200" style={{ minWidth: '1600px' }}>
+                <table className="divide-y divide-gray-200" style={{ minWidth: '1400px' }}>
                     <thead className="bg-gray-50">
                         <tr className="h-12">
-                            {/* Checkbox - Sticky */}
                             <th
                                 scope="col"
                                 className="w-12 px-3 py-3 border-r border-gray-200 sticky left-0 bg-gray-50 z-30"
@@ -242,8 +209,6 @@ const BugTable = ({
                                     )}
                                 </div>
                             </th>
-
-                            {/* Bug Title - Sticky */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 sticky left-12 bg-gray-50 z-30"
@@ -251,8 +216,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Bug Title</div>
                             </th>
-
-                            {/* Bug ID */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -260,8 +223,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Bug ID</div>
                             </th>
-
-                            {/* Tags */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -269,8 +230,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Tags</div>
                             </th>
-
-                            {/* Status */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -278,8 +237,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Status</div>
                             </th>
-
-                            {/* Assigned To */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -287,8 +244,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Assigned To</div>
                             </th>
-
-                            {/* Priority */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -296,8 +251,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Priority</div>
                             </th>
-
-                            {/* Severity */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -305,8 +258,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Severity</div>
                             </th>
-
-                            {/* Evidence */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -314,8 +265,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Evidence</div>
                             </th>
-
-                            {/* Reporter */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -323,8 +272,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Reporter</div>
                             </th>
-
-                            {/* Source */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -332,8 +279,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Source</div>
                             </th>
-
-                            {/* Environment */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -341,8 +286,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Environment</div>
                             </th>
-
-                            {/* Device/Browser */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -350,8 +293,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Device/Browser</div>
                             </th>
-
-                            {/* Due Date */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -359,8 +300,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Due Date</div>
                             </th>
-
-                            {/* Created */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -368,8 +307,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Created</div>
                             </th>
-
-                            {/* Frequency */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200"
@@ -377,8 +314,6 @@ const BugTable = ({
                             >
                                 <div className="flex items-center h-full">Frequency</div>
                             </th>
-
-                            {/* Actions */}
                             <th
                                 scope="col"
                                 className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider"
@@ -398,7 +333,7 @@ const BugTable = ({
                                 isSelected={selectedIds.includes(bug.id)}
                                 editingTitle={editingTitle}
                                 titleValue={titleValue}
-                                onSelect={() => handleSelectItem(bug.id)}
+                                onSelect={() => handleSelectItem(bug.id, !selectedIds.includes(bug.id))}
                                 onClick={() => handleRowClick(bug)}
                                 onChatClick={handleChatIconClick}
                                 onUpdateBugStatus={onUpdateBugStatus}
