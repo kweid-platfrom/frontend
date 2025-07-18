@@ -109,22 +109,31 @@ class FirestoreService {
     }
 
     // ===== GENERIC CRUD OPERATIONS =====
-
-    async createDocument(collectionPath, data, docId = null) {
+    async createDocument(collectionPath, data, customDocId = null) {
         try {
-            const documentData = this.addCommonFields(data);
+            const collectionRef = collection(db, collectionPath);
 
-            if (docId) {
-                const docRef = this.createDocRef(collectionPath, docId);
-                await setDoc(docRef, documentData);
-                return { success: true, id: docId, data: documentData };
+            let docRef;
+            if (customDocId) {
+                // Use the custom document ID
+                docRef = doc(collectionRef, customDocId);
+                await setDoc(docRef, data);
             } else {
-                const colRef = this.createCollectionRef(collectionPath);
-                const docRef = await addDoc(colRef, documentData);
-                return { success: true, id: docRef.id, data: documentData };
+                // Let Firestore generate the document ID
+                docRef = await addDoc(collectionRef, data);
             }
+
+            return {
+                success: true,
+                data: { id: docRef.id, ...data },
+                docId: docRef.id
+            };
         } catch (error) {
-            return this.handleFirestoreError(error, 'create document');
+            console.error('Error creating document:', error);
+            return {
+                success: false,
+                error: error
+            };
         }
     }
 

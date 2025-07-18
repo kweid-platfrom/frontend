@@ -15,11 +15,30 @@ import TeamProductivity from '../../components/stats/TeamProductivity';
 import QAIDCharts from '../../components/stats/QAIDCharts';
 import QuickActions from '../../components/stats/QuickActions';
 import { useBugTrackingMetrics } from '../../hooks/useBugTrackingMetrics';
+import { useTestMetrics } from '../../hooks/useTestCaseMetrics';
 
 const Dashboard = () => {
     const { suites, isLoading: suiteLoading, error: suiteError, refetchSuites } = useSuite();
     const { addNotification } = useAppNotifications();
     const { isLoading: subscriptionLoading } = useSubscription();
+    
+    // Get current suite ID (assuming you want to show metrics for the first/active suite)
+    const currentSuiteId = suites?.length > 0 ? suites[0].id : null;
+    
+    // Initialize test metrics hook
+    const {
+        metrics: testMetrics,
+        loading: testMetricsLoading,
+        error: testMetricsError,
+        refresh: refreshTestMetrics,
+        lastUpdated: testMetricsLastUpdated
+    } = useTestMetrics(currentSuiteId, null, {
+        autoRefresh: true,
+        refreshInterval: 30000,
+        enableRealtime: true,
+        includeExecutions: true
+    });
+
     const [filters, setFilters] = useState({
         timeRange: '7d',
         severity: 'all',
@@ -32,6 +51,7 @@ const Dashboard = () => {
     const [isConnected, setIsConnected] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const timeIntervalRef = useRef(null);
+    
     const { metrics: bugMetrics, loading: bugLoading, error: bugError, refetch: bugRefetch } = useBugTrackingMetrics(filters);
 
     // Time update timer
@@ -63,7 +83,7 @@ const Dashboard = () => {
         };
     }, []);
 
-    // Error notification for permission issues
+    // Error notifications
     useEffect(() => {
         if (bugError) {
             addNotification({
@@ -77,51 +97,98 @@ const Dashboard = () => {
         }
     }, [bugError, addNotification]);
 
-    // Metrics calculation
-    const enhancedMetrics = useMemo(() => {
-        if (!bugMetrics || bugError) {
-            return {
-                totalTestCases: 0,
-                passRate: 0,
-                totalBugs: 0,
-                activeBugs: 0,
-                criticalIssues: 0,
-                bugsFromScreenRecording: 0,
-                bugsFromManualTesting: 0,
-                bugsWithVideoEvidence: 0,
-                bugsWithConsoleLogs: 0,
-                criticalBugs: 0,
-                highPriorityBugs: 0,
-                mediumPriorityBugs: 0,
-                lowPriorityBugs: 0,
-                resolvedBugs: 0,
-                avgResolutionTime: 0,
-                bugResolutionRate: 0,
-                avgBugReportCompleteness: 0,
-                bugReportsWithAttachments: 0,
-                bugReproductionRate: 0,
-                weeklyReportsGenerated: 0,
-                monthlyReportsGenerated: 0,
-                avgBugsPerReport: 0,
-            };
+    useEffect(() => {
+        if (testMetricsError) {
+            addNotification({
+                type: 'error',
+                title: 'Test Metrics Error',
+                message: `Failed to load test case metrics: ${testMetricsError?.message || testMetricsError}`,
+                persistent: true,
+            });
         }
-        return {
-            totalTestCases: 245, // Hardcoded until implemented
-            passRate: 87, // Hardcoded until implemented
-            ...bugMetrics,
-        };
-    }, [bugMetrics, bugError]);
+    }, [testMetricsError, addNotification]);
 
-    // Summary stats
-    const summaryStats = useMemo(
-        () => ({
-            totalTestCases: enhancedMetrics.totalTestCases,
-            activeBugs: enhancedMetrics.totalBugs - (enhancedMetrics.resolvedBugs || 0),
-            passRate: enhancedMetrics.passRate,
-            criticalIssues: enhancedMetrics.criticalBugs || 0,
-        }),
-        [enhancedMetrics],
-    );
+    // Calculate enhanced metrics combining test and bug data
+    const enhancedMetrics = useMemo(() => {
+        // Default values for bug metrics
+        const bugMetricsWithDefaults = {
+            totalBugs: 0,
+            activeBugs: 0,
+            criticalIssues: 0,
+            bugsFromScreenRecording: 0,
+            bugsFromManualTesting: 0,
+            bugsWithVideoEvidence: 0,
+            bugsWithConsoleLogs: 0,
+            criticalBugs: 0,
+            highPriorityBugs: 0,
+            mediumPriorityBugs: 0,
+            lowPriorityBugs: 0,
+            resolvedBugs: 0,
+            avgResolutionTime: 0,
+            bugResolutionRate: 0,
+            avgBugReportCompleteness: 0,
+            bugReportsWithAttachments: 0,
+            bugReproductionRate: 0,
+            weeklyReportsGenerated: 0,
+            monthlyReportsGenerated: 0,
+            avgBugsPerReport: 0,
+            ...bugMetrics
+        };
+
+        // Default values for test metrics
+        const testMetricsWithDefaults = {
+            totalTestCases: 0,
+            manualTestCases: 0,
+            automatedTestCases: 0,
+            aiGeneratedTestCases: 0,
+            testCasesWithTags: 0,
+            testCasesLinkedToBugs: 0,
+            testCasesWithRecordings: 0,
+            functionalCoverage: 0,
+            edgeCaseCoverage: 0,
+            negativeCaseCoverage: 0,
+            aiGenerationSuccessRate: 0,
+            avgTestCasesPerAIGeneration: 0,
+            outdatedTestCases: 0,
+            recentlyUpdatedTestCases: 0,
+            testCaseUpdateFrequency: 0,
+            passRate: 0,
+            failRate: 0,
+            executionCount: 0,
+            avgExecutionTime: 0,
+            ...testMetrics
+        };
+
+        // Calculate pass rate if we have execution data
+        const calculatedPassRate = testMetricsWithDefaults.executionCount > 0
+            ? Math.round(((testMetricsWithDefaults.executionCount - (testMetricsWithDefaults.failRate || 0)) / testMetricsWithDefaults.executionCount) * 100)
+            : testMetricsWithDefaults.passRate || 0;
+
+        return {
+            ...bugMetricsWithDefaults,
+            ...testMetricsWithDefaults,
+            passRate: calculatedPassRate,
+            // Calculate additional derived metrics
+            automationRate: testMetricsWithDefaults.totalTestCases > 0
+                ? Math.round((testMetricsWithDefaults.automatedTestCases / testMetricsWithDefaults.totalTestCases) * 100)
+                : 0,
+            aiContributionRate: testMetricsWithDefaults.totalTestCases > 0
+                ? Math.round((testMetricsWithDefaults.aiGeneratedTestCases / testMetricsWithDefaults.totalTestCases) * 100)
+                : 0,
+            avgCoverage: Math.round((testMetricsWithDefaults.functionalCoverage + testMetricsWithDefaults.edgeCaseCoverage + testMetricsWithDefaults.negativeCaseCoverage) / 3),
+            qualityScore: testMetricsWithDefaults.totalTestCases > 0
+                ? Math.round(((testMetricsWithDefaults.testCasesWithTags + testMetricsWithDefaults.testCasesWithRecordings) / (testMetricsWithDefaults.totalTestCases * 2)) * 100)
+                : 0
+        };
+    }, [bugMetrics, testMetrics]);
+
+    // Summary stats for the top cards
+    const summaryStats = useMemo(() => ({
+        totalTestCases: enhancedMetrics.totalTestCases,
+        activeBugs: enhancedMetrics.totalBugs - (enhancedMetrics.resolvedBugs || 0),
+        passRate: enhancedMetrics.passRate,
+        criticalIssues: enhancedMetrics.criticalBugs || 0,
+    }), [enhancedMetrics]);
 
     // Handlers
     const handleFilterChange = useCallback((key, value) => {
@@ -130,8 +197,19 @@ const Dashboard = () => {
 
     const handleRefresh = useCallback(async () => {
         try {
-            await Promise.all([bugRefetch?.(), refetchSuites?.()]);
+            const refreshPromises = [refetchSuites?.()];
+            
+            if (bugRefetch) {
+                refreshPromises.push(bugRefetch());
+            }
+            
+            if (refreshTestMetrics) {
+                refreshPromises.push(refreshTestMetrics());
+            }
+
+            await Promise.all(refreshPromises);
             setCurrentTime(new Date());
+            
             addNotification({
                 type: 'success',
                 title: 'Data Refreshed',
@@ -146,7 +224,7 @@ const Dashboard = () => {
                 persistent: true,
             });
         }
-    }, [bugRefetch, refetchSuites, addNotification]);
+    }, [bugRefetch, refreshTestMetrics, refetchSuites, addNotification]);
 
     const FilterButton = useCallback(
         ({ active, onClick, children, disabled = false }) => (
@@ -184,7 +262,8 @@ const Dashboard = () => {
         { value: 'automation', label: 'Automation', icon: Settings },
     ];
 
-    const isLoading = bugLoading || suiteLoading || subscriptionLoading;
+    const isLoading = bugLoading || suiteLoading || subscriptionLoading || testMetricsLoading;
+    const hasErrors = bugError || suiteError || testMetricsError;
 
     const toolbar = (
         <div className="flex items-center">
@@ -203,6 +282,7 @@ const Dashboard = () => {
     return (
         <PageLayout title="Intelligent Dashboard" toolbar={toolbar} requiresTestSuite={true}>
             <div className="space-y-6">
+                {/* Status Bar */}
                 <div className="bg-white rounded-lg shadow-sm border p-6">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-6 text-sm text-gray-600">
@@ -215,6 +295,12 @@ const Dashboard = () => {
                             </div>
                             <span>•</span>
                             <span>Updated: {currentTime.toLocaleTimeString()}</span>
+                            {testMetricsLastUpdated && (
+                                <>
+                                    <span>•</span>
+                                    <span>Metrics: {testMetricsLastUpdated.toLocaleTimeString()}</span>
+                                </>
+                            )}
                             {isLoading && (
                                 <>
                                     <span>•</span>
@@ -228,6 +314,8 @@ const Dashboard = () => {
                             </div>
                         )}
                     </div>
+                    
+                    {/* Summary Cards */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-blue-50 rounded-lg p-4">
                             <div className="text-2xl font-bold text-teal-600">{summaryStats.totalTestCases}</div>
@@ -247,6 +335,8 @@ const Dashboard = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Tab Navigation */}
                 <div className="bg-white rounded-lg shadow-sm border p-1">
                     <div className="flex space-x-1 overflow-x-auto">
                         {tabOptions.map((tab) => {
@@ -268,6 +358,8 @@ const Dashboard = () => {
                         })}
                     </div>
                 </div>
+
+                {/* Filters */}
                 <div className="bg-white rounded-lg shadow-sm border p-4">
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div className="flex flex-wrap items-center gap-4">
@@ -340,29 +432,39 @@ const Dashboard = () => {
                         </div>
                     </div>
                 </div>
-                {(bugError || suiteError) && (
+
+                {/* Error Messages */}
+                {hasErrors && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                         <div className="flex items-center">
                             <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" aria-hidden="true" />
-                            <p className="text-yellow-800">
-                                {bugError?.includes('permission')
-                                    ? 'You lack permission to view bug tracking data. Contact your organization admin to be added as a member.'
-                                    : bugError
-                                        ? `Bug tracking error: ${bugError}`
-                                        : suiteError
-                                            ? `Suite error: ${suiteError}`
-                                            : 'Data may be outdated due to connection issues.'}
+                            <div className="text-yellow-800">
+                                {testMetricsError && (
+                                    <p className="mb-2">Test metrics error: {testMetricsError?.message || testMetricsError}</p>
+                                )}
+                                {bugError && (
+                                    <p className="mb-2">
+                                        {bugError.includes('permission')
+                                            ? 'You lack permission to view bug tracking data. Contact your organization admin to be added as a member.'
+                                            : `Bug tracking error: ${bugError}`}
+                                    </p>
+                                )}
+                                {suiteError && (
+                                    <p className="mb-2">Suite error: {suiteError}</p>
+                                )}
                                 <button
                                     onClick={handleRefresh}
-                                    className="underline ml-2 hover:no-underline"
+                                    className="underline hover:no-underline"
                                     aria-label="Try refreshing data"
                                 >
                                     Try refreshing
                                 </button>
-                            </p>
+                            </div>
                         </div>
                     </div>
                 )}
+
+                {/* Tab Content */}
                 <div className="space-y-6">
                     {activeTab === 'overview' && (
                         <>
@@ -373,17 +475,21 @@ const Dashboard = () => {
                     )}
                     {activeTab === 'testing' && (
                         <>
-                            <TestCaseMetrics
-                                metrics={{
-                                    totalTestCases: enhancedMetrics.totalTestCases,
-                                    passRate: enhancedMetrics.passRate,
+                            <TestCaseMetrics 
+                                suiteId={currentSuiteId} 
+                                sprintId={null}
+                                options={{
+                                    autoRefresh: true,
+                                    refreshInterval: 30000,
+                                    enableRealtime: true,
+                                    includeExecutions: true
                                 }}
-                                loading={isLoading}
                             />
                             <RecordingMetrics
                                 metrics={{
-                                    totalRecordings: enhancedMetrics.bugsFromScreenRecording || 0,
-                                    successfulRecordings: Math.round((enhancedMetrics.bugsFromScreenRecording || 0) * 0.9),
+                                    totalRecordings: enhancedMetrics.testCasesWithRecordings || 0,
+                                    successfulRecordings: Math.round((enhancedMetrics.testCasesWithRecordings || 0) * 0.9),
+                                    bugsFromRecordings: enhancedMetrics.bugsFromScreenRecording || 0,
                                 }}
                                 loading={isLoading}
                             />
@@ -395,8 +501,10 @@ const Dashboard = () => {
                     {activeTab === 'ai' && (
                         <AIGenerationMetrics
                             metrics={{
-                                totalGenerations: 148, // Hardcoded until implemented
-                                successRate: enhancedMetrics.avgBugReportCompleteness || 0,
+                                totalGenerations: enhancedMetrics.aiGeneratedTestCases || 0,
+                                successRate: enhancedMetrics.aiGenerationSuccessRate || 0,
+                                avgTestCasesPerGeneration: enhancedMetrics.avgTestCasesPerAIGeneration || 0,
+                                aiContributionRate: enhancedMetrics.aiContributionRate || 0,
                             }}
                             loading={isLoading}
                         />
@@ -404,21 +512,23 @@ const Dashboard = () => {
                     {activeTab === 'automation' && (
                         <AutomationMetrics
                             metrics={{
-                                automatedTests: 89, // Hardcoded until implemented
-                                automationCoverage:
-                                    enhancedMetrics.totalBugs > 0
-                                        ? Math.round(((enhancedMetrics.bugsFromScreenRecording || 0) / enhancedMetrics.totalBugs) * 100)
-                                        : 0,
+                                automatedTests: enhancedMetrics.automatedTestCases || 0,
+                                automationCoverage: enhancedMetrics.automationRate || 0,
+                                totalTestCases: enhancedMetrics.totalTestCases || 0,
+                                manualTests: enhancedMetrics.manualTestCases || 0,
                             }}
                             loading={isLoading}
                         />
                     )}
                 </div>
+
+                {/* Quick Actions */}
                 <QuickActions
                     metrics={{
                         qa: {
                             testCases: enhancedMetrics.totalTestCases,
                             passRate: enhancedMetrics.passRate,
+                            automationRate: enhancedMetrics.automationRate,
                         },
                         bugs: enhancedMetrics,
                     }}

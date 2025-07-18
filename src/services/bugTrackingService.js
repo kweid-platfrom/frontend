@@ -1,4 +1,4 @@
-import { Timestamp, where, orderBy } from 'firebase/firestore';
+import { Timestamp, where, orderBy, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 import { calculateBugMetrics } from '../utils/calculateBugMetrics';
 import firestoreService from './firestoreService';
 import {
@@ -10,13 +10,13 @@ import {
     VALID_BUG_SEVERITIES,
     VALID_ENVIRONMENTS,
 } from '../utils/bugUtils';
+import { db } from '../config/firebase';
 
 class BugTrackingService {
     constructor() {
         this.firestoreService = firestoreService;
     }
 
-    // Get bugs collection path based on suite type
     getBugsCollectionPath(suite, userId) {
         if (!suite?.suite_id || !userId) {
             throw new Error('Invalid suite or user configuration');
@@ -30,19 +30,16 @@ class BugTrackingService {
         return `organizations/${suite.org_id}/testSuites/${suite.suite_id}/bugs`;
     }
 
-    // Get team members collection path
     getTeamMembersCollectionPath(suite) {
         if (!suite?.org_id) return null;
         return `organizations/${suite.org_id}/members`;
     }
 
-    // Get sprints collection path
     getSprintsCollectionPath(suite) {
         if (!suite?.suite_id || !suite?.org_id) return null;
         return `organizations/${suite.org_id}/testSuites/${suite.suite_id}/sprints`;
     }
 
-    // Create a bug
     async createBug(suite, user, bugData) {
         const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
         const bugId = `bug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -101,6 +98,7 @@ class BugTrackingService {
             lastActivityBy: user.uid,
             created_at: Timestamp.now(),
             updated_at: Timestamp.now(),
+            linkedTestCases: [], // Initialize linkedTestCases array
         };
         const result = await this.firestoreService.createDocument(bugsCollectionPath, firestoreData);
         if (!result.success) {
@@ -109,7 +107,6 @@ class BugTrackingService {
         return result;
     }
 
-    // Update a bug
     async updateBug(suite, userId, bugId, updates) {
         const bugsCollectionPath = this.getBugsCollectionPath(suite, userId);
         const result = await this.firestoreService.updateDocument(bugsCollectionPath, bugId, {
@@ -123,17 +120,18 @@ class BugTrackingService {
         return result;
     }
 
-    // Fetch bugs
     async fetchBugs(suite, user, filters = {}) {
         const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
         const whereConstraints = [];
         if (filters.timeRange && filters.timeRange !== 'all') {
-            const fromDate = new Date(Date.now() - ({
-                '1d': 24 * 60 * 60 * 1000,
-                '7d': 7 * 24 * 60 * 60 * 1000,
-                '30d': 30 * 24 * 60 * 60 * 1000,
-                '90d': 90 * 24 * 60 * 60 * 1000,
-            }[filters.timeRange] || 7 * 24 * 60 * 60 * 1000));
+            const fromDate = new Date(
+                Date.now() - ({
+                    '1d': 24 * 60 * 60 * 1000,
+                    '7d': 7 * 24 * 60 * 60 * 1000,
+                    '30d': 30 * 24 * 60 * 60 * 1000,
+                    '90d': 90 * 24 * 60 * 60 * 1000,
+                }[filters.timeRange] || 7 * 24 * 60 * 60 * 1000),
+            );
             whereConstraints.push(where('created_at', '>=', Timestamp.fromDate(fromDate)));
         }
         ['priority', 'severity', 'status', 'source', 'environment'].forEach(field => {
@@ -160,7 +158,6 @@ class BugTrackingService {
         }));
     }
 
-    // Subscribe to bugs
     subscribeToBugs(suite, user, callback, errorCallback) {
         const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
         return this.firestoreService.subscribeToCollection(
@@ -177,15 +174,15 @@ class BugTrackingService {
                 callback(bugsData);
             },
             (err) => {
-                const message = err.code === 'permission-denied'
-                    ? 'You don’t have permission to access bugs in this suite'
-                    : 'Failed to load bugs';
+                const message =
+                    err.code === 'permission-denied'
+                        ? 'You don’t have permission to access bugs in this suite'
+                        : 'Failed to load bugs';
                 errorCallback?.({ message, originalError: err });
             },
         );
     }
 
-    // Fetch team members
     async fetchTeamMembers(suite) {
         const teamMembersCollectionPath = this.getTeamMembersCollectionPath(suite);
         if (!teamMembersCollectionPath) {
@@ -202,7 +199,6 @@ class BugTrackingService {
         }));
     }
 
-    // Subscribe to team members
     subscribeToTeamMembers(suite, callback, errorCallback) {
         const teamMembersCollectionPath = this.getTeamMembersCollectionPath(suite);
         if (!teamMembersCollectionPath) {
@@ -213,22 +209,24 @@ class BugTrackingService {
             teamMembersCollectionPath,
             [],
             (docs) => {
-                callback(docs.map(doc => ({
-                    id: doc.id,
-                    name: getTeamMemberName(doc),
-                    ...doc,
-                })));
+                callback(
+                    docs.map(doc => ({
+                        id: doc.id,
+                        name: getTeamMemberName(doc),
+                        ...doc,
+                    })),
+                );
             },
             (err) => {
-                const message = err.code === 'permission-denied'
-                    ? 'You don’t have permission to access team members'
-                    : 'Failed to load team members';
+                const message =
+                    err.code === 'permission-denied'
+                        ? 'You don’t have permission to access team members'
+                        : 'Failed to load team members';
                 errorCallback?.({ message, originalError: err });
             },
         );
     }
 
-    // Fetch sprints
     async fetchSprints(suite) {
         const sprintsCollectionPath = this.getSprintsCollectionPath(suite);
         if (!sprintsCollectionPath) {
@@ -244,7 +242,6 @@ class BugTrackingService {
         }));
     }
 
-    // Subscribe to sprints
     subscribeToSprints(suite, callback, errorCallback) {
         const sprintsCollectionPath = this.getSprintsCollectionPath(suite);
         if (!sprintsCollectionPath) {
@@ -255,21 +252,23 @@ class BugTrackingService {
             sprintsCollectionPath,
             [orderBy('created_at', 'desc')],
             (docs) => {
-                callback(docs.map(doc => ({
-                    id: doc.id,
-                    ...doc,
-                })));
+                callback(
+                    docs.map(doc => ({
+                        id: doc.id,
+                        ...doc,
+                    })),
+                );
             },
             (err) => {
-                const message = err.code === 'permission-denied'
-                    ? 'You don’t have permission to access sprints'
-                    : 'Failed to load sprints';
+                const message =
+                    err.code === 'permission-denied'
+                        ? 'You don’t have permission to access sprints'
+                        : 'Failed to load sprints';
                 errorCallback?.({ message, originalError: err });
             },
         );
     }
 
-    // Create a sprint
     async createSprint(suite, sprintData) {
         const sprintsCollectionPath = this.getSprintsCollectionPath(suite);
         if (!sprintsCollectionPath) {
@@ -282,17 +281,18 @@ class BugTrackingService {
         return result;
     }
 
-    // Fetch bug tracking metrics
     async fetchBugTrackingMetrics(suite, user, filters = {}) {
         const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
         const whereConstraints = [];
         if (filters.timeRange && filters.timeRange !== 'all') {
-            const fromDate = new Date(Date.now() - ({
-                '1d': 24 * 60 * 60 * 1000,
-                '7d': 7 * 24 * 60 * 60 * 1000,
-                '30d': 30 * 24 * 60 * 60 * 1000,
-                '90d': 90 * 24 * 60 * 60 * 1000,
-            }[filters.timeRange] || 7 * 24 * 60 * 60 * 1000));
+            const fromDate = new Date(
+                Date.now() - ({
+                    '1d': 24 * 60 * 60 * 1000,
+                    '7d': 7 * 24 * 60 * 60 * 1000,
+                    '30d': 30 * 24 * 60 * 60 * 1000,
+                    '90d': 90 * 24 * 60 * 60 * 1000,
+                }[filters.timeRange] || 7 * 24 * 60 * 60 * 1000),
+            );
             whereConstraints.push(where('created_at', '>=', Timestamp.fromDate(fromDate)));
         }
         ['priority', 'severity', 'status', 'source', 'environment'].forEach(field => {
@@ -321,7 +321,6 @@ class BugTrackingService {
         return calculateBugMetrics(bugs);
     }
 
-    // Export bugs
     async exportBugs(suite, user) {
         const bugsCollectionPath = this.getBugsCollectionPath(suite, user.uid);
         const result = await this.firestoreService.queryDocuments(bugsCollectionPath, [orderBy('created_at', 'desc')]);
@@ -338,7 +337,6 @@ class BugTrackingService {
         return { success: true };
     }
 
-    // Update bug status
     async updateBugStatus(suite, userId, bugId, status) {
         if (!VALID_BUG_STATUSES.includes(status)) {
             throw new Error('Invalid bug status');
@@ -346,7 +344,6 @@ class BugTrackingService {
         return await this.updateBug(suite, userId, bugId, { status });
     }
 
-    // Update bug severity
     async updateBugSeverity(suite, userId, bugId, severity) {
         if (!VALID_BUG_SEVERITIES.includes(severity)) {
             throw new Error('Invalid bug severity');
@@ -355,12 +352,10 @@ class BugTrackingService {
         return await this.updateBug(suite, userId, bugId, { severity, priority });
     }
 
-    // Update bug assignment
     async updateBugAssignment(suite, userId, bugId, assignedTo) {
         return await this.updateBug(suite, userId, bugId, { assignedTo: assignedTo || null });
     }
 
-    // Update bug environment
     async updateBugEnvironment(suite, userId, bugId, environment) {
         if (!VALID_ENVIRONMENTS.includes(environment)) {
             throw new Error('Invalid environment');
@@ -368,18 +363,75 @@ class BugTrackingService {
         return await this.updateBug(suite, userId, bugId, { environment });
     }
 
-    // Format date
-    formatDate(date) {
-        if (!date) return '-';
-        return new Date(date).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-        });
+    // New method to link test cases to a bug
+    async linkTestCasesToBug(suite, userId, bugId, testCaseIds) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, userId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const bugRef = doc(db, bugsCollectionPath, bugId);
+                // Update bug's linkedTestCases
+                transaction.update(bugRef, {
+                    linkedTestCases: arrayUnion(...testCaseIds),
+                    updated_at: Timestamp.now(),
+                    updated_by: userId,
+                });
+                // Update each test case's linkedBugs
+                for (const testCaseId of testCaseIds) {
+                    const testCaseRef = doc(db, 'testSuites', suite.suite_id, 'testCases', testCaseId);
+                    transaction.update(testCaseRef, {
+                        linkedBugs: arrayUnion(bugId),
+                        updated_at: Timestamp.now(),
+                    });
+                }
+            });
+            return { success: true };
+        } catch (error) {
+            console.error('linkTestCasesToBug error:', {
+                suiteId: suite.suite_id,
+                bugId,
+                testCaseIds,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            throw new Error(error.message || 'Failed to link test cases');
+        }
+    }
+
+    // New method to unlink test cases from a bug
+    async unlinkTestCasesFromBug(suite, userId, bugId, testCaseIds) {
+        const bugsCollectionPath = this.getBugsCollectionPath(suite, userId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const bugRef = doc(db, bugsCollectionPath, bugId);
+                // Remove test cases from bug's linkedTestCases
+                transaction.update(bugRef, {
+                    linkedTestCases: arrayRemove(...testCaseIds),
+                    updated_at: Timestamp.now(),
+                    updated_by: userId,
+                });
+                // Remove bug from each test case's linkedBugs
+                for (const testCaseId of testCaseIds) {
+                    const testCaseRef = doc(db, 'testSuites', suite.suite_id, 'testCases', testCaseId);
+                    transaction.update(testCaseRef, {
+                        linkedBugs: arrayRemove(bugId),
+                        updated_at: Timestamp.now(),
+                    });
+                }
+            });
+            return { success: true };
+        } catch (error) {
+            console.error('unlinkTestCasesFromBug error:', {
+                suiteId: suite.suite_id,
+                bugId,
+                testCaseIds,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            throw new Error(error.message || 'Failed to unlink test cases');
+        }
     }
 }
 
-// Create and export singleton instance
 const bugTrackingService = new BugTrackingService();
 export default bugTrackingService;
 export { BugTrackingService, VALID_BUG_STATUSES, VALID_BUG_SEVERITIES, VALID_ENVIRONMENTS, getShortBugId, isPastDue };

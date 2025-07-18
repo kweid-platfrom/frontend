@@ -5,13 +5,17 @@ import {
     Video,
     Brain,
     Zap,
-    Users,
+    // Users,
     TrendingUp,
     TrendingDown,
     Activity,
     Shield,
     Target,
-    Gauge
+    Gauge,
+    Clock,
+    CheckCircle,
+    Bot,
+    Tags
 } from 'lucide-react';
 
 const QAIDMetricsOverview = ({ metrics }) => {
@@ -48,7 +52,8 @@ const QAIDMetricsOverview = ({ metrics }) => {
             yellow: 'bg-yellow-50 text-yellow-600 border-yellow-100',
             red: 'bg-red-50 text-red-600 border-red-100',
             purple: 'bg-purple-50 text-purple-600 border-purple-100',
-            indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100'
+            indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+            orange: 'bg-orange-50 text-orange-600 border-orange-100'
         };
 
         const getTrendIcon = () => {
@@ -92,106 +97,130 @@ const QAIDMetricsOverview = ({ metrics }) => {
         );
     };
 
-    // Map flat bug metrics to nested structure expected by the component
+    // Extract test case metrics with proper fallbacks
     const testCases = {
-        totalTestCases: metrics.totalBugs || 0, 
-        aiGeneratedTestCases: Math.round((metrics.totalBugs || 0) * 0.3), 
-        functionalCoverage: metrics.bugReproductionRate || 0,
-        testCasesWithTags: Math.round((metrics.totalBugs || 0) * 0.8) 
+        totalTestCases: metrics.totalTestCases || 0,
+        manualTestCases: metrics.manualTestCases || 0,
+        automatedTestCases: metrics.automatedTestCases || 0,
+        aiGeneratedTestCases: metrics.aiGeneratedTestCases || 0,
+        testCasesWithTags: metrics.testCasesWithTags || 0,
+        testCasesWithRecordings: metrics.testCasesWithRecordings || 0,
+        testCasesLinkedToBugs: metrics.testCasesLinkedToBugs || 0,
+        outdatedTestCases: metrics.outdatedTestCases || 0,
+        recentlyUpdatedTestCases: metrics.recentlyUpdatedTestCases || 0,
+        testCaseUpdateFrequency: metrics.testCaseUpdateFrequency || 0
     };
 
-    const bugs = {
-        totalBugs: metrics.totalBugs || 0,
-        bugsWithVideoEvidence: metrics.bugsWithVideoEvidence || 0,
-        bugResolutionRate: metrics.bugResolutionRate || 0,
-        avgResolutionTime: metrics.avgResolutionTime || 0,
-        criticalBugs: metrics.criticalBugs || 0,
-        bugReproductionRate: metrics.bugReproductionRate || 0
+    // Extract coverage metrics
+    const coverage = {
+        functionalCoverage: metrics.functionalCoverage || 0,
+        edgeCaseCoverage: metrics.edgeCaseCoverage || 0,
+        negativeCaseCoverage: metrics.negativeCaseCoverage || 0
     };
 
-    const recordings = {
-        totalRecordings: metrics.bugsFromScreenRecording || 0,
-        avgRecordingDuration: 5, // Default 5 minutes
-        recordingToReportConversionRate: metrics.totalBugs > 0 ? 
-            Math.round((metrics.bugsFromScreenRecording / metrics.totalBugs) * 100) : 0
-    };
-
+    // Extract AI metrics
     const ai = {
-        totalAIGenerations: Math.round((metrics.totalBugs || 0) * 0.4), // Estimate AI involvement
-        aiSuccessRate: metrics.avgBugReportCompleteness || 75, // Use completeness as proxy
-        avgTestCasesPerGeneration: 3,
-        aiCostPerTestCase: 0.05
+        aiGenerationSuccessRate: metrics.aiGenerationSuccessRate || 0,
+        avgTestCasesPerAIGeneration: metrics.avgTestCasesPerAIGeneration || 0,
+        totalAIGenerations: Math.round((testCases.aiGeneratedTestCases || 0) / Math.max(metrics.avgTestCasesPerAIGeneration || 1, 1)),
+        aiCostPerTestCase: 0.05 // Default cost estimate
     };
 
+    // Extract automation metrics
     const automation = {
-        automationRatio: metrics.bugsFromScreenRecording > 0 ? 
-            Math.round((metrics.bugsFromScreenRecording / metrics.totalBugs) * 100) : 0,
-        cypressScriptsGenerated: Math.round((metrics.bugsFromScreenRecording || 0) * 0.6)
+        automationRatio: testCases.totalTestCases > 0 ? 
+            Math.round((testCases.automatedTestCases / testCases.totalTestCases) * 100) : 0,
+        cypressScriptsGenerated: Math.round((testCases.automatedTestCases || 0) * 0.8) // Estimate
     };
 
-    const team = {
-        activeTeamMembers: 5, // Default team size
-        testCasesCreatedPerMember: Math.round((metrics.totalBugs || 0) / 5)
+    // Extract team metrics (these might need to come from a different source)
+    // const team = {
+    //     activeTeamMembers: 5, // Default - should come from team management
+    //     testCasesCreatedPerMember: Math.round((testCases.totalTestCases || 0) / 5)
+    // };
+
+    // Extract recording metrics
+    const recordings = {
+        totalRecordings: testCases.testCasesWithRecordings || 0,
+        avgRecordingDuration: 5, // Default 5 minutes
+        recordingToTestCaseRatio: testCases.totalTestCases > 0 ? 
+            Math.round((testCases.testCasesWithRecordings / testCases.totalTestCases) * 100) : 0
     };
 
-    // Calculate key QAID metrics using available bug data
+    // Calculate key QAID metrics using actual test case data
     const qaEfficiency = Math.round(
-        (metrics.bugResolutionRate * 0.4) + 
-        (metrics.avgBugReportCompleteness * 0.3) + 
-        (metrics.bugReproductionRate * 0.3)
+        (automation.automationRatio * 0.4) + 
+        (ai.aiGenerationSuccessRate * 0.3) + 
+        (coverage.functionalCoverage * 0.3)
     );
 
     const evidenceQuality = Math.round(
-        ((metrics.bugsWithVideoEvidence + metrics.bugsWithNetworkLogs + metrics.bugsWithConsoleLogs) / 
-         Math.max(metrics.totalBugs * 3, 1)) * 100
+        ((testCases.testCasesWithRecordings + testCases.testCasesWithTags) / 
+         Math.max(testCases.totalTestCases * 2, 1)) * 100
     );
 
     const aiProductivity = Math.round(
-        (metrics.avgBugReportCompleteness * 0.6) + 
-        ((metrics.bugsWithVideoEvidence / Math.max(metrics.totalBugs, 1)) * 100 * 0.4)
+        (ai.aiGenerationSuccessRate * 0.6) + 
+        ((testCases.aiGeneratedTestCases / Math.max(testCases.totalTestCases, 1)) * 100 * 0.4)
     );
 
-    // Calculate trends (mock data - in real implementation, compare with previous period)
-    const calculateTrend = (current, previous = current * 0.85) => {
-        if (previous === 0) return current > 0 ? 100 : 0;
-        return Math.round(((current - previous) / previous) * 100);
+    // Calculate trends using metrics.trends if available
+    const getTrend = (metricName) => {
+        if (metrics.trends && metrics.trends[metricName] !== undefined) {
+            return metrics.trends[metricName];
+        }
+        // Fallback to mock trend calculation
+        return Math.round(Math.random() * 20 - 10); // -10 to +10 range
     };
+
+    const getTrendType = (trend) => {
+        if (trend > 5) return 'positive';
+        if (trend < -5) return 'negative';
+        return 'neutral';
+    };
+
+    // Calculate quality score
+    const qualityScore = testCases.totalTestCases > 0 ? 
+        Math.round(((testCases.testCasesWithTags + testCases.testCasesWithRecordings) / (testCases.totalTestCases * 2)) * 100) : 0;
+
+    // Calculate average coverage
+    const avgCoverage = Math.round((coverage.functionalCoverage + coverage.edgeCaseCoverage + coverage.negativeCaseCoverage) / 3);
 
     return (
         <div className="space-y-8">
             {/* QAID Core KPI Cards */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border">
                 <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
-                    <Gauge className="w-5 h-5 mr-2 text-teal-600" />
+                    <Gauge className="w-5 h-5 mr-2 text-blue-600" />
                     QAID Core Performance
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <MetricCard
                         title="QA Efficiency Score"
                         value={`${qaEfficiency}%`}
-                        change={calculateTrend(qaEfficiency)}
-                        changeType={qaEfficiency > 75 ? 'positive' : qaEfficiency > 50 ? 'neutral' : 'negative'}
+                        change={getTrend('qaEfficiency')}
+                        changeType={getTrendType(getTrend('qaEfficiency'))}
                         icon={Target}
                         color="blue"
-                        subtitle="Automation + Bug Quality + AI Success"
+                        subtitle="Automation + AI Success + Coverage"
                     />
                     <MetricCard
                         title="Evidence Quality Score"
                         value={`${evidenceQuality}%`}
-                        change={calculateTrend(evidenceQuality)}
-                        changeType={evidenceQuality > 80 ? 'positive' : 'neutral'}
+                        change={getTrend('evidenceQuality')}
+                        changeType={getTrendType(getTrend('evidenceQuality'))}
                         icon={Shield}
                         color="green"
-                        subtitle="Video + Network + Console Coverage"
+                        subtitle="Tags + Recordings Coverage"
                     />
                     <MetricCard
                         title="AI Productivity Gain"
                         value={`${aiProductivity}%`}
-                        change={calculateTrend(aiProductivity)}
-                        changeType={aiProductivity > 30 ? 'positive' : 'neutral'}
+                        change={getTrend('aiProductivity')}
+                        changeType={getTrendType(getTrend('aiProductivity'))}
                         icon={Brain}
                         color="purple"
-                        subtitle="AI Contribution + Generation Efficiency"
+                        subtitle="AI Generation Success + Contribution"
                     />
                 </div>
             </div>
@@ -201,139 +230,240 @@ const QAIDMetricsOverview = ({ metrics }) => {
                 <MetricCard
                     title="Total Test Cases"
                     value={testCases.totalTestCases?.toLocaleString() || '0'}
-                    change={calculateTrend(testCases.totalTestCases || 0)}
-                    changeType="positive"
+                    change={getTrend('totalTestCases')}
+                    changeType={getTrendType(getTrend('totalTestCases'))}
                     icon={TestTube}
                     color="blue"
                     subtitle={`${testCases.aiGeneratedTestCases || 0} AI-generated`}
                 />
 
                 <MetricCard
-                    title="Active Bugs"
-                    value={bugs.totalBugs?.toLocaleString() || '0'}
-                    change={calculateTrend(bugs.totalBugs || 0, (bugs.totalBugs || 0) * 1.1)}
-                    changeType="negative"
-                    icon={Bug}
-                    color="red"
-                    subtitle={`${bugs.bugsWithVideoEvidence || 0} with video evidence`}
+                    title="Manual Test Cases"
+                    value={testCases.manualTestCases?.toLocaleString() || '0'}
+                    change={getTrend('manualTestCases')}
+                    changeType={getTrendType(getTrend('manualTestCases'))}
+                    icon={Clock}
+                    color="orange"
+                    subtitle={`${testCases.totalTestCases > 0 ? Math.round((testCases.manualTestCases / testCases.totalTestCases) * 100) : 0}% of total`}
                 />
 
                 <MetricCard
-                    title="Screen Recordings"
-                    value={recordings.totalRecordings?.toLocaleString() || '0'}
-                    change={calculateTrend(recordings.totalRecordings || 0)}
-                    changeType="positive"
-                    icon={Video}
-                    color="yellow"
-                    subtitle={`${Math.round(recordings.avgRecordingDuration || 0)}min avg duration`}
+                    title="Automated Tests"
+                    value={testCases.automatedTestCases?.toLocaleString() || '0'}
+                    change={getTrend('automatedTestCases')}
+                    changeType={getTrendType(getTrend('automatedTestCases'))}
+                    icon={Zap}
+                    color="green"
+                    subtitle={`${automation.automationRatio}% automation coverage`}
                 />
 
                 <MetricCard
-                    title="AI Generations"
-                    value={ai.totalAIGenerations?.toLocaleString() || '0'}
-                    change={calculateTrend(ai.totalAIGenerations || 0)}
-                    changeType="positive"
-                    icon={Brain}
+                    title="AI Generated Tests"
+                    value={testCases.aiGeneratedTestCases?.toLocaleString() || '0'}
+                    change={getTrend('aiGeneratedTestCases')}
+                    changeType={getTrendType(getTrend('aiGeneratedTestCases'))}
+                    icon={Bot}
                     color="purple"
-                    subtitle={`${Math.round(ai.aiSuccessRate || 0)}% success rate`}
+                    subtitle={`${ai.aiGenerationSuccessRate}% success rate`}
                 />
             </div>
 
             {/* Secondary Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard
-                    title="Automation Coverage"
-                    value={`${Math.round(automation.automationRatio || 0)}%`}
-                    change={calculateTrend(automation.automationRatio || 0)}
-                    changeType="positive"
-                    icon={Zap}
-                    color="green"
-                    subtitle={`${automation.cypressScriptsGenerated || 0} Cypress scripts`}
-                />
-
-                <MetricCard
-                    title="Bug Resolution Rate"
-                    value={`${Math.round(bugs.bugResolutionRate || 0)}%`}
-                    change={calculateTrend(bugs.bugResolutionRate || 0)}
-                    changeType="positive"
-                    icon={Shield}
-                    color="green"
-                    subtitle={`${Math.round(bugs.avgResolutionTime || 0)}h avg resolution`}
-                />
-
-                <MetricCard
-                    title="Active Team Members"
-                    value={team.activeTeamMembers?.toLocaleString() || '0'}
-                    change={calculateTrend(team.activeTeamMembers || 0)}
-                    changeType="neutral"
-                    icon={Users}
-                    color="indigo"
-                    subtitle={`${Math.round(team.testCasesCreatedPerMember || 0)} tests/member`}
-                />
-
-                <MetricCard
-                    title="Recording-to-Bug Rate"
-                    value={`${Math.round(recordings.recordingToReportConversionRate || 0)}%`}
-                    change={calculateTrend(recordings.recordingToReportConversionRate || 0)}
-                    changeType="positive"
-                    icon={Activity}
+                    title="Tests with Recordings"
+                    value={testCases.testCasesWithRecordings?.toLocaleString() || '0'}
+                    change={getTrend('testCasesWithRecordings')}
+                    changeType={getTrendType(getTrend('testCasesWithRecordings'))}
+                    icon={Video}
                     color="yellow"
-                    subtitle="Recordings leading to bug reports"
+                    subtitle={`${recordings.recordingToTestCaseRatio}% of all tests`}
+                />
+
+                <MetricCard
+                    title="Tests with Tags"
+                    value={testCases.testCasesWithTags?.toLocaleString() || '0'}
+                    change={getTrend('testCasesWithTags')}
+                    changeType={getTrendType(getTrend('testCasesWithTags'))}
+                    icon={Tags}
+                    color="indigo"
+                    subtitle={`${testCases.totalTestCases > 0 ? Math.round((testCases.testCasesWithTags / testCases.totalTestCases) * 100) : 0}% properly tagged`}
+                />
+
+                <MetricCard
+                    title="Linked to Bugs"
+                    value={testCases.testCasesLinkedToBugs?.toLocaleString() || '0'}
+                    change={getTrend('testCasesLinkedToBugs')}
+                    changeType={getTrendType(getTrend('testCasesLinkedToBugs'))}
+                    icon={Bug}
+                    color="red"
+                    subtitle="Tests connected to bug reports"
+                />
+
+                <MetricCard
+                    title="Recently Updated"
+                    value={testCases.recentlyUpdatedTestCases?.toLocaleString() || '0'}
+                    change={getTrend('recentlyUpdatedTestCases')}
+                    changeType={getTrendType(getTrend('recentlyUpdatedTestCases'))}
+                    icon={Activity}
+                    color="green"
+                    subtitle={`${testCases.testCaseUpdateFrequency || 0} updates/week`}
                 />
             </div>
 
-            {/* Quality Insights */}
+            {/* Coverage Analysis */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quality Insights</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
+                    Coverage Analysis
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-teal-600 mb-1">
-                            {Math.round(testCases.functionalCoverage || 0)}%
+                        <div className="text-2xl font-bold text-blue-600 mb-1">
+                            {coverage.functionalCoverage}%
                         </div>
                         <div className="text-sm text-gray-600">Functional Coverage</div>
                         <div className="text-xs text-gray-500 mt-1">
-                            {testCases.testCasesWithTags || 0} tests with proper tags
+                            Core functionality testing
                         </div>
                     </div>
 
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-600 mb-1">
-                            {Math.round(bugs.bugReproductionRate || 0)}%
+                    <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                        <div className="text-2xl font-bold text-yellow-600 mb-1">
+                            {coverage.edgeCaseCoverage}%
                         </div>
-                        <div className="text-sm text-gray-600">Bug Reproduction Rate</div>
+                        <div className="text-sm text-gray-600">Edge Case Coverage</div>
                         <div className="text-xs text-gray-500 mt-1">
-                            Enhanced by screen recordings
+                            Boundary & edge scenarios
                         </div>
                     </div>
 
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                        <div className="text-2xl font-bold text-purple-600 mb-1">
-                            {Math.round(ai.avgTestCasesPerGeneration || 0)}
+                    <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <div className="text-2xl font-bold text-red-600 mb-1">
+                            {coverage.negativeCaseCoverage}%
                         </div>
-                        <div className="text-sm text-gray-600">Tests per AI Generation</div>
+                        <div className="text-sm text-gray-600">Negative Testing</div>
                         <div className="text-xs text-gray-500 mt-1">
-                            ${(ai.aiCostPerTestCase || 0).toFixed(3)} cost per test
+                            Error & failure scenarios
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Critical Alerts */}
-            {(bugs.criticalBugs > 0 || automation.automationRatio < 30 || ai.aiSuccessRate < 70) && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-red-800 mb-2 flex items-center">
-                        <Bug className="w-4 h-4 mr-1" />
-                        Attention Required
+            {/* AI Generation Insights */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Brain className="w-5 h-5 mr-2 text-purple-600" />
+                    AI Generation Insights
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <div className="text-2xl font-bold text-purple-600 mb-1">
+                            {ai.totalAIGenerations}
+                        </div>
+                        <div className="text-sm text-gray-600">Total AI Generations</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            Successful generation attempts
+                        </div>
+                    </div>
+
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600 mb-1">
+                            {ai.aiGenerationSuccessRate}%
+                        </div>
+                        <div className="text-sm text-gray-600">Success Rate</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            AI generation efficiency
+                        </div>
+                    </div>
+
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600 mb-1">
+                            {ai.avgTestCasesPerAIGeneration}
+                        </div>
+                        <div className="text-sm text-gray-600">Tests per Generation</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            Average output per attempt
+                        </div>
+                    </div>
+
+                    <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                        <div className="text-2xl font-bold text-yellow-600 mb-1">
+                            ${(ai.aiCostPerTestCase).toFixed(3)}
+                        </div>
+                        <div className="text-sm text-gray-600">Cost per Test</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            AI generation cost efficiency
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Test Case Health Summary */}
+            <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-green-600" />
+                    Test Case Health Summary
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                            {qualityScore}%
+                        </div>
+                        <div className="text-sm text-gray-600">Quality Score</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            Tags + Recordings coverage
+                        </div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                            {automation.automationRatio}%
+                        </div>
+                        <div className="text-sm text-gray-600">Automation Rate</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            Automated vs manual tests
+                        </div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-600">
+                            {testCases.totalTestCases > 0 ? Math.round((testCases.aiGeneratedTestCases / testCases.totalTestCases) * 100) : 0}%
+                        </div>
+                        <div className="text-sm text-gray-600">AI Contribution</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            AI-generated test cases
+                        </div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                            {avgCoverage}%
+                        </div>
+                        <div className="text-sm text-gray-600">Avg Coverage</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            Functional + Edge + Negative
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Maintenance Alerts */}
+            {(testCases.outdatedTestCases > 0 || automation.automationRatio < 30 || ai.aiGenerationSuccessRate < 70) && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-yellow-800 mb-2 flex items-center">
+                        <Activity className="w-4 h-4 mr-1" />
+                        Maintenance Recommendations
                     </h4>
-                    <div className="space-y-1 text-sm text-red-700">
-                        {bugs.criticalBugs > 0 && (
-                            <div>• {bugs.criticalBugs} critical bugs need immediate attention</div>
+                    <div className="space-y-1 text-sm text-yellow-700">
+                        {testCases.outdatedTestCases > 0 && (
+                            <div>• {testCases.outdatedTestCases} test cases need updates - consider reviewing and refreshing</div>
                         )}
                         {automation.automationRatio < 30 && (
-                            <div>• Automation coverage is below 30% - consider increasing automated tests</div>
+                            <div>• Automation coverage is below 30% - consider converting manual tests to automated</div>
                         )}
-                        {ai.aiSuccessRate < 70 && (
-                            <div>• AI generation success rate is below 70% - review prompts and inputs</div>
+                        {ai.aiGenerationSuccessRate < 70 && (
+                            <div>• AI generation success rate is below 70% - review prompts and generation parameters</div>
+                        )}
+                        {qualityScore < 60 && (
+                            <div>• Quality score is below 60% - add more tags and recordings to improve test case documentation</div>
                         )}
                     </div>
                 </div>

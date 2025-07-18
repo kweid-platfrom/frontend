@@ -1,6 +1,5 @@
 'use client';
-
-import { useState, } from 'react';
+import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import {
@@ -15,7 +14,63 @@ import {
     ChevronDown
 } from 'lucide-react';
 
-export default function TestCaseTable({
+const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const validOptions = Array.isArray(options) ? options.filter(opt => opt?.value && opt?.label) : [];
+
+    const handleToggle = (optionValue) => {
+        const newValue = value.includes(optionValue)
+            ? value.filter(v => v !== optionValue)
+            : [...value, optionValue];
+        onChange(newValue);
+    };
+
+    console.log('MultiSelectDropdown options in TestCaseTable:', validOptions);
+
+    return (
+        <div className="relative w-full">
+            <div
+                className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white flex items-center justify-between"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className="truncate">
+                    {value.length > 0 && validOptions.length > 0
+                        ? value.map(v => validOptions.find(o => o.value === v)?.label).filter(Boolean).join(', ')
+                        : placeholder}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+            </div>
+            {isOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
+                    {validOptions.length > 0 ? (
+                        validOptions.map(option => (
+                            <div
+                                key={option.value}
+                                className="flex items-center px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
+                                onClick={() => handleToggle(option.value)}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={value.includes(option.value)}
+                                    onChange={() => {}}
+                                    className="mr-2"
+                                />
+                                <span className="truncate">{option.label}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="px-3 py-2 text-xs text-gray-500">
+                            No bugs available
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const TestCaseTable = ({
     testCases = [],
     loading,
     onEdit,
@@ -23,10 +78,12 @@ export default function TestCaseTable({
     onDuplicate,
     onBulkAction,
     onView,
-    onRun
-}) {
+    onRun,
+    bugs = [],
+    onLinkBug
+}) => {
     const [selectedIds, setSelectedIds] = useState([]);
-    const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
 
     const handleSelectAll = (checked) => {
         if (checked) {
@@ -59,6 +116,21 @@ export default function TestCaseTable({
         }
         setSortConfig({ key, direction });
         toast.info(`Sorted by ${key} (${direction}ending)`);
+    };
+
+    const handleLinkBug = async (testCaseId, newBugs) => {
+        console.log('Linking bugs:', { testCaseId, newBugs });
+        if (onLinkBug) {
+            try {
+                await onLinkBug(testCaseId, newBugs);
+                toast.success(`Linked ${newBugs.length} bug${newBugs.length > 1 ? 's' : ''} to test case`);
+            } catch (error) {
+                console.error('Failed to link bugs:', error);
+                toast.error('Failed to link bugs');
+            }
+        } else {
+            console.warn('onLinkBug function not provided');
+        }
     };
 
     const sortedTestCases = [...testCases].sort((a, b) => {
@@ -142,24 +214,14 @@ export default function TestCaseTable({
             <ChevronDown className="w-3 h-3 text-gray-600" />;
     };
 
-    if (loading) {
-        return (
-            <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading test cases...</p>
-            </div>
-        );
-    }
+    const bugOptions = Array.isArray(bugs)
+        ? bugs.map(bug => ({
+              value: bug.id || bug.bugId || `bug_${Math.random().toString(36).slice(2)}`, // Fallback ID
+              label: bug.title || `Bug ${bug.id?.slice(-6) || bug.bugId?.slice(-6) || 'Unknown'}` // Fallback title
+          }))
+        : [];
 
-    if (testCases.length === 0) {
-        return (
-            <div className="p-8 text-center">
-                <div className="text-gray-400 text-6xl mb-4">📋</div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No test cases found</h3>
-                <p className="text-gray-600">Create a test case to get started</p>
-            </div>
-        );
-    }
+    console.log('TestCaseTable props:', { bugs, bugOptions, testCases });
 
     return (
         <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
@@ -239,20 +301,26 @@ export default function TestCaseTable({
                                     {getSortIcon('priority')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                                Tags
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                                Assignee
+                            <th
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                onClick={() => handleSort('assignee')}
+                            >
+                                <div className="flex items-center gap-1">
+                                    Assignee
+                                    {getSortIcon('assignee')}
+                                </div>
                             </th>
                             <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('updatedAt')}
+                                onClick={() => handleSort('updated_at')}
                             >
                                 <div className="flex items-center gap-1">
-                                    Updated
-                                    {getSortIcon('updatedAt')}
+                                    Last Updated
+                                    {getSortIcon('updated_at')}
                                 </div>
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                                Linked Bugs
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Actions
@@ -260,120 +328,111 @@ export default function TestCaseTable({
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {sortedTestCases.map((testCase) => (
-                            <tr key={testCase.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <div className="flex items-center">
-                                        {selectedIds.includes(testCase.id) ? (
-                                            <CheckSquare
-                                                className="w-4 h-4 text-teal-600 cursor-pointer"
-                                                onClick={() => handleSelectItem(testCase.id, false)}
-                                            />
-                                        ) : (
-                                            <Square
-                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
-                                                onClick={() => handleSelectItem(testCase.id, true)}
-                                            />
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <div>
-                                        <div className="text-sm font-medium text-gray-900">
-                                            {testCase.title}
-                                        </div>
-                                        <div className="text-sm text-gray-500 truncate max-w-xs">
-                                            {testCase.description}
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusBadge(testCase.status)}`}>
-                                        {testCase.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityBadge(testCase.priority)}`}>
-                                        {testCase.priority}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <div className="flex flex-wrap gap-1">
-                                        {testCase.tags?.slice(0, 2).map((tag, index) => (
-                                            <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded border border-gray-200">
-                                                {tag}
-                                            </span>
-                                        ))}
-                                        {testCase.tags?.length > 2 && (
-                                            <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded border border-gray-200">
-                                                +{testCase.tags.length - 2}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                                    {testCase.assignee || 'Unassigned'}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-500 border-r border-gray-200">
-                                    {testCase.updatedAt ?
-                                        formatDistanceToNow(testCase.updatedAt, { addSuffix: true }) :
-                                        'Never'
-                                    }
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => {
-                                                if (onView) {
-                                                    onView(testCase);
-                                                    toast.info(`Viewing "${testCase.title}"`);
-                                                }
-                                            }}
-                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (onRun) {
-                                                    onRun(testCase);
-                                                    toast.loading(`Running "${testCase.title}"...`);
-                                                }
-                                            }}
-                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                                        >
-                                            <Play className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (onEdit) {
-                                                    onEdit(testCase);
-                                                    toast.info(`Editing "${testCase.title}"`);
-                                                }
-                                            }}
-                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                                        >
-                                            <Edit3 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDuplicate(testCase)}
-                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                                        >
-                                            <Copy className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(testCase.id, testCase.title)}
-                                            className="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                                    Loading test cases...
                                 </td>
                             </tr>
-                        ))}
+                        ) : sortedTestCases.length === 0 ? (
+                            <tr>
+                                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                                    No test cases found
+                                </td>
+                            </tr>
+                        ) : (
+                            sortedTestCases.map(testCase => (
+                                <tr key={testCase.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <div className="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(testCase.id)}
+                                                onChange={(e) => handleSelectItem(testCase.id, e.target.checked)}
+                                                className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                            />
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <div className="text-sm text-gray-900 truncate max-w-xs" title={testCase.title}>
+                                            {testCase.title || 'Untitled Test Case'}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(testCase.status)}`}>
+                                            {testCase.status || 'Draft'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityBadge(testCase.priority)}`}>
+                                            {testCase.priority || 'Low'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <div className="text-sm text-gray-900 truncate" title={testCase.assignee}>
+                                            {testCase.assignee || 'Unassigned'}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <div className="text-sm text-gray-500">
+                                            {testCase.updatedAt ? formatDistanceToNow(testCase.updatedAt, { addSuffix: true }) : 'Never'}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <MultiSelectDropdown
+                                            options={bugOptions}
+                                            value={testCase?.linkedBugs || []}
+                                            onChange={(newBugs) => handleLinkBug(testCase.id, newBugs)}
+                                            placeholder="Link Bugs..."
+                                        />
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <div className="flex items-center space-x-2">
+                                            <button
+                                                onClick={() => onView && onView(testCase)}
+                                                className="text-gray-400 hover:text-teal-600"
+                                                title="View"
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => onEdit && onEdit(testCase)}
+                                                className="text-gray-400 hover:text-teal-600"
+                                                title="Edit"
+                                            >
+                                                <Edit3 className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDuplicate(testCase)}
+                                                className="text-gray-400 hover:text-teal-600"
+                                                title="Duplicate"
+                                            >
+                                                <Copy className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(testCase.id, testCase.title)}
+                                                className="text-gray-400 hover:text-red-600"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => onRun && onRun(testCase)}
+                                                className="text-gray-400 hover:text-teal-600"
+                                                title="Run"
+                                            >
+                                                <Play className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>
         </div>
     );
-}
+};
+
+export default TestCaseTable;

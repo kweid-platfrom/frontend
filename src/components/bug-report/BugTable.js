@@ -14,18 +14,19 @@ const BugTable = ({
     onUpdateBugPriority,
     onUpdateBugAssignment,
     onUpdateBugEnvironment,
-    onUpdateBugFrequency, // Added this prop
+    onUpdateBugFrequency,
     onShowBugDetails,
     onCreateBug,
     onRetryFetch,
     teamMembers = [],
     environments = [],
-    isUpdating = new Set(),
     loading = false,
     error = null,
     onBulkAction,
     onChatIconClick,
     onToggleSelection,
+    testCases = [],
+    onLinkTestCase
 }) => {
     const [selectedIds, setSelectedIds] = useState(Array.isArray(selectedBugs) ? selectedBugs : []);
 
@@ -130,118 +131,64 @@ const BugTable = ({
                 <table className="divide-y divide-gray-200 w-full">
                     <thead className="bg-gray-50">
                         <tr className="h-12">
-                            <th
-                                scope="col"
-                                className="w-12 px-3 py-3 border-r border-gray-200 sticky left-0 bg-gray-50 z-30"
-                            >
+                            <th scope="col" className="w-12 px-3 py-3 border-r border-gray-200 sticky left-0 bg-gray-50 z-30">
                                 <div className="flex items-center justify-center h-full">
                                     {selectedIds.length === bugs.length && bugs.length > 0 ? (
-                                        <CheckSquare
-                                            className="w-4 h-4 text-teal-600 cursor-pointer"
-                                            onClick={() => handleSelectAll(false)}
-                                        />
+                                        <CheckSquare className="w-4 h-4 text-teal-600 cursor-pointer" onClick={() => handleSelectAll(false)} />
                                     ) : (
-                                        <Square
-                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
-                                            onClick={() => handleSelectAll(true)}
-                                        />
+                                        <Square className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600" onClick={() => handleSelectAll(true)} />
                                     )}
                                 </div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 sticky left-12 bg-gray-50 z-30 min-w-[300px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 sticky left-12 bg-gray-50 z-30 min-w-[300px]">
                                 <div className="flex items-center h-full">Bug Title</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[80px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[80px]">
                                 <div className="flex items-center h-full">Bug ID</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]">
                                 <div className="flex items-center h-full">Tags</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Status</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]">
                                 <div className="flex items-center h-full">Assigned To</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[80px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[80px]">
                                 <div className="flex items-center h-full">Priority</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Severity</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Evidence</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Reporter</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Source</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]">
                                 <div className="flex items-center h-full">Environment</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[140px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[140px]">
                                 <div className="flex items-center h-full">Device/Browser</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Due Date</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Created</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[100px]">
                                 <div className="flex items-center h-full">Frequency</div>
                             </th>
-                            <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[60px]"
-                            >
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[120px]">
+                                <div className="flex items-center h-full">Linked Test Cases</div>
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[60px]">
                                 <div className="flex items-center h-full">Actions</div>
                             </th>
                         </tr>
@@ -258,12 +205,13 @@ const BugTable = ({
                                 onUpdateBugPriority={onUpdateBugPriority}
                                 onUpdateBugAssignment={onUpdateBugAssignment}
                                 onUpdateBugEnvironment={onUpdateBugEnvironment}
-                                onUpdateBugFrequency={onUpdateBugFrequency} // Pass the frequency update prop
+                                onUpdateBugFrequency={onUpdateBugFrequency}
                                 onShowBugDetails={onShowBugDetails}
                                 onChatClick={handleChatIconClick}
                                 teamMembers={teamMembers}
                                 environments={environments}
-                                isUpdating={isUpdating}
+                                testCases={testCases}
+                                onLinkTestCase={onLinkTestCase}
                             />
                         ))}
                     </tbody>
@@ -273,7 +221,7 @@ const BugTable = ({
                         <p className="text-gray-500">No bugs found. Report a new bug to get started.</p>
                         {onCreateBug && (
                             <button
-                                onClick={onCreateBug}
+                                onClick={onCreateeBug}
                                 className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-teal-600 hover:bg-teal-700"
                             >
                                 Report Bug

@@ -1,6 +1,5 @@
 'use client';
-
-import React from 'react';
+import React, { useState } from 'react';
 import {
     GripVertical,
     Paperclip,
@@ -16,7 +15,8 @@ import {
     Monitor,
     Globe,
     CheckSquare,
-    Square
+    Square,
+    ChevronDown
 } from 'lucide-react';
 import {
     getStatusColor,
@@ -31,9 +31,88 @@ import {
     VALID_BUG_STATUSES,
     VALID_BUG_SEVERITIES
 } from '../../utils/bugUtils';
+import { toast } from 'sonner';
 
-// Add frequency options
 const VALID_FREQUENCIES = ['Always', 'Often', 'Sometimes', 'Rarely', 'Once'];
+
+const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const validOptions = Array.isArray(options) ? options.filter(opt => opt?.value && opt?.label) : [];
+
+    const handleToggle = (optionValue) => {
+        const newValue = value.includes(optionValue)
+            ? value.filter(v => v !== optionValue)
+            : [...value, optionValue];
+        onChange(newValue);
+    };
+
+    const handleDropdownClick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setIsOpen(!isOpen);
+    };
+
+    const handleOptionClick = (e, optionValue) => {
+        e.stopPropagation();
+        e.preventDefault();
+        handleToggle(optionValue);
+    };
+
+    const handleCheckboxChange = (e, optionValue) => {
+        e.stopPropagation();
+        e.preventDefault();
+        handleToggle(optionValue);
+    };
+
+    console.log('MultiSelectDropdown options in BugTableRow:', {
+        validOptions,
+        value,
+        optionsLength: validOptions.length,
+        valueLength: value.length
+    });
+
+    return (
+        <div className="relative w-full" onClick={(e) => e.stopPropagation()}>
+            <div
+                className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white flex items-center justify-between"
+                onClick={handleDropdownClick}
+            >
+                <span className="truncate">
+                    {value.length > 0 && validOptions.length > 0
+                        ? value.map(v => validOptions.find(o => o.value === v)?.label).filter(Boolean).join(', ')
+                        : placeholder}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+            </div>
+            {isOpen && (
+                <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
+                    {validOptions.length > 0 ? (
+                        validOptions.map(option => (
+                            <div
+                                key={option.value}
+                                className="flex items-center px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
+                                onClick={(e) => handleOptionClick(e, option.value)}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={value.includes(option.value)}
+                                    onChange={(e) => handleCheckboxChange(e, option.value)}
+                                    className="mr-2"
+                                />
+                                <span className="truncate">{option.label}</span>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="px-3 py-2 text-xs text-gray-500">
+                            No test cases available
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const BugTableRow = ({
     bug,
@@ -46,23 +125,14 @@ const BugTableRow = ({
     onUpdateBugPriority,
     onUpdateBugAssignment,
     onUpdateBugEnvironment,
-    onUpdateBugFrequency, // Add this new prop
+    onUpdateBugFrequency,
     onShowBugDetails,
-    onChatClick, // Add this prop from BugTable
+    onChatClick,
     teamMembers = [],
     environments = [],
-    isUpdating = new Set(),
+    testCases = [],
+    onLinkTestCase
 }) => {
-    const updatingSet = React.useMemo(() => {
-        if (isUpdating instanceof Set) {
-            return isUpdating;
-        }
-        if (Array.isArray(isUpdating)) {
-            return new Set(isUpdating);
-        }
-        return new Set();
-    }, [isUpdating]);
-
     const getSourceIcon = (source) => {
         switch (source) {
             case 'manual':
@@ -74,15 +144,12 @@ const BugTableRow = ({
         }
     };
 
-    // Helper function to get user's first name from email or name
     const getFirstName = (user) => {
         if (!user) return 'Unknown';
         if (typeof user === 'string') {
-            // If it's an email, extract the part before @
             if (user.includes('@')) {
                 return user.split('@')[0];
             }
-            // If it's a name, get the first word
             return user.split(' ')[0];
         }
         if (user.displayName) {
@@ -94,19 +161,15 @@ const BugTableRow = ({
         return 'Unknown';
     };
 
-    // Helper function to generate user-friendly bug ID
     const getUserFriendlyBugId = (bugId) => {
         if (!bugId) return 'Unknown';
-        // Take last 6 characters and prefix with BUG-
         return `BUG-${bugId.slice(-6).toUpperCase()}`;
     };
 
-    // Helper function to format date properly
     const formatDateSafe = (date) => {
         if (!date) return 'Not set';
         try {
             if (date.toDate) {
-                // Firestore timestamp
                 return formatDate(date.toDate());
             }
             if (date instanceof Date) {
@@ -124,10 +187,7 @@ const BugTableRow = ({
 
     const handleSeverityChange = async (bugId, newSeverity, event) => {
         event.stopPropagation();
-        if (updatingSet.has(bugId)) return;
-        
         console.log('Updating severity:', { bugId, newSeverity });
-        
         if (onUpdateBugSeverity) {
             try {
                 await onUpdateBugSeverity(bugId, newSeverity);
@@ -145,10 +205,7 @@ const BugTableRow = ({
 
     const handleStatusChange = async (bugId, newStatus, event) => {
         event.stopPropagation();
-        if (updatingSet.has(bugId)) return;
-        
         console.log('Updating status:', { bugId, newStatus });
-        
         if (onUpdateBugStatus) {
             try {
                 await onUpdateBugStatus(bugId, newStatus);
@@ -162,10 +219,7 @@ const BugTableRow = ({
 
     const handleAssignmentChange = async (bugId, newAssignee, event) => {
         event.stopPropagation();
-        if (updatingSet.has(bugId)) return;
-        
         console.log('Updating assignment:', { bugId, newAssignee });
-        
         if (onUpdateBugAssignment) {
             try {
                 await onUpdateBugAssignment(bugId, newAssignee);
@@ -179,10 +233,7 @@ const BugTableRow = ({
 
     const handleEnvironmentChange = async (bugId, newEnvironment, event) => {
         event.stopPropagation();
-        if (updatingSet.has(bugId)) return;
-        
         console.log('Updating environment:', { bugId, newEnvironment });
-        
         if (onUpdateBugEnvironment) {
             try {
                 await onUpdateBugEnvironment(bugId, newEnvironment);
@@ -196,10 +247,7 @@ const BugTableRow = ({
 
     const handleFrequencyChange = async (bugId, newFrequency, event) => {
         event.stopPropagation();
-        if (updatingSet.has(bugId)) return;
-        
         console.log('Updating frequency:', { bugId, newFrequency });
-        
         if (onUpdateBugFrequency) {
             try {
                 await onUpdateBugFrequency(bugId, newFrequency);
@@ -208,6 +256,21 @@ const BugTableRow = ({
             }
         } else {
             console.warn('onUpdateBugFrequency function not provided');
+        }
+    };
+
+    const handleTestCaseLink = async (newTestCases) => {
+        console.log('Linking test cases:', { bugId: bug.id, newTestCases });
+        if (onLinkTestCase) {
+            try {
+                await onLinkTestCase(bug.id, newTestCases);
+                toast.success(`Updated test case links for bug`);
+            } catch (error) {
+                console.error('Failed to link test cases:', error);
+                toast.error('Failed to link test cases');
+            }
+        } else {
+            console.warn('onLinkTestCase function not provided');
         }
     };
 
@@ -222,15 +285,11 @@ const BugTableRow = ({
     const handleChatIconClick = (event) => {
         event.stopPropagation();
         event.preventDefault();
-        
         console.log('Chat icon clicked for bug:', bug);
-        
         if (!bug || !bug.id) {
             console.error('Invalid bug object in handleChatIconClick:', bug);
             return;
         }
-        
-        // Use onChatClick if provided, otherwise fall back to onShowBugDetails
         if (onChatClick) {
             onChatClick(bug, event);
         } else if (onShowBugDetails) {
@@ -240,32 +299,48 @@ const BugTableRow = ({
         }
     };
 
-    // Remove the handleRowClick function entirely since we don't want row clicks to open details
-    // Only the chat icon should trigger the modal
-
     const totalAttachments = bug?.attachments?.length || 0;
     const evidenceCount = getEvidenceCount(bug);
     
-    // Fix assigned user logic - get current assignee or default to creator
     const getAssignedUser = () => {
-        if (bug.assignedTo) return bug.assignedTo;
+        if (bug.assigned_to) return bug.assigned_to;
         if (bug.created_by) return bug.created_by;
         if (bug.reportedByEmail) return bug.reportedByEmail;
         return '';
     };
     
     const assignedUser = getAssignedUser();
-    const bugIsUpdating = bug?.id && updatingSet.has(bug.id);
     const isSelected = selectedIds.includes(bug.id);
     const ROW_HEIGHT = 'h-12';
     const CELL_VERTICAL_ALIGN = 'align-middle';
     
-    // Fix reporter name - get first name properly
     const reporterName = getFirstName(bug.created_by || bug.reportedByEmail);
 
     const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${
         selectedBug?.id === bug?.id ? 'bg-blue-50' : ''
-    } ${isSelected ? 'bg-blue-50' : ''} ${bugIsUpdating ? 'opacity-60' : ''}`;
+    } ${isSelected ? 'bg-blue-50' : ''}`;
+
+    // Create test case options with proper structure
+    const testCaseOptions = Array.isArray(testCases)
+        ? testCases.map(tc => ({
+              value: tc.id || tc.testCaseId || `tc_${Math.random().toString(36).slice(2)}`,
+              label: tc.title || `Test Case ${tc.id?.slice(-6) || tc.testCaseId?.slice(-6) || 'Unknown'}`
+          }))
+        : [];
+
+    // Get current linked test cases - handle both array of IDs and array of objects
+    const currentLinkedTestCases = bug?.linkedTestCases || [];
+    const linkedTestCaseIds = Array.isArray(currentLinkedTestCases) 
+        ? currentLinkedTestCases.map(tc => typeof tc === 'string' ? tc : tc.id || tc.testCaseId).filter(Boolean)
+        : [];
+
+    console.log('BugTableRow props:', { 
+        bugId: bug.id, 
+        testCases: testCases?.length || 0, 
+        testCaseOptions: testCaseOptions?.length || 0, 
+        linkedTestCases: bug?.linkedTestCases,
+        linkedTestCaseIds 
+    });
 
     return (
         <tr
@@ -273,7 +348,6 @@ const BugTableRow = ({
             className={rowClassName}
             draggable={true}
             onDragStart={(e) => onDragStart && onDragStart(e, bug)}
-            // Remove onClick handler from the row - only chat icon should open details
         >
             <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center justify-center h-full">
@@ -298,7 +372,7 @@ const BugTableRow = ({
                                 className="font-medium text-gray-900 truncate text-sm leading-tight"
                                 title={bug.title}
                             >
-                                {bug.title}
+                                {bug.title || 'Untitled Bug'}
                             </div>
                             {bug.comments && bug.comments.length > 0 && (
                                 <div className="flex items-center text-xs text-gray-400">
@@ -349,8 +423,7 @@ const BugTableRow = ({
                     <select
                         value={bug?.status || 'New'}
                         onChange={(e) => handleStatusChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating || !onUpdateBugStatus}
-                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getStatusColor(bug?.status)} ${(bugIsUpdating || !onUpdateBugStatus) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getStatusColor(bug?.status)}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_BUG_STATUSES.map(status => (
@@ -364,8 +437,7 @@ const BugTableRow = ({
                     <select
                         value={assignedUser}
                         onChange={(e) => handleAssignmentChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating || !onUpdateBugAssignment}
-                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white ${(bugIsUpdating || !onUpdateBugAssignment) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Unassigned</option>
@@ -389,8 +461,7 @@ const BugTableRow = ({
                     <select
                         value={bug?.severity || 'Low'}
                         onChange={(e) => handleSeverityChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating || !onUpdateBugSeverity}
-                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getSeverityColor(bug?.severity)} ${(bugIsUpdating || !onUpdateBugSeverity) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getSeverityColor(bug?.severity)}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_BUG_SEVERITIES.map(severity => (
@@ -449,8 +520,7 @@ const BugTableRow = ({
                     <select
                         value={bug?.environment || 'Production'}
                         onChange={(e) => handleEnvironmentChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating || !onUpdateBugEnvironment}
-                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white ${(bugIsUpdating || !onUpdateBugEnvironment) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {environments.map(env => (
@@ -472,11 +542,11 @@ const BugTableRow = ({
             </td>
             <td className={`px-4 py-3 whitespace-nowrap text-sm border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
                 <div className="flex items-center">
-                    {bug.dueDate ? (
-                        <div className={`flex items-center ${isPastDue(bug.dueDate) ? 'text-red-600' : 'text-gray-900'}`}>
+                    {bug.due_date ? (
+                        <div className={`flex items-center ${isPastDue(bug.due_date) ? 'text-red-600' : 'text-gray-900'}`}>
                             <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
-                            <span className="text-xs">{formatDateSafe(bug.dueDate)}</span>
-                            {isPastDue(bug.dueDate) && (
+                            <span className="text-xs">{formatDateSafe(bug.due_date)}</span>
+                            {isPastDue(bug.due_date) && (
                                 <AlertTriangle className="h-3 w-3 ml-1 text-red-500 flex-shrink-0" />
                             )}
                         </div>
@@ -489,7 +559,7 @@ const BugTableRow = ({
                 <div className="flex items-center">
                     <div className="flex items-center">
                         <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{formatDateSafe(bug.createdAt)}</span>
+                        <span className="truncate">{formatDateSafe(bug.created_at)}</span>
                     </div>
                 </div>
             </td>
@@ -498,14 +568,23 @@ const BugTableRow = ({
                     <select
                         value={bug?.frequency || 'Sometimes'}
                         onChange={(e) => handleFrequencyChange(bug.id, e.target.value, e)}
-                        disabled={bugIsUpdating || !onUpdateBugFrequency}
-                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white ${(bugIsUpdating || !onUpdateBugFrequency) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_FREQUENCIES.map(freq => (
                             <option key={freq} value={freq}>{freq}</option>
                         ))}
                     </select>
+                </div>
+            </td>
+            <td className={`px-4 py-3 whitespace-nowrap border-r border-gray-200 w-28 ${CELL_VERTICAL_ALIGN}`}>
+                <div className="flex items-center">
+                    <MultiSelectDropdown
+                        options={testCaseOptions}
+                        value={linkedTestCaseIds}
+                        onChange={handleTestCaseLink}
+                        placeholder="Link Test Cases..."
+                    />
                 </div>
             </td>
             <td className={`px-4 py-3 whitespace-nowrap w-8 ${CELL_VERTICAL_ALIGN}`}>

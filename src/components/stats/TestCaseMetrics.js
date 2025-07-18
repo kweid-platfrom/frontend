@@ -1,7 +1,82 @@
 import React from 'react';
-import { CheckCircle, Clock, Zap, Bot, Tags, TrendingUp } from 'lucide-react';
+import { CheckCircle, Clock, Zap, Bot, Tags, TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
+import { useTestMetrics } from '../../hooks/useTestCaseMetrics';
 
-const TestCaseMetrics = ({ metrics = {} }) => {
+const TestCaseMetrics = ({ suiteId, sprintId = null, options = {} }) => {
+    const {
+        metrics,
+        loading,
+        error,
+        lastUpdated,
+        refresh,
+        isRealtime
+    } = useTestMetrics(suiteId, sprintId, {
+        autoRefresh: true,
+        refreshInterval: 30000,
+        enableRealtime: true,
+        includeExecutions: false,
+        ...options
+    });
+
+    // Handle loading state
+    if (loading) {
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-gray-900">Test Case Management</h2>
+                    <div className="flex items-center text-sm text-gray-500">
+                        <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                        Loading metrics...
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[...Array(4)].map((_, i) => (
+                        <div key={i} className="bg-white rounded-lg border border-gray-200 p-6 animate-pulse">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="w-16 h-8 bg-gray-200 rounded"></div>
+                                <div className="w-24 h-4 bg-gray-200 rounded"></div>
+                                <div className="w-20 h-3 bg-gray-200 rounded"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    // Handle error state
+    if (error) {
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-gray-900">Test Case Management</h2>
+                    <button
+                        onClick={refresh}
+                        className="flex items-center px-3 py-1 text-sm text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50"
+                    >
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Retry
+                    </button>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                    <div className="flex items-center">
+                        <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                        <div>
+                            <h3 className="text-sm font-medium text-red-800">Error Loading Metrics</h3>
+                            <p className="text-sm text-red-600 mt-1">
+                                {error?.message || 'Failed to load test case metrics. Please try again.'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Extract metrics with fallback values
     const {
         totalTestCases = 0,
         manualTestCases = 0,
@@ -17,8 +92,9 @@ const TestCaseMetrics = ({ metrics = {} }) => {
         avgTestCasesPerAIGeneration = 0,
         outdatedTestCases = 0,
         recentlyUpdatedTestCases = 0,
-        testCaseUpdateFrequency = 0
-    } = metrics;
+        testCaseUpdateFrequency = 0,
+        trends = {}
+    } = metrics || {};
 
     const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend = null }) => (
         <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
@@ -64,8 +140,28 @@ const TestCaseMetrics = ({ metrics = {} }) => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900">Test Case Management</h2>
-                <div className="text-sm text-gray-500">
-                    Total: {totalTestCases.toLocaleString()} test cases
+                <div className="flex items-center space-x-4">
+                    <div className="text-sm text-gray-500">
+                        Total: {totalTestCases.toLocaleString()} test cases
+                    </div>
+                    {lastUpdated && (
+                        <div className="text-xs text-gray-400">
+                            Last updated: {lastUpdated.toLocaleTimeString()}
+                        </div>
+                    )}
+                    {isRealtime && (
+                        <div className="flex items-center text-xs text-green-600">
+                            <div className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                            Live
+                        </div>
+                    )}
+                    <button
+                        onClick={refresh}
+                        className="flex items-center px-3 py-1 text-sm text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50"
+                    >
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Refresh
+                    </button>
                 </div>
             </div>
 
@@ -77,7 +173,7 @@ const TestCaseMetrics = ({ metrics = {} }) => {
                     subtitle="All test cases created"
                     icon={CheckCircle}
                     color="blue"
-                    trend={12}
+                    trend={trends.totalTestCases}
                 />
                 <MetricCard
                     title="Manual Tests"
@@ -85,6 +181,7 @@ const TestCaseMetrics = ({ metrics = {} }) => {
                     subtitle={`${totalTestCases > 0 ? Math.round((manualTestCases / totalTestCases) * 100) : 0}% of total`}
                     icon={Clock}
                     color="orange"
+                    trend={trends.manualTestCases}
                 />
                 <MetricCard
                     title="Automated Tests"
@@ -92,7 +189,7 @@ const TestCaseMetrics = ({ metrics = {} }) => {
                     subtitle={`${totalTestCases > 0 ? Math.round((automatedTestCases / totalTestCases) * 100) : 0}% automated`}
                     icon={Zap}
                     color="green"
-                    trend={8}
+                    trend={trends.automatedTestCases}
                 />
                 <MetricCard
                     title="AI Generated"
@@ -100,7 +197,7 @@ const TestCaseMetrics = ({ metrics = {} }) => {
                     subtitle={`${avgTestCasesPerAIGeneration} avg per generation`}
                     icon={Bot}
                     color="purple"
-                    trend={25}
+                    trend={trends.aiGeneratedTestCases}
                 />
             </div>
 
