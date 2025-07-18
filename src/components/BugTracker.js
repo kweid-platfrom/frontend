@@ -1,4 +1,3 @@
-// src/components/BugTracker.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,9 +10,9 @@ import BugFilters from './bug-report/BugFilters';
 import firestoreService from '../services/firestoreService';
 
 const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
-    const { user: resolvedUser, userCapabilities, isAuthenticated, isLoading: appLoading, addNotification } = useApp();
+    const { user: resolvedUser, isAuthenticated, isLoading: appLoading, addNotification } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
-    const { teamMembers, sprints, environments, filters, setFilters, isUpdating, error, loading, updateBugStatus, updateBugSeverity, updateBugAssignment, updateBugEnvironment, updateBug, updateBugTitle, refetchBugs } = useBugTracker({
+    const { teamMembers, sprints, environments, filters, setFilters, isUpdating, error, loading, updateBugStatus, updateBugSeverity, updateBugAssignment, updateBugEnvironment, updateBugFrequency, updateBug, updateBugTitle, refetchBugs } = useBugTracker({
         enabled: isAuthenticated && !!resolvedUser?.uid && !!activeSuite?.suite_id && !appLoading && !suiteLoading,
         suite: activeSuite,
         user: resolvedUser
@@ -28,14 +27,6 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
     }, []);
 
     const handleBugSelect = (bug) => {
-        if (!userCapabilities.canViewBugs) {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You don’t have permission to view bug details'
-            });
-            return;
-        }
         setSelectedBug(bug);
         setShowDetailsModal(true);
     };
@@ -44,14 +35,6 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
         if (event) {
             event.preventDefault();
             event.stopPropagation();
-        }
-        if (!userCapabilities.canViewBugs) {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You don’t have permission to view bug details'
-            });
-            return;
         }
         if (!bug || !bug.id) {
             console.error('Invalid bug object passed to chat icon click');
@@ -67,35 +50,10 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
     };
 
     const toggleBugSelection = (bugId) => {
-        if (!userCapabilities.canViewBugs) {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You don’t have permission to select bugs'
-            });
-            return;
-        }
         setSelectedBugs(prev => prev.includes(bugId) ? prev.filter(id => id !== bugId) : [...prev, bugId]);
     };
 
     const handleBulkAction = async (action, ids) => {
-        if (!userCapabilities.canUpdateBugs && action !== 'delete') {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You don’t have permission to update bugs'
-            });
-            return;
-        }
-        if (!userCapabilities.canDeleteBugs && action === 'delete') {
-            addNotification({
-                type: 'error',
-                title: 'Permission Denied',
-                message: 'You don’t have permission to delete bugs'
-            });
-            return;
-        }
-
         try {
             switch (action) {
                 case 'reopen':
@@ -166,31 +124,32 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
                     <BugTable
                         bugs={filteredBugs || []}
                         selectedBugs={selectedBugs}
-                        onBugSelect={userCapabilities.canViewBugs ? handleBugSelect : null}
+                        onBugSelect={handleBugSelect}
                         selectedBug={selectedBug}
-                        onToggleSelection={userCapabilities.canViewBugs ? toggleBugSelection : null}
-                        onUpdateBugStatus={userCapabilities.canUpdateBugs ? updateBugStatus : null}
-                        onUpdateBugSeverity={userCapabilities.canUpdateBugs ? updateBugSeverity : null}
-                        onUpdateBugAssignment={userCapabilities.canUpdateBugs ? updateBugAssignment : null}
-                        onUpdateBugEnvironment={userCapabilities.canUpdateBugs ? updateBugEnvironment : null}
-                        onUpdateBugTitle={userCapabilities.canUpdateBugs ? updateBugTitle : null}
-                        onShowBugDetails={userCapabilities.canViewBugs ? handleBugSelect : null}
-                        onCreateBug={userCapabilities.canCreateBugs ? onCreateBug : null}
+                        onToggleSelection={toggleBugSelection}
+                        onUpdateBugStatus={updateBugStatus}
+                        onUpdateBugSeverity={updateBugSeverity}
+                        onUpdateBugAssignment={updateBugAssignment}
+                        onUpdateBugEnvironment={updateBugEnvironment}
+                        onUpdateBugFrequency={updateBugFrequency}
+                        onUpdateBugTitle={updateBugTitle}
+                        onShowBugDetails={handleBugSelect}
+                        onCreateBug={onCreateBug}
                         onRetryFetch={refetchBugs}
                         teamMembers={teamMembers || []}
                         environments={environments || []}
                         isUpdating={isUpdating}
                         loading={loading}
                         error={error}
-                        onBulkAction={(userCapabilities.canUpdateBugs || userCapabilities.canDeleteBugs) ? handleBulkAction : null}
-                        onChatIconClick={userCapabilities.canViewBugs ? handleChatIconClick : null}
+                        onBulkAction={handleBulkAction}
+                        onChatIconClick={handleChatIconClick}
                     />
                 </div>
-                {showDetailsModal && selectedBug && userCapabilities.canViewBugs && (
+                {showDetailsModal && selectedBug && (
                     <BugDetailsModal
                         bug={selectedBug}
                         teamMembers={teamMembers || []}
-                        onUpdateBug={userCapabilities.canUpdateBugs ? updateBug : null}
+                        onUpdateBug={updateBug}
                         onClose={() => setShowDetailsModal(false)}
                     />
                 )}

@@ -45,7 +45,18 @@ class FirestoreService {
             throw new Error('Document ID is required');
         }
 
-        const pathParts = [collectionPath, ...validSegments].join('/').split('/');
+        // If we have only one segment (document ID), use collection + doc ID
+        if (validSegments.length === 1) {
+            const colRef = this.createCollectionRef(collectionPath);
+            return doc(colRef, validSegments[0]);
+        }
+
+        // For multiple segments, build the full path
+        const fullPath = `${collectionPath}/${validSegments.join('/')}`;
+        const pathParts = fullPath.split('/').filter(part => part !== '');
+
+        console.log('Creating doc ref with path parts:', pathParts); // Debug log
+
         return doc(this.db, ...pathParts);
     }
 
@@ -123,7 +134,12 @@ class FirestoreService {
                 return { success: false, error: { message: 'Document ID is required' } };
             }
 
-            const docRef = this.createDocRef(collectionPath, docId);
+            // Create collection reference first, then document reference
+            const colRef = collection(this.db, collectionPath);
+            const docRef = doc(colRef, docId);
+
+            console.log('Getting document with path:', `${collectionPath}/${docId}`); // Debug log
+
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
@@ -135,6 +151,7 @@ class FirestoreService {
                 return { success: false, error: { message: 'Document not found' } };
             }
         } catch (error) {
+            console.error('getDocument error:', error);
             return this.handleFirestoreError(error, 'get document');
         }
     }
@@ -145,11 +162,17 @@ class FirestoreService {
                 return { success: false, error: { message: 'Document ID is required' } };
             }
 
-            const docRef = this.createDocRef(collectionPath, docId);
+            // Create collection reference first, then document reference
+            const colRef = collection(this.db, collectionPath);
+            const docRef = doc(colRef, docId);
+
+            console.log('Updating document with path:', `${collectionPath}/${docId}`); // Debug log
+
             const updateData = this.addCommonFields(data, true);
             await updateDoc(docRef, updateData);
             return { success: true, data: updateData };
         } catch (error) {
+            console.error('updateDocument error:', error);
             return this.handleFirestoreError(error, 'update document');
         }
     }
@@ -160,10 +183,16 @@ class FirestoreService {
                 return { success: false, error: { message: 'Document ID is required' } };
             }
 
-            const docRef = this.createDocRef(collectionPath, docId);
+            // Create collection reference first, then document reference
+            const colRef = collection(this.db, collectionPath);
+            const docRef = doc(colRef, docId);
+
+            console.log('Deleting document with path:', `${collectionPath}/${docId}`); // Debug log
+
             await deleteDoc(docRef);
             return { success: true };
         } catch (error) {
+            console.error('deleteDocument error:', error);
             return this.handleFirestoreError(error, 'delete document');
         }
     }

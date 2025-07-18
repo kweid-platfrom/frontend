@@ -240,19 +240,8 @@ const BugTableRow = ({
         }
     };
 
-    const handleRowClick = (event) => {
-        if (event.target.tagName === 'SELECT' || 
-            event.target.tagName === 'INPUT' || 
-            event.target.tagName === 'BUTTON' ||
-            event.target.closest('button') ||
-            event.target.closest('select') ||
-            event.target.closest('input')) {
-            return;
-        }
-        if (onShowBugDetails && bug) {
-            onShowBugDetails(bug);
-        }
-    };
+    // Remove the handleRowClick function entirely since we don't want row clicks to open details
+    // Only the chat icon should trigger the modal
 
     const totalAttachments = bug?.attachments?.length || 0;
     const evidenceCount = getEvidenceCount(bug);
@@ -274,7 +263,7 @@ const BugTableRow = ({
     // Fix reporter name - get first name properly
     const reporterName = getFirstName(bug.created_by || bug.reportedByEmail);
 
-    const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors cursor-pointer ${
+    const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${
         selectedBug?.id === bug?.id ? 'bg-blue-50' : ''
     } ${isSelected ? 'bg-blue-50' : ''} ${bugIsUpdating ? 'opacity-60' : ''}`;
 
@@ -284,7 +273,7 @@ const BugTableRow = ({
             className={rowClassName}
             draggable={true}
             onDragStart={(e) => onDragStart && onDragStart(e, bug)}
-            onClick={handleRowClick}
+            // Remove onClick handler from the row - only chat icon should open details
         >
             <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center justify-center h-full">
@@ -306,7 +295,7 @@ const BugTableRow = ({
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-col justify-center space-y-1">
                             <div
-                                className="font-medium text-gray-900 truncate text-sm leading-tight cursor-pointer hover:text-[#00897B] transition-colors"
+                                className="font-medium text-gray-900 truncate text-sm leading-tight"
                                 title={bug.title}
                             >
                                 {bug.title}
