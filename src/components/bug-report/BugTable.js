@@ -8,25 +8,19 @@ import BulkActionButtons from '../buttons/BulkActionButtons';
 
 const BugTable = ({
     bugs = [],
+    testCases = [],
+    relationships = {},
     selectedBugs = [],
-    onUpdateBugStatus,
-    onUpdateBugSeverity,
-    onUpdateBugPriority,
-    onUpdateBugAssignment,
-    onUpdateBugEnvironment,
-    onUpdateBugFrequency,
+    onToggleSelection,
     onShowBugDetails,
     onCreateBug,
-    onRetryFetch,
+    onBulkAction,
+    onUpdateBug,
+    onLinkTestCase,
     teamMembers = [],
     environments = [],
     loading = false,
-    error = null,
-    onBulkAction,
-    onChatIconClick,
-    onToggleSelection,
-    testCases = [],
-    onLinkTestCase
+    error = null
 }) => {
     const [selectedIds, setSelectedIds] = useState(Array.isArray(selectedBugs) ? selectedBugs : []);
 
@@ -46,12 +40,11 @@ const BugTable = ({
         if (checked) {
             const allIds = bugs.filter((bug) => bug && bug.id).map((bug) => bug.id);
             setSelectedIds(allIds);
-            const itemsToSelect = allIds.filter((id) => !selectedIds.includes(id));
-            itemsToSelect.forEach((id) => onToggleSelection(id));
+            allIds.forEach((id) => onToggleSelection(id, true));
             toast.info(`Selected all ${allIds.length} bugs`);
         } else {
             setSelectedIds([]);
-            selectedIds.forEach((id) => onToggleSelection(id));
+            selectedIds.forEach((id) => onToggleSelection(id, false));
             toast.info('Cleared selection');
         }
     };
@@ -67,7 +60,7 @@ const BugTable = ({
             toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
             return newSelection;
         });
-        onToggleSelection(id);
+        onToggleSelection(id, checked);
     };
 
     const handleChatIconClick = (bug, event) => {
@@ -79,9 +72,6 @@ const BugTable = ({
             console.error('Invalid bug object in handleChatIconClick:', bug);
             toast.error('Cannot display bug details: Invalid bug data');
             return;
-        }
-        if (onChatIconClick) {
-            onChatIconClick(bug, event);
         }
         if (onShowBugDetails) {
             onShowBugDetails(bug);
@@ -110,14 +100,6 @@ const BugTable = ({
                         </svg>
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Bugs</h3>
                         <p className="text-gray-600 mb-4">{error}</p>
-                        {onRetryFetch && (
-                            <button
-                                onClick={onRetryFetch}
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-teal-600 hover:bg-teal-700"
-                            >
-                                Retry
-                            </button>
-                        )}
                     </div>
                 </div>
             </div>
@@ -200,17 +182,13 @@ const BugTable = ({
                                 bug={bug}
                                 selectedIds={selectedIds}
                                 onToggleSelection={handleSelectItem}
-                                onUpdateBugStatus={onUpdateBugStatus}
-                                onUpdateBugSeverity={onUpdateBugSeverity}
-                                onUpdateBugPriority={onUpdateBugPriority}
-                                onUpdateBugAssignment={onUpdateBugAssignment}
-                                onUpdateBugEnvironment={onUpdateBugEnvironment}
-                                onUpdateBugFrequency={onUpdateBugFrequency}
+                                onUpdateBug={onUpdateBug}
                                 onShowBugDetails={onShowBugDetails}
                                 onChatClick={handleChatIconClick}
                                 teamMembers={teamMembers}
                                 environments={environments}
                                 testCases={testCases}
+                                relationships={relationships}
                                 onLinkTestCase={onLinkTestCase}
                             />
                         ))}
@@ -221,7 +199,7 @@ const BugTable = ({
                         <p className="text-gray-500">No bugs found. Report a new bug to get started.</p>
                         {onCreateBug && (
                             <button
-                                onClick={onCreateeBug}
+                                onClick={onCreateBug}
                                 className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-teal-600 hover:bg-teal-700"
                             >
                                 Report Bug

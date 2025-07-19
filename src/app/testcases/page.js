@@ -1,8 +1,10 @@
-'use client'
+/* eslint-disable @typescript-eslint/no-unused-vars */
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppProvider';
-import { SuiteProvider, useSuite } from '@/contexts/SuiteContext';
+import { useSuite } from '@/contexts/SuiteContext';
+import { useEntitySync } from '@/hooks/useEntitySync';
 import PageLayout from '@/components/layout/PageLayout';
 import TestCaseTable from '@/components/testCase/TestCaseTable';
 import TestCaseModal from '@/components/testCase/TestCaseModal';
@@ -10,12 +12,18 @@ import FilterBar from '@/components/testCase/FilterBar';
 import ImportModal from '@/components/testCase/ImportModal';
 import AIGenerationModal from '@/components/testCase/AIGenerationModal';
 import TraceabilityComponent from '@/components/testCase/TraceabilityMatrix';
-import testCaseService from '@/services/testCaseService';
+import firestoreService from '@/services/firestoreService';
+import { toast } from 'sonner';
 
 function TestCasesPageContent() {
-    const { addNotification, isLoading: appLoading } = useApp();
+    const { user, isLoading: appLoading } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
     const [testCases, setTestCases] = useState([]);
+    const [relationships, setRelationships] = useState({
+        testCaseToBugs: {},
+        bugToRecordings: {},
+        requirementToTestCases: {},
+    });
     const [filteredTestCases, setFilteredTestCases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
@@ -31,38 +39,32 @@ function TestCasesPageContent() {
         search: ''
     });
 
-    const loadTestCases = useCallback(async () => {
-        if (!activeSuite?.id) {
-            setTestCases([]);
-            setLoading(false);
-            return;
-        }
-        try {
-            setLoading(true);
-            const result = await testCaseService.getTestCases(activeSuite.id);
-            if (result.success) {
-                setTestCases(result.data.map(tc => ({
-                    ...tc,
-                    createdAt: tc.created_at?.toDate ? tc.created_at.toDate() : null,
-                    updatedAt: tc.updated_at?.toDate ? tc.updated_at.toDate() : null
-                })));
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: result.error.message || 'Failed to load test cases'
-                });
-            }
-        } catch {
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: 'Failed to load test cases'
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [activeSuite?.id, addNotification]);
+    const addNotification = useCallback((notification) => {
+        toast[notification.type](notification.title, {
+            description: notification.message,
+            duration: notification.persistent ? 0 : 5000,
+        });
+    }, []);
+
+    const handleError = useCallback((error, context) => {
+        console.error(`Error in ${context}:`, error);
+        addNotification({
+            type: 'error',
+            title: 'Error',
+            message: `Failed to ${context}: ${error.message}`,
+            persistent: true,
+        });
+    }, [addNotification]);
+
+    useEntitySync(
+        !appLoading && !suiteLoading && !!activeSuite?.id && !!user?.uid,
+        activeSuite?.id,
+        setTestCases,
+        () => {}, // No bugs needed
+        () => {}, // No recordings needed
+        setRelationships,
+        handleError
+    );
 
     const applyFilters = useCallback(() => {
         let filtered = [...testCases];
@@ -98,38 +100,37 @@ function TestCasesPageContent() {
 
     const handleSaveTestCase = useCallback(async (testCaseData) => {
         try {
-            const result = selectedTestCase
-                ? await testCaseService.updateTestCase(activeSuite.id, selectedTestCase.id, testCaseData)
-                : await testCaseService.createTestCase(activeSuite.id, testCaseData);
-            if (result.success) {
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: selectedTestCase ? 'Test case updated successfully' : 'Test case created successfully'
+            const testCasesCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.id}/testCases`;
+            let result;
+            if (selectedTestCase) {
+                result = await firestoreService.updateDocument(testCasesCollectionPath, selectedTestCase.id, {
+                    ...testCaseData,
+                    updated_at: new Date(),
                 });
-                setIsModalOpen(false);
-                await loadTestCases();
             } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: result.error.message || 'Failed to save test case'
+                result = await firestoreService.createDocument(testCasesCollectionPath, {
+                    ...testCaseData,
+                    created_at: new Date(),
+                    updated_at: new Date(),
+                    suite_id: activeSuite.id,
+                    created_by: user?.email || 'anonymous',
                 });
             }
-        } catch {
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: selectedTestCase ? 'Test case updated successfully' : 'Test case created successfully'
+            });
+            setIsModalOpen(false);
+            // Data is updated via useEntitySync
+        } catch (error) {
             addNotification({
                 type: 'error',
                 title: 'Error',
-                message: 'Failed to save test case'
+                message: `Failed to save test case: ${error.message}`
             });
         }
-    }, [activeSuite?.id, selectedTestCase, addNotification, loadTestCases]);
-
-    useEffect(() => {
-        if (!appLoading && !suiteLoading) {
-            loadTestCases();
-        }
-    }, [appLoading, suiteLoading, loadTestCases]);
+    }, [activeSuite, selectedTestCase, user, addNotification]);
 
     useEffect(() => {
         applyFilters();
@@ -156,26 +157,18 @@ function TestCasesPageContent() {
     const handleDeleteTestCase = async (id) => {
         if (window.confirm('Are you sure you want to delete this test case?')) {
             try {
-                const result = await testCaseService.deleteTestCase(activeSuite.id, id);
-                if (result.success) {
-                    await loadTestCases();
-                    addNotification({
-                        type: 'success',
-                        title: 'Success',
-                        message: 'Test case deleted successfully'
-                    });
-                } else {
-                    addNotification({
-                        type: 'error',
-                        title: 'Error',
-                        message: result.error.message || 'Failed to delete test case'
-                    });
-                }
-            } catch {
+                const testCasesCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.id}/testCases`;
+                await firestoreService.deleteDocument(testCasesCollectionPath, id);
+                addNotification({
+                    type: 'success',
+                    title: 'Success',
+                    message: 'Test case deleted successfully'
+                });
+            } catch (error) {
                 addNotification({
                     type: 'error',
                     title: 'Error',
-                    message: 'Failed to delete test case'
+                    message: `Failed to delete test case: ${error.message}`
                 });
             }
         }
@@ -183,104 +176,113 @@ function TestCasesPageContent() {
 
     const handleDuplicateTestCase = async (testCase) => {
         try {
+            const testCasesCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.id}/testCases`;
             const duplicatedTestCase = {
                 ...testCase,
                 title: `${testCase.title} (Copy)`,
-                id: undefined,
-                createdAt: undefined,
-                updatedAt: undefined
+                created_at: new Date(),
+                updated_at: new Date(),
+                suite_id: activeSuite.id,
+                created_by: user?.email || 'anonymous',
             };
-            const result = await testCaseService.createTestCase(activeSuite.id, duplicatedTestCase);
-            if (result.success) {
-                await loadTestCases();
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Test case duplicated successfully'
-                });
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: result.error.message || 'Failed to duplicate test case'
-                });
-            }
-        } catch {
+            await firestoreService.createDocument(testCasesCollectionPath, duplicatedTestCase);
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: 'Test case duplicated successfully'
+            });
+        } catch (error) {
             addNotification({
                 type: 'error',
                 title: 'Error',
-                message: 'Failed to duplicate test case'
+                message: `Failed to duplicate test case: ${error.message}`
             });
         }
     };
 
     const handleBulkAction = async (action, selectedIds) => {
         try {
-            let result;
+            const testCasesCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.id}/testCases`;
             if (action === 'delete') {
-                result = await testCaseService.bulkDelete(activeSuite.id, selectedIds);
+                await Promise.all(selectedIds.map(id => firestoreService.deleteDocument(testCasesCollectionPath, id)));
             } else {
-                result = await testCaseService.bulkUpdateStatus(activeSuite.id, selectedIds, action);
+                await Promise.all(selectedIds.map(id => firestoreService.updateDocument(testCasesCollectionPath, id, { status: action })));
             }
-            if (result.success) {
-                await loadTestCases();
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} ${action}d`
-                });
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: result.error.message || `Failed to perform bulk action: ${action}`
-                });
-            }
-        } catch {
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} ${action}d`
+            });
+        } catch (error) {
             addNotification({
                 type: 'error',
                 title: 'Error',
-                message: `Failed to perform bulk action: ${action}`
+                message: `Failed to perform bulk action: ${error.message}`
             });
         }
     };
 
-    const handleImportComplete = async () => {
+    const handleImportComplete = async (importedTestCases) => {
         setIsImportModalOpen(false);
-        await loadTestCases();
-        addNotification({
-            type: 'success',
-            title: 'Success',
-            message: 'Test cases imported successfully'
-        });
+        try {
+            const testCasesCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.id}/testCases`;
+            await Promise.all(
+                importedTestCases.map(tc =>
+                    firestoreService.createDocument(testCasesCollectionPath, {
+                        ...tc,
+                        created_at: new Date(),
+                        updated_at: new Date(),
+                        suite_id: activeSuite.id,
+                        created_by: user?.email || 'anonymous',
+                    })
+                )
+            );
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: 'Test cases imported successfully'
+            });
+        } catch (error) {
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to import test cases: ${error.message}`
+            });
+        }
     };
 
     const handleAIGenerationComplete = async (generatedTestCases) => {
         setIsAIModalOpen(false);
         try {
-            const result = await testCaseService.bulkCreate(activeSuite.id, generatedTestCases);
-            if (result.success) {
-                await loadTestCases();
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: `${generatedTestCases.length} test cases generated and saved`
-                });
-            } else {
-                addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: result.error.message || 'Failed to save generated test cases'
-                });
-            }
-        } catch {
+            const testCasesCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.id}/testCases`;
+            await Promise.all(
+                generatedTestCases.map(tc =>
+                    firestoreService.createDocument(testCasesCollectionPath, {
+                        ...tc,
+                        created_at: new Date(),
+                        updated_at: new Date(),
+                        suite_id: activeSuite.id,
+                        created_by: user?.email || 'anonymous',
+                    })
+                )
+            );
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: `${generatedTestCases.length} test cases generated and saved`
+            });
+        } catch (error) {
             addNotification({
                 type: 'error',
                 title: 'Error',
-                message: 'Failed to save generated test cases'
+                message: `Failed to save generated test cases: ${error.message}`
             });
         }
     };
+
+    useEffect(() => {
+        setLoading(appLoading || suiteLoading);
+    }, [appLoading, suiteLoading]);
 
     if (appLoading || suiteLoading) {
         return null;
@@ -341,7 +343,6 @@ function TestCasesPageContent() {
                     />
                 </div>
 
-                {/* Remove the SuiteProvider wrapper around TestCaseModal */}
                 {isModalOpen && (
                     <TestCaseModal
                         testCase={selectedTestCase}
@@ -367,6 +368,7 @@ function TestCasesPageContent() {
                 {isTraceabilityOpen && (
                     <TraceabilityComponent
                         testCases={testCases}
+                        relationships={relationships}
                         onClose={() => setIsTraceabilityOpen(false)}
                     />
                 )}
@@ -380,9 +382,5 @@ export default function TestCasesPage() {
     if (appLoading || !user) {
         return null;
     }
-    return (
-        <SuiteProvider user={user}>
-            <TestCasesPageContent />
-        </SuiteProvider>
-    );
+    return <TestCasesPageContent />;
 }

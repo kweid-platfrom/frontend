@@ -26,7 +26,7 @@ const sansHebrew = Noto_Sans_Hebrew({
     subsets: ["hebrew"], 
     weight: ["400", "700"],
     display: 'swap',
-    preload: false, // Only preload if Hebrew is commonly used
+    preload: false,
     variable: '--font-sans-hebrew'
 });
 
@@ -66,12 +66,11 @@ export default function RootLayout({ children }) {
     return (
         <html lang="en" className={`${poppins.variable} ${montserrat.variable} ${sansHebrew.variable}`}>
             <head>
-                {/* Preload critical resources */}
-                <link rel="preload" href="/fonts" as="font" type="font/woff2" crossOrigin="anonymous" />
+                {/* Only keep DNS prefetch and preconnect for Google Fonts optimization */}
                 <link rel="dns-prefetch" href="//fonts.gstatic.com" />
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
             </head>
-            <body className="font-sans antialiased">
+            <body className={`${poppins.className} antialiased`}>
                 <Suspense fallback={<AppFallback />}>
                     <AppProvider>
                         <AppWrapper>

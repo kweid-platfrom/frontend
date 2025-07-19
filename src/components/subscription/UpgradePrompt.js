@@ -64,13 +64,13 @@ const UpgradePrompt = ({
                     <div className="flex space-x-3">
                         <button
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
                         >
                             Maybe Later
                         </button>
                         <button
                             onClick={handleUpgrade}
-                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            className="flex-1 px-3 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
                         >
                             Upgrade Now
                         </button>

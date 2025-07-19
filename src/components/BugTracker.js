@@ -1,45 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useApp } from '@/contexts/AppProvider';
-import { useSuite } from '@/contexts/SuiteContext';
-import { useBugTracker } from '../hooks/useBugTracker';
+import { useState } from 'react';
 import BugTable from './bug-report/BugTable';
 import BugDetailsModal from './modals/BugDetailsModal';
 import BugFilters from './bug-report/BugFilters';
-import firestoreService from '../services/firestoreService';
+import { useAppNotifications } from '@/contexts/AppProvider';
+import firestoreService from '@/services/firestoreService';
+import { where } from 'firebase/firestore';
 
-const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
-    const { user: resolvedUser, isAuthenticated, isLoading: appLoading, addNotification } = useApp();
-    const { activeSuite, isLoading: suiteLoading } = useSuite();
-    const { teamMembers, sprints, environments, filters, setFilters, isUpdating, error, loading, updateBugStatus, updateBugSeverity, updateBugAssignment, updateBugEnvironment, updateBugFrequency, updateBug, updateBugTitle, refetchBugs } = useBugTracker({
-        enabled: isAuthenticated && !!resolvedUser?.uid && !!activeSuite?.suite_id && !appLoading && !suiteLoading,
-        suite: activeSuite,
-        user: resolvedUser
-    });
+
+const BugTracker = ({
+    bugs = [],
+    filteredBugs = [],
+    testCases = [],
+    relationships = {},
+    selectedBugs = [],
+    onToggleSelection,
+    onBulkAction,
+    showFilters,
+    onCreateBug,
+    teamMembers = [],
+    sprints = [],
+    environments = [],
+    filters,
+    setFilters,
+    activeSuite
+}) => {
+    const { addNotification } = useAppNotifications();
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [selectedBug, setSelectedBug] = useState(null);
-    const [selectedBugs, setSelectedBugs] = useState([]);
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     const handleBugSelect = (bug) => {
-        setSelectedBug(bug);
-        setShowDetailsModal(true);
-    };
-
-    const handleChatIconClick = (bug, event) => {
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-        if (!bug || !bug.id) {
-            console.error('Invalid bug object passed to chat icon click');
-            return;
-        }
         setSelectedBug(bug);
         setShowDetailsModal(true);
         addNotification({
@@ -49,61 +40,97 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
         });
     };
 
-    const toggleBugSelection = (bugId) => {
-        setSelectedBugs(prev => prev.includes(bugId) ? prev.filter(id => id !== bugId) : [...prev, bugId]);
-    };
-
-    const handleBulkAction = async (action, ids) => {
-        try {
-            switch (action) {
-                case 'reopen':
-                    await Promise.all(ids.map(id => updateBugStatus(id, 'open')));
-                    addNotification({
-                        type: 'success',
-                        title: 'Bugs Reopened',
-                        message: `Successfully reopened ${ids.length} bugs`
-                    });
-                    break;
-                case 'close':
-                    await Promise.all(ids.map(id => updateBugStatus(id, 'closed')));
-                    addNotification({
-                        type: 'success',
-                        title: 'Bugs Closed',
-                        message: `Successfully closed ${ids.length} bugs`
-                    });
-                    break;
-                case 'delete':
-                    const bugsCollectionPath = activeSuite.is_personal
-                        ? `individualAccounts/${resolvedUser.uid}/testSuites/${activeSuite.suite_id}/bugs`
-                        : `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/bugs`;
-                    await Promise.all(ids.map(id => firestoreService.deleteDocument(`${bugsCollectionPath}/${id}`)));
-                    addNotification({
-                        type: 'success',
-                        title: 'Bugs Deleted',
-                        message: `Successfully deleted ${ids.length} bugs`
-                    });
-                    break;
-                default:
-                    addNotification({
-                        type: 'error',
-                        title: 'Invalid Action',
-                        message: 'Unknown bulk action'
-                    });
-            }
-            setSelectedBugs([]);
-        } catch (error) {
-            console.error(`Bulk ${action} failed:`, error);
+    const handleChatIconClick = (bug, event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        if (!bug || !bug.id) {
+            console.error('Invalid bug object passed to chat icon click');
             addNotification({
                 type: 'error',
-                title: `Bulk ${action} Failed`,
-                message: `Failed to ${action} bugs: ${error.message}`
+                title: 'Error',
+                message: 'Invalid bug data'
+            });
+            return;
+        }
+        handleBugSelect(bug);
+    };
+
+    const updateBug = async (bugId, updates) => {
+        try {
+            await firestoreService.updateDocument(
+                `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/bugs`,
+                bugId,
+                updates
+            );
+            addNotification({
+                type: 'success',
+                title: 'Bug Updated',
+                message: `Bug #${bugId.slice(-6)} updated successfully`
+            });
+        } catch (error) {
+            console.error('Failed to update bug:', error);
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to update bug: ${error.message}`
             });
         }
     };
 
-    if (!mounted || !isAuthenticated || !resolvedUser || !activeSuite) {
-        return null;
-    }
+    const handleLinkTestCase = async (bugId, newTestCases) => {
+        try {
+            const existingTestCases = relationships[bugId] || [];
+            const toAdd = newTestCases.filter(id => !existingTestCases.includes(id));
+            const toRemove = existingTestCases.filter(id => !newTestCases.includes(id));
+
+            const promises = [];
+            toAdd.forEach(testCaseId => {
+                promises.push(
+                    firestoreService.createDocument(
+                        `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/relationships`,
+                        {
+                            suiteId: activeSuite.suite_id,
+                            sourceType: 'bug',
+                            sourceId: bugId,
+                            targetType: 'testCase',
+                            targetId: testCaseId,
+                            created_at: new Date()
+                        }
+                    )
+                );
+            });
+            toRemove.forEach(testCaseId => {
+                promises.push(
+                    firestoreService.deleteDocumentByQuery(
+                        `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/relationships`,
+                        [
+                            where('suiteId', '==', activeSuite.suite_id),
+                            where('sourceType', '==', 'bug'),
+                            where('sourceId', '==', bugId),
+                            where('targetType', '==', 'testCase'),
+                            where('targetId', '==', testCaseId)
+                        ]
+                    )
+                );
+            });
+
+            await Promise.all(promises);
+            addNotification({
+                type: 'success',
+                title: 'Test Cases Linked',
+                message: `Linked ${newTestCases.length} test case${newTestCases.length > 1 ? 's' : ''} to bug`
+            });
+        } catch (error) {
+            console.error('Failed to link test cases:', error);
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to link test cases: ${error.message}`
+            });
+        }
+    };
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -112,43 +139,37 @@ const BugTracker = ({ showFilters, onCreateBug, bugs, filteredBugs }) => {
                     <BugFilters
                         filters={filters}
                         setFilters={setFilters}
-                        teamMembers={teamMembers || []}
-                        sprints={sprints || []}
-                        environments={environments || []}
-                        bugs={bugs || []}
+                        teamMembers={teamMembers}
+                        sprints={sprints}
+                        environments={environments}
+                        bugs={bugs}
                     />
                 </div>
             )}
             <div className="flex-1 flex gap-6 overflow-hidden p-6">
                 <div className="w-full overflow-auto">
                     <BugTable
-                        bugs={filteredBugs || []}
+                        bugs={filteredBugs}
+                        testCases={testCases}
+                        relationships={relationships}
                         selectedBugs={selectedBugs}
-                        onBugSelect={handleBugSelect}
-                        selectedBug={selectedBug}
-                        onToggleSelection={toggleBugSelection}
-                        onUpdateBugStatus={updateBugStatus}
-                        onUpdateBugSeverity={updateBugSeverity}
-                        onUpdateBugAssignment={updateBugAssignment}
-                        onUpdateBugEnvironment={updateBugEnvironment}
-                        onUpdateBugFrequency={updateBugFrequency}
-                        onUpdateBugTitle={updateBugTitle}
+                        onToggleSelection={onToggleSelection}
                         onShowBugDetails={handleBugSelect}
                         onCreateBug={onCreateBug}
-                        onRetryFetch={refetchBugs}
-                        teamMembers={teamMembers || []}
-                        environments={environments || []}
-                        isUpdating={isUpdating}
-                        loading={loading}
-                        error={error}
-                        onBulkAction={handleBulkAction}
                         onChatIconClick={handleChatIconClick}
+                        onBulkAction={onBulkAction}
+                        onUpdateBug={updateBug}
+                        onLinkTestCase={handleLinkTestCase}
+                        teamMembers={teamMembers}
+                        environments={environments}
+                        loading={false}
+                        error={null}
                     />
                 </div>
                 {showDetailsModal && selectedBug && (
                     <BugDetailsModal
                         bug={selectedBug}
-                        teamMembers={teamMembers || []}
+                        teamMembers={teamMembers}
                         onUpdateBug={updateBug}
                         onClose={() => setShowDetailsModal(false)}
                     />

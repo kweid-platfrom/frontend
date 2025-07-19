@@ -147,13 +147,13 @@ const AppSidebar = ({
                 <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white">
                     <div className="flex items-center min-w-0 flex-1">
                         <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-teal-700 rounded-lg flex items-center justify-center shadow-lg">
+                            <div className="w-8 h-8 bg-gradient-to-br from-teal-200 to-teal-700 rounded-lg flex items-center justify-center shadow-lg">
                                 <BeakerIcon className="h-5 w-5 text-white" />
                             </div>
                         </div>
                         <div className={`ml-3 overflow-hidden transition-all duration-300 ease-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
-                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-blue-600 to-teal-700 bg-clip-text text-transparent">
-                                QA Platform
+                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-purple-600 to-teal-700 bg-clip-text text-transparent">
+                                Validly
                             </span>
                         </div>
                     </div>

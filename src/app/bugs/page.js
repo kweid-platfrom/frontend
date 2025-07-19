@@ -1,32 +1,120 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState, useCallback, useEffect } from 'react';
 import { useApp } from '@/contexts/AppProvider';
 import { useSuite } from '@/contexts/SuiteContext';
+import { useEntitySync } from '@/hooks/useEntitySync';
 import PageLayout from '@/components/layout/PageLayout';
 import BugTracker from '@/components/BugTracker';
 import { FileText, Download, Filter, List, Table, Calendar, User, Flag, AlertTriangle, Clock } from 'lucide-react';
 import BugReportButton from '@/components/modals/BugReportButton';
-import { useBugTracker } from '@/hooks/useBugTracker';
-import { BugAntIcon } from "@heroicons/react/24/outline";
-import { useState, useCallback } from 'react';
+import { BugAntIcon } from '@heroicons/react/24/outline';
 import { toast } from 'sonner';
+import firestoreService from '@/services/firestoreService';
 
 export default function BugTrackerPage() {
-    const { addNotification, user, userCapabilities, isAuthenticated, isLoading: appLoading } = useApp();
+    const { user, userCapabilities, isAuthenticated, isLoading: appLoading } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
     const router = useRouter();
-    const { bugs, filteredBugs, setFilters, exportBugs, updateBugStatus, updateBugSeverity, updateBugPriority, updateBugAssignment, updateBugEnvironment, deleteBugs } = useBugTracker({
-        enabled: isAuthenticated && !!activeSuite?.suite_id && !!user?.uid && !appLoading && !suiteLoading,
-        suite: activeSuite,
-        user
+    const [bugs, setBugs] = useState([]);
+    const [testCases, setTestCases] = useState([]);
+    const [relationships, setRelationships] = useState({
+        testCaseToBugs: {},
+        bugToRecordings: {},
+        requirementToTestCases: {},
     });
+    const [filteredBugs, setFilteredBugs] = useState([]);
     const [showFilters, setShowFilters] = useState(false);
-    const [showMetrics, setShowMetrics] = useState(false);
     const [groupBy, setGroupBy] = useState('none');
     const [subGroupBy, setSubGroupBy] = useState('none');
     const [viewMode, setViewMode] = useState('table');
     const [selectedBugs, setSelectedBugs] = useState([]);
+    const [filters, setFilters] = useState({
+        status: 'all',
+        severity: 'all',
+        priority: 'all',
+        assignee: 'all',
+        environment: 'all',
+        search: ''
+    });
+
+    const addNotification = useCallback((notification) => {
+        toast[notification.type](notification.title, {
+            description: notification.message,
+            duration: notification.persistent ? 0 : 5000,
+        });
+    }, []);
+
+    const handleError = useCallback((error, context) => {
+        console.error(`Error in ${context}:`, error);
+        addNotification({
+            type: 'error',
+            title: 'Error',
+            message: `Failed to ${context}: ${error.message}`,
+            persistent: true,
+        });
+    }, [addNotification]);
+
+    useEntitySync(
+        isAuthenticated && !!activeSuite?.suite_id && !!user?.uid && !appLoading && !suiteLoading,
+        activeSuite?.suite_id,
+        setTestCases,
+        setBugs,
+        () => {}, // No-op for setRecordings
+        setRelationships,
+        handleError
+    );
+
+    // Convert testCaseToBugs to bugToTestCases
+    const bugToTestCases = useCallback(() => {
+        const bugMap = {};
+        Object.entries(relationships.testCaseToBugs).forEach(([testCaseId, bugIds]) => {
+            bugIds.forEach(bugId => {
+                if (!bugMap[bugId]) bugMap[bugId] = [];
+                bugMap[bugId].push(testCaseId);
+            });
+        });
+        return bugMap;
+    }, [relationships.testCaseToBugs]);
+
+    // Apply filters to bugs
+    const applyFilters = useCallback(() => {
+        let filtered = [...bugs];
+
+        if (filters.search) {
+            filtered = filtered.filter(bug =>
+                bug.title?.toLowerCase().includes(filters.search.toLowerCase()) ||
+                bug.description?.toLowerCase().includes(filters.search.toLowerCase())
+            );
+        }
+
+        if (filters.status !== 'all') {
+            filtered = filtered.filter(bug => bug.status === filters.status);
+        }
+
+        if (filters.severity !== 'all') {
+            filtered = filtered.filter(bug => bug.severity === filters.severity);
+        }
+
+        if (filters.priority !== 'all') {
+            filtered = filtered.filter(bug => bug.priority === filters.priority);
+        }
+
+        if (filters.assignee !== 'all') {
+            filtered = filtered.filter(bug => bug.assigned_to === filters.assignee);
+        }
+
+        if (filters.environment !== 'all') {
+            filtered = filtered.filter(bug => bug.environment === filters.environment);
+        }
+
+        setFilteredBugs(filtered);
+    }, [bugs, filters]);
+
+    useEffect(() => {
+        applyFilters();
+    }, [bugs, filters, applyFilters]);
 
     const groupingOptions = [
         { value: 'none', label: 'No Grouping', icon: List },
@@ -72,13 +160,14 @@ export default function BugTrackerPage() {
             return;
         }
         try {
+            const bugsCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/bugs`;
             if (action === 'delete') {
                 if (!window.confirm(`Are you sure you want to delete ${ids.length} bug${ids.length > 1 ? 's' : ''}?`)) {
                     return;
                 }
-                await deleteBugs(activeSuite.suite_id, ids);
+                await Promise.all(ids.map(id => firestoreService.deleteDocument(bugsCollectionPath, id)));
             } else {
-                await Promise.all(ids.map(id => updateBugStatus(id, action === 'reopen' ? 'open' : 'closed')));
+                await Promise.all(ids.map(id => firestoreService.updateDocument(bugsCollectionPath, id, { status: action === 'reopen' ? 'open' : 'closed' })));
             }
             setSelectedBugs([]);
             addNotification({
@@ -94,35 +183,43 @@ export default function BugTrackerPage() {
                 message: `Failed to ${action} bugs: ${error.message}`
             });
         }
-    }, [userCapabilities, activeSuite, updateBugStatus, deleteBugs, addNotification]);
+    }, [userCapabilities, activeSuite, addNotification]);
 
-    if (appLoading || suiteLoading) {
-        return null;
-    }
-
-    if (!isAuthenticated || !user || !activeSuite) {
-        addNotification({
-            type: 'error',
-            title: 'Access Denied',
-            message: 'Please log in and select a test suite to access the bug tracker.'
-        });
-        router.push('/login');
-        return null;
-    }
-
-    if (!userCapabilities.canViewBugs) {
-        addNotification({
-            type: 'error',
-            title: 'Subscription Required',
-            message: 'Your subscription does not allow access to the bug tracker. Please upgrade your plan.'
-        });
-        router.push('/pricing');
-        return null;
-    }
+    const handleCreateBug = useCallback(async (bugData) => {
+        if (!userCapabilities.canCreateBugs) {
+            toast.error("You don't have permission to create bugs");
+            return;
+        }
+        try {
+            const bugsCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/bugs`;
+            const newBug = {
+                ...bugData,
+                created_at: new Date(),
+                suite_id: activeSuite.suite_id,
+                status: 'New',
+                severity: bugData.severity || 'Low',
+                priority: bugData.priority || 'Low',
+                environment: bugData.environment || 'Production',
+                created_by: user?.email || 'anonymous'
+            };
+            const docRef = await firestoreService.createDocument(bugsCollectionPath, newBug);
+            addNotification({
+                type: 'success',
+                title: 'Bug Created',
+                message: `Bug #${docRef.id.slice(-6)} created successfully`
+            });
+        } catch (error) {
+            console.error('Error creating bug:', error);
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to create bug: ${error.message}`
+            });
+        }
+    }, [userCapabilities, activeSuite, user, addNotification]);
 
     const handleExportBugs = async () => {
         try {
-            await exportBugs();
             addNotification({
                 type: 'success',
                 title: 'Bugs Exported',
@@ -154,6 +251,30 @@ export default function BugTrackerPage() {
         });
     };
 
+    if (appLoading || suiteLoading) {
+        return null;
+    }
+
+    if (!isAuthenticated || !user || !activeSuite) {
+        addNotification({
+            type: 'error',
+            title: 'Access Denied',
+            message: 'Please log in and select a test suite to access the bug tracker.'
+        });
+        router.push('/login');
+        return null;
+    }
+
+    if (!userCapabilities.canViewBugs) {
+        addNotification({
+            type: 'error',
+            title: 'Subscription Required',
+            message: 'Your subscription does not allow access to the bug tracker. Please upgrade your plan.'
+        });
+        router.push('/pricing');
+        return null;
+    }
+
     return (
         <PageLayout requiresTestSuite={true}>
             <div className="space-y-6">
@@ -182,7 +303,7 @@ export default function BugTrackerPage() {
                             <FileText className="w-4 h-4 mr-2" />
                             <span className="hidden sm:inline">Generate Report</span>
                         </button>
-                        <BugReportButton />
+                        <BugReportButton onCreateBug={handleCreateBug} />
                     </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border p-4">
@@ -264,24 +385,23 @@ export default function BugTrackerPage() {
                 <BugTracker
                     bugs={bugs || []}
                     filteredBugs={filteredBugs || []}
+                    testCases={testCases}
+                    relationships={bugToTestCases()}
                     selectedBugs={selectedBugs}
                     onToggleSelection={toggleBugSelection}
                     onBulkAction={handleBulkAction}
                     showFilters={showFilters}
                     setShowFilters={setShowFilters}
-                    showMetrics={showMetrics}
-                    setShowMetrics={setShowMetrics}
                     groupBy={groupBy}
                     setGroupBy={setGroupBy}
                     subGroupBy={subGroupBy}
                     setSubGroupBy={setSubGroupBy}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
-                    onUpdateBugStatus={updateBugStatus}
-                    onUpdateBugSeverity={updateBugSeverity}
-                    onUpdateBugPriority={updateBugPriority}
-                    onUpdateBugAssignment={updateBugAssignment}
-                    onUpdateBugEnvironment={updateBugEnvironment}
+                    onCreateBug={handleCreateBug}
+                    filters={filters}
+                    setFilters={setFilters}
+                    activeSuite={activeSuite}
                 />
             </div>
         </PageLayout>

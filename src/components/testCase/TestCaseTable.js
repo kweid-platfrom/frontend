@@ -1,4 +1,5 @@
 'use client';
+
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -72,6 +73,8 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
 
 const TestCaseTable = ({
     testCases = [],
+    bugs = [],
+    relationships = {}, // Added to initialize linkedBugs
     loading,
     onEdit,
     onDelete,
@@ -79,7 +82,6 @@ const TestCaseTable = ({
     onBulkAction,
     onView,
     onRun,
-    bugs = [],
     onLinkBug
 }) => {
     const [selectedIds, setSelectedIds] = useState([]);
@@ -116,21 +118,6 @@ const TestCaseTable = ({
         }
         setSortConfig({ key, direction });
         toast.info(`Sorted by ${key} (${direction}ending)`);
-    };
-
-    const handleLinkBug = async (testCaseId, newBugs) => {
-        console.log('Linking bugs:', { testCaseId, newBugs });
-        if (onLinkBug) {
-            try {
-                await onLinkBug(testCaseId, newBugs);
-                toast.success(`Linked ${newBugs.length} bug${newBugs.length > 1 ? 's' : ''} to test case`);
-            } catch (error) {
-                console.error('Failed to link bugs:', error);
-                toast.error('Failed to link bugs');
-            }
-        } else {
-            console.warn('onLinkBug function not provided');
-        }
     };
 
     const sortedTestCases = [...testCases].sort((a, b) => {
@@ -216,12 +203,12 @@ const TestCaseTable = ({
 
     const bugOptions = Array.isArray(bugs)
         ? bugs.map(bug => ({
-              value: bug.id || bug.bugId || `bug_${Math.random().toString(36).slice(2)}`, // Fallback ID
-              label: bug.title || `Bug ${bug.id?.slice(-6) || bug.bugId?.slice(-6) || 'Unknown'}` // Fallback title
+              value: bug.id || bug.bugId || `bug_${Math.random().toString(36).slice(2)}`,
+              label: bug.title || `Bug ${bug.id?.slice(-6) || bug.bugId?.slice(-6) || 'Unknown'}`
           }))
         : [];
 
-    console.log('TestCaseTable props:', { bugs, bugOptions, testCases });
+    console.log('TestCaseTable props:', { bugs, bugOptions, testCases, relationships });
 
     return (
         <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
@@ -381,8 +368,8 @@ const TestCaseTable = ({
                                     <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
                                         <MultiSelectDropdown
                                             options={bugOptions}
-                                            value={testCase?.linkedBugs || []}
-                                            onChange={(newBugs) => handleLinkBug(testCase.id, newBugs)}
+                                            value={relationships[testCase.id] || testCase.linkedBugs || []} // Initialize with relationships
+                                            onChange={(newBugs) => onLinkBug(testCase.id, newBugs)}
                                             placeholder="Link Bugs..."
                                         />
                                     </td>

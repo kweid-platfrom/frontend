@@ -1,4 +1,5 @@
 'use client';
+
 import React, { useState } from 'react';
 import {
     GripVertical,
@@ -20,19 +21,18 @@ import {
 } from 'lucide-react';
 import {
     getStatusColor,
-    getSeverityColor,
     getPriorityColor,
     getSourceColor,
     getPriorityFromSeverity,
     isPastDue,
     formatDate,
     getTeamMemberName,
-    getEvidenceCount,
-    VALID_BUG_STATUSES,
-    VALID_BUG_SEVERITIES
+    getEvidenceCount
 } from '../../utils/bugUtils';
 import { toast } from 'sonner';
 
+const VALID_BUG_STATUSES = ['New', 'Open', 'In Progress', 'Resolved', 'Closed'];
+const VALID_BUG_SEVERITIES = ['Low', 'Medium', 'High', 'Critical'];
 const VALID_FREQUENCIES = ['Always', 'Often', 'Sometimes', 'Rarely', 'Once'];
 
 const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => {
@@ -116,21 +116,15 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
 
 const BugTableRow = ({
     bug,
-    selectedBug,
     selectedIds,
     onToggleSelection,
-    onDragStart,
-    onUpdateBugStatus,
-    onUpdateBugSeverity,
-    onUpdateBugPriority,
-    onUpdateBugAssignment,
-    onUpdateBugEnvironment,
-    onUpdateBugFrequency,
+    onUpdateBug,
     onShowBugDetails,
     onChatClick,
     teamMembers = [],
     environments = [],
     testCases = [],
+    relationships = {},
     onLinkTestCase
 }) => {
     const getSourceIcon = (source) => {
@@ -188,74 +182,65 @@ const BugTableRow = ({
     const handleSeverityChange = async (bugId, newSeverity, event) => {
         event.stopPropagation();
         console.log('Updating severity:', { bugId, newSeverity });
-        if (onUpdateBugSeverity) {
+        if (onUpdateBug) {
             try {
-                await onUpdateBugSeverity(bugId, newSeverity);
-                const newPriority = getPriorityFromSeverity(newSeverity);
-                if (onUpdateBugPriority) {
-                    await onUpdateBugPriority(bugId, newPriority);
-                }
+                await onUpdateBug(bugId, { severity: newSeverity, priority: getPriorityFromSeverity(newSeverity) });
             } catch (error) {
                 console.error('Failed to update severity:', error);
+                toast.error('Failed to update severity');
             }
-        } else {
-            console.warn('onUpdateBugSeverity function not provided');
         }
     };
 
     const handleStatusChange = async (bugId, newStatus, event) => {
         event.stopPropagation();
         console.log('Updating status:', { bugId, newStatus });
-        if (onUpdateBugStatus) {
+        if (onUpdateBug) {
             try {
-                await onUpdateBugStatus(bugId, newStatus);
+                await onUpdateBug(bugId, { status: newStatus });
             } catch (error) {
                 console.error('Failed to update status:', error);
+                toast.error('Failed to update status');
             }
-        } else {
-            console.warn('onUpdateBugStatus function not provided');
         }
     };
 
     const handleAssignmentChange = async (bugId, newAssignee, event) => {
         event.stopPropagation();
         console.log('Updating assignment:', { bugId, newAssignee });
-        if (onUpdateBugAssignment) {
+        if (onUpdateBug) {
             try {
-                await onUpdateBugAssignment(bugId, newAssignee);
+                await onUpdateBug(bugId, { assigned_to: newAssignee });
             } catch (error) {
                 console.error('Failed to update assignment:', error);
+                toast.error('Failed to update assignment');
             }
-        } else {
-            console.warn('onUpdateBugAssignment function not provided');
         }
     };
 
     const handleEnvironmentChange = async (bugId, newEnvironment, event) => {
         event.stopPropagation();
         console.log('Updating environment:', { bugId, newEnvironment });
-        if (onUpdateBugEnvironment) {
+        if (onUpdateBug) {
             try {
-                await onUpdateBugEnvironment(bugId, newEnvironment);
+                await onUpdateBug(bugId, { environment: newEnvironment });
             } catch (error) {
                 console.error('Failed to update environment:', error);
+                toast.error('Failed to update environment');
             }
-        } else {
-            console.warn('onUpdateBugEnvironment function not provided');
         }
     };
 
     const handleFrequencyChange = async (bugId, newFrequency, event) => {
         event.stopPropagation();
         console.log('Updating frequency:', { bugId, newFrequency });
-        if (onUpdateBugFrequency) {
+        if (onUpdateBug) {
             try {
-                await onUpdateBugFrequency(bugId, newFrequency);
+                await onUpdateBug(bugId, { frequency: newFrequency });
             } catch (error) {
                 console.error('Failed to update frequency:', error);
+                toast.error('Failed to update frequency');
             }
-        } else {
-            console.warn('onUpdateBugFrequency function not provided');
         }
     };
 
@@ -269,8 +254,6 @@ const BugTableRow = ({
                 console.error('Failed to link test cases:', error);
                 toast.error('Failed to link test cases');
             }
-        } else {
-            console.warn('onLinkTestCase function not provided');
         }
     };
 
@@ -294,33 +277,28 @@ const BugTableRow = ({
             onChatClick(bug, event);
         } else if (onShowBugDetails) {
             onShowBugDetails(bug);
-        } else {
-            console.warn('Neither onChatClick nor onShowBugDetails function provided');
         }
     };
 
     const totalAttachments = bug?.attachments?.length || 0;
     const evidenceCount = getEvidenceCount(bug);
-    
+
     const getAssignedUser = () => {
         if (bug.assigned_to) return bug.assigned_to;
         if (bug.created_by) return bug.created_by;
         if (bug.reportedByEmail) return bug.reportedByEmail;
         return '';
     };
-    
+
     const assignedUser = getAssignedUser();
     const isSelected = selectedIds.includes(bug.id);
     const ROW_HEIGHT = 'h-12';
     const CELL_VERTICAL_ALIGN = 'align-middle';
-    
+
     const reporterName = getFirstName(bug.created_by || bug.reportedByEmail);
 
-    const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${
-        selectedBug?.id === bug?.id ? 'bg-blue-50' : ''
-    } ${isSelected ? 'bg-blue-50' : ''}`;
+    const rowClassName = `${ROW_HEIGHT} hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`;
 
-    // Create test case options with proper structure
     const testCaseOptions = Array.isArray(testCases)
         ? testCases.map(tc => ({
               value: tc.id || tc.testCaseId || `tc_${Math.random().toString(36).slice(2)}`,
@@ -328,18 +306,15 @@ const BugTableRow = ({
           }))
         : [];
 
-    // Get current linked test cases - handle both array of IDs and array of objects
-    const currentLinkedTestCases = bug?.linkedTestCases || [];
-    const linkedTestCaseIds = Array.isArray(currentLinkedTestCases) 
-        ? currentLinkedTestCases.map(tc => typeof tc === 'string' ? tc : tc.id || tc.testCaseId).filter(Boolean)
-        : [];
+    const linkedTestCaseIds = relationships[bug.id] || bug.linkedTestCases?.map(tc => typeof tc === 'string' ? tc : tc.id || tc.testCaseId).filter(Boolean) || [];
 
     console.log('BugTableRow props:', { 
         bugId: bug.id, 
         testCases: testCases?.length || 0, 
         testCaseOptions: testCaseOptions?.length || 0, 
         linkedTestCases: bug?.linkedTestCases,
-        linkedTestCaseIds 
+        linkedTestCaseIds,
+        relationships
     });
 
     return (
@@ -347,9 +322,9 @@ const BugTableRow = ({
             key={`bug-${bug.id}`}
             className={rowClassName}
             draggable={true}
-            onDragStart={(e) => onDragStart && onDragStart(e, bug)}
+            onDragStart={(e) => e.dataTransfer.setData('text/plain', bug.id)}
         >
-            <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
+            <td className={`w-10 px-2 py-4 border-r border-gray-200 sticky left-0 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center justify-center h-full">
                     {isSelected ? (
                         <CheckSquare
@@ -364,7 +339,7 @@ const BugTableRow = ({
                     )}
                 </div>
             </td>
-            <td className={`px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200 sticky left-10 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''} ${selectedBug?.id === bug?.id ? 'bg-blue-50' : ''}`}>
+            <td className={`px-4 py-3 w-[300px] min-w-[300px] max-w-[300px] border-r border-gray-200 sticky left-10 bg-white z-20 ${CELL_VERTICAL_ALIGN} ${isSelected ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center space-x-2 h-full">
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-col justify-center space-y-1">
@@ -461,7 +436,7 @@ const BugTableRow = ({
                     <select
                         value={bug?.severity || 'Low'}
                         onChange={(e) => handleSeverityChange(bug.id, e.target.value, e)}
-                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getSeverityColor(bug?.severity)}`}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getStatusColor(bug?.severity)}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {VALID_BUG_SEVERITIES.map(severity => (
