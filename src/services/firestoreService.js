@@ -36,10 +36,33 @@ class FirestoreService {
         return this.auth.currentUser;
     }
 
+    // Validate and convert docId to string
+    validateDocId(docId) {
+        if (!docId || docId === null || docId === undefined) {
+            return null;
+        }
+        
+        // Convert to string and trim
+        const stringId = String(docId).trim();
+        
+        // Check if it's empty after conversion
+        if (stringId === '' || stringId === 'null' || stringId === 'undefined') {
+            return null;
+        }
+        
+        return stringId;
+    }
+
     createDocRef(collectionPath, ...pathSegments) {
-        const validSegments = pathSegments.filter(segment =>
-            segment !== null && segment !== undefined && segment !== ''
-        ).map(segment => String(segment));
+        const validSegments = pathSegments
+            .filter(segment => segment !== null && segment !== undefined && segment !== '')
+            .map(segment => {
+                const stringSegment = String(segment).trim();
+                if (stringSegment === '' || stringSegment === 'null' || stringSegment === 'undefined') {
+                    throw new Error(`Invalid path segment: ${segment}`);
+                }
+                return stringSegment;
+            });
 
         if (validSegments.length === 0) {
             throw new Error('Document ID is required');
@@ -61,6 +84,9 @@ class FirestoreService {
     }
 
     createCollectionRef(collectionPath) {
+        if (!collectionPath || typeof collectionPath !== 'string') {
+            throw new Error('Collection path must be a non-empty string');
+        }
         return collection(this.db, collectionPath);
     }
 
@@ -115,8 +141,17 @@ class FirestoreService {
 
             let docRef;
             if (customDocId) {
+                // Validate custom doc ID
+                const validDocId = this.validateDocId(customDocId);
+                if (!validDocId) {
+                    return {
+                        success: false,
+                        error: { message: 'Invalid custom document ID provided' }
+                    };
+                }
+                
                 // Use the custom document ID
-                docRef = doc(collectionRef, customDocId);
+                docRef = doc(collectionRef, validDocId);
                 await setDoc(docRef, data);
             } else {
                 // Let Firestore generate the document ID
@@ -139,15 +174,21 @@ class FirestoreService {
 
     async getDocument(collectionPath, docId) {
         try {
-            if (!docId) {
-                return { success: false, error: { message: 'Document ID is required' } };
+            // Validate docId first
+            const validDocId = this.validateDocId(docId);
+            if (!validDocId) {
+                console.error('Invalid docId provided to getDocument:', docId);
+                return { 
+                    success: false, 
+                    error: { message: 'Invalid or missing document ID' } 
+                };
             }
 
             // Create collection reference first, then document reference
             const colRef = collection(this.db, collectionPath);
-            const docRef = doc(colRef, docId);
+            const docRef = doc(colRef, validDocId);
 
-            console.log('Getting document with path:', `${collectionPath}/${docId}`); // Debug log
+            console.log('Getting document with path:', `${collectionPath}/${validDocId}`); // Debug log
 
             const docSnap = await getDoc(docRef);
 
@@ -167,15 +208,21 @@ class FirestoreService {
 
     async updateDocument(collectionPath, docId, data) {
         try {
-            if (!docId) {
-                return { success: false, error: { message: 'Document ID is required' } };
+            // Validate docId first
+            const validDocId = this.validateDocId(docId);
+            if (!validDocId) {
+                console.error('Invalid docId provided to updateDocument:', docId);
+                return { 
+                    success: false, 
+                    error: { message: 'Invalid or missing document ID' } 
+                };
             }
 
             // Create collection reference first, then document reference
             const colRef = collection(this.db, collectionPath);
-            const docRef = doc(colRef, docId);
+            const docRef = doc(colRef, validDocId);
 
-            console.log('Updating document with path:', `${collectionPath}/${docId}`); // Debug log
+            console.log('Updating document with path:', `${collectionPath}/${validDocId}`); // Debug log
 
             const updateData = this.addCommonFields(data, true);
             await updateDoc(docRef, updateData);
@@ -188,15 +235,21 @@ class FirestoreService {
 
     async deleteDocument(collectionPath, docId) {
         try {
-            if (!docId) {
-                return { success: false, error: { message: 'Document ID is required' } };
+            // Validate docId first
+            const validDocId = this.validateDocId(docId);
+            if (!validDocId) {
+                console.error('Invalid docId provided to deleteDocument:', docId);
+                return { 
+                    success: false, 
+                    error: { message: 'Invalid or missing document ID' } 
+                };
             }
 
             // Create collection reference first, then document reference
             const colRef = collection(this.db, collectionPath);
-            const docRef = doc(colRef, docId);
+            const docRef = doc(colRef, validDocId);
 
-            console.log('Deleting document with path:', `${collectionPath}/${docId}`); // Debug log
+            console.log('Deleting document with path:', `${collectionPath}/${validDocId}`); // Debug log
 
             await deleteDoc(docRef);
             return { success: true };
@@ -239,12 +292,18 @@ class FirestoreService {
     // ===== REAL-TIME SUBSCRIPTIONS =====
 
     subscribeToDocument(collectionPath, docId, callback, errorCallback = null) {
-        if (!docId) {
-            errorCallback?.({ success: false, error: { message: 'Document ID is required' } });
+        // Validate docId first
+        const validDocId = this.validateDocId(docId);
+        if (!validDocId) {
+            console.error('Invalid docId provided to subscribeToDocument:', docId);
+            errorCallback?.({ 
+                success: false, 
+                error: { message: 'Invalid or missing document ID' } 
+            });
             return null;
         }
 
-        const docRef = this.createDocRef(collectionPath, docId);
+        const docRef = this.createDocRef(collectionPath, validDocId);
         const unsubscribe = onSnapshot(
             docRef,
             (doc) => {
@@ -260,7 +319,7 @@ class FirestoreService {
             }
         );
 
-        const subscriptionKey = `${collectionPath}/${docId}`;
+        const subscriptionKey = `${collectionPath}/${validDocId}`;
         this.unsubscribes.set(subscriptionKey, unsubscribe);
         return unsubscribe;
     }
@@ -424,7 +483,6 @@ class FirestoreService {
 
     // ===== TEST SUITE OPERATIONS =====
 
-    // services/firestoreService.js
     async createTestSuite(suiteData) {
         const userId = this.getCurrentUserId();
         if (!userId) {

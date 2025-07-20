@@ -13,7 +13,6 @@ const BugTable = ({
     selectedBugs = [],
     onToggleSelection,
     onShowBugDetails,
-    onCreateBug,
     onBulkAction,
     onUpdateBug,
     onLinkTestCase,
@@ -197,14 +196,6 @@ const BugTable = ({
                 {bugs.length === 0 && !loading && !error && (
                     <div className="text-center py-6">
                         <p className="text-gray-500">No bugs found. Report a new bug to get started.</p>
-                        {onCreateBug && (
-                            <button
-                                onClick={onCreateBug}
-                                className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-teal-600 hover:bg-teal-700"
-                            >
-                                Report Bug
-                            </button>
-                        )}
                     </div>
                 )}
             </div>

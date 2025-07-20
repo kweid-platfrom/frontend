@@ -39,7 +39,6 @@ export const useEntityManagement = (
                 handleError(result.error, 'test case creation');
                 return null;
             }
-            setTestCases((prev) => [...prev, result.data]);
             addNotification({
                 type: 'success',
                 title: 'Test Case Created',
@@ -47,7 +46,7 @@ export const useEntityManagement = (
             });
             return result.docId;
         },
-        [canCreateResource, testCases.length, setTestCases, addNotification, handleError]
+        [canCreateResource, testCases.length, addNotification, handleError]
     );
 
     const addBug = useCallback(
@@ -76,7 +75,6 @@ export const useEntityManagement = (
                 handleError(result.error, 'bug creation');
                 return null;
             }
-            setBugs((prev) => [...prev, result.data]);
             addNotification({
                 type: 'success',
                 title: 'Bug Created',
@@ -84,7 +82,7 @@ export const useEntityManagement = (
             });
             return result.docId;
         },
-        [canCreateResource, bugs.length, setBugs, addNotification, handleError]
+        [canCreateResource, bugs.length, addNotification, handleError]
     );
 
     const addRecording = useCallback(

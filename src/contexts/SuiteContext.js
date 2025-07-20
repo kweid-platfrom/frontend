@@ -16,9 +16,9 @@ export const useSuite = () => {
 
 export const SuiteProvider = ({ children }) => {
     const { user } = useAuth();
-    const { 
-        userProfile, 
-        isLoading: profileLoading, 
+    const {
+        userProfile,
+        isLoading: profileLoading,
         error: profileError,
         isNewUser,
         isProfileLoaded
@@ -58,10 +58,10 @@ export const SuiteProvider = ({ children }) => {
         }
 
         if (!isAuthenticated) {
-            console.log('shouldFetchSuites: false - user not authenticated or email not verified', { 
-                user: !!user, 
+            console.log('shouldFetchSuites: false - user not authenticated or email not verified', {
+                user: !!user,
                 uid: !!user?.uid,
-                emailVerified: user?.emailVerified 
+                emailVerified: user?.emailVerified
             });
             return false;
         }
@@ -109,8 +109,8 @@ export const SuiteProvider = ({ children }) => {
         }
 
         if (!userId || !shouldFetchSuites) {
-            console.log('Skipping fetch - missing requirements:', { 
-                userId: !!userId, 
+            console.log('Skipping fetch - missing requirements:', {
+                userId: !!userId,
                 shouldFetchSuites,
                 isRegistering: isRegistering(),
                 isAuthenticated
@@ -168,37 +168,30 @@ export const SuiteProvider = ({ children }) => {
             localStorage.removeItem('activeSuiteId');
         }
     }, [isRegistering]);
-
     const refetchSuites = useCallback(async (forceRefresh = true) => {
         if (isRegistering()) {
             console.log('Skipping refetch - registration in progress');
             return;
         }
-
         if (!shouldFetchSuites) {
-            console.log('Cannot refetch - missing requirements:', { 
-                shouldFetchSuites,
-                isRegistering: isRegistering(),
-                isAuthenticated
-            });
+            console.log('Cannot refetch - missing requirements:', { shouldFetchSuites, isAuthenticated });
             return;
         }
-
-        console.log('Refetching suites...');
-
-        if (forceRefresh) {
-            cache.current = { suites: null, timestamp: null };
-        }
-
-        const userSuites = await fetchUserSuites(user.uid, forceRefresh);
-        setSuites(userSuites);
-
-        if (userSuites.length > 0 && typeof window !== 'undefined') {
-            const savedSuiteId = localStorage.getItem('activeSuiteId');
-            const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
-            setActiveSuiteWithStorage(activeSuiteItem);
-        } else {
-            setActiveSuiteWithStorage(null);
+        try {
+            if (forceRefresh) cache.current = { suites: null, timestamp: null };
+            const userSuites = await fetchUserSuites(user.uid, forceRefresh);
+            setSuites(userSuites);
+            if (userSuites.length > 0) {
+                const savedSuiteId = localStorage.getItem('activeSuiteId');
+                const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
+                setActiveSuiteWithStorage(activeSuiteItem);
+                console.log('Set active suite:', activeSuiteItem.suite_id);
+            } else {
+                setActiveSuiteWithStorage(null); // Modal handled by page layout
+            }
+        } catch (error) {
+            console.error('Error refetching suites:', error);
+            setError(`Failed to fetch test suites: ${error.message}`);
         }
     }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isRegistering, isAuthenticated]);
 
@@ -259,7 +252,6 @@ export const SuiteProvider = ({ children }) => {
 
     useEffect(() => {
         const userId = user?.uid;
-        
         if (userId !== currentUserIdRef.current) {
             console.log('User changed, resetting suite context');
             currentUserIdRef.current = userId;
@@ -270,24 +262,9 @@ export const SuiteProvider = ({ children }) => {
             setActiveSuite(null);
             setError(null);
         }
-
         if (shouldFetchSuites && !initializedRef.current && !isRegistering()) {
-            console.log('Initializing suites for user:', userId);
             initializedRef.current = true;
             refetchSuites(false);
-        } else if (!shouldFetchSuites || isRegistering()) {
-            console.log('Clearing suites - conditions not met:', {
-                shouldFetchSuites,
-                isRegistering: isRegistering(),
-                isAuthenticated,
-                profileLoading,
-                isNewUser
-            });
-            setSuites([]);
-            setActiveSuite(null);
-            if (!isRegistering()) {
-                setError(null);
-            }
         }
     }, [shouldFetchSuites, refetchSuites, isRegistering, user?.uid, isAuthenticated, profileLoading, isNewUser]);
 
@@ -303,7 +280,7 @@ export const SuiteProvider = ({ children }) => {
                 suites: [],
                 userTestSuites: [],
                 activeSuite: null,
-                setActiveSuite: () => {},
+                setActiveSuite: () => { },
                 isLoading: false,
                 loading: false,
                 error: null,

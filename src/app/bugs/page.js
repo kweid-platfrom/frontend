@@ -19,6 +19,7 @@ export default function BugTrackerPage() {
     const router = useRouter();
     const [bugs, setBugs] = useState([]);
     const [testCases, setTestCases] = useState([]);
+    const [recordings, setRecordings] = useState([]);
     const [relationships, setRelationships] = useState({
         testCaseToBugs: {},
         bugToRecordings: {},
@@ -56,12 +57,23 @@ export default function BugTrackerPage() {
         });
     }, [addNotification]);
 
+    // Get orgId and accountType from activeSuite or user context
+    const getOrgId = useCallback(() => {
+        return activeSuite?.org_id || user?.org_id || null;
+    }, [activeSuite, user]);
+
+    const getAccountType = useCallback(() => {
+        return activeSuite?.account_type || user?.account_type || 'individual';
+    }, [activeSuite, user]);
+
     useEntitySync(
         isAuthenticated && !!activeSuite?.suite_id && !!user?.uid && !appLoading && !suiteLoading,
         activeSuite?.suite_id,
+        getOrgId,
+        getAccountType,
         setTestCases,
         setBugs,
-        () => {}, // No-op for setRecordings
+        setRecordings,
         setRelationships,
         handleError
     );
@@ -160,7 +172,16 @@ export default function BugTrackerPage() {
             return;
         }
         try {
-            const bugsCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/bugs`;
+            const orgId = getOrgId();
+            const accountType = getAccountType();
+            
+            let bugsCollectionPath;
+            if (accountType === 'individual') {
+                bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+            } else {
+                bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
+            }
+            
             if (action === 'delete') {
                 if (!window.confirm(`Are you sure you want to delete ${ids.length} bug${ids.length > 1 ? 's' : ''}?`)) {
                     return;
@@ -183,7 +204,7 @@ export default function BugTrackerPage() {
                 message: `Failed to ${action} bugs: ${error.message}`
             });
         }
-    }, [userCapabilities, activeSuite, addNotification]);
+    }, [userCapabilities, activeSuite, user, getOrgId, getAccountType, addNotification]);
 
     const handleCreateBug = useCallback(async (bugData) => {
         if (!userCapabilities.canCreateBugs) {
@@ -191,7 +212,16 @@ export default function BugTrackerPage() {
             return;
         }
         try {
-            const bugsCollectionPath = `organizations/${activeSuite.org_id}/testSuites/${activeSuite.suite_id}/bugs`;
+            const orgId = getOrgId();
+            const accountType = getAccountType();
+            
+            let bugsCollectionPath;
+            if (accountType === 'individual') {
+                bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+            } else {
+                bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
+            }
+            
             const newBug = {
                 ...bugData,
                 created_at: new Date(),
@@ -216,7 +246,7 @@ export default function BugTrackerPage() {
                 message: `Failed to create bug: ${error.message}`
             });
         }
-    }, [userCapabilities, activeSuite, user, addNotification]);
+    }, [userCapabilities, activeSuite, user, getOrgId, getAccountType, addNotification]);
 
     const handleExportBugs = async () => {
         try {
@@ -243,7 +273,14 @@ export default function BugTrackerPage() {
     };
 
     const clearFilters = () => {
-        setFilters({});
+        setFilters({
+            status: 'all',
+            severity: 'all',
+            priority: 'all',
+            assignee: 'all',
+            environment: 'all',
+            search: ''
+        });
         addNotification({
             type: 'success',
             title: 'Filters Cleared',
@@ -386,6 +423,7 @@ export default function BugTrackerPage() {
                     bugs={bugs || []}
                     filteredBugs={filteredBugs || []}
                     testCases={testCases}
+                    recordings={recordings}
                     relationships={bugToTestCases()}
                     selectedBugs={selectedBugs}
                     onToggleSelection={toggleBugSelection}
