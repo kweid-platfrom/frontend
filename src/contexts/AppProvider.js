@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './AuthProvider';
 import { UserProfileProvider, useUserProfile } from './userProfileContext';
 import SubscriptionProvider, { useSubscription } from './subscriptionContext';
 import { SuiteProvider, useSuite } from './SuiteContext';
+import { EntityProvider, useEntityData } from './EntityProvider';
 
 const NO_AUTH_CHECK_PAGES = ['/login', '/register'];
 
@@ -17,6 +18,42 @@ export const useApp = () => {
         throw new Error('useApp must be used within an AppProvider');
     }
     return context;
+};
+
+// Separate component to handle EntityProvider with proper dependencies
+const EntityProviderWrapper = ({ children, isAuthenticated, activeSuiteId, orgId, accountType }) => {
+    console.log('EntityProviderWrapper props:', { isAuthenticated, activeSuiteId, orgId, accountType });
+
+    const hasRequiredProps = isAuthenticated &&
+        activeSuiteId &&
+        accountType &&
+        (accountType === 'individual' || orgId);
+
+    // Only render EntityProvider when we have valid data
+    if (!hasRequiredProps) {
+        console.log('EntityProviderWrapper: Missing required props, rendering without EntityProvider');
+        return (
+            <EntityProvider
+                isAuthenticated={false}
+                activeSuiteId={null}
+                orgId={null}
+                accountType={null}
+            >
+                {children}
+            </EntityProvider>
+        );
+    }
+
+    return (
+        <EntityProvider
+            isAuthenticated={isAuthenticated}
+            activeSuiteId={activeSuiteId}
+            orgId={orgId}
+            accountType={accountType}
+        >
+            {children}
+        </EntityProvider>
+    );
 };
 
 const UnifiedAppProvider = ({ children }) => {
@@ -54,6 +91,56 @@ const UnifiedAppProvider = ({ children }) => {
         automation: false,
         bugTracker: true,
     });
+
+    // Compute authentication state
+    const isAuthenticated = useMemo(() => {
+        const authState = auth.currentUser && auth.currentUser.uid && !auth.loading;
+        console.log('Computing isAuthenticated:', {
+            hasUser: !!auth.currentUser,
+            uid: auth.currentUser?.uid,
+            loading: auth.loading,
+            result: authState
+        });
+        return authState;
+    }, [auth.currentUser, auth.loading]);
+
+    // Compute Entity Provider props
+    const entityProviderProps = useMemo(() => {
+        if (!isAuthenticated || !userProfile.userProfile) {
+            console.log('Entity props: Not authenticated or no profile');
+            return {
+                isAuthenticated: false,
+                activeSuiteId: null,
+                orgId: null,
+                accountType: null,
+            };
+        }
+
+        const activeSuiteId = suite.activeSuite?.id;
+        const accountType = userProfile.userProfile?.accountType || auth.accountType;
+
+        // For individual accounts, orgId should be null
+        // For organization accounts, get from userProfile
+        const orgId = accountType === 'individual'
+            ? null
+            : userProfile.userProfile?.organizationId;
+
+        console.log('Computing entity props:', {
+            isAuthenticated,
+            activeSuiteId,
+            orgId,
+            accountType,
+            hasProfile: !!userProfile.userProfile,
+            hasActiveSuite: !!suite.activeSuite
+        });
+
+        return {
+            isAuthenticated,
+            activeSuiteId,
+            orgId,
+            accountType,
+        };
+    }, [isAuthenticated, userProfile.userProfile, suite.activeSuite, auth.accountType]);;
 
     const removeNotification = useCallback((id) => {
         setNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -133,12 +220,6 @@ const UnifiedAppProvider = ({ children }) => {
         (resourceType) => subscription.getResourceLimit?.(resourceType) || (resourceType === 'bugs' ? -1 : 0),
         [subscription]
     );
-
-    const isAuthenticated = useMemo(() => {
-        const currentAuth = auth.currentUser && auth.currentUser.uid && !auth.loading;
-        initializationRef.current.lastAuthState = currentAuth;
-        return currentAuth;
-    }, [auth.currentUser, auth.loading]);
 
     const authLoadingOverride = useMemo(() => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
@@ -278,7 +359,7 @@ const UnifiedAppProvider = ({ children }) => {
         const initPromise = (async () => {
             try {
                 setGlobalLoading(true);
-                const createTimeoutPromise = (checkFn, timeout = 5000) => {
+                const createTimeoutPromise = (checkFn, timeout = 10000) => {
                     return new Promise((resolve) => {
                         const startTime = Date.now();
                         const check = () => {
@@ -292,6 +373,7 @@ const UnifiedAppProvider = ({ children }) => {
                     });
                 };
 
+                // Wait for core data to be ready
                 await Promise.allSettled([
                     createTimeoutPromise(() => userProfile.userProfile),
                     createTimeoutPromise(() => subscription.subscriptionStatus),
@@ -522,9 +604,16 @@ const UnifiedAppProvider = ({ children }) => {
         checkFeatureLimit,
     ]);
 
-    return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+    return (
+        <AppContext.Provider value={value}>
+            <EntityProviderWrapper {...entityProviderProps}>
+                {children}
+            </EntityProviderWrapper>
+        </AppContext.Provider>
+    );
 };
 
+// Updated AppProvider structure
 export const AppProvider = ({ children }) => {
     return (
         <AuthProvider>
@@ -537,6 +626,36 @@ export const AppProvider = ({ children }) => {
             </UserProfileProvider>
         </AuthProvider>
     );
+};
+
+// Hook for accessing entity data through the app context
+export const useAppEntityData = () => {
+    const context = useApp();
+    if (!context) {
+        throw new Error('useAppEntityData must be used within an AppProvider');
+    }
+
+    // Access entity data from the EntityProvider through useEntityData hook
+    const entityContext = useEntityData();
+
+    return {
+        testCases: entityContext.testCases,
+        bugs: entityContext.bugs,
+        recordings: entityContext.recordings,
+        relationships: entityContext.relationships,
+        createTestCase: entityContext.createTestCase,
+        updateTestCase: entityContext.updateTestCase,
+        deleteTestCase: entityContext.deleteTestCase,
+        createBug: entityContext.createBug,
+        updateBug: entityContext.updateBug,
+        deleteBug: entityContext.deleteBug,
+        linkBugToTestCase: entityContext.linkBugToTestCase,
+        unlinkBugFromTestCase: entityContext.unlinkBugFromTestCase,
+        refreshAllData: entityContext.refreshAllData,
+        isLoading: entityContext.isLoading,
+        error: entityContext.error,
+        isInitialized: entityContext.isInitialized,
+    };
 };
 
 export const useAppAuth = () => {

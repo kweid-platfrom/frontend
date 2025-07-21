@@ -1,19 +1,23 @@
-// services/subscriptionService.js - Handle ONLY billing and payment logic
-import { doc, updateDoc, getDoc, collection, addDoc, query, where, getDocs } from "firebase/firestore";
-import { db } from "../config/firebase";
+import firestoreService from './firestoreService';
+
+class SubscriptionError extends Error {
+    constructor(message, code = 'SUBSCRIPTION_ERROR') {
+        super(message);
+        this.name = 'SubscriptionError';
+        this.code = code;
+    }
+}
 
 /**
  * Billing and payment-focused subscription service
  * This service handles only billing, payments, and plan upgrades/downgrades
- * All subscription plan logic, features, and capabilities are handled by accountService
+ * Feature access and capabilities are handled by accountService
  */
 export const subscriptionService = {
-    
     /**
      * Payment and billing configuration
      */
     BILLING_CONFIG: {
-        // Stripe price IDs (these would be actual Stripe price IDs in production)
         priceIds: {
             individual_pro_monthly: 'price_individual_pro_monthly',
             individual_pro_yearly: 'price_individual_pro_yearly',
@@ -22,20 +26,16 @@ export const subscriptionService = {
             organization_professional_monthly: 'price_org_pro_monthly',
             organization_professional_yearly: 'price_org_pro_yearly',
             organization_enterprise_monthly: 'price_org_enterprise_monthly',
-            organization_enterprise_yearly: 'price_org_enterprise_yearly'
+            organization_enterprise_yearly: 'price_org_enterprise_yearly',
         },
-        
-        // Billing cycles
         billingCycles: {
             monthly: 'monthly',
-            yearly: 'yearly'
+            yearly: 'yearly',
         },
-        
-        // Payment methods
         paymentMethods: {
             stripe: 'stripe',
-            paypal: 'paypal'
-        }
+            paypal: 'paypal',
+        },
     },
 
     /**
@@ -46,25 +46,15 @@ export const subscriptionService = {
     async getSubscription(userId) {
         try {
             if (!userId) {
-                return {
-                    success: false,
-                    error: 'User ID is required'
-                };
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
             }
 
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (!userDoc.exists()) {
-                return {
-                    success: false,
-                    error: 'User not found'
-                };
+            const userResult = await firestoreService.getUserProfile(userId);
+            if (!userResult.success) {
+                throw new SubscriptionError(userResult.error.message, userResult.error.code);
             }
 
-            const userData = userDoc.data();
-            
-            // Extract subscription-related fields
+            const userData = userResult.data;
             const subscriptionData = {
                 subscriptionPlan: userData.subscriptionPlan || 'individual_free',
                 subscriptionStatus: userData.subscriptionStatus || 'active',
@@ -73,145 +63,94 @@ export const subscriptionService = {
                 billingCycle: userData.billingCycle || 'monthly',
                 isTrialActive: userData.isTrialActive || false,
                 trialDaysRemaining: userData.trialDaysRemaining || 0,
-                
-                // Billing information
                 stripeCustomerId: userData.stripeCustomerId,
                 stripeSubscriptionId: userData.stripeSubscriptionId,
                 lastPaymentDate: userData.lastPaymentDate,
                 nextBillingDate: userData.nextBillingDate,
-                
-                // Calculated fields
                 isActive: userData.subscriptionStatus === 'active',
                 isPaidPlan: userData.subscriptionPlan && !userData.subscriptionPlan.includes('free'),
                 willCancelAt: userData.willCancelAt,
-                cancelledAt: userData.cancelledAt
+                cancelledAt: userData.cancelledAt,
             };
 
             return {
                 success: true,
-                data: subscriptionData
+                data: subscriptionData,
             };
-
         } catch (error) {
-            console.error('Error getting subscription:', error);
+            console.error('Error getting subscription:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message || 'Failed to get subscription'
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
 
     /**
-     * Check if user has access to a specific feature based on subscription
+     * Update trial status for a user
      * @param {string} userId - User ID
-     * @param {string} feature - Feature to check
-     * @returns {Promise<boolean>} Has access
+     * @returns {Promise<Object>} Updated user profile
      */
-    async hasFeatureAccess(userId, feature) {
+    async updateTrialStatus(userId) {
         try {
-            const subscriptionResult = await this.getSubscription(userId);
-            
-            if (!subscriptionResult.success) {
-                return false;
+            if (!userId) {
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
             }
 
-            const { subscriptionPlan, subscriptionStatus } = subscriptionResult.data;
-            
-            // If subscription is not active, only free features are available
-            if (subscriptionStatus !== 'active') {
-                return this.isFeatureInFreePlan(feature);
+            const userResult = await firestoreService.getUserProfile(userId);
+            if (!userResult.success) {
+                throw new SubscriptionError(userResult.error.message, userResult.error.code);
             }
 
-            // Check feature access based on plan
-            return this.isFeatureInPlan(subscriptionPlan, feature);
+            const userData = userResult.data;
+            const now = new Date();
+            let updateData = {};
 
+            if (userData.isTrialActive && userData.trialEndDate) {
+                const trialEndDate = userData.trialEndDate instanceof Date
+                    ? userData.trialEndDate
+                    : new Date(userData.trialEndDate);
+                const diffTime = trialEndDate.getTime() - now.getTime();
+                const trialDaysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+                if (trialDaysRemaining <= 0) {
+                    const accountType = userData.account_memberships?.[0]?.account_type || 'individual';
+                    updateData = {
+                        isTrialActive: false,
+                        trialDaysRemaining: 0,
+                        subscriptionPlan: accountType === 'organization' ? 'organization_free' : 'individual_free',
+                        subscriptionStatus: 'inactive',
+                    };
+                } else {
+                    updateData.trialDaysRemaining = trialDaysRemaining;
+                }
+            }
+
+            if (userData.subscriptionStatus === 'active' && userData.subscriptionEndDate) {
+                const subscriptionEndDate = userData.subscriptionEndDate instanceof Date
+                    ? userData.subscriptionEndDate
+                    : new Date(userData.subscriptionEndDate);
+                if (subscriptionEndDate <= now && !userData.isTrialActive) {
+                    const accountType = userData.account_memberships?.[0]?.account_type || 'individual';
+                    updateData.subscriptionPlan = accountType === 'organization' ? 'organization_free' : 'individual_free';
+                    updateData.subscriptionStatus = 'inactive';
+                }
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                updateData.updated_at = firestoreService.serverTimestamp();
+                const updateResult = await firestoreService.updateDocument('users', userId, updateData);
+                if (!updateResult.success) {
+                    throw new SubscriptionError(updateResult.error.message, updateResult.error.code);
+                }
+                return { success: true, data: { ...userData, ...updateData } };
+            }
+
+            return { success: true, data: userData };
         } catch (error) {
-            console.error('Error checking feature access:', error);
-            return false;
+            console.error('Error updating trial status:', firestoreService.handleFirestoreError(error));
+            return { success: false, error: firestoreService.handleFirestoreError(error) };
         }
-    },
-
-    /**
-     * Check if feature is available in free plan
-     * @param {string} feature - Feature to check
-     * @returns {boolean} Is available in free plan
-     */
-    isFeatureInFreePlan(feature) {
-        const freeFeatures = [
-            'basic_projects',
-            'basic_export',
-            'community_support'
-        ];
-        return freeFeatures.includes(feature);
-    },
-
-    /**
-     * Check if feature is available in specific plan
-     * @param {string} plan - Subscription plan
-     * @param {string} feature - Feature to check
-     * @returns {boolean} Is available in plan
-     */
-    isFeatureInPlan(plan, feature) {
-        const planFeatures = {
-            individual_free: [
-                'basic_projects',
-                'basic_export',
-                'community_support'
-            ],
-            individual_pro: [
-                'basic_projects',
-                'basic_export',
-                'community_support',
-                'advanced_projects',
-                'premium_export',
-                'priority_support',
-                'advanced_analytics'
-            ],
-            organization_free: [
-                'basic_projects',
-                'basic_export',
-                'community_support',
-                'team_collaboration'
-            ],
-            organization_starter: [
-                'basic_projects',
-                'basic_export',
-                'community_support',
-                'team_collaboration',
-                'advanced_projects',
-                'premium_export',
-                'basic_admin_tools'
-            ],
-            organization_professional: [
-                'basic_projects',
-                'basic_export',
-                'community_support',
-                'team_collaboration',
-                'advanced_projects',
-                'premium_export',
-                'basic_admin_tools',
-                'advanced_admin_tools',
-                'priority_support',
-                'advanced_analytics'
-            ],
-            organization_enterprise: [
-                'basic_projects',
-                'basic_export',
-                'community_support',
-                'team_collaboration',
-                'advanced_projects',
-                'premium_export',
-                'basic_admin_tools',
-                'advanced_admin_tools',
-                'priority_support',
-                'advanced_analytics',
-                'custom_integrations',
-                'dedicated_support',
-                'sso_integration'
-            ]
-        };
-
-        return planFeatures[plan]?.includes(feature) || false;
     },
 
     /**
@@ -225,40 +164,41 @@ export const subscriptionService = {
      */
     async createCheckoutSession(userId, planId, billingCycle = 'monthly', successUrl, cancelUrl) {
         try {
-            // This would integrate with Stripe API in production
+            if (!userId) {
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
+            }
             const priceId = this.BILLING_CONFIG.priceIds[`${planId}_${billingCycle}`];
-            
             if (!priceId) {
-                throw new Error(`No price ID found for plan: ${planId}_${billingCycle}`);
+                throw new SubscriptionError(`No price ID found for plan: ${planId}_${billingCycle}`, 'INVALID_PLAN');
             }
 
-            // In production, this would call Stripe API
             const checkoutSession = {
                 id: `cs_${Date.now()}_${userId}`,
-                url: `https://checkout.stripe.com/pay/${Date.now()}`, // Mock URL
+                url: `https://checkout.stripe.com/pay/${Date.now()}`,
                 priceId,
                 planId,
                 billingCycle,
                 userId,
                 successUrl,
                 cancelUrl,
-                createdAt: new Date()
+                created_at: firestoreService.serverTimestamp(),
             };
 
-            // Save checkout session to database for tracking
-            await this.saveCheckoutSession(checkoutSession);
+            const sessionResult = await firestoreService.createDocument('checkout_sessions', checkoutSession);
+            if (!sessionResult.success) {
+                throw new SubscriptionError(sessionResult.error.message, sessionResult.error.code);
+            }
 
             return {
                 success: true,
                 checkoutUrl: checkoutSession.url,
-                sessionId: checkoutSession.id
+                sessionId: checkoutSession.id,
             };
-
         } catch (error) {
-            console.error('Error creating checkout session:', error);
+            console.error('Error creating checkout session:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
@@ -271,48 +211,47 @@ export const subscriptionService = {
      */
     async handleSuccessfulPayment(sessionId, paymentData) {
         try {
-            // Get checkout session data
-            const session = await this.getCheckoutSession(sessionId);
-            if (!session) {
-                throw new Error('Checkout session not found');
+            if (!sessionId || !paymentData) {
+                throw new SubscriptionError('Session ID and payment data are required', 'INVALID_INPUT');
             }
 
+            const sessionResult = await firestoreService.queryDocuments('checkout_sessions', { id: sessionId });
+            if (!sessionResult.success || sessionResult.data.length === 0) {
+                throw new SubscriptionError('Checkout session not found', 'SESSION_NOT_FOUND');
+            }
+
+            const session = sessionResult.data[0];
             const { userId, planId, billingCycle } = session;
 
-            // Calculate subscription dates
             const now = new Date();
             const subscriptionEnd = new Date();
-            
             if (billingCycle === 'yearly') {
                 subscriptionEnd.setFullYear(subscriptionEnd.getFullYear() + 1);
             } else {
                 subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 1);
             }
 
-            // Update user subscription in database
-            const userDocRef = doc(db, 'users', userId);
             const subscriptionUpdate = {
                 subscriptionPlan: planId,
                 subscriptionStatus: 'active',
                 subscriptionStartDate: now,
                 subscriptionEndDate: subscriptionEnd,
-                billingCycle: billingCycle,
+                billingCycle,
                 isTrialActive: false,
                 trialDaysRemaining: 0,
-                
-                // Billing information
                 stripeCustomerId: paymentData.customerId,
                 stripeSubscriptionId: paymentData.subscriptionId,
                 lastPaymentDate: now,
                 nextBillingDate: subscriptionEnd,
-                
-                updatedAt: now
+                updated_at: firestoreService.serverTimestamp(),
             };
 
-            await updateDoc(userDocRef, subscriptionUpdate);
+            const updateResult = await firestoreService.updateDocument('users', userId, subscriptionUpdate);
+            if (!updateResult.success) {
+                throw new SubscriptionError(updateResult.error.message, updateResult.error.code);
+            }
 
-            // Record payment transaction
-            await this.recordPaymentTransaction({
+            const transaction = {
                 userId,
                 sessionId,
                 planId,
@@ -321,8 +260,14 @@ export const subscriptionService = {
                 currency: paymentData.currency,
                 stripePaymentIntentId: paymentData.paymentIntentId,
                 status: 'completed',
-                transactionDate: now
-            });
+                transactionDate: now,
+                created_at: firestoreService.serverTimestamp(),
+            };
+
+            const transactionResult = await firestoreService.createDocument('payment_transactions', transaction);
+            if (!transactionResult.success) {
+                console.warn('Failed to record payment transaction:', transactionResult.error);
+            }
 
             return {
                 success: true,
@@ -330,14 +275,13 @@ export const subscriptionService = {
                 planId,
                 subscriptionEnd,
                 billingCycle,
-                nextBillingDate: subscriptionEnd
+                nextBillingDate: subscriptionEnd,
             };
-
         } catch (error) {
-            console.error('Error handling successful payment:', error);
+            console.error('Error handling successful payment:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
@@ -349,46 +293,49 @@ export const subscriptionService = {
      */
     async handleSubscriptionRenewal(userId) {
         try {
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (!userDoc.exists()) {
-                throw new Error('User not found');
+            if (!userId) {
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
             }
 
-            const userData = userDoc.data();
+            const userResult = await firestoreService.getUserProfile(userId);
+            if (!userResult.success) {
+                throw new SubscriptionError(userResult.error.message, userResult.error.code);
+            }
+
+            const userData = userResult.data;
             const { billingCycle, subscriptionPlan } = userData;
 
-            // Calculate next billing period
             const now = new Date();
             const nextBillingDate = new Date();
-            
             if (billingCycle === 'yearly') {
                 nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
             } else {
                 nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
             }
 
-            // Update subscription dates
-            await updateDoc(userDocRef, {
+            const updateData = {
                 subscriptionStartDate: now,
                 subscriptionEndDate: nextBillingDate,
                 lastPaymentDate: now,
-                nextBillingDate: nextBillingDate,
-                updatedAt: now
-            });
+                nextBillingDate,
+                updated_at: firestoreService.serverTimestamp(),
+            };
+
+            const updateResult = await firestoreService.updateDocument('users', userId, updateData);
+            if (!updateResult.success) {
+                throw new SubscriptionError(updateResult.error.message, updateResult.error.code);
+            }
 
             return {
                 success: true,
                 nextBillingDate,
-                subscriptionPlan
+                subscriptionPlan,
             };
-
         } catch (error) {
-            console.error('Error handling subscription renewal:', error);
+            console.error('Error handling subscription renewal:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
@@ -401,61 +348,66 @@ export const subscriptionService = {
      */
     async cancelSubscription(userId, immediate = false) {
         try {
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (!userDoc.exists()) {
-                throw new Error('User not found');
+            if (!userId) {
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
             }
 
-            const userData = userDoc.data();
-            const now = new Date();
+            const userResult = await firestoreService.getUserProfile(userId);
+            if (!userResult.success) {
+                throw new SubscriptionError(userResult.error.message, userResult.error.code);
+            }
 
+            const userData = userResult.data;
+            const now = new Date();
             let updateData = {
                 subscriptionStatus: immediate ? 'cancelled' : 'active',
                 cancelledAt: now,
-                updatedAt: now
+                updated_at: firestoreService.serverTimestamp(),
             };
 
             if (immediate) {
-                // Immediate cancellation - downgrade to free plan
-                const accountType = userData.accountType || 'individual';
+                const accountType = userData.account_memberships?.[0]?.account_type || 'individual';
                 const freePlan = accountType === 'organization' ? 'organization_free' : 'individual_free';
-                
                 updateData = {
                     ...updateData,
                     subscriptionPlan: freePlan,
                     subscriptionEndDate: now,
-                    nextBillingDate: null
+                    nextBillingDate: null,
                 };
             } else {
-                // Cancel at period end
                 updateData.willCancelAt = userData.subscriptionEndDate || userData.nextBillingDate;
             }
 
-            await updateDoc(userDocRef, updateData);
+            const updateResult = await firestoreService.updateDocument('users', userId, updateData);
+            if (!updateResult.success) {
+                throw new SubscriptionError(updateResult.error.message, updateResult.error.code);
+            }
 
-            // Record cancellation
-            await this.recordCancellation({
+            const cancellation = {
                 userId,
                 reason: 'user_requested',
                 immediate,
                 cancelledAt: now,
-                willCancelAt: updateData.willCancelAt
-            });
+                willCancelAt: updateData.willCancelAt,
+                created_at: firestoreService.serverTimestamp(),
+            };
+
+            const cancellationResult = await firestoreService.createDocument('subscription_cancellations', cancellation);
+            if (!cancellationResult.success) {
+                console.warn('Failed to record cancellation:', cancellationResult.error);
+            }
 
             return {
                 success: true,
                 immediate,
                 cancelledAt: now,
-                willCancelAt: updateData.willCancelAt
+                willCancelAt: updateData.willCancelAt,
             };
-
         } catch (error) {
-            console.error('Error cancelling subscription:', error);
+            console.error('Error cancelling subscription:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
@@ -467,17 +419,18 @@ export const subscriptionService = {
      */
     async reactivateSubscription(userId) {
         try {
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            
-            if (!userDoc.exists()) {
-                throw new Error('User not found');
+            if (!userId) {
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
             }
 
-            const userData = userDoc.data();
-            
+            const userResult = await firestoreService.getUserProfile(userId);
+            if (!userResult.success) {
+                throw new SubscriptionError(userResult.error.message, userResult.error.code);
+            }
+
+            const userData = userResult.data;
             if (userData.subscriptionStatus !== 'cancelled' && !userData.willCancelAt) {
-                throw new Error('Subscription is not cancelled');
+                throw new SubscriptionError('Subscription is not cancelled', 'INVALID_STATE');
             }
 
             const now = new Date();
@@ -485,21 +438,23 @@ export const subscriptionService = {
                 subscriptionStatus: 'active',
                 cancelledAt: null,
                 willCancelAt: null,
-                updatedAt: now
+                updated_at: firestoreService.serverTimestamp(),
             };
 
-            await updateDoc(userDocRef, updateData);
+            const updateResult = await firestoreService.updateDocument('users', userId, updateData);
+            if (!updateResult.success) {
+                throw new SubscriptionError(updateResult.error.message, updateResult.error.code);
+            }
 
             return {
                 success: true,
-                reactivatedAt: now
+                reactivatedAt: now,
             };
-
         } catch (error) {
-            console.error('Error reactivating subscription:', error);
+            console.error('Error reactivating subscription:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
@@ -507,56 +462,43 @@ export const subscriptionService = {
     /**
      * Get billing history for user
      * @param {string} userId - User ID
-     * @returns {Promise<Array>} Billing history
+     * @returns {Promise<Object>} Billing history
      */
     async getBillingHistory(userId) {
         try {
             if (!userId) {
-                return {
-                    success: false,
-                    error: 'User ID is required',
-                    transactions: []
-                };
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
             }
 
-            // Query payment transactions for this user
-            const transactionsRef = collection(db, 'payment_transactions');
-            const q = query(transactionsRef, where('userId', '==', userId));
-            const querySnapshot = await getDocs(q);
+            const transactionsResult = await firestoreService.queryDocuments('payment_transactions', { userId });
+            if (!transactionsResult.success) {
+                throw new SubscriptionError(transactionsResult.error.message, transactionsResult.error.code);
+            }
 
-            const transactions = [];
-            let totalSpent = 0;
+            const transactions = transactionsResult.data.map(doc => ({
+                id: doc.id,
+                ...doc,
+            }));
 
-            querySnapshot.forEach((doc) => {
-                const transaction = doc.data();
-                transactions.push({
-                    id: doc.id,
-                    ...transaction
-                });
-                
-                if (transaction.status === 'completed' && transaction.amount) {
-                    totalSpent += transaction.amount;
-                }
-            });
+            const totalSpent = transactions
+                .filter(t => t.status === 'completed' && t.amount)
+                .reduce((sum, t) => sum + t.amount, 0);
 
-            // Get next billing date from user profile
-            const userDocRef = doc(db, 'users', userId);
-            const userDoc = await getDoc(userDocRef);
-            const nextBillingDate = userDoc.exists() ? userDoc.data().nextBillingDate : null;
+            const userResult = await firestoreService.getUserProfile(userId);
+            const nextBillingDate = userResult.success ? userResult.data.nextBillingDate : null;
 
             return {
                 success: true,
                 transactions: transactions.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
                 totalSpent,
-                nextBillingDate
+                nextBillingDate,
             };
-
         } catch (error) {
-            console.error('Error getting billing history:', error);
+            console.error('Error getting billing history:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message,
-                transactions: []
+                error: firestoreService.handleFirestoreError(error),
+                transactions: [],
             };
         }
     },
@@ -569,78 +511,37 @@ export const subscriptionService = {
      */
     async updatePaymentMethod(userId, paymentMethodData) {
         try {
-            const userDocRef = doc(db, 'users', userId);
-            
-            await updateDoc(userDocRef, {
+            if (!userId) {
+                throw new SubscriptionError('User ID is required', 'INVALID_USER_ID');
+            }
+
+            const updateData = {
                 paymentMethod: paymentMethodData,
-                updatedAt: new Date()
-            });
+                updated_at: firestoreService.serverTimestamp(),
+            };
+
+            const updateResult = await firestoreService.updateDocument('users', userId, updateData);
+            if (!updateResult.success) {
+                throw new SubscriptionError(updateResult.error.message, updateResult.error.code);
+            }
 
             return {
                 success: true,
-                paymentMethod: paymentMethodData
+                paymentMethod: paymentMethodData,
             };
-
         } catch (error) {
-            console.error('Error updating payment method:', error);
+            console.error('Error updating payment method:', firestoreService.handleFirestoreError(error));
             return {
                 success: false,
-                error: error.message
+                error: firestoreService.handleFirestoreError(error),
             };
         }
     },
 
     /**
-     * Private helper methods for database operations
+     * Cleanup Firestore subscriptions
      */
-
-    async saveCheckoutSession(session) {
-        try {
-            const sessionsRef = collection(db, 'checkout_sessions');
-            await addDoc(sessionsRef, session);
-        } catch (error) {
-            console.error('Error saving checkout session:', error);
-        }
+    cleanup() {
+        firestoreService.cleanup();
     },
-
-    async getCheckoutSession(sessionId) {
-        try {
-            const sessionsRef = collection(db, 'checkout_sessions');
-            const q = query(sessionsRef, where('id', '==', sessionId));
-            const querySnapshot = await getDocs(q);
-            
-            if (querySnapshot.empty) {
-                return null;
-            }
-
-            return querySnapshot.docs[0].data();
-        } catch (error) {
-            console.error('Error getting checkout session:', error);
-            return null;
-        }
-    },
-
-    async recordPaymentTransaction(transaction) {
-        try {
-            const transactionsRef = collection(db, 'payment_transactions');
-            await addDoc(transactionsRef, {
-                ...transaction,
-                createdAt: new Date()
-            });
-        } catch (error) {
-            console.error('Error recording payment transaction:', error);
-        }
-    },
-
-    async recordCancellation(cancellation) {
-        try {
-            const cancellationsRef = collection(db, 'subscription_cancellations');
-            await addDoc(cancellationsRef, {
-                ...cancellation,
-                createdAt: new Date()
-            });
-        } catch (error) {
-            console.error('Error recording cancellation:', error);
-        }
-    }
 };

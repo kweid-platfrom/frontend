@@ -1,31 +1,27 @@
-import { getAccountSetupStatus, setupAccount } from "./accountSetup";
-import firestoreService from "./firestoreService";
-import { suiteService } from "./suiteService"; // Import suiteService
+import firestoreService from './firestoreService';
+import { getAccountSetupStatus, setupAccount } from './accountSetup';
 
-/**
- * Get complete account information
- * @param {string} userId - User ID (optional, defaults to current user)
- * @returns {Promise<Object>} Complete account info result
- */
 export const getCompleteAccountInfo = async (userId = null) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         const result = await firestoreService.getUserProfile(targetUserId);
         if (!result.success) {
-            return result;
+            return { success: false, error: { message: result.error.message, code: result.error.code } };
         }
 
         const userProfile = result.data;
-        
         let organizations = [];
-        if (userProfile.accountType === 'organization' && userProfile.organizationId) {
-            const orgResult = await firestoreService.getDocument('organizations', userProfile.organizationId);
-            if (orgResult.success) {
-                organizations = [{ id: userProfile.organizationId, ...orgResult.data }];
+        if (userProfile.account_memberships?.some(m => m.account_type === 'organization')) {
+            const orgId = userProfile.account_memberships.find(m => m.account_type === 'organization')?.account_id;
+            if (orgId) {
+                const orgResult = await firestoreService.getDocument('organizations', orgId);
+                if (orgResult.success) {
+                    organizations = [{ id: orgId, ...orgResult.data }];
+                }
             }
         }
 
@@ -34,156 +30,118 @@ export const getCompleteAccountInfo = async (userId = null) => {
             data: {
                 userProfile,
                 organizations,
-                accountType: userProfile.accountType || 'individual'
-            }
+                accountType: userProfile.account_memberships?.[0]?.account_type || 'individual',
+            },
         };
     } catch (error) {
-        console.error('Error getting complete account info:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting complete account info:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Update user profile
- * @param {string} userId - User ID
- * @param {Object} updateData - Data to update
- * @returns {Promise<Object>} Update result
- */
 export const updateUserProfile = async (userId, updateData) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         const result = await firestoreService.updateUserProfile(targetUserId, updateData);
-        return result;
+        if (!result.success) {
+            return { success: false, error: { message: result.error.message, code: result.error.code } };
+        }
+
+        return { success: true, data: result.data };
     } catch (error) {
-        console.error('Error updating user profile:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error updating user profile:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Delete user account
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Delete result
- */
 export const deleteUserAccount = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
-        return { success: false, error: { message: 'Account deletion not implemented yet' } };
+        return { success: false, error: { message: 'Account deletion not implemented yet', code: 'NOT_IMPLEMENTED' } };
     } catch (error) {
-        console.error('Error deleting user account:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error deleting user account:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Determine account type based on email domain
- * @param {string} email - User email
- * @returns {string} Account type ('individual' or 'organization')
- */
 export const determineAccountType = (email) => {
     if (!email) return 'individual';
-    
     const domain = email.split('@')[1];
     const commonPersonalDomains = [
-        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
-        'icloud.com', 'aol.com', 'protonmail.com'
+        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+        'icloud.com', 'aol.com', 'protonmail.com',
     ];
-    
     return commonPersonalDomains.includes(domain.toLowerCase()) ? 'individual' : 'organization';
 };
 
-/**
- * Get account type from user profile
- * @param {string} userId - User ID (optional, defaults to current user)
- * @returns {Promise<Object>} Account type result
- */
 export const getAccountType = async (userId = null) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         const result = await firestoreService.getUserProfile(targetUserId);
         if (!result.success) {
-            return result;
+            return { success: false, error: { message: result.error.message, code: result.error.code } };
         }
 
         return {
             success: true,
             data: {
-                accountType: result.data.accountType || 'individual',
-                userId: targetUserId
-            }
+                accountType: result.data.account_memberships?.[0]?.account_type || 'individual',
+                userId: targetUserId,
+            },
         };
     } catch (error) {
-        console.error('Error getting account type:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting account type:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Check if user can create new suite
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canCreateNewSuite = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
-        const capabilitiesResult = await getUserCapabilities(targetUserId);
+        const { suiteService } = await import('./suiteService');
+        const capabilitiesResult = await suiteService.canCreateNewSuite(targetUserId);
         if (!capabilitiesResult.success) {
-            return { success: false, error: { message: 'Unable to fetch capabilities' } };
+            return { success: false, error: { message: capabilitiesResult.error.message, code: capabilitiesResult.error.code } };
         }
-
-        const { maxTestSuites, remaining } = capabilitiesResult.data;
-        const canCreate = remaining.testSuites !== 0;
 
         return {
             success: true,
             data: {
-                canCreate,
-                message: canCreate ? 
-                    `You can create ${remaining.testSuites === -1 ? 'unlimited' : remaining.testSuites} more suites` : 
-                    `Suite limit of ${maxTestSuites} reached`
-            }
+                canCreate: capabilitiesResult.canCreate,
+                message: capabilitiesResult.message,
+            },
         };
     } catch (error) {
-        console.error('Error checking suite creation permission:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error checking suite creation permission:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Alias for canCreateNewSuite
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canCreateNewTestSuite = async (userId) => {
     return await canCreateNewSuite(userId);
 };
 
-/**
- * Check if user can invite team members
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canInviteTeamMembers = async (userId) => {
     try {
         const accountInfo = await getCompleteAccountInfo(userId);
         if (!accountInfo.success) {
-            return accountInfo;
+            return { success: false, error: { message: accountInfo.error.message, code: accountInfo.error.code } };
         }
 
         const canInvite = accountInfo.data.accountType === 'organization';
@@ -192,145 +150,116 @@ export const canInviteTeamMembers = async (userId) => {
             success: true,
             data: {
                 canInvite,
-                message: canInvite ? 'Team member invitation allowed' : 'Team invitations only available for organization accounts'
-            }
+                message: canInvite ? 'Team member invitation allowed' : 'Team invitations only available for organization accounts',
+            },
         };
     } catch (error) {
-        console.error('Error checking team invitation permission:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error checking team invitation permission:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get organization member count
- * @param {string} organizationId - Organization ID
- * @returns {Promise<Object>} Member count result
- */
 export const getOrganizationMemberCount = async (organizationId) => {
     try {
         if (!organizationId) {
-            return { success: false, error: { message: 'Organization ID required' } };
+            return { success: false, error: { message: 'Organization ID required', code: 'INVALID_ORG_ID' } };
         }
 
         const result = await firestoreService.queryDocuments(`organizations/${organizationId}/members`);
         if (!result.success) {
-            return result;
+            return { success: false, error: { message: result.error.message, code: result.error.code } };
         }
 
         return {
             success: true,
             data: {
                 count: result.data.length,
-                members: result.data
-            }
+                members: result.data,
+            },
         };
     } catch (error) {
-        console.error('Error getting organization member count:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting organization member count:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get user's suite count
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Suite count result
- */
 export const getUserSuiteCount = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
-        const result = await suiteService.getUserSuites(targetUserId); // Use suiteService
+        const { suiteService } = await import('./suiteService');
+        const result = await suiteService.getUserSuites(targetUserId);
+        if (!result.success) {
+            return { success: false, error: { message: result.error.message, code: result.error.code } };
+        }
+
         return {
             success: true,
             data: {
                 count: result.suites.length,
                 suites: result.suites,
-                message: 'Suite count retrieved'
-            }
+                message: 'Suite count retrieved',
+            },
         };
     } catch (error) {
-        console.error('Error getting user suite count:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user suite count:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Alias for getUserSuiteCount
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Test suite count result
- */
 export const getUserTestSuiteCount = async (userId) => {
     return await getUserSuiteCount(userId);
 };
 
-/**
- * Get user's usage statistics
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Usage stats result
- */
 export const getUserUsageStats = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         const accountInfo = await getCompleteAccountInfo(targetUserId);
         if (!accountInfo.success) {
-            return accountInfo;
+            return { success: false, error: { message: accountInfo.error.message, code: accountInfo.error.code } };
         }
 
-        const suitesResult = await getUserSuiteCount(targetUserId);
-        const suitesCount = suitesResult.success ? suitesResult.data.count : 0;
+        const organizationCount = accountInfo.data.organizations?.length || 0;
 
-        let totalMembersCount = 0;
-        if (accountInfo.data.organizations && accountInfo.data.organizations.length > 0) {
-            for (const org of accountInfo.data.organizations) {
-                const memberResult = await getOrganizationMemberCount(org.id);
-                if (memberResult.success) {
-                    totalMembersCount += memberResult.data.count;
-                }
-            }
-        }
+        const suiteCountResult = await getUserSuiteCount(targetUserId);
+        const testSuitesCount = suiteCountResult.success ? suiteCountResult.data.count : 0;
+
+        const orgMemberCountResult = await getOrganizationMemberCount(accountInfo.data.organizations?.[0]?.id);
+        const totalMembersCount = orgMemberCountResult.success ? orgMemberCountResult.data.count : 0;
 
         return {
             success: true,
             data: {
-                accountType: accountInfo.data.accountType,
-                organizationCount: accountInfo.data.organizations.length,
+                organizationCount,
+                testSuitesCount,
                 totalMembersCount,
-                testSuitesCount: suitesCount,
-                isActive: accountInfo.data.userProfile.isActive,
-                emailVerified: accountInfo.data.userProfile.emailVerified,
-                createdAt: accountInfo.data.userProfile.created_at,
-                lastUpdated: accountInfo.data.userProfile.updated_at,
-                message: 'Usage statistics retrieved'
-            }
+                suites: suiteCountResult.success ? suiteCountResult.data.suites : [],
+            },
         };
     } catch (error) {
-        console.error('Error getting user usage stats:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user usage stats:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get user's test script count from suite assets
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Test script count result
- */
 export const getUserTestScriptCount = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
+        const { suiteService } = await import('./suiteService');
         const suitesResult = await suiteService.getUserSuites(targetUserId);
         if (!suitesResult.success) {
-            return suitesResult;
+            return { success: false, error: { message: suitesResult.error.message, code: suitesResult.error.code } };
         }
 
         let totalScriptCount = 0;
@@ -347,30 +276,26 @@ export const getUserTestScriptCount = async (userId) => {
             success: true,
             data: {
                 count: totalScriptCount,
-                message: 'Test script count retrieved'
-            }
+                message: 'Test script count retrieved',
+            },
         };
     } catch (error) {
-        console.error('Error getting user test script count:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user test script count:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get user's automated test count from suite assets
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Automated test count result
- */
 export const getUserAutomatedTestCount = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
+        const { suiteService } = await import('./suiteService');
         const suitesResult = await suiteService.getUserSuites(targetUserId);
         if (!suitesResult.success) {
-            return suitesResult;
+            return { success: false, error: { message: suitesResult.error.message, code: suitesResult.error.code } };
         }
 
         let totalAutomatedTestCount = 0;
@@ -388,30 +313,26 @@ export const getUserAutomatedTestCount = async (userId) => {
             success: true,
             data: {
                 count: totalAutomatedTestCount,
-                message: 'Automated test count retrieved'
-            }
+                message: 'Automated test count retrieved',
+            },
         };
     } catch (error) {
-        console.error('Error getting user automated test count:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user automated test count:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get user's recording count from suite assets
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Recording count result
- */
 export const getUserRecordingCount = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
+        const { suiteService } = await import('./suiteService');
         const suitesResult = await suiteService.getUserSuites(targetUserId);
         if (!suitesResult.success) {
-            return suitesResult;
+            return { success: false, error: { message: suitesResult.error.message, code: suitesResult.error.code } };
         }
 
         let totalRecordingCount = 0;
@@ -428,175 +349,125 @@ export const getUserRecordingCount = async (userId) => {
             success: true,
             data: {
                 count: totalRecordingCount,
-                message: 'Recording count retrieved'
-            }
+                message: 'Recording count retrieved',
+            },
         };
     } catch (error) {
-        console.error('Error getting user recording count:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user recording count:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Check if user can create new test script
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canCreateNewTestScript = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const user = firestoreService.getCurrentUser();
-        if (!user) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         return {
             success: true,
             data: {
                 canCreate: true,
-                message: 'Test script creation allowed'
-            }
+                message: 'Test script creation allowed',
+            },
         };
     } catch (error) {
-        console.error('Error checking test script creation permission:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error checking test script creation permission:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Check if user can create new automated test
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canCreateNewAutomatedTest = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const user = firestoreService.getCurrentUser();
-        if (!user) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         return {
             success: true,
             data: {
                 canCreate: true,
-                message: 'Automated test creation allowed'
-            }
+                message: 'Automated test creation allowed',
+            },
         };
     } catch (error) {
-        console.error('Error checking automated test creation permission:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error checking automated test creation permission:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Check if user can create new recording
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canCreateNewRecording = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const user = firestoreService.getCurrentUser();
-        if (!user) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         return {
             success: true,
             data: {
                 canCreate: true,
-                message: 'Recording creation allowed'
-            }
+                message: 'Recording creation allowed',
+            },
         };
     } catch (error) {
-        console.error('Error checking recording creation permission:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error checking recording creation permission:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Check if user can export report
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Permission result
- */
 export const canExportReport = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const user = firestoreService.getCurrentUser();
-        if (!user) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         return {
             success: true,
             data: {
                 canExport: true,
-                message: 'Report export allowed'
-            }
+                message: 'Report export allowed',
+            },
         };
     } catch (error) {
-        console.error('Error checking report export permission:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error checking report export permission:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get user's monthly export count (placeholder)
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Monthly export count result
- */
 export const getUserMonthlyExportCount = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         return {
             success: true,
             data: {
                 count: 0,
-                message: 'Monthly export count retrieved (placeholder)'
-            }
+                message: 'Monthly export count retrieved (placeholder)',
+            },
         };
     } catch (error) {
-        console.error('Error getting user monthly export count:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user monthly export count:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get user capabilities based on account type and current usage
- * @param {string} userId - User ID
- * @returns {Promise<Object>} User capabilities result
- */
 export const getUserCapabilities = async (userId) => {
     try {
         const targetUserId = userId || firestoreService.getCurrentUserId();
         if (!targetUserId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+            return { success: false, error: { message: 'User not authenticated', code: 'NO_AUTHENTICATED_USER' } };
         }
 
         const accountInfo = await getCompleteAccountInfo(targetUserId);
         if (!accountInfo.success) {
-            return accountInfo;
+            return { success: false, error: { message: accountInfo.error.message, code: accountInfo.error.code } };
         }
 
         const accountType = accountInfo.data.accountType || 'individual';
@@ -605,8 +476,12 @@ export const getUserCapabilities = async (userId) => {
         const usageStats = await getUserUsageStats(targetUserId);
         const currentUsage = usageStats.success ? usageStats.data : {};
 
+        const { suiteService } = await import('./suiteService');
+        const suiteCapabilities = await suiteService.canCreateNewSuite(targetUserId);
+
         const capabilities = {
             ...defaultCapabilities,
+            maxTestSuites: suiteCapabilities.maxAllowed || defaultCapabilities.maxTestSuites,
             currentUsage: {
                 testSuites: currentUsage.testSuitesCount || 0,
                 testScripts: 0,
@@ -614,15 +489,15 @@ export const getUserCapabilities = async (userId) => {
                 recordings: 0,
                 monthlyExports: 0,
                 teamMembers: currentUsage.totalMembersCount || 0,
-                organizations: currentUsage.organizationCount || 0
-            }
+                organizations: currentUsage.organizationCount || 0,
+            },
         };
 
         const [scriptsResult, automatedTestsResult, recordingsResult, exportsResult] = await Promise.all([
             getUserTestScriptCount(targetUserId),
             getUserAutomatedTestCount(targetUserId),
             getUserRecordingCount(targetUserId),
-            getUserMonthlyExportCount(targetUserId)
+            getUserMonthlyExportCount(targetUserId),
         ]);
 
         if (scriptsResult.success) {
@@ -644,33 +519,27 @@ export const getUserCapabilities = async (userId) => {
             automatedTests: Math.max(0, capabilities.maxAutomatedTests - capabilities.currentUsage.automatedTests),
             recordings: Math.max(0, capabilities.maxRecordings - capabilities.currentUsage.recordings),
             monthlyExports: Math.max(0, capabilities.maxMonthlyExports - capabilities.currentUsage.monthlyExports),
-            teamMembers: Math.max(0, capabilities.maxTeamMembers - capabilities.currentUsage.teamMembers)
+            teamMembers: Math.max(0, capabilities.maxTeamMembers - capabilities.currentUsage.teamMembers),
         };
 
         capabilities.usagePercentage = {
-            testSuites: Math.round((capabilities.currentUsage.testSuites / capabilities.maxTestSuites) * 100),
-            testScripts: Math.round((capabilities.currentUsage.testScripts / capabilities.maxTestScripts) * 100),
-            automatedTests: Math.round((capabilities.currentUsage.automatedTests / capabilities.maxAutomatedTests) * 100),
-            recordings: Math.round((capabilities.currentUsage.recordings / capabilities.maxRecordings) * 100),
-            monthlyExports: Math.round((capabilities.currentUsage.monthlyExports / capabilities.maxMonthlyExports) * 100),
-            teamMembers: Math.round((capabilities.currentUsage.teamMembers / capabilities.maxTeamMembers) * 100)
+            testSuites: capabilities.maxTestSuites > 0 ? Math.round((capabilities.currentUsage.testSuites / capabilities.maxTestSuites) * 100) : 0,
+            testScripts: capabilities.maxTestScripts > 0 ? Math.round((capabilities.currentUsage.testScripts / capabilities.maxTestScripts) * 100) : 0,
+            automatedTests: capabilities.maxAutomatedTests > 0 ? Math.round((capabilities.currentUsage.automatedTests / capabilities.maxAutomatedTests) * 100) : 0,
+            recordings: capabilities.maxRecordings > 0 ? Math.round((capabilities.currentUsage.recordings / capabilities.maxRecordings) * 100) : 0,
+            monthlyExports: capabilities.maxMonthlyExports > 0 ? Math.round((capabilities.currentUsage.monthlyExports / capabilities.maxMonthlyExports) * 100) : 0,
+            teamMembers: capabilities.maxTeamMembers > 0 ? Math.round((capabilities.currentUsage.teamMembers / capabilities.maxTeamMembers) * 100) : 0,
         };
 
         return { success: true, data: capabilities };
     } catch (error) {
-        console.error('Error getting user capabilities:', error);
-        return { success: false, error: { message: error.message } };
+        console.error('Error getting user capabilities:', firestoreService.handleFirestoreError(error));
+        return { success: false, error: firestoreService.handleFirestoreError(error) };
     }
 };
 
-/**
- * Get default capabilities based on account type
- * @param {string} accountType - Account type ('individual' or 'organization')
- * @returns {Object} Default capabilities object
- */
 export const getDefaultCapabilities = (accountType = 'individual') => {
     const baseCapabilities = {
-        maxSuites: accountType === 'individual' ? 5 : 50,
         maxTestSuites: accountType === 'individual' ? 5 : 50,
         maxTestScripts: accountType === 'individual' ? 20 : 500,
         maxAutomatedTests: accountType === 'individual' ? 10 : 200,
@@ -683,10 +552,14 @@ export const getDefaultCapabilities = (accountType = 'individual') => {
         canCreateRecordings: true,
         canCreateTestScripts: true,
         maxStorageGB: accountType === 'individual' ? 1 : 10,
-        supportLevel: accountType === 'individual' ? 'community' : 'email'
+        supportLevel: accountType === 'individual' ? 'community' : 'email',
     };
 
     return { success: true, data: baseCapabilities };
+};
+
+export const cleanup = () => {
+    firestoreService.cleanup();
 };
 
 const accountService = {
@@ -709,7 +582,8 @@ const accountService = {
     getUserMonthlyExportCount,
     getUserUsageStats,
     getUserCapabilities,
-    getDefaultCapabilities
+    getDefaultCapabilities,
+    cleanup,
 };
 
 export default accountService;
@@ -734,5 +608,6 @@ export {
     getUserMonthlyExportCount,
     getUserUsageStats,
     getUserCapabilities,
-    getDefaultCapabilities
+    getDefaultCapabilities,
+    cleanup,
 };

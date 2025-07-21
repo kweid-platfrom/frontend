@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { toast } from 'sonner';
+import { useApp } from '@/contexts/AppProvider';
 import {
     Edit3,
     Copy,
@@ -38,7 +38,11 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
                         ? value.map((v) => validOptions.find((o) => o.value === v)?.label).filter(Boolean).join(', ')
                         : placeholder}
                 </span>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                {isOpen ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                )}
             </div>
             {isOpen && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
@@ -52,7 +56,7 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
                                 <input
                                     type="checkbox"
                                     checked={value.includes(option.value)}
-                                    onChange={() => { }}
+                                    onChange={() => {}}
                                     className="mr-2"
                                 />
                                 <span className="truncate">{option.label}</span>
@@ -70,8 +74,7 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
 const TestCaseTable = ({
     testCases = [],
     bugs = [],
-    relationships = {}, // This should be the testCaseToBugs object from the parent
-    filters = {}, // Added filters prop to handle filtering
+    relationships = { testCaseToBugs: {} },
     loading,
     onEdit,
     onDelete,
@@ -81,28 +84,21 @@ const TestCaseTable = ({
     onRun,
     onLinkBug,
 }) => {
+    const { addNotification } = useApp();
     const [selectedIds, setSelectedIds] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
 
     const handleSelectAll = (checked) => {
         if (checked) {
             setSelectedIds(testCases.map((tc) => tc.id));
-            toast.info(`Selected all ${testCases.length} test cases`);
         } else {
             setSelectedIds([]);
-            toast.info('Cleared selection');
         }
     };
 
     const handleSelectItem = (id, checked) => {
         if (checked) {
-            setSelectedIds((prev) => {
-                const newSelection = [...prev, id];
-                if (newSelection.length === 1) {
-                    toast.info('1 test case selected');
-                }
-                return newSelection;
-            });
+            setSelectedIds((prev) => [...prev, id]);
         } else {
             setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id));
         }
@@ -114,46 +110,13 @@ const TestCaseTable = ({
             direction = 'desc';
         }
         setSortConfig({ key, direction });
-        toast.info(`Sorted by ${key} (${direction}ending)`);
     };
 
-    // Apply filters to test cases
-    const filteredTestCases = testCases.filter((testCase) => {
-        const matchesStatus = filters.status === 'all' || testCase.status === filters.status;
-        const matchesPriority = filters.priority === 'all' || testCase.priority === filters.priority;
-        const matchesAssignee = filters.assignee === 'all' || testCase.assignee === filters.assignee || (!testCase.assignee && filters.assignee === '');
-        const matchesTags = !filters.tags || filters.tags.length === 0 || (testCase.tags && filters.tags.every((tag) => testCase.tags.includes(tag)));
-        const matchesSearch = !filters.search || testCase.title.toLowerCase().includes(filters.search.toLowerCase());
-        const matchesExecutionType = !filters.executionType || filters.executionType === 'all' || testCase.executionType === filters.executionType;
-        const matchesAutomationStatus = !filters.automationStatus || filters.automationStatus === 'all' || testCase.automationStatus === filters.automationStatus;
-        const matchesLastUpdated = !filters.lastUpdated || filters.lastUpdated === 'all' || (() => {
-            const updatedAt = new Date(testCase.updated_at);
-            const now = new Date();
-            if (filters.lastUpdated === 'today') return updatedAt.toDateString() === now.toDateString();
-            if (filters.lastUpdated === 'week') return updatedAt >= new Date(now.setDate(now.getDate() - 7));
-            if (filters.lastUpdated === 'month') return updatedAt >= new Date(now.setDate(now.getDate() - 30));
-            if (filters.lastUpdated === 'quarter') return updatedAt >= new Date(now.setDate(now.getDate() - 90));
-            return true;
-        })();
-
-        return (
-            matchesStatus &&
-            matchesPriority &&
-            matchesAssignee &&
-            matchesTags &&
-            matchesSearch &&
-            matchesExecutionType &&
-            matchesAutomationStatus &&
-            matchesLastUpdated
-        );
-    });
-
-    const sortedTestCases = [...filteredTestCases].sort((a, b) => {
+    const sortedTestCases = [...testCases].sort((a, b) => {
         if (sortConfig.key) {
             const aValue = a[sortConfig.key];
             const bValue = b[sortConfig.key];
             if (sortConfig.key === 'updated_at') {
-                // Handle date sorting
                 const aDate = aValue instanceof Date ? aValue : new Date(aValue);
                 const bDate = bValue instanceof Date ? bValue : new Date(bValue);
                 if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
@@ -172,8 +135,10 @@ const TestCaseTable = ({
     });
 
     const handleDelete = (testCaseId, testCaseTitle) => {
-        toast.custom(
-            (t) => (
+        addNotification({
+            type: 'custom',
+            title: 'Delete Test Case',
+            message: (
                 <div className="flex flex-col gap-2 p-4 bg-white border border-gray-300 rounded-lg shadow-sm">
                     <div className="flex items-center gap-2">
                         <Trash2 className="w-4 h-4 text-red-600" />
@@ -183,7 +148,6 @@ const TestCaseTable = ({
                     <div className="flex gap-2 mt-2">
                         <button
                             onClick={() => {
-                                toast.dismiss(t);
                                 if (onDelete) onDelete(testCaseId);
                             }}
                             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
@@ -191,7 +155,7 @@ const TestCaseTable = ({
                             Delete
                         </button>
                         <button
-                            onClick={() => toast.dismiss(t)}
+                            onClick={() => {}}
                             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                         >
                             Cancel
@@ -199,8 +163,8 @@ const TestCaseTable = ({
                     </div>
                 </div>
             ),
-            { duration: Infinity }
-        );
+            persistent: true,
+        });
     };
 
     const handleDuplicate = (testCase) => {
@@ -218,7 +182,7 @@ const TestCaseTable = ({
             archived: 'bg-gray-100 text-gray-800 border-gray-200',
             deprecated: 'bg-red-100 text-red-800 border-red-200',
         };
-        return statusConfig[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
     const getPriorityBadge = (priority) => {
@@ -227,7 +191,7 @@ const TestCaseTable = ({
             medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
             low: 'bg-blue-100 text-blue-800 border-blue-200',
         };
-        return priorityConfig[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
     const getSortIcon = (columnKey) => {
@@ -247,9 +211,9 @@ const TestCaseTable = ({
 
     const bugOptions = Array.isArray(bugs)
         ? bugs.map((bug) => ({
-            value: bug.id || bug.bugId || `bug_${Math.random().toString(36).slice(2)}`,
-            label: bug.title || `Bug ${bug.id?.slice(-6) || bug.bugId?.slice(-6) || 'Unknown'}`,
-        }))
+              value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
+              label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
+          }))
         : [];
 
     return (
@@ -290,7 +254,7 @@ const TestCaseTable = ({
                         <tr>
                             <th className="px-6 py-3 text-left border-r border-gray-200">
                                 <div className="flex items-center">
-                                    {selectedIds.length === filteredTestCases.length ? (
+                                    {selectedIds.length === testCases.length && testCases.length > 0 ? (
                                         <CheckSquare
                                             className="w-4 h-4 text-teal-600 cursor-pointer"
                                             onClick={() => handleSelectAll(false)}
@@ -363,7 +327,7 @@ const TestCaseTable = ({
                                     Loading test cases...
                                 </td>
                             </tr>
-                        ) : filteredTestCases.length === 0 ? (
+                        ) : sortedTestCases.length === 0 ? (
                             <tr>
                                 <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                                     No test cases found
@@ -372,9 +336,8 @@ const TestCaseTable = ({
                         ) : (
                             sortedTestCases.map((testCase) => {
                                 const updatedAt = testCase.updated_at instanceof Date ? testCase.updated_at : new Date(testCase.updated_at);
-                                // Get linked bugs for this test case from the relationships object
-                                const linkedBugs = relationships[testCase.id] || [];
-                                
+                                const linkedBugs = relationships.testCaseToBugs[testCase.id] || [];
+
                                 return (
                                     <tr key={testCase.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">

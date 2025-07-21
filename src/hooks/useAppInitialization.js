@@ -1,3 +1,4 @@
+// hooks/useAppInitialization.js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useCallback, useEffect } from 'react';
 
@@ -46,11 +47,17 @@ export const useAppInitialization = (
                 });
             };
 
+            // Wait for all required context data
             await Promise.allSettled([
-                createTimeoutPromise(() => userProfile.userProfile),
+                createTimeoutPromise(() => userProfile.isProfileLoaded && userProfile.userProfile),
                 createTimeoutPromise(() => subscription.subscriptionStatus),
-                createTimeoutPromise(() => suite.suites),
+                createTimeoutPromise(() => suite.suites && suite.activeSuite),
             ]);
+
+            // Validate all required data is present
+            if (!userProfile.userProfile || !subscription.subscriptionStatus || !suite.activeSuite) {
+                throw new Error('Incomplete context: Missing user profile, subscription, or active suite');
+            }
 
             if (subscription.subscriptionStatus?.capabilities) {
                 setFeatureFlags((prev) => ({
@@ -90,7 +97,21 @@ export const useAppInitialization = (
         } finally {
             setGlobalLoading(false);
         }
-    }, [NO_AUTH_CHECK_PAGES, pathname, isAuthenticated, setIsInitialized, setGlobalLoading, subscription.subscriptionStatus, setError, userProfile.userProfile, suite.suites, setFeatureFlags, setAppPreferences, addNotification]);
+    }, [
+        pathname,
+        isAuthenticated,
+        userProfile.isProfileLoaded,
+        userProfile.userProfile,
+        subscription.subscriptionStatus,
+        suite.suites,
+        suite.activeSuite,
+        setIsInitialized,
+        setGlobalLoading,
+        setError,
+        setFeatureFlags,
+        setAppPreferences,
+        addNotification,
+    ]);
 
     useEffect(() => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
@@ -109,5 +130,5 @@ export const useAppInitialization = (
         }
 
         initializeApp();
-    }, [isAuthenticated, initializeApp, pathname, NO_AUTH_CHECK_PAGES, setIsInitialized, setGlobalLoading, setError]);
+    }, [isAuthenticated, pathname, initializeApp]);
 };

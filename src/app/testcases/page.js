@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useApp } from '@/contexts/AppProvider';
+import { useApp, useAppEntityData } from '@/contexts/AppProvider';
 import { useSuite } from '@/contexts/SuiteContext';
-import { useEntitySync } from '@/hooks/useEntitySync';
 import PageLayout from '@/components/layout/PageLayout';
 import TestCaseTable from '@/components/testCase/TestCaseTable';
 import TestCaseList from '@/components/testCase/TestCaseList';
@@ -13,28 +12,23 @@ import FilterBar from '@/components/testCase/FilterBar';
 import ImportModal from '@/components/testCase/ImportModal';
 import AIGenerationModal from '@/components/testCase/AIGenerationModal';
 import TraceabilityMatrix from '@/components/testCase/TraceabilityMatrix';
-import firestoreService from '@/services/firestoreService';
-import { where, Timestamp } from 'firebase/firestore';
-import { toast } from 'sonner';
-
-const notify = (type, title, message, persistent = false) => {
-    toast[type](title, {
-        description: message,
-        duration: persistent ? 0 : 5000,
-    });
-};
 
 function TestCasesPageContent() {
-    const { user, isLoading: appLoading } = useApp();
+    const { user, isLoading: appLoading, addNotification } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
-    const [testCases, setTestCases] = useState([]);
-    const [bugs, setBugs] = useState([]);
-    const [recordings, setRecordings] = useState([]);
-    const [relationships, setRelationships] = useState({
-        testCaseToBugs: {},
-        bugToRecordings: {},
-        requirementToTestCases: {},
-    });
+    const {
+        testCases,
+        bugs,
+        recordings,
+        relationships,
+        createTestCase,
+        updateTestCase,
+        deleteTestCase,
+        linkBugToTestCase,
+        unlinkBugFromTestCase,
+        isLoadingEntities,
+        entityError,
+    } = useAppEntityData();
     const [filteredTestCases, setFilteredTestCases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
@@ -42,47 +36,45 @@ function TestCasesPageContent() {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
-    const [viewMode, setViewMode] = useState('table'); // Default to table view
-    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+    const [viewMode, setViewMode] = useState('table');
+
     const [filters, setFilters] = useState({
+        search: '',
         status: 'all',
         priority: 'all',
         assignee: 'all',
         tags: [],
-        search: '',
         executionType: 'all',
         automationStatus: 'all',
         lastUpdated: 'all',
     });
 
+    console.log('TestCasesPage Data:', {
+        testCasesLength: testCases?.length,
+        bugsLength: bugs?.length,
+        recordingsLength: recordings?.length,
+        relationships,
+        isLoadingEntities,
+        entityError,
+        activeSuiteId: activeSuite?.id,
+        userId: user?.uid,
+    });
+
     const handleError = useCallback(
         (error, context) => {
             console.error(`Error in ${context}:`, error);
-            notify('error', 'Error', `Failed to ${context}: ${error.message}`, true);
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to ${context}: ${error.message}`,
+                persistent: true,
+            });
         },
-        []
-    );
-
-    // Get orgId and accountType
-    const orgId = activeSuite?.organizationId || user?.organizationId || null;
-    const accountType = activeSuite?.accountType || user?.accountType || 'individual';
-
-    // Use the hook with proper parameters
-    useEntitySync(
-        !appLoading && !suiteLoading && !!activeSuite?.id && !!user?.uid,
-        activeSuite?.id,
-        orgId,
-        accountType,
-        setTestCases,
-        setBugs,
-        setRecordings,
-        setRelationships,
-        handleError
+        [addNotification]
     );
 
     const applyFilters = useCallback(() => {
-        console.log('Applying filters to testCases:', { testCases, filters });
-        let filtered = [...testCases];
+        let filtered = [...(testCases || [])];
 
         if (filters.search) {
             filtered = filtered.filter((tc) =>
@@ -130,105 +122,88 @@ function TestCasesPageContent() {
             });
         }
 
-        console.log('Filtered testCases:', { filtered, count: filtered.length });
         setFilteredTestCases(filtered);
     }, [testCases, filters]);
 
     const handleSaveTestCase = useCallback(
         async (testCaseData) => {
             try {
-                let testCasesCollectionPath;
-                if (accountType === 'individual') {
-                    testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
-                } else {
-                    testCasesCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/testCases`;
+                if (!activeSuite?.id) {
+                    throw new Error('No active test suite selected');
                 }
-
-                const timestamp = Timestamp.fromDate(new Date());
-                console.log('Saving test case:', { ...testCaseData, updated_at: timestamp });
-
+                const timestamp = new Date();
                 if (selectedTestCase) {
-                    await firestoreService.updateDocument(testCasesCollectionPath, selectedTestCase.id, {
+                    console.log('Updating test case:', selectedTestCase.id, testCaseData);
+                    await updateTestCase(selectedTestCase.id, {
                         ...testCaseData,
                         updated_at: timestamp,
                         created_by: user?.email || 'anonymous',
                         suite_id: activeSuite.id,
                     });
+                    addNotification({
+                        type: 'success',
+                        title: 'Success',
+                        message: 'Test case updated successfully',
+                    });
                 } else {
-                    await firestoreService.createDocument(testCasesCollectionPath, {
+                    console.log('Creating test case:', testCaseData);
+                    await createTestCase({
                         ...testCaseData,
                         created_at: timestamp,
                         updated_at: timestamp,
                         suite_id: activeSuite.id,
                         created_by: user?.email || 'anonymous',
                     });
+                    addNotification({
+                        type: 'success',
+                        title: 'Success',
+                        message: 'Test case created successfully',
+                    });
                 }
-                notify(
-                    'success',
-                    'Success',
-                    selectedTestCase ? 'Test case updated successfully' : 'Test case created successfully'
-                );
                 setIsModalOpen(false);
             } catch (error) {
                 handleError(error, 'save test case');
             }
         },
-        [activeSuite, selectedTestCase, user, handleError, accountType, orgId]
+        [activeSuite, selectedTestCase, user, handleError, createTestCase, updateTestCase, addNotification]
     );
 
     const handleLinkBug = useCallback(
         async (testCaseId, newBugIds) => {
             try {
-                let relationshipsCollectionPath;
-                if (accountType === 'individual') {
-                    relationshipsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/relationships`;
-                } else {
-                    relationshipsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/relationships`;
+                if (!activeSuite?.id) {
+                    throw new Error('No active test suite selected');
                 }
-
                 const existingBugs = relationships.testCaseToBugs[testCaseId] || [];
                 const toAdd = newBugIds.filter((id) => !existingBugs.includes(id));
                 const toRemove = existingBugs.filter((id) => !newBugIds.includes(id));
-                const promises = [];
 
-                toAdd.forEach((bugId) => {
-                    promises.push(
-                        firestoreService.createDocument(relationshipsCollectionPath, {
-                            suiteId: activeSuite.id,
-                            sourceType: 'testCase',
-                            sourceId: testCaseId,
-                            targetType: 'bug',
-                            targetId: bugId,
-                            created_at: Timestamp.fromDate(new Date()),
-                            created_by: user?.email || 'anonymous',
-                        })
-                    );
+                console.log('Linking bugs:', { testCaseId, toAdd, toRemove });
+
+                await Promise.all([
+                    ...toAdd.map((bugId) => linkBugToTestCase(testCaseId, bugId)),
+                    ...toRemove.map((bugId) => unlinkBugFromTestCase(testCaseId, bugId)),
+                ]);
+
+                addNotification({
+                    type: 'success',
+                    title: 'Success',
+                    message: `Linked ${newBugIds.length} bug${newBugIds.length > 1 ? 's' : ''} to test case`,
                 });
-
-                toRemove.forEach((bugId) => {
-                    promises.push(
-                        firestoreService.deleteDocumentByQuery(relationshipsCollectionPath, [
-                            where('suiteId', '==', activeSuite.id),
-                            where('sourceType', '==', 'testCase'),
-                            where('sourceId', '==', testCaseId),
-                            where('targetType', '==', 'bug'),
-                            where('targetId', '==', bugId),
-                        ])
-                    );
-                });
-
-                await Promise.all(promises);
-                notify('success', 'Success', `Linked ${newBugIds.length} bug${newBugIds.length > 1 ? 's' : ''} to test case`);
             } catch (error) {
                 handleError(error, 'link bugs');
             }
         },
-        [activeSuite, relationships, user, handleError, accountType, orgId]
+        [activeSuite, relationships, handleError, linkBugToTestCase, unlinkBugFromTestCase, addNotification]
     );
 
     const handleCreateTestCase = () => {
         if (!activeSuite?.id) {
-            notify('error', 'Error', 'Please select a test suite first');
+            addNotification({
+                type: 'error',
+                title: 'Error',
+                message: 'Please select a test suite first',
+            });
             return;
         }
         setSelectedTestCase(null);
@@ -242,15 +217,16 @@ function TestCasesPageContent() {
 
     const handleDeleteTestCase = async (id) => {
         try {
-            let testCasesCollectionPath;
-            if (accountType === 'individual') {
-                testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
-            } else {
-                testCasesCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/testCases`;
+            if (!activeSuite?.id) {
+                throw new Error('No active test suite selected');
             }
-
-            await firestoreService.deleteDocument(testCasesCollectionPath, id);
-            notify('success', 'Success', 'Test case deleted successfully');
+            console.log('Deleting test case:', id);
+            await deleteTestCase(id);
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: 'Test case deleted successfully',
+            });
         } catch (error) {
             handleError(error, 'delete test case');
         }
@@ -258,25 +234,24 @@ function TestCasesPageContent() {
 
     const handleDuplicateTestCase = async (testCase) => {
         try {
-            let testCasesCollectionPath;
-            if (accountType === 'individual') {
-                testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
-            } else {
-                testCasesCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/testCases`;
+            if (!activeSuite?.id) {
+                throw new Error('No active test suite selected');
             }
-
-            const timestamp = Timestamp.fromDate(new Date());
-            const duplicatedTestCase = {
+            const timestamp = new Date();
+            console.log('Duplicating test case:', testCase.id);
+            await createTestCase({
                 ...testCase,
                 title: `${testCase.title} (Copy)`,
                 created_at: timestamp,
                 updated_at: timestamp,
                 suite_id: activeSuite.id,
                 created_by: user?.email || 'anonymous',
-            };
-            console.log('Duplicating test case:', duplicatedTestCase);
-            await firestoreService.createDocument(testCasesCollectionPath, duplicatedTestCase);
-            notify('success', 'Success', 'Test case duplicated successfully');
+            });
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: 'Test case duplicated successfully',
+            });
         } catch (error) {
             handleError(error, 'duplicate test case');
         }
@@ -284,20 +259,17 @@ function TestCasesPageContent() {
 
     const handleBulkAction = async (action, selectedIds) => {
         try {
-            let testCasesCollectionPath;
-            if (accountType === 'individual') {
-                testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
-            } else {
-                testCasesCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/testCases`;
+            if (!activeSuite?.id) {
+                throw new Error('No active test suite selected');
             }
-
-            const timestamp = Timestamp.fromDate(new Date());
+            console.log('Performing bulk action:', action, selectedIds);
             if (action === 'delete') {
-                await Promise.all(selectedIds.map((id) => firestoreService.deleteDocument(testCasesCollectionPath, id)));
+                await Promise.all(selectedIds.map((id) => deleteTestCase(id)));
             } else {
+                const timestamp = new Date();
                 await Promise.all(
                     selectedIds.map((id) =>
-                        firestoreService.updateDocument(testCasesCollectionPath, id, {
+                        updateTestCase(id, {
                             status: action,
                             updated_at: timestamp,
                             created_by: user?.email || 'anonymous',
@@ -305,7 +277,11 @@ function TestCasesPageContent() {
                     )
                 );
             }
-            notify('success', 'Success', `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} ${action}d`);
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} ${action}d`,
+            });
         } catch (error) {
             handleError(error, 'bulk action');
         }
@@ -314,28 +290,27 @@ function TestCasesPageContent() {
     const handleImportComplete = async (importedTestCases) => {
         setIsImportModalOpen(false);
         try {
-            let testCasesCollectionPath;
-            if (accountType === 'individual') {
-                testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
-            } else {
-                testCasesCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/testCases`;
+            if (!activeSuite?.id) {
+                throw new Error('No active test suite selected');
             }
-
-            const timestamp = Timestamp.fromDate(new Date());
+            console.log('Importing test cases:', importedTestCases.length);
+            const timestamp = new Date();
             await Promise.all(
-                importedTestCases.map((tc) => {
-                    const testCaseData = {
+                importedTestCases.map((tc) =>
+                    createTestCase({
                         ...tc,
                         created_at: timestamp,
                         updated_at: timestamp,
                         suite_id: activeSuite.id,
                         created_by: user?.email || 'anonymous',
-                    };
-                    console.log('Importing test case:', testCaseData);
-                    return firestoreService.createDocument(testCasesCollectionPath, testCaseData);
-                })
+                    })
+                )
             );
-            notify('success', 'Success', 'Test cases imported successfully');
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: 'Test cases imported successfully',
+            });
         } catch (error) {
             handleError(error, 'import test cases');
         }
@@ -344,78 +319,66 @@ function TestCasesPageContent() {
     const handleAIGenerationComplete = async (generatedTestCases) => {
         setIsAIModalOpen(false);
         try {
-            let testCasesCollectionPath;
-            if (accountType === 'individual') {
-                testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
-            } else {
-                testCasesCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.id}/testCases`;
+            if (!activeSuite?.id) {
+                throw new Error('No active test suite selected');
             }
-
-            const timestamp = Timestamp.fromDate(new Date());
+            console.log('Generating test cases:', generatedTestCases.length);
+            const timestamp = new Date();
             await Promise.all(
-                generatedTestCases.map((tc) => {
-                    const testCaseData = {
+                generatedTestCases.map((tc) =>
+                    createTestCase({
                         ...tc,
                         created_at: timestamp,
                         updated_at: timestamp,
                         suite_id: activeSuite.id,
                         created_by: user?.email || 'anonymous',
-                    };
-                    console.log('Generating test case:', testCaseData);
-                    return firestoreService.createDocument(testCasesCollectionPath, testCaseData);
-                })
+                    })
+                )
             );
-            notify('success', 'Success', `${generatedTestCases.length} test cases generated and saved`);
+            addNotification({
+                type: 'success',
+                title: 'Success',
+                message: `${generatedTestCases.length} test cases generated and saved`,
+            });
         } catch (error) {
             handleError(error, 'save generated test cases');
         }
     };
 
-    // Update loading state and track initial load
     useEffect(() => {
-        const isLoading = appLoading || suiteLoading || !initialLoadComplete;
-        console.log('TestCasesPage: Loading state updated', { 
-            appLoading, 
-            suiteLoading, 
-            initialLoadComplete,
-            testCasesLength: testCases.length,
-            filteredTestCasesLength: filteredTestCases.length,
-            isLoading 
-        });
-        setLoading(isLoading);
-        if (!appLoading && !suiteLoading && testCases.length > 0 && !initialLoadComplete) {
-            setInitialLoadComplete(true);
-        }
-    }, [appLoading, suiteLoading, testCases.length, initialLoadComplete, filteredTestCases.length]);
+        const isStillLoading = appLoading || suiteLoading || isLoadingEntities;
+        setLoading(isStillLoading);
+    }, [appLoading, suiteLoading, isLoadingEntities]);
 
-    // Apply filters when testCases or filters change
     useEffect(() => {
         applyFilters();
     }, [testCases, filters, applyFilters]);
 
-    // Debug viewMode changes
     useEffect(() => {
-        console.log('View mode changed:', { viewMode });
-        notify('info', 'View Changed', `Switched to ${viewMode} view`);
-    }, [viewMode]);
-
-    // Debug testCases and filteredTestCases
-    useEffect(() => {
-        console.log('TestCases state updated:', {
-            testCasesLength: testCases.length,
-            testCases: testCases.slice(0, 3),
-            filteredTestCasesLength: filteredTestCases.length,
-            filteredTestCases: filteredTestCases.slice(0, 3),
+        console.log('TestCasesPage: State updated', {
+            testCasesLength: testCases?.length,
+            filteredTestCasesLength: filteredTestCases?.length,
             activeSuiteId: activeSuite?.id,
             userId: user?.uid,
-            orgId,
-            accountType,
-            viewMode
+            viewMode,
+            isLoadingEntities,
+            entityError,
         });
-    }, [testCases, filteredTestCases, activeSuite?.id, user?.uid, orgId, accountType, viewMode]);
+    }, [testCases, filteredTestCases, activeSuite?.id, user?.uid, viewMode, isLoadingEntities, entityError]);
 
-    if (appLoading || suiteLoading) {
+    if (appLoading || suiteLoading || isLoadingEntities) {
         return <div>Loading...</div>;
+    }
+
+    if (entityError) {
+        console.warn('TestCasesPage: Entity error:', entityError);
+        return (
+            <PageLayout title="Test Cases" requiresTestSuite={true}>
+                <div className="text-center py-8">
+                    <p className="text-red-500">Error: {entityError}</p>
+                </div>
+            </PageLayout>
+        );
     }
 
     if (!activeSuite?.id) {
@@ -476,40 +439,40 @@ function TestCasesPageContent() {
                 />
 
                 <div key={viewMode} className="transition-opacity duration-300">
-                    {loading ? (
-                        <div className="text-center py-8 text-gray-500">Loading test cases...</div>
-                    ) : filteredTestCases.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            No test cases found. Try adjusting the filters or creating a new test case.
-                        </div>
-                    ) : viewMode === 'table' ? (
+                    {viewMode === 'table' ? (
                         <TestCaseTable
                             testCases={filteredTestCases}
                             bugs={bugs}
-                            relationships={relationships.testCaseToBugs}
-                            filters={filters}
+                            relationships={relationships}
                             loading={loading}
                             onEdit={handleEditTestCase}
                             onDelete={handleDeleteTestCase}
                             onDuplicate={handleDuplicateTestCase}
                             onBulkAction={handleBulkAction}
                             onView={handleEditTestCase}
-                            onRun={() => notify('info', 'Run', 'Run functionality not implemented yet')}
+                            onRun={() => addNotification({
+                                type: 'info',
+                                title: 'Run',
+                                message: 'Run functionality not implemented yet',
+                            })}
                             onLinkBug={handleLinkBug}
                         />
                     ) : (
                         <TestCaseList
                             testCases={filteredTestCases}
                             bugs={bugs}
-                            relationships={relationships.testCaseToBugs}
-                            filters={filters}
+                            relationships={relationships}
                             loading={loading}
                             onEdit={handleEditTestCase}
                             onDelete={handleDeleteTestCase}
                             onDuplicate={handleDuplicateTestCase}
                             onBulkAction={handleBulkAction}
                             onView={handleEditTestCase}
-                            onRun={() => notify('info', 'Run', 'Run functionality not implemented yet')}
+                            onRun={() => addNotification({
+                                type: 'info',
+                                title: 'Run',
+                                message: 'Run functionality not implemented yet',
+                            })}
                             onLinkBug={handleLinkBug}
                         />
                     )}

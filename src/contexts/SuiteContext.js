@@ -1,8 +1,8 @@
-'use client'
+'use client';
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { useUserProfile } from './userProfileContext';
-import { suiteService } from '../services/suiteService'; // Import suiteService
+import { suiteService } from '../services/suiteService'; // Assumed to wrap FirestoreService
 
 const SuiteContext = createContext();
 
@@ -21,7 +21,7 @@ export const SuiteProvider = ({ children }) => {
         isLoading: profileLoading,
         error: profileError,
         isNewUser,
-        isProfileLoaded
+        isProfileLoaded,
     } = useUserProfile();
 
     const [suites, setSuites] = useState([]);
@@ -35,7 +35,7 @@ export const SuiteProvider = ({ children }) => {
 
     const cache = useRef({
         suites: null,
-        timestamp: null
+        timestamp: null,
     });
 
     const isRegistering = useCallback(() => {
@@ -44,7 +44,7 @@ export const SuiteProvider = ({ children }) => {
 
     const isCacheValid = useCallback(() => {
         const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-        return cache.current.timestamp && (Date.now() - cache.current.timestamp) < CACHE_DURATION;
+        return cache.current.timestamp && Date.now() - cache.current.timestamp < CACHE_DURATION;
     }, []);
 
     const isAuthenticated = useMemo(() => {
@@ -56,50 +56,47 @@ export const SuiteProvider = ({ children }) => {
             console.log('shouldFetchSuites: false - registration in progress');
             return false;
         }
-
         if (!isAuthenticated) {
             console.log('shouldFetchSuites: false - user not authenticated or email not verified', {
                 user: !!user,
                 uid: !!user?.uid,
-                emailVerified: user?.emailVerified
+                emailVerified: user?.emailVerified,
             });
             return false;
         }
-
         if (isNewUser) {
             console.log('shouldFetchSuites: false - new user detected');
             return false;
         }
-
         if (!isProfileLoaded || profileLoading) {
             console.log('shouldFetchSuites: false - profile not loaded or loading', {
                 isProfileLoaded,
                 profileLoading,
-                hasProfile: !!userProfile
+                hasProfile: !!userProfile,
             });
             return false;
         }
-
         if (profileError) {
             console.log('shouldFetchSuites: false - profile error:', profileError);
             return false;
         }
-
         return true;
     }, [isRegistering, isAuthenticated, isNewUser, isProfileLoaded, profileLoading, profileError, user, userProfile]);
 
     const canCreateSuite = useMemo(() => {
         if (!isAuthenticated || !userProfile || isRegistering()) return false;
-
-        // Since useMemo can't handle async directly, we'll assume true for initial render
-        // and let the component handle async checks
-        return true;
+        return true; // Async check handled in createTestSuite
     }, [isAuthenticated, userProfile, isRegistering]);
 
     const getSuiteLimit = useCallback(async () => {
         if (isRegistering()) return 0;
-        const result = await suiteService.canCreateNewSuite(user.uid);
-        return result.maxAllowed;
+        try {
+            const result = await suiteService.canCreateNewSuite(user.uid);
+            return result.maxAllowed || 0;
+        } catch (error) {
+            console.error('Error getting suite limit:', error);
+            return 0;
+        }
     }, [isRegistering, user?.uid]);
 
     const fetchUserSuites = useCallback(async (userId = null, forceRefresh = false) => {
@@ -107,17 +104,15 @@ export const SuiteProvider = ({ children }) => {
             console.log('Skipping suite fetch - registration in progress');
             return [];
         }
-
         if (!userId || !shouldFetchSuites) {
             console.log('Skipping fetch - missing requirements:', {
                 userId: !!userId,
                 shouldFetchSuites,
                 isRegistering: isRegistering(),
-                isAuthenticated
+                isAuthenticated,
             });
             return [];
         }
-
         if (fetchingRef.current && !forceRefresh) {
             console.log('Already fetching, skipping...');
             return cache.current.suites || [];
@@ -135,19 +130,27 @@ export const SuiteProvider = ({ children }) => {
 
             console.log('Fetching suites for userId:', userId);
             const result = await suiteService.getUserSuites(userId);
-            if (!result.suites) {
-                throw new Error('Failed to fetch suites');
+            if (!result.success) {
+                throw new Error(result.error?.message || 'Failed to fetch suites');
             }
 
+            const userSuites = result.data.map(suite => ({
+                suite_id: suite.id, // Map FirestoreService id to suite_id
+                ...suite,
+            }));
+
             cache.current = {
-                suites: result.suites,
-                timestamp: Date.now()
+                suites: userSuites,
+                timestamp: Date.now(),
             };
 
-            return result.suites;
+            return userSuites;
         } catch (error) {
             console.error('Error fetching suites:', error);
-            setError(error.message);
+            const errorMessage = error.code === 'permission-denied'
+                ? 'You do not have permission to access test suites.'
+                : error.message || 'Failed to fetch test suites.';
+            setError(errorMessage);
             return cache.current.suites || [];
         } finally {
             setIsLoading(false);
@@ -160,7 +163,6 @@ export const SuiteProvider = ({ children }) => {
             console.log('Skipping active suite setting - registration in progress');
             return;
         }
-
         setActiveSuite(suite);
         if (suite?.suite_id && typeof window !== 'undefined') {
             localStorage.setItem('activeSuiteId', suite.suite_id);
@@ -168,6 +170,7 @@ export const SuiteProvider = ({ children }) => {
             localStorage.removeItem('activeSuiteId');
         }
     }, [isRegistering]);
+
     const refetchSuites = useCallback(async (forceRefresh = true) => {
         if (isRegistering()) {
             console.log('Skipping refetch - registration in progress');
@@ -185,52 +188,63 @@ export const SuiteProvider = ({ children }) => {
                 const savedSuiteId = localStorage.getItem('activeSuiteId');
                 const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
                 setActiveSuiteWithStorage(activeSuiteItem);
-                console.log('Set active suite:', activeSuiteItem.suite_id);
+                console.log('Set active suite:', activeSuiteItem?.suite_id);
             } else {
-                setActiveSuiteWithStorage(null); // Modal handled by page layout
+                setActiveSuiteWithStorage(null);
             }
         } catch (error) {
             console.error('Error refetching suites:', error);
             setError(`Failed to fetch test suites: ${error.message}`);
         }
-    }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isRegistering, isAuthenticated]);
+    }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isAuthenticated, isRegistering]);
 
     const createTestSuite = useCallback(async (suiteData) => {
         if (isRegistering()) {
             throw new Error('Cannot create test suites during registration');
         }
-
         if (!isAuthenticated) {
             throw new Error('User not authenticated or email not verified');
         }
-
         if (!userProfile) {
             throw new Error('User profile not loaded');
+        }
+        if (!suiteData.name) {
+            throw new Error('Suite name is required');
         }
 
         try {
             const canCreateResult = await suiteService.canCreateNewSuite(user.uid);
             if (!canCreateResult.canCreate) {
-                throw new Error(canCreateResult.message);
+                throw new Error(canCreateResult.message || 'Cannot create new suite due to limits');
             }
 
-            const result = await suiteService.createSuite(
-                suiteData,
-                user.uid,
-                { capabilities: { limits: { testSuites: canCreateResult.maxAllowed } } },
-                suiteData.organizationId
-            );
+            const formattedSuiteData = {
+                name: suiteData.name,
+                description: suiteData.description || '',
+                ownerType: suiteData.organizationId ? 'organization' : 'individual',
+                ownerId: suiteData.organizationId || user.uid,
+                tags: suiteData.tags || [],
+                settings: suiteData.settings || {},
+                access_control: {
+                    ownerType: suiteData.organizationId ? 'organization' : 'individual',
+                    ownerId: suiteData.organizationId || user.uid,
+                    admins: suiteData.access_control?.admins || [],
+                    members: suiteData.access_control?.members || [user.uid],
+                    permissions_matrix: suiteData.access_control?.permissions_matrix || {},
+                },
+            };
+
+            const result = await suiteService.createSuite(formattedSuiteData, user.uid, {
+                capabilities: { limits: { testSuites: canCreateResult.maxAllowed } },
+            });
 
             if (!result.success) {
-                throw new Error(result.error);
+                throw new Error(result.error?.message || 'Failed to create suite');
             }
 
             const newSuite = {
-                suite_id: result.suiteId,
-                ...result.suite,
-                accountType: suiteData.organizationId ? 'organization' : 'individual',
-                ownerId: suiteData.organizationId || user.uid,
-                organizationId: suiteData.organizationId
+                suite_id: result.docId, // Map FirestoreService docId to suite_id
+                ...result.data,
             };
 
             setSuites(prevSuites => [newSuite, ...prevSuites]);
@@ -240,13 +254,13 @@ export const SuiteProvider = ({ children }) => {
             setTimeout(() => refetchSuites(true), 100);
 
             console.log('Suite created successfully:', newSuite);
-            return {
-                suite_id: result.suiteId,
-                ...result.suite
-            };
+            return newSuite;
         } catch (error) {
             console.error('Error creating test suite:', error);
-            throw error;
+            const errorMessage = error.code === 'permission-denied'
+                ? 'You do not have permission to create a test suite.'
+                : error.message || 'Failed to create test suite.';
+            throw new Error(errorMessage);
         }
     }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, isRegistering, isAuthenticated]);
 
@@ -270,7 +284,7 @@ export const SuiteProvider = ({ children }) => {
 
     useEffect(() => {
         return () => {
-            // No direct Firestore cleanup needed since suiteService handles it
+            suiteService.cleanup(); // Cleanup Firestore subscriptions
         };
     }, []);
 
@@ -280,7 +294,7 @@ export const SuiteProvider = ({ children }) => {
                 suites: [],
                 userTestSuites: [],
                 activeSuite: null,
-                setActiveSuite: () => { },
+                setActiveSuite: () => {},
                 isLoading: false,
                 loading: false,
                 error: null,
@@ -290,7 +304,7 @@ export const SuiteProvider = ({ children }) => {
                 fetchUserSuites: () => Promise.resolve([]),
                 getSuiteLimit: () => 0,
                 shouldFetchSuites: false,
-                isAuthenticated: false
+                isAuthenticated: false,
             };
         }
 
@@ -308,7 +322,7 @@ export const SuiteProvider = ({ children }) => {
             fetchUserSuites,
             getSuiteLimit,
             shouldFetchSuites,
-            isAuthenticated
+            isAuthenticated,
         };
     }, [
         suites,
@@ -323,7 +337,7 @@ export const SuiteProvider = ({ children }) => {
         getSuiteLimit,
         shouldFetchSuites,
         isAuthenticated,
-        isRegistering
+        isRegistering,
     ]);
 
     return <SuiteContext.Provider value={value}>{children}</SuiteContext.Provider>;

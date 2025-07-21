@@ -1,3 +1,5 @@
+// hooks/useEntitySync.js
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useRef, useCallback } from 'react';
 import { where, orderBy } from 'firebase/firestore';
 import firestoreService from '../services/firestoreService';
@@ -12,65 +14,78 @@ export const useEntitySync = (
     setBugs,
     setRecordings,
     setRelationships,
-    handleError
+    handleError,
+    setIsLoading,
+    setIsInitialized
 ) => {
     const { checkSuiteAccess } = useSubscription();
     const isMounted = useRef(true);
     const unsubscribes = useRef([]);
     const previousSuiteId = useRef(null);
-    const accessCheckCache = useRef({});
     const initializationInProgress = useRef(false);
 
-    // Validate orgId and accountType
     const validOrgId = typeof orgId === 'function' ? orgId() : orgId;
     const validAccountType = typeof accountType === 'function' ? accountType() : accountType;
 
-    console.log('🔧 useEntitySync Parameter validation:', {
+    console.log('useEntitySync Params:', {
         isAuthenticated,
         activeSuiteId,
         orgId: validOrgId,
         accountType: validAccountType,
-        setters: {
-            setTestCases: typeof setTestCases === 'function',
-            setBugs: typeof setBugs === 'function',
-            setRecordings: typeof setRecordings === 'function',
-            setRelationships: typeof setRelationships === 'function',
-        },
+        hasCheckSuiteAccess: !!checkSuiteAccess,
     });
 
-    const getCollectionPath = useCallback((collectionName) => {
-        if (!validOrgId || !activeSuiteId) {
-            console.warn(`Invalid parameters for collection path: orgId=${validOrgId}, activeSuiteId=${activeSuiteId}`);
-            return null;
-        }
-        const path = validAccountType === 'individual'
-            ? `individualAccounts/${firestoreService.getCurrentUserId()}/testSuites/${activeSuiteId}/${collectionName}`
-            : `organizations/${validOrgId}/testSuites/${activeSuiteId}/${collectionName}`;
-        console.log(`Generated collection path for ${collectionName}: ${path}`);
-        return path;
-    }, [validAccountType, activeSuiteId, validOrgId]);
+    const getCollectionPath = useCallback(
+        (collectionName) => {
+            if (!validAccountType || !activeSuiteId) {
+                console.warn('Cannot generate path: invalid context', {
+                    validAccountType,
+                    activeSuiteId,
+                    validOrgId,
+                });
+                return '';
+            }
+
+            // For individual accounts, orgId can be null - that's expected
+            if (validAccountType === 'organization' && !validOrgId) {
+                console.warn('Cannot generate path: organization account missing orgId', {
+                    validAccountType,
+                    activeSuiteId,
+                    validOrgId,
+                });
+                return '';
+            }
+
+            const path =
+                validAccountType === 'individual'
+                    ? `individualAccounts/${firestoreService.getCurrentUserId()}/testSuites/${activeSuiteId}/${collectionName}`
+                    : `organizations/${validOrgId}/testSuites/${activeSuiteId}/${collectionName}`;
+
+            console.log('Generated collection path:', path);
+            return path;
+        },
+        [validAccountType, activeSuiteId, validOrgId]
+    );
 
     const resetState = useCallback(() => {
-        console.log('Resetting state for all entities');
-        if (typeof setTestCases === 'function') setTestCases([]);
-        if (typeof setBugs === 'function') setBugs([]);
-        if (typeof setRecordings === 'function') setRecordings([]);
-        if (typeof setRelationships === 'function') {
-            setRelationships({ 
-                testCaseToBugs: {}, 
-                bugToRecordings: {}, 
-                requirementToTestCases: {} 
-            });
-        }
-    }, [setTestCases, setBugs, setRecordings, setRelationships]);
+        console.log('Resetting entity state');
+        setTestCases([]);
+        setBugs([]);
+        setRecordings([]);
+        setRelationships({
+            testCaseToBugs: {},
+            bugToRecordings: {},
+            requirementToTestCases: {},
+        });
+        setIsLoading(false);
+        setIsInitialized(false);
+    }, [setTestCases, setBugs, setRecordings, setRelationships, setIsLoading, setIsInitialized]);
 
     const cleanupSubscriptions = useCallback(() => {
-        console.log('Cleaning up subscriptions', { count: unsubscribes.current.length });
+        console.log('Cleaning up subscriptions:', unsubscribes.current.length);
         unsubscribes.current.forEach((unsub) => {
             try {
-                if (unsub && typeof unsub === 'function') {
-                    unsub();
-                }
+                if (unsub && typeof unsub === 'function') unsub();
             } catch (error) {
                 console.warn('Error during subscription cleanup:', error);
             }
@@ -79,105 +94,56 @@ export const useEntitySync = (
         initializationInProgress.current = false;
     }, []);
 
-    const subscribeToCollection = useCallback((collectionConfig) => {
-        const { name, path, constraints, setter, transformData } = collectionConfig;
-        
-        if (!path) {
-            console.error(`No valid path for ${name} subscription`);
-            return false;
-        }
+    const subscribeToCollection = useCallback(
+        (collectionConfig) => {
+            const { name, path, constraints, setter, transformData } = collectionConfig;
+            if (!path) {
+                console.error(`No valid path for ${name} subscription`);
+                return false;
+            }
+            if (typeof setter !== 'function') {
+                console.error(`Setter for ${name} is not a function:`, setter);
+                return false;
+            }
 
-        if (typeof setter !== 'function') {
-            console.error(`Setter for ${name} is not a function:`, setter);
-            return false;
-        }
-        
-        try {
-            console.log(`Subscribing to ${name} at ${path}`);
-            
-            const unsubscribe = firestoreService.subscribeToCollection(
-                path,
-                constraints,
-                (snapshot) => {
-                    if (!isMounted.current) return;
-                    
-                    const data = snapshot.docs.map((doc) => {
-                        const docData = doc.data();
-                        const baseData = {
+            console.log(`Subscribing to ${name} at path:`, path, 'with constraints:', constraints);
+
+            try {
+                const unsubscribe = firestoreService.subscribeToCollection(
+                    path,
+                    constraints,
+                    (documents) => {
+                        if (!isMounted.current) return;
+                        console.log(`Received ${documents.length} ${name} documents:`, documents);
+                        const data = documents.map((doc) => ({
                             id: doc.id,
-                            ...docData,
-                            created_at: docData.created_at?.toDate ? docData.created_at.toDate() : new Date(),
-                            updated_at: docData.updated_at?.toDate ? docData.updated_at.toDate() : new Date(),
-                            title: docData.title || 'Untitled',
-                            status: docData.status || 'draft',
-                            priority: docData.priority || 'low',
-                            assignee: docData.assignee || '',
-                            tags: docData.tags || [],
-                            executionType: docData.executionType || 'manual',
-                            automationStatus: docData.automationStatus || 'none',
-                        };
-                        return transformData ? transformData(baseData) : baseData;
-                    });
-                    
-                    console.log(`Received ${data.length} ${name}`, data.slice(0, 3));
-                    setter(data);
-                },
-                (error) => {
-                    if (!isMounted.current) return;
-                    console.error(`Error subscribing to ${name}:`, error);
-                    if (typeof handleError === 'function') {
+                            ...doc,
+                            created_at: doc.created_at?.toDate ? doc.created_at.toDate() : new Date(),
+                            updated_at: doc.updated_at?.toDate ? doc.updated_at.toDate() : new Date(),
+                        }));
+                        setter(transformData ? transformData(data) : data);
+                    },
+                    (error) => {
+                        if (!isMounted.current) return;
+                        console.error(`Error subscribing to ${name}:`, error);
                         handleError(error, `${name} sync`);
                     }
-                }
-            );
+                );
 
-            if (unsubscribe) {
-                unsubscribes.current.push(unsubscribe);
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.error(`Error setting up subscription for ${name}:`, error);
-            if (typeof handleError === 'function') {
+                if (unsubscribe) {
+                    console.log(`Subscription active for ${name}`);
+                    unsubscribes.current.push(unsubscribe);
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error(`Error setting up subscription for ${name}:`, error);
                 handleError(error, `${name} subscription setup`);
+                return false;
             }
-            return false;
-        }
-    }, [handleError]);
-
-    const subscribeToRelationships = useCallback(() => {
-        const relationshipsPath = getCollectionPath('relationships');
-        if (!relationshipsPath) return false;
-
-        return subscribeToCollection({
-            name: 'relationships',
-            path: relationshipsPath,
-            constraints: [where('suiteId', '==', activeSuiteId), orderBy('created_at', 'desc')],
-            setter: (data) => {
-                const newRelationships = {
-                    testCaseToBugs: {},
-                    bugToRecordings: {},
-                    requirementToTestCases: {},
-                };
-                
-                data.forEach((doc) => {
-                    const { sourceType, sourceId, targetType, targetId } = doc;
-                    if (sourceType && sourceId && targetType && targetId) {
-                        const key = `${sourceType}To${targetType.charAt(0).toUpperCase() + targetType.slice(1)}`;
-                        if (!newRelationships[key]) newRelationships[key] = {};
-                        if (!newRelationships[key][sourceId]) newRelationships[key][sourceId] = [];
-                        newRelationships[key][sourceId].push(targetId);
-                    }
-                });
-                
-                console.log('Received relationships data:', newRelationships);
-                if (typeof setRelationships === 'function') {
-                    setRelationships(newRelationships);
-                }
-            },
-            transformData: (data) => data
-        });
-    }, [getCollectionPath, activeSuiteId, setRelationships, subscribeToCollection]);
+        },
+        [handleError]
+    );
 
     const initializeSubscriptions = useCallback(async () => {
         if (initializationInProgress.current) {
@@ -185,165 +151,130 @@ export const useEntitySync = (
             return;
         }
 
+        if (!isAuthenticated || !activeSuiteId || !validAccountType || !validOrgId) {
+            console.warn('Skipping subscriptions due to invalid parameters:', {
+                isAuthenticated,
+                activeSuiteId,
+                validAccountType,
+                validOrgId,
+            });
+            resetState();
+            cleanupSubscriptions();
+            return;
+        }
+
         initializationInProgress.current = true;
+        setIsLoading(true);
 
         try {
             const userId = firestoreService.getCurrentUserId();
             if (!userId) {
-                console.error('No user ID available');
-                if (typeof handleError === 'function') {
-                    handleError(new Error('No user ID available.'), 'user authentication');
-                }
-                return;
+                throw new Error('No user ID available');
             }
 
-            console.log('🔍 Access Check Details:', {
-                userId,
-                activeSuiteId,
-                accountType: validAccountType,
-                orgId: validOrgId,
-                isAuthenticated
-            });
-
-            const cacheKey = `${userId}_${activeSuiteId}`;
-            let hasSuiteAccess = accessCheckCache.current[cacheKey];
-            
-            if (hasSuiteAccess === undefined) {
-                console.log(`🔐 Checking access for suite ${activeSuiteId} (user: ${userId})`);
-                
-                try {
-                    hasSuiteAccess = await checkSuiteAccess(userId, activeSuiteId);
-                    console.log(`🔐 Access check result: ${hasSuiteAccess}`);
-                    
-                    if (hasSuiteAccess) {
-                        accessCheckCache.current[cacheKey] = hasSuiteAccess;
-                        setTimeout(() => {
-                            delete accessCheckCache.current[cacheKey];
-                        }, 5 * 60 * 1000);
-                    }
-                } catch (accessError) {
-                    console.error('🔐 Error during access check:', accessError);
-                    hasSuiteAccess = false;
-                    if (typeof handleError === 'function') {
-                        handleError(accessError, 'suite access');
-                    }
-                }
-            } else {
-                console.log(`🔐 Using cached access result: ${hasSuiteAccess}`);
+            const hasAccess = await checkSuiteAccess(activeSuiteId);
+            if (!hasAccess) {
+                throw new Error('Access denied for suite');
             }
 
-            if (!hasSuiteAccess) {
-                console.error(`❌ Access denied to suite ${activeSuiteId}`, {
-                    userId,
-                    accountType: validAccountType,
-                    orgId: validOrgId,
-                    isAuthenticated,
-                });
-                if (typeof handleError === 'function') {
-                    handleError(new Error(`Access denied to suite ${activeSuiteId}. Please check your permissions.`), 'suite access');
-                }
-                return;
-            }
-
-            console.log(`✅ Access granted to suite ${activeSuiteId}`);
+            cleanupSubscriptions();
 
             const collections = [
-                { 
-                    name: 'testCases', 
-                    path: getCollectionPath('testCases'), 
+                {
+                    name: 'testCases',
+                    path: getCollectionPath('testCases'),
                     constraints: [orderBy('created_at', 'desc')],
-                    setter: setTestCases 
+                    setter: setTestCases,
+                    transformData: null,
                 },
-                { 
-                    name: 'bugs', 
-                    path: getCollectionPath('bugs'), 
+                {
+                    name: 'bugs',
+                    path: getCollectionPath('bugs'),
                     constraints: [orderBy('created_at', 'desc')],
-                    setter: setBugs 
+                    setter: setBugs,
+                    transformData: null,
                 },
-                { 
-                    name: 'recordings', 
-                    path: getCollectionPath('recordings'), 
+                {
+                    name: 'recordings',
+                    path: getCollectionPath('recordings'),
                     constraints: [orderBy('created_at', 'desc')],
-                    setter: setRecordings 
+                    setter: setRecordings,
+                    transformData: null,
+                },
+                {
+                    name: 'relationships',
+                    path: getCollectionPath('relationships'),
+                    constraints: [where('suiteId', '==', activeSuiteId), orderBy('created_at', 'desc')],
+                    setter: setRelationships,
+                    transformData: (data) => {
+                        const relationshipsData = {
+                            testCaseToBugs: {},
+                            bugToRecordings: {},
+                            requirementToTestCases: {},
+                        };
+                        data.forEach((doc) => {
+                            if (doc.type === 'testCase_bug') {
+                                relationshipsData.testCaseToBugs[doc.testCaseId] = doc.bugIds || [];
+                            } else if (doc.type === 'bug_recording') {
+                                relationshipsData.bugToRecordings[doc.bugId] = doc.recordingIds || [];
+                            } else if (doc.type === 'requirement_testCase') {
+                                relationshipsData.requirementToTestCases[doc.requirementId] = doc.testCaseIds || [];
+                            }
+                        });
+                        return relationshipsData;
+                    },
                 },
             ];
 
-            const subscriptionPromises = collections.map(collection => 
-                subscribeToCollection(collection)
-            );
-            subscriptionPromises.push(subscribeToRelationships());
-
-            const results = await Promise.allSettled(subscriptionPromises);
-            const failedSubscriptions = results.filter(result => result.status === 'rejected' || !result.value);
-            
-            if (failedSubscriptions.length > 0) {
-                console.warn(`${failedSubscriptions.length} subscriptions failed to initialize`, failedSubscriptions);
-            } else {
-                console.log('🎉 All subscriptions initialized successfully');
-            }
+            collections.forEach((config) => subscribeToCollection(config));
+            setIsInitialized(true);
         } catch (error) {
-            if (isMounted.current) {
-                console.error('Error in subscription initialization:', error);
-                if (typeof handleError === 'function') {
-                    handleError(error, 'subscription initialization');
-                }
-            }
+            handleError(error, 'initialize subscriptions');
+            resetState();
+            cleanupSubscriptions();
         } finally {
+            setIsLoading(false);
             initializationInProgress.current = false;
         }
     }, [
-        activeSuiteId, 
-        handleError, 
-        checkSuiteAccess, 
-        getCollectionPath, 
-        setTestCases, 
-        setBugs, 
-        setRecordings, 
-        subscribeToCollection,
-        subscribeToRelationships,
-        validAccountType,
+        isAuthenticated,
+        activeSuiteId,
         validOrgId,
-        isAuthenticated
+        validAccountType,
+        checkSuiteAccess,
+        getCollectionPath,
+        resetState,
+        cleanupSubscriptions,
+        setTestCases,
+        setBugs,
+        setRecordings,
+        setRelationships,
+        handleError,
+        setIsLoading,
+        setIsInitialized,
     ]);
 
     useEffect(() => {
-        if (!isMounted.current) return;
-
-        if (activeSuiteId !== previousSuiteId.current) {
-            console.log(`🔄 Suite changed from ${previousSuiteId.current} to ${activeSuiteId}`);
+        if (!isAuthenticated || !activeSuiteId || !validAccountType || !validOrgId) {
+            console.log('Invalid context, resetting state');
+            resetState();
             cleanupSubscriptions();
-            resetState();
-            previousSuiteId.current = activeSuiteId;
-            accessCheckCache.current = {};
-        }
-
-        if (!isAuthenticated || !activeSuiteId || !validOrgId) {
-            console.warn('⚠️ Missing required parameters for entity sync:', {
-                isAuthenticated,
-                activeSuiteId,
-                orgId: validOrgId
-            });
-            resetState();
             return;
         }
 
-        const timeoutId = setTimeout(() => {
-            if (isMounted.current) {
-                initializeSubscriptions();
-            }
-        }, 100);
-
-        return () => {
-            clearTimeout(timeoutId);
+        if (previousSuiteId.current !== activeSuiteId) {
+            console.log('Suite ID changed:', { previous: previousSuiteId.current, current: activeSuiteId });
+            resetState();
             cleanupSubscriptions();
-        };
-    }, [isAuthenticated, activeSuiteId, validOrgId, validAccountType, cleanupSubscriptions, resetState, initializeSubscriptions]);
+            initializeSubscriptions();
+            previousSuiteId.current = activeSuiteId;
+        } else {
+            initializeSubscriptions();
+        }
 
-    useEffect(() => {
-        isMounted.current = true;
         return () => {
             isMounted.current = false;
             cleanupSubscriptions();
         };
-    }, [cleanupSubscriptions]);
+    }, [isAuthenticated, activeSuiteId, validAccountType, validOrgId, initializeSubscriptions, resetState, cleanupSubscriptions]);
 };

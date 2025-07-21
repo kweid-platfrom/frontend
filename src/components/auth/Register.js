@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import accountService from '../../services/accountService';
+import { clearRegistrationState, handlePostVerification, setupAccount } from '../../services/accountSetup'; // Added setupAccount import
 import { validateEmailForAccountType, getEmailDomainInfo, suggestAccountType } from '../../utils/emailDomainValidator';
 import { FcGoogle } from 'react-icons/fc';
 import AccountTypeStep from './reg/AccountTypeStep';
@@ -26,9 +26,7 @@ const GoogleSignUp = ({ onGoogleRegister, loading }) => {
             ) : (
                 <FcGoogle className="w-5 h-5" />
             )}
-            <span>
-                {loading ? 'Signing up with Google...' : 'Continue with Google'}
-            </span>
+            <span>{loading ? 'Signing up with Google...' : 'Continue with Google'}</span>
         </button>
     );
 };
@@ -39,7 +37,7 @@ const Register = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const [accountType, setAccountType] = useState('individual');
     const [isCreatingAccount, setIsCreatingAccount] = useState(false);
-    const [isResendingEmail] = useState(false);
+    const [isResendingEmail, setIsResendingEmail] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const [registeredUserEmail, setRegisteredUserEmail] = useState('');
     const [emailDomainInfo, setEmailDomainInfo] = useState(null);
@@ -54,7 +52,7 @@ const Register = () => {
         companyName: '',
         companyType: 'startup',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        agreeToTerms: false
+        agreeToTerms: false,
     });
 
     const [errors, setErrors] = useState({});
@@ -63,10 +61,11 @@ const Register = () => {
     useEffect(() => {
         window.isRegistering = true;
         console.log('Registration component mounted, isRegistering set to true');
-        
+
         return () => {
             window.isRegistering = false;
-            console.log('Registration component unmounted, isRegistering set to false');
+            clearRegistrationState();
+            console.log('Registration component unmounted, isRegistering cleared');
         };
     }, []);
 
@@ -78,14 +77,14 @@ const Register = () => {
             const validation = validateEmailForAccountType(formData.email, accountType);
             setEmailValidation(validation);
 
-            if (accountType === 'individual' &&
+            if (
+                accountType === 'individual' &&
                 validation.isValid &&
                 validation.recommendAccountType === 'organization' &&
-                !showAccountTypeSuggestion) {
+                !showAccountTypeSuggestion
+            ) {
                 setShowAccountTypeSuggestion(true);
-            } else if (accountType === 'organization' ||
-                validation.domainType !== 'custom' ||
-                !validation.isValid) {
+            } else if (accountType === 'organization' || validation.domainType !== 'custom' || !validation.isValid) {
                 setShowAccountTypeSuggestion(false);
             }
         } else {
@@ -96,9 +95,9 @@ const Register = () => {
     }, [formData.email, accountType, showAccountTypeSuggestion]);
 
     const handleInputChange = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData((prev) => ({ ...prev, [field]: value }));
         if (errors[field]) {
-            setErrors(prev => ({ ...prev, [field]: '' }));
+            setErrors((prev) => ({ ...prev, [field]: '' }));
         }
     };
 
@@ -110,11 +109,11 @@ const Register = () => {
             const suggestedCompanyName = emailDomainInfo.domain
                 .split('.')[0]
                 .replace(/[-_]/g, ' ')
-                .replace(/\b\w/g, l => l.toUpperCase());
+                .replace(/\b\w/g, (l) => l.toUpperCase());
 
-            setFormData(prev => ({
+            setFormData((prev) => ({
                 ...prev,
-                companyName: prev.companyName || suggestedCompanyName
+                companyName: prev.companyName || suggestedCompanyName,
             }));
         }
 
@@ -122,7 +121,7 @@ const Register = () => {
             type: 'success',
             title: 'Account Type Switched',
             message: `Switched to ${newAccountType} account type`,
-            persistent: false
+            persistent: false,
         });
     };
 
@@ -142,17 +141,17 @@ const Register = () => {
             const user = result.user;
 
             // Check if account already exists
-            const setupStatus = await accountService.getAccountSetupStatus(user.uid);
+            const setupStatus = await getAccountSetupStatus(user.uid);
 
-            if (setupStatus.exists) {
+            if (setupStatus.exists && setupStatus.userData?.auth_metadata?.email_verified) {
+                await handlePostVerification(user.uid);
                 addNotification({
                     type: 'success',
                     title: 'Welcome Back',
                     message: 'Welcome back!',
-                    persistent: false
+                    persistent: false,
                 });
-                // Clear registration flag before navigation
-                window.isRegistering = false;
+                clearRegistrationState();
                 router.push('/dashboard');
                 return;
             }
@@ -166,44 +165,46 @@ const Register = () => {
                 user: user,
                 email: user.email,
                 userId: user.uid,
-                accountType: suggestedAccountType
+                accountType: suggestedAccountType,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             };
 
             console.log('Google sign-up: Setting up account with data:', setupData);
-            const result_setup = await accountService.setupAccount(setupData);
+            const setupResult = await setupAccount(setupData);
 
-            if (result_setup.success) {
-                console.log('Google account setup successful:', result_setup);
-                addNotification({
-                    type: 'success',
-                    title: 'Account Created',
-                    message: 'Account created successfully with Google!',
-                    persistent: false
-                });
-                // Clear registration flag before navigation
-                window.isRegistering = false;
-                router.push('/dashboard');
-            } else {
-                throw new Error('Failed to setup account: ' + result_setup.error.message);
+            if (!setupResult.success) {
+                throw new Error('Failed to setup account: ' + setupResult.error.message);
             }
+
+            console.log('Google account setup successful:', setupResult);
+            await handlePostVerification(user.uid);
+            addNotification({
+                type: 'success',
+                title: 'Account Created',
+                message: 'Account created successfully with Google!',
+                persistent: false,
+            });
+            clearRegistrationState();
+            router.push('/dashboard');
         } catch (error) {
             console.error('Error with Google registration:', error);
-            let errorMessage = "Failed to sign up with Google. Please try again.";
+            let errorMessage = 'Failed to sign up with Google. Please try again.';
             if (error.code === 'auth/popup-closed-by-user') {
-                errorMessage = "Sign-up was cancelled.";
+                errorMessage = 'Sign-up was cancelled.';
             } else if (error.code === 'auth/popup-blocked') {
-                errorMessage = "Popup was blocked. Please allow popups and try again.";
+                errorMessage = 'Popup was blocked. Please allow popups and try again.';
             } else if (error.code === 'auth/account-exists-with-different-credential') {
-                errorMessage = "An account already exists with this email using a different sign-in method.";
+                errorMessage = 'An account already exists with this email using a different sign-in method.';
             }
             addNotification({
                 type: 'error',
                 title: 'Google Sign-Up Failed',
                 message: errorMessage,
-                persistent: true
+                persistent: true,
             });
         } finally {
             setIsGoogleLoading(false);
+            clearRegistrationState();
         }
     };
 
@@ -248,12 +249,12 @@ const Register = () => {
 
     const nextStep = () => {
         if (validateStep(currentStep)) {
-            setCurrentStep(prev => prev + 1);
+            setCurrentStep((prev) => prev + 1);
         }
     };
 
     const prevStep = () => {
-        setCurrentStep(prev => prev - 1);
+        setCurrentStep((prev) => prev - 1);
     };
 
     const handleCreateAccount = async () => {
@@ -263,13 +264,9 @@ const Register = () => {
 
         try {
             console.log('Starting account creation with data:', { email: formData.email, accountType });
-            
+
             // Create Firebase user
-            const userCredential = await createUserWithEmailAndPassword(
-                auth,
-                formData.email,
-                formData.password
-            );
+            const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
             console.log('Firebase user created:', userCredential.user.uid);
             const user = userCredential.user;
 
@@ -285,11 +282,12 @@ const Register = () => {
                 user: user,
                 email: formData.email,
                 userId: user.uid,
-                accountType: accountType
+                accountType: accountType,
+                timezone: formData.timezone,
             };
 
             console.log('Setting up account with data:', setupData);
-            const setupResult = await accountService.setupAccount(setupData);
+            const setupResult = await setupAccount(setupData);
             console.log('Account setup result:', setupResult);
 
             if (!setupResult.success) {
@@ -308,7 +306,7 @@ const Register = () => {
                     type: 'success',
                     title: 'Account Created',
                     message: 'Account created successfully! Please check your email.',
-                    persistent: false
+                    persistent: false,
                 });
             } catch (emailError) {
                 console.error('Error sending verification email:', emailError);
@@ -316,56 +314,81 @@ const Register = () => {
                     type: 'success',
                     title: 'Account Created',
                     message: 'Account created successfully! Verification email will be sent shortly.',
-                    persistent: false
+                    persistent: false,
                 });
             }
 
             // Store email for step 4
             setRegisteredUserEmail(formData.email);
-            
-            // Sign out user and proceed to email verification step
-            console.log('Signing out user:', user.uid);
+
+            // Clear registration state and sign out user
+            await handlePostVerification(user.uid);
             await signOut(auth);
             console.log('User signed out, advancing to step 4');
             setCurrentStep(4);
-            
         } catch (error) {
             console.error('Error creating account:', error);
-            let errorMessage = "Failed to create account. Please try again.";
+            let errorMessage = 'Failed to create account. Please try again.';
             if (error.code === 'auth/email-already-in-use') {
-                errorMessage = "An account with this email already exists.";
+                errorMessage = 'An account with this email already exists.';
             } else if (error.code === 'auth/weak-password') {
-                errorMessage = "Password should be at least 6 characters.";
+                errorMessage = 'Password should be at least 6 characters.';
             } else if (error.code === 'auth/invalid-email') {
-                errorMessage = "Please enter a valid email address.";
+                errorMessage = 'Please enter a valid email address.';
             }
             addNotification({
                 type: 'error',
                 title: 'Account Creation Failed',
                 message: errorMessage,
-                persistent: true
+                persistent: true,
             });
         } finally {
             setIsCreatingAccount(false);
+            clearRegistrationState();
             console.log('Registration process completed');
         }
     };
 
     const handleResendEmail = async () => {
-        addNotification({
-            type: 'info',
-            title: 'Verification Required',
-            message: "Please try signing in with your credentials. If your email isn't verified, you'll get an option to resend the verification email.",
-            persistent: false
-        });
-        // Clear registration flag before navigation
-        window.isRegistering = false;
-        router.push('/login');
+        setIsResendingEmail(true);
+        try {
+            const user = auth.currentUser;
+            if (user) {
+                await sendEmailVerification(user, {
+                    url: `${window.location.origin}/verify-email`,
+                    handleCodeInApp: false,
+                });
+                addNotification({
+                    type: 'success',
+                    title: 'Email Resent',
+                    message: 'Verification email resent. Please check your inbox and spam folder.',
+                    persistent: false,
+                });
+            } else {
+                addNotification({
+                    type: 'info',
+                    title: 'Verification Required',
+                    message: 'Please sign in to resend the verification email.',
+                    persistent: false,
+                });
+                clearRegistrationState();
+                router.push('/login');
+            }
+        } catch (error) {
+            console.error('Error resending verification email:', error);
+            addNotification({
+                type: 'error',
+                title: 'Resend Failed',
+                message: 'Failed to resend verification email. Please try again.',
+                persistent: true,
+            });
+        } finally {
+            setIsResendingEmail(false);
+        }
     };
 
     const handleSignInRedirect = () => {
-        // Clear registration flag before navigation
-        window.isRegistering = false;
+        clearRegistrationState();
         router.push('/login');
     };
 
@@ -377,10 +400,7 @@ const Register = () => {
                         <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">Create Your Account</h1>
                         <p className="text-slate-600 mb-6 text-center">Get started with QAID today</p>
                         <div className="mb-6">
-                            <GoogleSignUp
-                                onGoogleRegister={handleGoogleRegister}
-                                loading={isGoogleLoading}
-                            />
+                            <GoogleSignUp onGoogleRegister={handleGoogleRegister} loading={isGoogleLoading} />
                         </div>
                         <div className="relative mb-6">
                             <div className="absolute inset-0 flex items-center">
@@ -422,7 +442,7 @@ const Register = () => {
                             accountType={accountType}
                             emailDomainInfo={emailDomainInfo}
                             emailValidation={emailValidation}
-                            setAccountType={setAccountType} 
+                            setAccountType={setAccountType}
                             onAccountTypeSwitch={handleAccountTypeSwitch}
                             showAccountTypeSuggestion={showAccountTypeSuggestion}
                             onDismissAccountTypeSuggestion={dismissAccountTypeSuggestion}

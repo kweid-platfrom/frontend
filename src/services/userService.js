@@ -1,46 +1,23 @@
-import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db, environment } from '../config/firebase';
+import { serverTimestamp } from 'firebase/firestore';
+import firestoreService from './firestoreService';
 import { extractNameFromEmail, parseDisplayName } from '../utils/userUtils';
 
-// Helper to add timeout to Firestore operations
-const withTimeout = async (promise, ms = 5000) => {
-    const timeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Firestore operation timed out')), ms);
-    });
-    return Promise.race([promise, timeout]);
-};
+class UserServiceError extends Error {
+    constructor(message, code = 'UNKNOWN_ERROR') {
+        super(message);
+        this.name = 'UserServiceError';
+        this.code = code;
+    }
+}
 
 export const createUserDocument = async (firebaseUser, userData = {}, source = 'unknown') => {
     if (!firebaseUser?.uid) {
-        throw new Error('Invalid Firebase user provided');
+        throw new UserServiceError('Invalid Firebase user provided', 'INVALID_USER');
     }
 
     try {
         console.log('Creating user document with data:', { uid: firebaseUser.uid, source, userData });
 
-        if (userData.user_id && userData.profile_info) {
-            console.log('Using new format user data from Register component');
-            const finalUserData = {
-                ...userData,
-                profile_info: {
-                    ...userData.profile_info,
-                    created_at: userData.profile_info.created_at || serverTimestamp(),
-                    updated_at: serverTimestamp(),
-                },
-                auth_metadata: {
-                    ...userData.auth_metadata,
-                    registration_date: userData.auth_metadata.registration_date || serverTimestamp(),
-                    last_login: source === 'google' ? serverTimestamp() : null,
-                },
-            };
-
-            const userRef = doc(db, 'users', firebaseUser.uid);
-            await withTimeout(setDoc(userRef, finalUserData));
-            console.log('User document created successfully with new format');
-            return finalUserData;
-        }
-
-        console.log('Converting to new format or creating from minimal data');
         const { firstName: parsedFirstName, lastName: parsedLastName } = parseDisplayName(firebaseUser.displayName);
 
         let firstName = (userData.firstName?.trim() || parsedFirstName || '').trim();
@@ -60,10 +37,7 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
             firstName ||
             'User';
 
-        const userType = ['individual', 'organization'].includes(userData.userType) ? userData.userType : 'individual';
-        const initialRole = userType === 'organization' ? ['admin'] : ['member'];
-
-        const newFormatUserData = {
+        const newUserData = {
             user_id: firebaseUser.uid,
             primary_email: firebaseUser.email?.toLowerCase().trim() || '',
             profile_info: {
@@ -81,15 +55,6 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                 updated_at: serverTimestamp(),
             },
             account_memberships: userData.account_memberships || [],
-            session_context: {
-                current_account_id: userData.current_account_id || null,
-                current_account_type: userType,
-                preferences: {
-                    theme: 'light',
-                    notifications: true,
-                    ...userData.preferences,
-                },
-            },
             auth_metadata: {
                 registration_method: source === 'google' ? 'google' : 'email',
                 email_verified: firebaseUser.emailVerified || false,
@@ -102,35 +67,20 @@ export const createUserDocument = async (firebaseUser, userData = {}, source = '
                     },
                 }),
             },
-            role: userData.role || initialRole,
-            preferences: {
-                notifications: {
-                    newMessages: true,
-                    productUpdates: false,
-                    securityAlerts: true,
-                },
-                pushNotifications: {
-                    approvalRequests: true,
-                    newMessages: true,
-                    productUpdates: true,
-                    reminders: false,
-                },
-                ...(userData.preferences || {}),
-            },
-            environment: environment || 'development',
-            source,
+            environment: userData.environment || 'development',
             ...(userData.organizationId && { organizationId: userData.organizationId }),
-            ...(userData.lastPasswordChange && { lastPasswordChange: userData.lastPasswordChange }),
-            ...(userData.deviceHistory && { deviceHistory: userData.deviceHistory }),
         };
 
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        await withTimeout(setDoc(userRef, newFormatUserData));
-        console.log('User document created successfully (converted to new format)');
-        return newFormatUserData;
+        const result = await firestoreService.createOrUpdateUserProfile(newUserData);
+        if (!result.success) {
+            throw new UserServiceError(result.error.message || 'Failed to create user profile', result.error.code);
+        }
+
+        console.log('User document created successfully:', result.data);
+        return result.data;
     } catch (error) {
         console.error('Error creating user document:', error);
-        throw new Error(`Failed to create user profile: ${error.message}`);
+        throw new UserServiceError(`Failed to create user profile: ${error.message}`, error.code || 'CREATE_ERROR');
     }
 };
 
@@ -142,36 +92,30 @@ export const fetchUserData = async (userId) => {
 
     try {
         console.log('Fetching user data for userId:', userId);
-        const userRef = doc(db, 'users', userId);
-        const userSnap = await withTimeout(getDoc(userRef));
+        const result = await firestoreService.getUserProfile(userId);
 
-        if (userSnap.exists()) {
-            const userData = userSnap.data();
-            console.log('User document exists:', userData);
-            const normalizedData = userData.user_id && userData.profile_info
-                ? userData
-                : normalizeLegacyUserData(userData, userId);
+        if (result.success) {
+            console.log('User document exists:', result.data);
             return {
-                userData: normalizedData,
+                userData: result.data,
                 error: null,
                 isNewUser: false,
             };
-        } else {
+        } else if (result.error.code === 'not-found') {
             console.log('User document does not exist');
             return {
                 userData: null,
                 error: null,
                 isNewUser: true,
             };
+        } else {
+            throw new UserServiceError(result.error.message, result.error.code);
         }
     } catch (error) {
         console.error('Error fetching user data:', error);
-        let errorMessage = 'Failed to fetch user data';
-        if (error.code === 'permission-denied') {
-            errorMessage = 'Permission denied: User may not have access to this profile';
-        } else if (error.message.includes('timed out')) {
-            errorMessage = 'Firestore request timed out';
-        }
+        const errorMessage = error.code === 'permission-denied'
+            ? 'Permission denied: User may not have access to this profile'
+            : `Failed to fetch user data: ${error.message}`;
         return {
             userData: null,
             error: errorMessage,
@@ -181,43 +125,42 @@ export const fetchUserData = async (userId) => {
 };
 
 export const updateUserProfile = async (userId, updateData, currentUserUid) => {
-    if (!userId) throw new Error('User ID is required');
-    if (currentUserUid !== userId) throw new Error('You can only update your own profile');
+    if (!userId) throw new UserServiceError('User ID is required', 'INVALID_USER');
+    if (currentUserUid !== userId) throw new UserServiceError('You can only update your own profile', 'PERMISSION_DENIED');
 
     try {
         console.log('Updating user profile:', userId, updateData);
-        const userRef = doc(db, 'users', userId);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-            throw new Error('User profile not found');
+        const result = await firestoreService.getUserProfile(userId);
+        if (!result.success) {
+            throw new UserServiceError('User profile not found', result.error.code || 'NOT_FOUND');
         }
 
-        const existingData = userSnap.data();
-        const isNewFormat = existingData.user_id && existingData.profile_info;
-
-        let updatePayload;
-        if (isNewFormat) {
-            updatePayload = buildNewFormatUpdate(existingData, updateData);
-        } else {
-            updatePayload = buildLegacyFormatUpdate(existingData, updateData);
+        const updatePayload = buildUpdatePayload(result.data, updateData);
+        const updateResult = await firestoreService.updateDocument('users', userId, updatePayload);
+        if (!updateResult.success) {
+            throw new UserServiceError(updateResult.error.message || 'Failed to update user profile', updateResult.error.code);
         }
 
-        await updateDoc(userRef, updatePayload);
-        const updatedSnap = await getDoc(userRef);
-        const updatedData = updatedSnap.data();
-        return isNewFormat ? updatedData : normalizeLegacyUserData(updatedData, userId);
+        const updatedProfile = await firestoreService.getUserProfile(userId);
+        if (!updatedProfile.success) {
+            throw new UserServiceError('Failed to fetch updated profile', updatedProfile.error.code);
+        }
+
+        return updatedProfile.data;
     } catch (error) {
         console.error('Error updating user profile:', error);
-        if (error.code === 'permission-denied') {
-            throw new Error('You do not have permission to update this profile.');
-        }
-        throw new Error(`Failed to update profile: ${error.message}`);
+        throw new UserServiceError(
+            error.code === 'permission-denied'
+                ? 'You do not have permission to update this profile'
+                : `Failed to update profile: ${error.message}`,
+            error.code || 'UPDATE_ERROR'
+        );
     }
 };
 
-const buildNewFormatUpdate = (existingData, updateData) => {
+const buildUpdatePayload = (existingData, updateData) => {
     const updatePayload = {};
+
     if (updateData.email && updateData.email !== existingData.primary_email) {
         updatePayload.primary_email = updateData.email.toLowerCase().trim();
     }
@@ -263,78 +206,11 @@ const buildNewFormatUpdate = (existingData, updateData) => {
         };
     }
 
-    if (updateData.preferences) {
-        updatePayload.session_context = {
-            ...existingData.session_context,
-            preferences: {
-                ...existingData.session_context.preferences,
-                ...updateData.preferences,
-            },
-        };
+    if (updateData.account_memberships) {
+        updatePayload.account_memberships = updateData.account_memberships;
     }
 
     return updatePayload;
-};
-
-const buildLegacyFormatUpdate = (existingData, updateData) => {
-    const updatePayload = {};
-    if (updateData.email && updateData.email !== existingData.email) {
-        updatePayload.email = updateData.email.toLowerCase().trim();
-    }
-    if (updateData.firstName) updatePayload.firstName = updateData.firstName.trim();
-    if (updateData.lastName) updatePayload.lastName = updateData.lastName.trim();
-    if (updateData.displayName) updatePayload.displayName = updateData.displayName.trim();
-    if (updateData.avatarURL !== undefined) updatePayload.avatarURL = updateData.avatarURL;
-    if (updateData.bio !== undefined) updatePayload.bio = updateData.bio?.trim() || '';
-    if (updateData.location !== undefined) updatePayload.location = updateData.location?.trim() || '';
-    if (updateData.phone !== undefined) updatePayload.phone = updateData.phone?.trim() || '';
-    if (typeof updateData.emailVerified === 'boolean') updatePayload.emailVerified = updateData.emailVerified;
-    if (updateData.preferences) updatePayload.preferences = updateData.preferences;
-    updatePayload.updatedAt = serverTimestamp();
-    return updatePayload;
-};
-
-const normalizeLegacyUserData = (userData, userId) => {
-    return {
-        user_id: userData.uid || userId,
-        primary_email: userData.email || '',
-        profile_info: {
-            name: {
-                first: userData.firstName || '',
-                last: userData.lastName || '',
-                display: userData.displayName || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || '',
-            },
-            timezone: userData.timezone || 'UTC',
-            avatar_url: userData.avatarURL || null,
-            bio: userData.bio || '',
-            location: userData.location || '',
-            phone: userData.phone || '',
-            created_at: userData.createdAt,
-            updated_at: userData.updatedAt,
-        },
-        account_memberships: Array.isArray(userData.account_memberships) ? userData.account_memberships : [],
-        session_context: {
-            current_account_id: userData.organizationId || null,
-            current_account_type: userData.accountType || userData.userType || 'individual',
-            preferences: userData.preferences || {
-                theme: 'light',
-                notifications: true,
-            },
-        },
-        auth_metadata: {
-            registration_method: userData.registrationMethod || 'email',
-            email_verified: userData.emailVerified || false,
-            registration_date: userData.createdAt,
-            last_login: userData.lastLogin,
-            ...(userData.registrationMethod === 'google' && {
-                google_profile: {
-                    id: userData.uid,
-                    photo_url: userData.avatarURL,
-                },
-            }),
-        },
-        ...userData,
-    };
 };
 
 export const getUserDisplayName = (userData) => {
@@ -343,15 +219,7 @@ export const getUserDisplayName = (userData) => {
         return '';
     }
 
-    if (userData.profile_info?.name?.display) {
-        return userData.profile_info.name.display;
-    }
-
-    const firstName = userData.profile_info?.name?.first || userData.firstName || '';
-    const lastName = userData.profile_info?.name?.last || userData.lastName || '';
-    const displayName = userData.displayName || `${firstName} ${lastName}`.trim();
-
-    return displayName || 'User';
+    return userData.profile_info?.name?.display || userData.primary_email || 'User';
 };
 
 export const getAvatarInitials = (userData) => {
@@ -360,8 +228,8 @@ export const getAvatarInitials = (userData) => {
         return '';
     }
 
-    const firstName = userData.profile_info?.name?.first || userData.firstName || '';
-    const lastName = userData.profile_info?.name?.last || userData.lastName || '';
+    const firstName = userData.profile_info?.name?.first || '';
+    const lastName = userData.profile_info?.name?.last || '';
     if (firstName && lastName) {
         return `${firstName[0]}${lastName[0]}`.toUpperCase();
     } else if (firstName) {
@@ -370,104 +238,75 @@ export const getAvatarInitials = (userData) => {
         return lastName.slice(0, 2).toUpperCase();
     }
 
-    const email = userData.primary_email || userData.email || '';
-    return email ? email.slice(0, 2).toUpperCase() : '';
+    return userData.primary_email?.slice(0, 2).toUpperCase() || '';
 };
 
 export const getUserEmail = (userData) => {
-    if (!userData) return '';
-    return userData.primary_email || userData.email || '';
+    return userData?.primary_email || '';
 };
 
 export const getUserAccountType = (userData) => {
-    if (!userData) return 'individual';
-    return userData.session_context?.current_account_type || userData.accountType || userData.userType || 'individual';
+    return userData?.account_memberships?.[0]?.account_type || 'individual';
 };
 
 export const isUserAdmin = (userData) => {
     if (!userData) return false;
-    if (userData.role && Array.isArray(userData.role) && userData.role.includes('admin')) {
-        return true;
-    }
-    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
-        return userData.account_memberships.some(
-            (membership) => membership.role === 'Admin' && membership.status === 'active'
-        );
-    }
-    return false;
+    return userData.account_memberships?.some(
+        (membership) => membership.role === 'Admin' && membership.status === 'active'
+    ) || false;
 };
 
 export const isUserAdminOfAccount = (userData, accountId) => {
     if (!userData || !accountId) return false;
-    if (userData.account_memberships && Array.isArray(userData.account_memberships)) {
-        return userData.account_memberships.some(
-            (membership) =>
-                membership.account_id === accountId &&
-                membership.role === 'Admin' &&
-                membership.status === 'active'
-        );
-    }
-    return false;
+    return userData.account_memberships?.some(
+        (membership) =>
+            membership.account_id === accountId &&
+            membership.role === 'Admin' &&
+            membership.status === 'active'
+    ) || false;
 };
 
 export const getCurrentAccountInfo = (userData) => {
     if (!userData) return null;
-    if (userData.session_context?.current_account_id) {
-        const accountId = userData.session_context.current_account_id;
-        const accountType = userData.session_context.current_account_type;
-        const membership = userData.account_memberships?.find((m) => m.account_id === accountId);
-        return {
-            account_id: accountId,
-            account_type: accountType,
-            role: membership?.role || 'Member',
-            is_admin: membership?.role === 'Admin',
-        };
-    }
+    const membership = userData.account_memberships?.[0];
     return {
-        account_id: userData.organizationId || userData.user_id,
-        account_type: userData.accountType || userData.userType || 'individual',
-        role: userData.role?.includes('admin') ? 'Admin' : 'Member',
-        is_admin: userData.role?.includes('admin') || false,
+        account_id: membership?.account_id || userData.user_id,
+        account_type: membership?.account_type || 'individual',
+        role: membership?.role || 'Member',
+        is_admin: membership?.role === 'Admin',
     };
 };
 
 export const hasPermission = (userData) => {
     if (!userData) return false;
-    if (isUserAdmin(userData)) {
-        return true;
-    }
     const currentAccount = getCurrentAccountInfo(userData);
-    if (!currentAccount) return false;
-    if (currentAccount.account_type === 'individual' && currentAccount.is_admin) {
-        return true;
-    }
-    if (currentAccount.account_type === 'organization' && currentAccount.is_admin) {
-        return true;
-    }
-    return false;
+    return currentAccount?.is_admin || false;
 };
 
 export const createIndividualAccount = async (userId, accountData) => {
     try {
-        const accountRef = doc(db, 'individualAccounts', userId);
         const finalAccountData = {
-            ...accountData,
+            user_id: userId,
+            account_type: 'individual',
             account_profile: {
-                ...accountData.account_profile,
-                created_at: accountData.account_profile.created_at || serverTimestamp(),
+                created_at: serverTimestamp(),
                 updated_at: serverTimestamp(),
+                ...accountData.account_profile,
             },
             subscription: {
+                started_at: serverTimestamp(),
                 ...accountData.subscription,
-                started_at: accountData.subscription.started_at || serverTimestamp(),
             },
         };
-        await setDoc(accountRef, finalAccountData);
-        console.log('Individual account created successfully');
-        return finalAccountData;
+        const result = await firestoreService.createDocument('individualAccounts', finalAccountData, userId);
+        if (!result.success) {
+            throw new UserServiceError(result.error.message || 'Failed to create individual account', result.error.code);
+        }
+        console.log('Individual account created successfully:', result.data);
+        return result.data;
     } catch (error) {
         console.error('Error creating individual account:', error);
-        throw new Error(`Failed to create individual account: ${error.message}`);
+        throw new UserServiceError(`Failed to create individual account: ${error.message}`, error.code || 'CREATE_ACCOUNT_ERROR');
     }
 };
 
@@ -475,40 +314,37 @@ export const subscribeToUserData = (userId, callback, errorCallback) => {
     if (!userId) {
         console.error('subscribeToUserData: No userId provided');
         if (errorCallback) {
-            errorCallback({ message: 'No user ID provided' });
+            errorCallback(new UserServiceError('No user ID provided', 'INVALID_USER'));
         }
-        return null;
+        return () => { };
     }
 
     try {
         console.log('Subscribing to user data for:', userId);
-        const userRef = doc(db, 'users', userId);
-        return onSnapshot(
-            userRef,
-            (doc) => {
-                if (doc.exists()) {
-                    const data = doc.data();
-                    console.log('User data received:', data);
-                    callback(data.user_id && data.profile_info ? data : normalizeLegacyUserData(data, userId));
-                } else {
-                    console.log('User document does not exist');
-                    callback(null);
-                }
+        return firestoreService.subscribeToUserProfile(
+            userId,
+            (data) => {
+                console.log('User data received:', data);
+                callback(data);
             },
             (error) => {
                 console.error('Subscription error:', error);
                 if (errorCallback) {
-                    errorCallback(error);
+                    errorCallback(new UserServiceError(error.message, error.code));
                 }
             }
         );
     } catch (error) {
         console.error('Error setting up subscription:', error);
         if (errorCallback) {
-            errorCallback(error);
+            errorCallback(new UserServiceError(error.message, error.code || 'SUBSCRIPTION_ERROR'));
         }
-        return null;
+        return () => { };
     }
+};
+
+export const cleanup = () => {
+    firestoreService.cleanup();
 };
 
 export const userService = {
@@ -523,5 +359,9 @@ export const userService = {
     isUserAdminOfAccount,
     getCurrentAccountInfo,
     hasPermission,
+    createIndividualAccount,
     subscribeToUserData,
+    cleanup,
 };
+
+export default userService;

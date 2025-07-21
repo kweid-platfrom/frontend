@@ -1,46 +1,40 @@
-// services/accountSetup.js - Enhanced with better verification handling
 import { serverTimestamp } from "firebase/firestore";
 import firestoreService from "./firestoreService";
 
-// Global flag to prevent concurrent setup processes
+class AccountSetupError extends Error {
+    constructor(message, code = 'UNKNOWN_ERROR') {
+        super(message);
+        this.name = 'AccountSetupError';
+        this.code = code;
+    }
+}
+
 let isSetupInProgress = false;
 
-/**
- * Check if account exists and get setup status
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Account setup status
- */
 export const getAccountSetupStatus = async (userId) => {
     try {
         if (!userId) {
-            return { exists: false, needsSetup: true };
+            return { exists: false, needsSetup: true, error: 'User ID required' };
         }
 
-        const result = await firestoreService.getDocument('users', userId);
-
+        const result = await firestoreService.getUserProfile(userId);
         if (!result.success) {
-            return { exists: false, needsSetup: true };
+            return { exists: false, needsSetup: true, error: result.error.message };
         }
 
         const userData = result.data;
-
-        // Check if user has completed basic setup
-        const hasBasicInfo = userData.firstName && userData.email;
-
-        // Check if user has proper account structure
-        const hasAccountStructure = userData.accountType &&
-            (userData.accountType === 'individual' ||
-                (userData.accountType === 'organization' && userData.organizationId));
+        const hasBasicInfo = userData.profile_info?.name?.first && userData.email; // Changed from primary_email
+        const hasAccountStructure = userData.account_memberships?.length > 0;
 
         const isComplete = hasBasicInfo && hasAccountStructure;
 
         return {
             exists: true,
             needsSetup: !isComplete,
-            userData: userData,
+            userData,
             hasBasicInfo,
             hasAccountStructure,
-            emailVerified: userData.emailVerified
+            emailVerified: userData.auth_metadata?.email_verified || false,
         };
     } catch (error) {
         console.error('Error checking account setup status:', error);
@@ -48,54 +42,42 @@ export const getAccountSetupStatus = async (userId) => {
     }
 };
 
-/**
- * Check if user needs account setup - ENHANCED with better verification checks
- * @param {string} userId - User ID
- * @returns {Promise<boolean>} Whether setup is needed
- */
 export const shouldRunAccountSetup = async (userId) => {
     try {
-        // Don't run setup if already in progress
         if (isSetupInProgress) {
             console.log('Account setup already in progress, skipping...');
             return false;
         }
 
-        // Get current user to check email verification status
         const currentUser = firestoreService.getCurrentUser();
-
-        // CRITICAL: Don't run setup for email-verified users
         if (currentUser && currentUser.emailVerified) {
             console.log('User email is verified, skipping account setup and clearing registration state...');
             clearRegistrationState();
             return false;
         }
 
-        // CRITICAL: Don't run setup if not explicitly in registration mode
         if (!window.isRegistering) {
             console.log('Not in registration mode, skipping account setup...');
             return false;
         }
 
-        // Additional safety check - if user exists and is verified, don't run setup
         const status = await getAccountSetupStatus(userId);
-        if (status.exists && status.userData && status.userData.emailVerified) {
+        if (status.exists && status.userData?.auth_metadata?.email_verified) {
             console.log('User exists and email is verified, clearing registration state...');
             clearRegistrationState();
             return false;
         }
 
-        // Only run setup if user doesn't exist or needs setup AND is in registration flow
         const shouldRun = (!status.exists || status.needsSetup) && window.isRegistering;
 
         console.log('Account setup check:', {
             userId,
             exists: status.exists,
             needsSetup: status.needsSetup,
-            emailVerified: status.userData?.emailVerified || false,
+            emailVerified: status.userData?.auth_metadata?.email_verified || false,
             currentUserVerified: currentUser?.emailVerified || false,
             isRegistering: window.isRegistering,
-            shouldRun
+            shouldRun,
         });
 
         return shouldRun;
@@ -105,15 +87,11 @@ export const shouldRunAccountSetup = async (userId) => {
     }
 };
 
-/**
- * Clear registration state - ENHANCED with better cleanup
- */
 export const clearRegistrationState = () => {
     if (typeof window !== 'undefined') {
         window.isRegistering = false;
         isSetupInProgress = false;
 
-        // Clear any registration-related localStorage items
         try {
             localStorage.removeItem('registrationInProgress');
             localStorage.removeItem('pendingEmailVerification');
@@ -125,70 +103,60 @@ export const clearRegistrationState = () => {
     }
 };
 
-/**
- * Handle post-verification cleanup - ENHANCED
- * Should be called immediately after email verification is complete
- * @param {string} userId - User ID
- */
 export const handlePostVerification = async (userId) => {
     try {
         console.log('Handling post-verification cleanup for user:', userId);
-
-        // CRITICAL: Clear registration state immediately
         clearRegistrationState();
 
-        // Update user's emailVerified status in Firestore if needed
         const userStatus = await getAccountSetupStatus(userId);
-        if (userStatus.exists && userStatus.userData && !userStatus.userData.emailVerified) {
+        if (userStatus.exists && userStatus.userData && !userStatus.userData.auth_metadata?.email_verified) {
             const updateResult = await firestoreService.updateDocument('users', userId, {
-                emailVerified: true,
-                updated_at: serverTimestamp()
+                auth_metadata: {
+                    ...userStatus.userData.auth_metadata,
+                    email_verified: true,
+                },
+                profile_info: {
+                    ...userStatus.userData.profile_info,
+                    updated_at: serverTimestamp(),
+                },
             });
 
-            if (updateResult.success) {
-                console.log('Updated user emailVerified status in Firestore');
-            } else {
+            if (!updateResult.success) {
                 console.error('Failed to update emailVerified status:', updateResult.error);
+            } else {
+                console.log('Updated user emailVerified status in Firestore');
             }
         }
 
         return { success: true, message: 'Post-verification cleanup completed' };
     } catch (error) {
         console.error('Error in post-verification cleanup:', error);
-        return { success: false, error: { message: error.message } };
+        return { success: false, error: { message: error.message, code: error.code || 'POST_VERIFICATION_ERROR' } };
     }
 };
 
-/**
- * Setup user account - FIXED to avoid serverTimestamp in arrays
- * @param {Object} setupData - Account setup data
- * @returns {Promise<Object>} Setup result
- */
 export const setupAccount = async (setupData) => {
     try {
         const userId = setupData.userId || (setupData.user && setupData.user.uid);
         if (!userId) {
-            throw new Error('User ID is required for account setup');
+            throw new AccountSetupError('User ID is required for account setup', 'INVALID_USER');
         }
 
-        // CRITICAL: Check if setup should run before proceeding
         const shouldRun = await shouldRunAccountSetup(userId);
         if (!shouldRun) {
             console.log('Account setup not needed or not in registration flow, skipping...');
             return {
                 success: true,
                 skipped: true,
-                message: 'Account setup not needed or not in registration flow'
+                message: 'Account setup not needed or not in registration flow',
             };
         }
 
-        // Prevent concurrent setup
         if (isSetupInProgress) {
             console.log('Account setup already in progress, returning...');
-            return { success: false, error: { message: 'Setup already in progress' } };
+            return { success: false, error: { message: 'Setup already in progress', code: 'SETUP_IN_PROGRESS' } };
         }
 
-        // Set flags to prevent concurrent execution
         isSetupInProgress = true;
         window.isRegistering = true;
 
@@ -196,162 +164,184 @@ export const setupAccount = async (setupData) => {
         if (!user) {
             user = firestoreService.getCurrentUser();
             if (!user) {
-                throw new Error('No authenticated user found');
+                throw new AccountSetupError('No authenticated user found', 'NO_AUTHENTICATED_USER');
             }
         }
 
-        const email = setupData.email || user.email;
+        // CRITICAL FIX: Use the exact email from Firebase Auth without modification
+        const email = user.email; // Don't lowercase or trim here
         const accountType = setupData.accountType || determineAccountType(email);
 
         console.log('Setting up account for user:', { userId, email, accountType });
 
+        // CRITICAL FIX: Match your security rules exactly
         const userProfileData = {
             user_id: userId,
-            uid: userId,
-            email: email,
-            firstName: setupData.firstName || '',
-            lastName: setupData.lastName || '',
-            fullName: `${setupData.firstName || ''} ${setupData.lastName || ''}`.trim(),
-            accountType: accountType,
-            isActive: true,
-            emailVerified: user.emailVerified,
-            timezone: setupData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-            account_memberships: [] // Initialize empty, will update later if needed
+            email: email, // Use 'email' not 'primary_email' to match security rules
+            primary_email: email.toLowerCase().trim(), // Keep this for app logic
+            profile_info: {
+                name: {
+                    first: setupData.firstName || '',
+                    last: setupData.lastName || '',
+                    display: `${setupData.firstName || ''} ${setupData.lastName || ''}`.trim() || 'User',
+                },
+                timezone: setupData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                avatar_url: null,
+                bio: '',
+                location: '',
+                phone: '',
+                created_at: serverTimestamp(),
+                updated_at: serverTimestamp(),
+            },
+            account_memberships: [],
+            auth_metadata: {
+                registration_method: user.providerData?.[0]?.providerId === 'google.com' ? 'google' : 'email',
+                email_verified: user.emailVerified || false,
+                registration_date: serverTimestamp(),
+                last_login: serverTimestamp(),
+            },
+            environment: 'production',
         };
 
         console.log('Creating user profile:', userProfileData);
-        const userResult = await firestoreService.createDocument('users', userProfileData, userId);
+        const userResult = await firestoreService.createOrUpdateUserProfile(userProfileData);
         if (!userResult.success) {
-            console.error('Failed to create user profile:', userResult.error);
-            throw new Error(userResult.error.message);
+            throw new AccountSetupError(userResult.error.message || 'Failed to create user profile', userResult.error.code);
         }
-        console.log('User profile created successfully:', userResult);
 
         let organizationData = null;
 
         if (accountType === 'individual') {
             const individualAccountData = {
                 user_id: userId,
-                email: email,
-                firstName: setupData.firstName || '',
-                lastName: setupData.lastName || '',
-                isActive: true
+                account_type: 'individual',
+                profile: {
+                    email: email.toLowerCase().trim(),
+                    first_name: setupData.firstName || '',
+                    last_name: setupData.lastName || '',
+                    created_at: serverTimestamp(),
+                    updated_at: serverTimestamp(),
+                },
+                status: 'active',
             };
 
             console.log('Creating individual account:', individualAccountData);
             const individualResult = await firestoreService.createDocument('individualAccounts', individualAccountData, userId);
             if (!individualResult.success) {
-                console.error('Failed to create individual account:', individualResult.error);
-                throw new Error(individualResult.error.message);
+                throw new AccountSetupError(individualResult.error.message || 'Failed to create individual account', individualResult.error.code);
             }
+
+            const userUpdate = await firestoreService.updateDocument('users', userId, {
+                account_memberships: [{
+                    account_id: userId,
+                    account_type: 'individual',
+                    role: 'Admin',
+                    status: 'active',
+                }],
+                profile_info: {
+                    ...userResult.data.profile_info,
+                    updated_at: serverTimestamp(),
+                },
+            });
+
+            if (!userUpdate.success) {
+                throw new AccountSetupError(userUpdate.error.message || 'Failed to update user memberships', userUpdate.error.code);
+            }
+
             console.log('Individual account created successfully:', individualResult);
         } else if (accountType === 'organization' && setupData.organizationName) {
             console.log('Starting organization setup transaction...');
-            const transactionResult = await firestoreService.executeTransaction(async (transaction) => {
+            const transactionResult = await firestoreService.executeTransaction(async () => {
                 const orgId = `org_${userId}`;
                 const now = serverTimestamp();
 
                 const orgData = {
                     id: orgId,
                     name: setupData.organizationName,
-                    ownerId: userId,
+                    ownerId: userId, // Changed from owner_id to match security rules
+                    created_by: userId, // Add this field for security rules
                     domain: email.split('@')[1],
-                    isActive: true,
+                    is_active: true,
                     created_at: now,
-                    updated_at: now
+                    updated_at: now,
                 };
-
-                const orgRef = firestoreService.createDocRef('organizations', orgId);
-                transaction.set(orgRef, orgData);
 
                 const membershipData = {
-                    userId: userId,
-                    email: email,
+                    user_id: userId,
+                    email: email.toLowerCase().trim(),
                     role: 'Admin',
                     status: 'active',
-                    joinedAt: now,
+                    joined_at: now,
                     created_at: now,
-                    updated_at: now
+                    updated_at: now,
                 };
-
-                const memberRef = firestoreService.createDocRef('organizations', orgId, 'members', userId);
-                transaction.set(memberRef, membershipData);
 
                 const userUpdates = {
-                    organizationId: orgId,
-                    organizationName: setupData.organizationName,
-                    // Store membership reference without serverTimestamp in array
                     account_memberships: [{
-                        org_id: orgId,
+                        account_id: orgId,
+                        account_type: 'organization',
                         role: 'Admin',
-                        status: 'active'
-                        // joined_at is moved to the members subcollection
+                        status: 'active',
                     }],
-                    updated_at: now
+                    profile_info: {
+                        ...userResult.data.profile_info,
+                        updated_at: now,
+                    },
+                    organization_id: orgId,
                 };
 
-                const userRef = firestoreService.createDocRef('users', userId);
-                transaction.update(userRef, userUpdates);
+                await firestoreService.createDocument('organizations', orgData, orgId);
+                await firestoreService.createDocument(`organizations/${orgId}/members`, membershipData, userId);
+                await firestoreService.updateDocument('users', userId, userUpdates);
 
-                console.log('Transaction prepared:', { orgData, membershipData, userUpdates });
-                return {
-                    orgId,
-                    orgData,
-                    membershipData,
-                    userUpdates
-                };
+                return { orgId, orgData, membershipData, userUpdates };
             });
 
             if (!transactionResult.success) {
-                console.error('Transaction failed:', transactionResult.error);
-                throw new Error(transactionResult.error.message);
+                throw new AccountSetupError(transactionResult.error.message || 'Transaction failed', transactionResult.error.code);
             }
 
             console.log('Organization setup completed successfully:', transactionResult.data);
             organizationData = transactionResult.data;
-            Object.assign(userProfileData, transactionResult.data.userUpdates);
         }
 
         return {
             success: true,
-            userId: userId,
-            accountType: accountType,
-            userProfile: userProfileData,
-            organizationData: organizationData
+            userId,
+            accountType,
+            userProfile: userResult.data,
+            organizationData,
         };
     } catch (error) {
         console.error('Error setting up account:', error);
         return {
             success: false,
-            error: { message: error.message || 'Account setup failed' }
+            error: { message: error.message || 'Account setup failed', code: error.code || 'SETUP_ERROR' },
         };
     } finally {
-        // Clear setup flag
         isSetupInProgress = false;
-        // Keep registration flag until explicitly cleared by verification
     }
 };
 
-/**
- * Determine account type based on email domain
- * @param {string} email - User email
- * @returns {string} Account type ('individual' or 'organization')
- */
 const determineAccountType = (email) => {
     if (!email) return 'individual';
     const domain = email.split('@')[1];
     const commonPersonalDomains = [
         'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
-        'icloud.com', 'aol.com', 'protonmail.com'
+        'icloud.com', 'aol.com', 'protonmail.com',
     ];
     return commonPersonalDomains.includes(domain.toLowerCase()) ? 'individual' : 'organization';
 };
 
-// Export all functions
+export const cleanup = () => {
+    firestoreService.cleanup();
+};
+
 export {
     setupAccount,
     getAccountSetupStatus,
     shouldRunAccountSetup,
     clearRegistrationState,
-    handlePostVerification
+    handlePostVerification,
+    cleanup,
 };

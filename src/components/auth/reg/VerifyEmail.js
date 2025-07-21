@@ -18,7 +18,7 @@ const retryOperation = async (operation, maxAttempts = 3, delay = 1000) => {
                 throw error;
             }
             console.warn(`Retry ${attempt}/${maxAttempts} failed:`, error.message);
-            await new Promise(resolve => setTimeout(resolve, delay * attempt));
+            await new Promise((resolve) => setTimeout(resolve, delay * attempt));
         }
     }
 };
@@ -31,21 +31,26 @@ const VerifyEmail = () => {
     const [registrationData, setRegistrationData] = useState(null);
     const [showOnboardingOption, setShowOnboardingOption] = useState(false);
 
-    // Move handleEmailVerified outside useEffect and wrap in useCallback
     const handleEmailVerified = useCallback(async (user) => {
         try {
             if (!user) {
                 throw new Error('User not authenticated');
             }
 
-            // Clear registration state immediately
+            // Perform post-verification cleanup
+            await handlePostVerification(user.uid);
+            console.log('Post-verification completed for user:', user.uid);
+
+            // Clear registration state
             await clearRegistrationState();
-            
-            // Now redirect to dashboard
+            console.log('Registration state cleared after verification');
+
+            // Redirect to dashboard
             router.push('/dashboard');
         } catch (error) {
             console.error('Post-verification error:', error);
-            // Fallback to login page
+            setStatus('error');
+            setMessage('Failed to complete verification process. Please sign in to continue.');
             router.push('/login?verified=true');
         }
     }, [router]);
@@ -63,6 +68,7 @@ const VerifyEmail = () => {
                 }
             } catch (error) {
                 console.error('Error parsing registration data:', error);
+                localStorage.removeItem('pendingRegistration');
             }
         }
 
@@ -75,14 +81,14 @@ const VerifyEmail = () => {
             }
 
             try {
-                // Step 1: Verify and apply action code (this is the critical part)
                 console.log('Starting email verification...');
-                
+
+                // Verify and apply action code
                 let info;
                 try {
                     info = await retryOperation(async () => {
                         return await checkActionCode(auth, actionCode);
-                    }, 3, 1000);
+                    });
                     console.log('Action code verified:', info);
                 } catch (error) {
                     console.error('Failed to check action code:', error);
@@ -92,19 +98,18 @@ const VerifyEmail = () => {
                 try {
                     await retryOperation(async () => {
                         await applyActionCode(auth, actionCode);
-                    }, 3, 1000);
+                    });
                     console.log('Email verification applied successfully');
                 } catch (error) {
                     console.error('Failed to apply action code:', error);
                     throw error;
                 }
 
-                // At this point, email verification is successful
-                // Everything below is post-verification cleanup and should not fail the verification
+                // Set success state
                 setStatus('success');
                 setMessage('Your email has been verified successfully!');
 
-                // Step 2: Update user document (non-critical - don't fail verification if this fails)
+                // Update user document
                 if (info?.data?.email) {
                     try {
                         await retryOperation(async () => {
@@ -115,56 +120,49 @@ const VerifyEmail = () => {
                             if (!querySnapshot.empty) {
                                 const userDoc = querySnapshot.docs[0];
                                 await updateDoc(doc(db, 'users', userDoc.id), {
-                                    email_verified: true,
+                                    'auth_metadata.email_verified': true,
                                     emailVerified: true,
-                                    updatedAt: new Date().toISOString(),
+                                    'profile_info.updated_at': new Date().toISOString(),
                                     onboardingStatus: {
                                         emailVerified: true,
-                                        needsSuiteCreation: true
-                                    }
+                                        needsSuiteCreation: true,
+                                    },
                                 });
                                 console.log('User document updated successfully:', userDoc.id);
                             } else {
                                 console.warn('No user document found for email:', info.data.email);
-                                // This is not a failure - user might not have a document yet
                             }
                         }, 2, 1000);
                     } catch (error) {
                         console.error('Error updating user document (non-critical):', error);
-                        // Don't fail verification for this
                     }
                 }
 
-                // Step 3: Handle post-verification (non-critical)
+                // Handle post-verification for authenticated user
                 if (auth.currentUser?.uid) {
                     try {
                         await handlePostVerification(auth.currentUser.uid);
                         console.log('Post-verification handling completed successfully');
                     } catch (error) {
                         console.error('Error in post-verification handling (non-critical):', error);
-                        // Don't fail verification for this
                     }
                 }
 
-                // Step 4: Handle onboarding flow
+                // Handle onboarding flow
                 if (registrationData?.isNewRegistration) {
                     setShowOnboardingOption(true);
                     localStorage.setItem('needsOnboarding', 'true');
                     localStorage.setItem('verificationComplete', 'true');
                 } else {
-                    // Wait a bit to show success message, then redirect
+                    // Wait to show success message, then redirect
                     setTimeout(() => {
                         handleEmailVerified(auth.currentUser);
                     }, 2000);
                 }
-
             } catch (error) {
                 console.error('Email verification failed:', error);
                 setStatus('error');
-                
-                // Provide specific error messages
                 let errorMessage = 'Failed to verify email. Please try again.';
-                
                 if (error.code === 'auth/expired-action-code') {
                     errorMessage = 'This verification link has expired. Please request a new one.';
                 } else if (error.code === 'auth/invalid-action-code') {
@@ -174,8 +172,10 @@ const VerifyEmail = () => {
                 } else if (error.message?.includes('permission-denied')) {
                     errorMessage = 'Permission denied. Please try signing in again.';
                 }
-                
                 setMessage(errorMessage);
+            } finally {
+                // Ensure registration state is cleared even on error
+                await clearRegistrationState();
             }
         };
 
@@ -187,10 +187,7 @@ const VerifyEmail = () => {
             localStorage.removeItem('pendingRegistration');
             localStorage.setItem('startOnboarding', 'true');
             localStorage.setItem('needsSuiteCreation', 'true');
-            
-            // Use the centralized function to clear registration state
             await clearRegistrationState();
-            
             router.push('/login?verified=true&continue=onboarding');
         } catch (error) {
             console.error('Error during onboarding setup:', error);
@@ -201,10 +198,7 @@ const VerifyEmail = () => {
     const handleGoToLogin = async () => {
         try {
             localStorage.removeItem('pendingRegistration');
-            
-            // Use the centralized function to clear registration state
             await clearRegistrationState();
-            
             router.push('/login?verified=true');
         } catch (error) {
             console.error('Error during navigation to login:', error);
@@ -283,15 +277,17 @@ const VerifyEmail = () => {
                             <p className="text-sm text-slate-500">
                                 Redirecting you to the dashboard...
                             </p>
-                        ) : status === 'error' && (
-                            <div className="space-y-3">
-                                <button
-                                    onClick={handleGoToLogin}
-                                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white py-2 px-4 rounded-lg hover:from-teal-700 hover:to-cyan-700 transition-all transform hover:scale-[1.02] font-medium"
-                                >
-                                    Go to Sign In
-                                </button>
-                            </div>
+                        ) : (
+                            status === 'error' && (
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={handleGoToLogin}
+                                        className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white py-2 px-4 rounded-lg hover:from-teal-700 hover:to-cyan-700 transition-all transform hover:scale-[1.02] font-medium"
+                                    >
+                                        Go to Sign In
+                                    </button>
+                                </div>
+                            )
                         )}
                     </div>
                 </div>

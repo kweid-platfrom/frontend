@@ -223,8 +223,8 @@ const BugTable = ({
         if (onBulkAction) onBulkAction(action, selectedIds);
     };
 
-    const getSortIcon = (key) => {
-        if (sortConfig.key !== key) {
+    const getSortIcon = (columnKey) => {
+        if (sortConfig.key !== columnKey) {
             return <ChevronUp className="w-3 h-3 text-gray-400" />;
         }
         return sortConfig.direction === 'asc' ? (
@@ -365,7 +365,7 @@ const BugTable = ({
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0 z-10">
                         <tr>
-                            <th className="w-10 px-2 py-3 border-r border-gray-200 sticky left-0 bg-gray-50 z-20 whitespace-nowrap">
+                            <th className="w-10 px-2 py-3 border-r border-gray-200 sticky left-0 bg-gray-50 z-20">
                                 <div className="flex items-center justify-center">
                                     {selectedIds.length === bugs.length ? (
                                         <CheckSquare
@@ -381,7 +381,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-[300px] min-w-[300px] sticky left-10 bg-gray-50 z-20 whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-[300px] min-w-[300px] sticky left-10 bg-gray-50 z-20"
                                 onClick={() => handleSort('title')}
                             >
                                 <div className="flex items-center gap-1">
@@ -390,7 +390,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-20 min-w-[80px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-20 min-w-[80px]"
                                 onClick={() => handleSort('id')}
                             >
                                 <div className="flex items-center gap-1">
@@ -399,7 +399,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 min-w-[128px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 min-w-[128px]"
                                 onClick={() => handleSort('tags')}
                             >
                                 <div className="flex items-center gap-1">
@@ -408,7 +408,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px]"
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -417,16 +417,16 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 min-w-[128px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 min-w-[128px]"
                                 onClick={() => handleSort('assigned_to')}
                             >
-                                <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1">
                                     Assignee
                                     {getSortIcon('assigned_to')}
-                                </div>
+                            </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-20 min-w-[80px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-20 min-w-[80px]"
                                 onClick={() => handleSort('priority')}
                             >
                                 <div className="flex items-center gap-1">
@@ -435,7 +435,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px]"
                                 onClick={() => handleSort('severity')}
                             >
                                 <div className="flex items-center gap-1">
@@ -444,12 +444,12 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-24 min-w-[96px]"
                             >
                                 Evidence
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px]"
                                 onClick={() => handleSort('created_by')}
                             >
                                 <div className="flex items-center gap-1">
@@ -458,7 +458,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px]"
                                 onClick={() => handleSort('source')}
                             >
                                 <div className="flex items-center gap-1">
@@ -467,7 +467,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-28 min-w-[112px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-28 min-w-[112px]"
                                 onClick={() => handleSort('environment')}
                             >
                                 <div className="flex items-center gap-1">
@@ -476,7 +476,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-28 min-w-[112px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-28 min-w-[112px]"
                                 onClick={() => handleSort('browserInfo')}
                             >
                                 <div className="flex items-center gap-1">
@@ -485,7 +485,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-28 min-w-[112px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-28 min-w-[112px]"
                                 onClick={() => handleSort('due_date')}
                             >
                                 <div className="flex items-center gap-1">
@@ -494,7 +494,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px]"
                                 onClick={() => handleSort('created_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -503,7 +503,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-24 min-w-[96px]"
                                 onClick={() => handleSort('frequency')}
                             >
                                 <div className="flex items-center gap-1">
@@ -512,12 +512,12 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-28 min-w-[112px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-28 min-w-[112px]"
                             >
                                 Linked Test Cases
                             </th>
                             <th
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8 min-w-[32px] whitespace-nowrap"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8 min-w-[32px]"
                             >
                                 Actions
                             </th>

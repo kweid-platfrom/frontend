@@ -1,4 +1,3 @@
-// services/firestoreService.js - Centralized Firestore Service
 import {
     doc,
     getDoc,
@@ -15,7 +14,7 @@ import {
     onSnapshot,
     serverTimestamp,
     writeBatch,
-    runTransaction
+    runTransaction,
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 
@@ -36,20 +35,14 @@ class FirestoreService {
         return this.auth.currentUser;
     }
 
-    // Validate and convert docId to string
     validateDocId(docId) {
         if (!docId || docId === null || docId === undefined) {
             return null;
         }
-        
-        // Convert to string and trim
         const stringId = String(docId).trim();
-        
-        // Check if it's empty after conversion
         if (stringId === '' || stringId === 'null' || stringId === 'undefined') {
             return null;
         }
-        
         return stringId;
     }
 
@@ -68,19 +61,7 @@ class FirestoreService {
             throw new Error('Document ID is required');
         }
 
-        // If we have only one segment (document ID), use collection + doc ID
-        if (validSegments.length === 1) {
-            const colRef = this.createCollectionRef(collectionPath);
-            return doc(colRef, validSegments[0]);
-        }
-
-        // For multiple segments, build the full path
-        const fullPath = `${collectionPath}/${validSegments.join('/')}`;
-        const pathParts = fullPath.split('/').filter(part => part !== '');
-
-        console.log('Creating doc ref with path parts:', pathParts); // Debug log
-
-        return doc(this.db, ...pathParts);
+        return doc(this.db, collectionPath, ...validSegments);
     }
 
     createCollectionRef(collectionPath) {
@@ -92,7 +73,6 @@ class FirestoreService {
 
     handleFirestoreError(error, operation = 'operation') {
         console.error(`Firestore ${operation} error:`, error);
-
         const errorMessages = {
             'permission-denied': 'Access denied. Check your permissions.',
             'not-found': 'Document not found.',
@@ -102,11 +82,11 @@ class FirestoreService {
             'invalid-argument': 'Invalid data provided.',
             'resource-exhausted': 'Rate limit exceeded.',
             'deadline-exceeded': 'Request timeout.',
-            'aborted': 'Operation aborted.'
+            'aborted': 'Operation aborted.',
+            'failed-precondition': 'Operation failed due to invalid state.',
+            'out-of-range': 'Data out of acceptable range.'
         };
-
         const userMessage = errorMessages[error.code] || `${operation} failed. Please try again.`;
-
         return {
             success: false,
             error: {
@@ -119,142 +99,112 @@ class FirestoreService {
 
     addCommonFields(data, isUpdate = false) {
         const userId = this.getCurrentUserId();
+        const cleanData = JSON.parse(JSON.stringify(data, (key, value) => {
+            if (value === null || value === undefined) return undefined;
+            return value;
+        }));
         const commonFields = {
             updated_at: serverTimestamp(),
             ...(userId && { updated_by: userId })
         };
-
         if (!isUpdate) {
             commonFields.created_at = serverTimestamp();
             if (userId) {
                 commonFields.created_by = userId;
             }
         }
+        return { ...cleanData, ...commonFields };
+    }
 
-        return { ...data, ...commonFields };
+    // ===== VALIDATION METHODS =====
+
+    validateTestSuiteData(data) {
+        const requiredFields = ['name', 'ownerType', 'ownerId'];
+        return requiredFields.every(field => field in data && data[field] !== null && data[field] !== undefined);
+    }
+
+    validateSprintData(data) {
+        const requiredFields = ['suite_id', 'metadata'];
+        const requiredMetadataFields = ['name', 'status'];
+        return requiredFields.every(field => field in data && data[field] !== null && data[field] !== undefined) &&
+               requiredMetadataFields.every(field => field in data.metadata && data.metadata[field] !== null && data.metadata[field] !== undefined);
+    }
+
+    validateAssetData(assetType, data) {
+        const requiredFields = {
+            bugs: ['suite_id', 'title', 'severity', 'priority', 'status'],
+            testCases: ['suite_id', 'title', 'status'],
+            recordings: ['suite_id', 'title', 'file_path'],
+            automatedScripts: ['suite_id', 'name', 'framework', 'language']
+        };
+        return requiredFields[assetType]?.every(field => field in data && data[field] !== null && data[field] !== undefined) || false;
     }
 
     // ===== GENERIC CRUD OPERATIONS =====
+
     async createDocument(collectionPath, data, customDocId = null) {
         try {
-            const collectionRef = collection(db, collectionPath);
-
+            const collectionRef = this.createCollectionRef(collectionPath);
             let docRef;
+            const validatedData = this.addCommonFields(data);
             if (customDocId) {
-                // Validate custom doc ID
                 const validDocId = this.validateDocId(customDocId);
                 if (!validDocId) {
-                    return {
-                        success: false,
-                        error: { message: 'Invalid custom document ID provided' }
-                    };
+                    return { success: false, error: { message: 'Invalid custom document ID provided' } };
                 }
-                
-                // Use the custom document ID
                 docRef = doc(collectionRef, validDocId);
-                await setDoc(docRef, data);
+                await setDoc(docRef, validatedData);
             } else {
-                // Let Firestore generate the document ID
-                docRef = await addDoc(collectionRef, data);
+                docRef = await addDoc(collectionRef, validatedData);
             }
-
-            return {
-                success: true,
-                data: { id: docRef.id, ...data },
-                docId: docRef.id
-            };
+            return { success: true, data: { id: docRef.id, ...validatedData }, docId: docRef.id };
         } catch (error) {
-            console.error('Error creating document:', error);
-            return {
-                success: false,
-                error: error
-            };
+            return this.handleFirestoreError(error, 'create document');
         }
     }
 
     async getDocument(collectionPath, docId) {
         try {
-            // Validate docId first
             const validDocId = this.validateDocId(docId);
             if (!validDocId) {
-                console.error('Invalid docId provided to getDocument:', docId);
-                return { 
-                    success: false, 
-                    error: { message: 'Invalid or missing document ID' } 
-                };
+                return { success: false, error: { message: 'Invalid or missing document ID' } };
             }
-
-            // Create collection reference first, then document reference
-            const colRef = collection(this.db, collectionPath);
-            const docRef = doc(colRef, validDocId);
-
-            console.log('Getting document with path:', `${collectionPath}/${validDocId}`); // Debug log
-
+            const docRef = this.createDocRef(collectionPath, validDocId);
             const docSnap = await getDoc(docRef);
-
             if (docSnap.exists()) {
-                return {
-                    success: true,
-                    data: { id: docSnap.id, ...docSnap.data() }
-                };
-            } else {
-                return { success: false, error: { message: 'Document not found' } };
+                return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
             }
+            return { success: false, error: { message: 'Document not found' } };
         } catch (error) {
-            console.error('getDocument error:', error);
             return this.handleFirestoreError(error, 'get document');
         }
     }
 
     async updateDocument(collectionPath, docId, data) {
         try {
-            // Validate docId first
             const validDocId = this.validateDocId(docId);
             if (!validDocId) {
-                console.error('Invalid docId provided to updateDocument:', docId);
-                return { 
-                    success: false, 
-                    error: { message: 'Invalid or missing document ID' } 
-                };
+                return { success: false, error: { message: 'Invalid or missing document ID' } };
             }
-
-            // Create collection reference first, then document reference
-            const colRef = collection(this.db, collectionPath);
-            const docRef = doc(colRef, validDocId);
-
-            console.log('Updating document with path:', `${collectionPath}/${validDocId}`); // Debug log
-
+            const docRef = this.createDocRef(collectionPath, validDocId);
             const updateData = this.addCommonFields(data, true);
             await updateDoc(docRef, updateData);
             return { success: true, data: updateData };
         } catch (error) {
-            console.error('updateDocument error:', error);
             return this.handleFirestoreError(error, 'update document');
         }
     }
 
     async deleteDocument(collectionPath, docId) {
         try {
-            // Validate docId first
             const validDocId = this.validateDocId(docId);
             if (!validDocId) {
-                console.error('Invalid docId provided to deleteDocument:', docId);
-                return { 
-                    success: false, 
-                    error: { message: 'Invalid or missing document ID' } 
-                };
+                return { success: false, error: { message: 'Invalid or missing document ID' } };
             }
-
-            // Create collection reference first, then document reference
-            const colRef = collection(this.db, collectionPath);
-            const docRef = doc(colRef, validDocId);
-
-            console.log('Deleting document with path:', `${collectionPath}/${validDocId}`); // Debug log
-
+            const docRef = this.createDocRef(collectionPath, validDocId);
             await deleteDoc(docRef);
             return { success: true };
         } catch (error) {
-            console.error('deleteDocument error:', error);
             return this.handleFirestoreError(error, 'delete document');
         }
     }
@@ -263,26 +213,20 @@ class FirestoreService {
         try {
             const colRef = this.createCollectionRef(collectionPath);
             let q = colRef;
-
             if (constraints.length > 0) {
                 q = query(q, ...constraints);
             }
-
             if (orderByField) {
                 q = query(q, orderBy(orderByField));
             }
-
             if (limitCount) {
                 q = query(q, limit(limitCount));
             }
-
             const querySnapshot = await getDocs(q);
             const documents = [];
-
             querySnapshot.forEach((doc) => {
                 documents.push({ id: doc.id, ...doc.data() });
             });
-
             return { success: true, data: documents };
         } catch (error) {
             return this.handleFirestoreError(error, 'query documents');
@@ -292,17 +236,11 @@ class FirestoreService {
     // ===== REAL-TIME SUBSCRIPTIONS =====
 
     subscribeToDocument(collectionPath, docId, callback, errorCallback = null) {
-        // Validate docId first
         const validDocId = this.validateDocId(docId);
         if (!validDocId) {
-            console.error('Invalid docId provided to subscribeToDocument:', docId);
-            errorCallback?.({ 
-                success: false, 
-                error: { message: 'Invalid or missing document ID' } 
-            });
+            errorCallback?.({ success: false, error: { message: 'Invalid or missing document ID' } });
             return null;
         }
-
         const docRef = this.createDocRef(collectionPath, validDocId);
         const unsubscribe = onSnapshot(
             docRef,
@@ -314,11 +252,9 @@ class FirestoreService {
                 }
             },
             (error) => {
-                console.error('Document subscription error:', error);
                 errorCallback?.(this.handleFirestoreError(error, 'subscribe to document'));
             }
         );
-
         const subscriptionKey = `${collectionPath}/${validDocId}`;
         this.unsubscribes.set(subscriptionKey, unsubscribe);
         return unsubscribe;
@@ -327,11 +263,9 @@ class FirestoreService {
     subscribeToCollection(collectionPath, constraints = [], callback, errorCallback = null) {
         const colRef = this.createCollectionRef(collectionPath);
         let q = colRef;
-
         if (constraints.length > 0) {
             q = query(q, ...constraints);
         }
-
         const unsubscribe = onSnapshot(
             q,
             (querySnapshot) => {
@@ -342,11 +276,9 @@ class FirestoreService {
                 callback(documents);
             },
             (error) => {
-                console.error('Collection subscription error:', error);
                 errorCallback?.(this.handleFirestoreError(error, 'subscribe to collection'));
             }
         );
-
         const subscriptionKey = `${collectionPath}_collection`;
         this.unsubscribes.set(subscriptionKey, unsubscribe);
         return unsubscribe;
@@ -366,24 +298,16 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
         try {
             const userRef = this.createDocRef('users', userId);
             const userDoc = await getDoc(userRef);
-
+            const updateData = this.addCommonFields(userData, userDoc.exists());
             if (userDoc.exists()) {
-                const updateData = this.addCommonFields(userData, true);
                 await updateDoc(userRef, updateData);
-                return { success: true, data: { id: userId, ...updateData } };
             } else {
-                const newUserData = this.addCommonFields({
-                    user_id: userId,
-                    email: this.getCurrentUser()?.email,
-                    ...userData
-                });
-                await setDoc(userRef, newUserData);
-                return { success: true, data: { id: userId, ...newUserData } };
+                await setDoc(userRef, { user_id: userId, email: this.getCurrentUser()?.email, ...updateData });
             }
+            return { success: true, data: { id: userId, ...updateData } };
         } catch (error) {
             return this.handleFirestoreError(error, 'create/update user profile');
         }
@@ -394,7 +318,6 @@ class FirestoreService {
         if (!targetUserId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
         return await this.getDocument('users', targetUserId);
     }
 
@@ -404,7 +327,6 @@ class FirestoreService {
             errorCallback?.({ success: false, error: { message: 'User not authenticated' } });
             return null;
         }
-
         return this.subscribeToDocument('users', userId, callback, errorCallback);
     }
 
@@ -415,24 +337,21 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
+        if (!orgData.name) {
+            return { success: false, error: { message: 'Organization name is required' } };
+        }
         try {
             const batch = writeBatch(this.db);
-
-            // Create organization with user as owner
             const orgId = orgData.orgId || doc(this.createCollectionRef('organizations')).id;
             const orgRef = this.createDocRef('organizations', orgId);
             const organizationData = this.addCommonFields({
                 name: orgData.name,
                 description: orgData.description || '',
                 ownerId: userId,
-                members: [userId], // Initialize with creator
-                memberCount: 1,
                 settings: orgData.settings || {}
             });
             batch.set(orgRef, organizationData);
 
-            // Add member document
             const memberRef = this.createDocRef('organizations', orgId, 'members', userId);
             const memberData = this.addCommonFields({
                 user_id: userId,
@@ -442,8 +361,16 @@ class FirestoreService {
             });
             batch.set(memberRef, memberData);
 
-            await batch.commit();
+            const userMembershipRef = this.createDocRef('userMemberships', userId, 'organizations', orgId);
+            const userMembershipData = this.addCommonFields({
+                user_id: userId,
+                role: 'owner',
+                org_id: orgId,
+                status: 'active'
+            });
+            batch.set(userMembershipRef, userMembershipData);
 
+            await batch.commit();
             return { success: true, data: { id: orgId, ...organizationData } };
         } catch (error) {
             return this.handleFirestoreError(error, 'create organization');
@@ -455,17 +382,13 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
         try {
-            // Get organizations where user is a member
             const orgsQuery = query(
                 this.createCollectionRef('organizations'),
                 where('members', 'array-contains', userId)
             );
-
             const orgsSnapshot = await getDocs(orgsQuery);
             const organizations = [];
-
             orgsSnapshot.forEach((doc) => {
                 const orgData = doc.data();
                 organizations.push({
@@ -474,7 +397,6 @@ class FirestoreService {
                     userRole: orgData.ownerId === userId ? 'owner' : 'member'
                 });
             });
-
             return { success: true, data: organizations };
         } catch (error) {
             return this.handleFirestoreError(error, 'get user organizations');
@@ -488,17 +410,11 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
-        try {
-            // Refresh auth token
-            await this.auth.currentUser.getIdToken(true);
-            console.log('Firebase auth token refreshed');
-        } catch (error) {
-            console.error('Error refreshing auth token:', error);
-            return this.handleFirestoreError(error, 'refresh auth token');
+        if (!this.validateTestSuiteData(suiteData)) {
+            return { success: false, error: { message: 'Missing required test suite fields' } };
         }
-
         try {
+            await this.auth.currentUser.getIdToken(true);
             const testSuiteData = this.addCommonFields({
                 name: suiteData.name,
                 description: suiteData.description || '',
@@ -510,17 +426,14 @@ class FirestoreService {
                 tags: suiteData.tags || [],
                 access_control: {
                     ownerType: suiteData.ownerType || 'individual',
-                    ownerId: suiteData.ownerId || userId
+                    ownerId: suiteData.ownerId || userId,
+                    admins: suiteData.access_control?.admins || [],
+                    members: suiteData.access_control?.members || [userId],
+                    permissions_matrix: suiteData.access_control?.permissions_matrix || {}
                 }
             });
-
             return await this.createDocument('testSuites', testSuiteData, suiteData.id);
         } catch (error) {
-            console.error('Detailed createTestSuite error:', {
-                errorCode: error.code,
-                errorMessage: error.message,
-                suiteData
-            });
             return this.handleFirestoreError(error, 'create test suite');
         }
     }
@@ -530,22 +443,17 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
         try {
-            // Get test suites where user is a member
             const suitesQuery = query(
                 this.createCollectionRef('testSuites'),
                 where('members', 'array-contains', userId),
                 orderBy('created_at', 'desc')
             );
-
             const suitesSnapshot = await getDocs(suitesQuery);
             const testSuites = [];
-
             suitesSnapshot.forEach((doc) => {
                 testSuites.push({ id: doc.id, ...doc.data() });
             });
-
             return { success: true, data: testSuites };
         } catch (error) {
             return this.handleFirestoreError(error, 'get user test suites');
@@ -558,13 +466,9 @@ class FirestoreService {
             errorCallback?.({ success: false, error: { message: 'User not authenticated' } });
             return null;
         }
-
         return this.subscribeToCollection(
             'testSuites',
-            [
-                where('members', 'array-contains', userId),
-                orderBy('created_at', 'desc')
-            ],
+            [where('members', 'array-contains', userId), orderBy('created_at', 'desc')],
             callback,
             errorCallback
         );
@@ -577,17 +481,17 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
+        if (!this.validateAssetData(assetType, assetData)) {
+            return { success: false, error: { message: `Missing required fields for ${assetType}` } };
+        }
         const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
-
         const data = this.addCommonFields({
             suite_id: suiteId,
             ...(sprintId && { sprint_id: sprintId }),
             ...assetData
         });
-
         return await this.createDocument(collectionPath, data);
     }
 
@@ -595,7 +499,6 @@ class FirestoreService {
         const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
-
         return await this.queryDocuments(collectionPath, [], 'created_at');
     }
 
@@ -603,7 +506,6 @@ class FirestoreService {
         const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
-
         return this.subscribeToCollection(
             collectionPath,
             [orderBy('created_at', 'desc')],
@@ -615,8 +517,16 @@ class FirestoreService {
     // ===== SPRINT OPERATIONS =====
 
     async createSprint(suiteId, sprintData) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+        if (!this.validateSprintData(sprintData)) {
+            return { success: false, error: { message: 'Missing required sprint fields' } };
+        }
         const collectionPath = `testSuites/${suiteId}/sprints`;
-        return await this.createDocument(collectionPath, sprintData);
+        const data = this.addCommonFields(sprintData);
+        return await this.createDocument(collectionPath, data);
     }
 
     async getSuiteSprints(suiteId) {
@@ -631,14 +541,13 @@ class FirestoreService {
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
-
         const collectionPath = `testSuites/${suiteId}/activityLogs`;
         const data = this.addCommonFields({
             suite_id: suiteId,
             user_id: userId,
-            ...logData
+            ...logData,
+            timestamp: serverTimestamp()
         });
-
         return await this.createDocument(collectionPath, data);
     }
 
@@ -647,10 +556,8 @@ class FirestoreService {
     async executeBatch(operations) {
         try {
             const batch = writeBatch(this.db);
-
             operations.forEach(operation => {
                 const { type, ref, data } = operation;
-
                 switch (type) {
                     case 'set':
                         batch.set(ref, this.addCommonFields(data));
@@ -663,7 +570,6 @@ class FirestoreService {
                         break;
                 }
             });
-
             await batch.commit();
             return { success: true };
         } catch (error) {
@@ -682,6 +588,13 @@ class FirestoreService {
         }
     }
 
+    // ===== DEPRECATED METHODS =====
+
+    async testFetchTestCases(suiteId) {
+        console.warn('testFetchTestCases is deprecated. Use getSuiteAssets(suiteId, "testCases") instead.');
+        return await this.getSuiteAssets(suiteId, 'testCases');
+    }
+
     // ===== CLEANUP =====
 
     cleanup() {
@@ -689,7 +602,6 @@ class FirestoreService {
     }
 }
 
-// Create and export singleton instance
 const firestoreService = new FirestoreService();
 export default firestoreService;
 export { FirestoreService };
