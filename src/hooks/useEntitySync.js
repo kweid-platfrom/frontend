@@ -21,36 +21,40 @@ export const useEntitySync = (
     const accessCheckCache = useRef({});
     const initializationInProgress = useRef(false);
 
-    // Add validation for orgId and accountType
+    // Validate orgId and accountType
     const validOrgId = typeof orgId === 'function' ? orgId() : orgId;
     const validAccountType = typeof accountType === 'function' ? accountType() : accountType;
 
-    console.log('🔧 Parameter validation:', {
-        orgIdType: typeof orgId,
-        orgIdValue: validOrgId,
-        accountTypeType: typeof accountType,
-        accountTypeValue: validAccountType
+    console.log('🔧 useEntitySync Parameter validation:', {
+        isAuthenticated,
+        activeSuiteId,
+        orgId: validOrgId,
+        accountType: validAccountType,
+        setters: {
+            setTestCases: typeof setTestCases === 'function',
+            setBugs: typeof setBugs === 'function',
+            setRecordings: typeof setRecordings === 'function',
+            setRelationships: typeof setRelationships === 'function',
+        },
     });
 
     const getCollectionPath = useCallback((collectionName) => {
-        if (validAccountType === 'individual') {
-            return `individualAccounts/${firestoreService.getCurrentUserId()}/testSuites/${activeSuiteId}/${collectionName}`;
+        if (!validOrgId || !activeSuiteId) {
+            console.warn(`Invalid parameters for collection path: orgId=${validOrgId}, activeSuiteId=${activeSuiteId}`);
+            return null;
         }
-        return `organizations/${validOrgId}/testSuites/${activeSuiteId}/${collectionName}`;
+        const path = validAccountType === 'individual'
+            ? `individualAccounts/${firestoreService.getCurrentUserId()}/testSuites/${activeSuiteId}/${collectionName}`
+            : `organizations/${validOrgId}/testSuites/${activeSuiteId}/${collectionName}`;
+        console.log(`Generated collection path for ${collectionName}: ${path}`);
+        return path;
     }, [validAccountType, activeSuiteId, validOrgId]);
 
     const resetState = useCallback(() => {
         console.log('Resetting state for all entities');
-        
-        if (typeof setTestCases === 'function') {
-            setTestCases([]);
-        }
-        if (typeof setBugs === 'function') {
-            setBugs([]);
-        }
-        if (typeof setRecordings === 'function') {
-            setRecordings([]);
-        }
+        if (typeof setTestCases === 'function') setTestCases([]);
+        if (typeof setBugs === 'function') setBugs([]);
+        if (typeof setRecordings === 'function') setRecordings([]);
         if (typeof setRelationships === 'function') {
             setRelationships({ 
                 testCaseToBugs: {}, 
@@ -61,7 +65,7 @@ export const useEntitySync = (
     }, [setTestCases, setBugs, setRecordings, setRelationships]);
 
     const cleanupSubscriptions = useCallback(() => {
-        console.log('Cleaning up subscriptions');
+        console.log('Cleaning up subscriptions', { count: unsubscribes.current.length });
         unsubscribes.current.forEach((unsub) => {
             try {
                 if (unsub && typeof unsub === 'function') {
@@ -78,13 +82,18 @@ export const useEntitySync = (
     const subscribeToCollection = useCallback((collectionConfig) => {
         const { name, path, constraints, setter, transformData } = collectionConfig;
         
+        if (!path) {
+            console.error(`No valid path for ${name} subscription`);
+            return false;
+        }
+
         if (typeof setter !== 'function') {
             console.error(`Setter for ${name} is not a function:`, setter);
             return false;
         }
         
         try {
-            console.log(`Subscribing to ${path}`);
+            console.log(`Subscribing to ${name} at ${path}`);
             
             const unsubscribe = firestoreService.subscribeToCollection(
                 path,
@@ -99,12 +108,18 @@ export const useEntitySync = (
                             ...docData,
                             created_at: docData.created_at?.toDate ? docData.created_at.toDate() : new Date(),
                             updated_at: docData.updated_at?.toDate ? docData.updated_at.toDate() : new Date(),
+                            title: docData.title || 'Untitled',
+                            status: docData.status || 'draft',
+                            priority: docData.priority || 'low',
+                            assignee: docData.assignee || '',
+                            tags: docData.tags || [],
+                            executionType: docData.executionType || 'manual',
+                            automationStatus: docData.automationStatus || 'none',
                         };
-                        
                         return transformData ? transformData(baseData) : baseData;
                     });
                     
-                    console.log(`Received ${data.length} ${name}`);
+                    console.log(`Received ${data.length} ${name}`, data.slice(0, 3));
                     setter(data);
                 },
                 (error) => {
@@ -132,7 +147,8 @@ export const useEntitySync = (
 
     const subscribeToRelationships = useCallback(() => {
         const relationshipsPath = getCollectionPath('relationships');
-        
+        if (!relationshipsPath) return false;
+
         return subscribeToCollection({
             name: 'relationships',
             path: relationshipsPath,
@@ -189,7 +205,6 @@ export const useEntitySync = (
                 isAuthenticated
             });
 
-            // Check access with enhanced debugging
             const cacheKey = `${userId}_${activeSuiteId}`;
             let hasSuiteAccess = accessCheckCache.current[cacheKey];
             
@@ -200,20 +215,18 @@ export const useEntitySync = (
                     hasSuiteAccess = await checkSuiteAccess(userId, activeSuiteId);
                     console.log(`🔐 Access check result: ${hasSuiteAccess}`);
                     
-                    // Only cache successful access checks for a short time
                     if (hasSuiteAccess) {
                         accessCheckCache.current[cacheKey] = hasSuiteAccess;
-                        // Clear cache after 5 minutes
                         setTimeout(() => {
                             delete accessCheckCache.current[cacheKey];
                         }, 5 * 60 * 1000);
-                    } else {
-                        // Don't cache failed access checks to allow retry
-                        console.log('❌ Not caching failed access check to allow retry');
                     }
                 } catch (accessError) {
                     console.error('🔐 Error during access check:', accessError);
                     hasSuiteAccess = false;
+                    if (typeof handleError === 'function') {
+                        handleError(accessError, 'suite access');
+                    }
                 }
             } else {
                 console.log(`🔐 Using cached access result: ${hasSuiteAccess}`);
@@ -225,10 +238,7 @@ export const useEntitySync = (
                     accountType: validAccountType,
                     orgId: validOrgId,
                     isAuthenticated,
-                    checkSuiteAccessFunction: typeof checkSuiteAccess
                 });
-                
-                // Don't throw error immediately - let parent component handle this
                 if (typeof handleError === 'function') {
                     handleError(new Error(`Access denied to suite ${activeSuiteId}. Please check your permissions.`), 'suite access');
                 }
@@ -237,7 +247,6 @@ export const useEntitySync = (
 
             console.log(`✅ Access granted to suite ${activeSuiteId}`);
 
-            // Define collection configurations
             const collections = [
                 { 
                     name: 'testCases', 
@@ -259,23 +268,19 @@ export const useEntitySync = (
                 },
             ];
 
-            // Subscribe to all collections
             const subscriptionPromises = collections.map(collection => 
                 subscribeToCollection(collection)
             );
-
-            // Add relationships subscription
             subscriptionPromises.push(subscribeToRelationships());
 
             const results = await Promise.allSettled(subscriptionPromises);
             const failedSubscriptions = results.filter(result => result.status === 'rejected' || !result.value);
             
             if (failedSubscriptions.length > 0) {
-                console.warn(`${failedSubscriptions.length} subscriptions failed to initialize`);
+                console.warn(`${failedSubscriptions.length} subscriptions failed to initialize`, failedSubscriptions);
             } else {
                 console.log('🎉 All subscriptions initialized successfully');
             }
-
         } catch (error) {
             if (isMounted.current) {
                 console.error('Error in subscription initialization:', error);
@@ -301,33 +306,14 @@ export const useEntitySync = (
         isAuthenticated
     ]);
 
-    // Add debug effect to track parameter changes
-    useEffect(() => {
-        console.log('📊 useEntitySync parameters changed:', {
-            isAuthenticated,
-            activeSuiteId,
-            orgId: validOrgId,
-            accountType: validAccountType,
-            hasSetters: {
-                setTestCases: typeof setTestCases === 'function',
-                setBugs: typeof setBugs === 'function',
-                setRecordings: typeof setRecordings === 'function',
-                setRelationships: typeof setRelationships === 'function'
-            }
-        });
-    }, [isAuthenticated, activeSuiteId, validOrgId, validAccountType, setTestCases, setBugs, setRecordings, setRelationships]);
-
     useEffect(() => {
         if (!isMounted.current) return;
 
-        // Clean up previous subscriptions on suite change
         if (activeSuiteId !== previousSuiteId.current) {
             console.log(`🔄 Suite changed from ${previousSuiteId.current} to ${activeSuiteId}`);
             cleanupSubscriptions();
             resetState();
             previousSuiteId.current = activeSuiteId;
-            
-            // Clear access cache for new suite
             accessCheckCache.current = {};
         }
 
@@ -341,7 +327,6 @@ export const useEntitySync = (
             return;
         }
 
-        // Add small delay to ensure authentication is fully settled
         const timeoutId = setTimeout(() => {
             if (isMounted.current) {
                 initializeSubscriptions();
@@ -354,7 +339,6 @@ export const useEntitySync = (
         };
     }, [isAuthenticated, activeSuiteId, validOrgId, validAccountType, cleanupSubscriptions, resetState, initializeSubscriptions]);
 
-    // Cleanup on unmount
     useEffect(() => {
         isMounted.current = true;
         return () => {

@@ -67,11 +67,11 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
     );
 };
 
-const TestCaseTable = ({
+const TestCaseList = ({
     testCases = [],
     bugs = [],
-    relationships = {}, // This should be the testCaseToBugs object from the parent
-    filters = {}, // Added filters prop to handle filtering
+    relationships = {},
+    filters = {},
     loading,
     onEdit,
     onDelete,
@@ -153,7 +153,6 @@ const TestCaseTable = ({
             const aValue = a[sortConfig.key];
             const bValue = b[sortConfig.key];
             if (sortConfig.key === 'updated_at') {
-                // Handle date sorting
                 const aDate = aValue instanceof Date ? aValue : new Date(aValue);
                 const bDate = bValue instanceof Date ? bValue : new Date(bValue);
                 if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
@@ -253,9 +252,9 @@ const TestCaseTable = ({
         : [];
 
     return (
-        <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
+        <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-4">
             {selectedIds.length > 0 && (
-                <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
+                <div className="bg-teal-50 border-b border-teal-200 px-6 py-3 mb-4">
                     <div className="flex items-center justify-between">
                         <span className="text-sm text-teal-700 font-medium">
                             {selectedIds.length} test case{selectedIds.length > 1 ? 's' : ''} selected
@@ -284,200 +283,174 @@ const TestCaseTable = ({
                 </div>
             )}
 
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left border-r border-gray-200">
-                                <div className="flex items-center">
-                                    {selectedIds.length === filteredTestCases.length ? (
-                                        <CheckSquare
-                                            className="w-4 h-4 text-teal-600 cursor-pointer"
-                                            onClick={() => handleSelectAll(false)}
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center">
+                    {selectedIds.length === filteredTestCases.length ? (
+                        <CheckSquare
+                            className="w-4 h-4 text-teal-600 cursor-pointer"
+                            onClick={() => handleSelectAll(false)}
+                        />
+                    ) : (
+                        <Square
+                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                            onClick={() => handleSelectAll(true)}
+                        />
+                    )}
+                    <span className="ml-2 text-sm font-medium text-gray-700">Select All</span>
+                </div>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => handleSort('title')}
+                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        Title {getSortIcon('title')}
+                    </button>
+                    <button
+                        onClick={() => handleSort('status')}
+                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        Status {getSortIcon('status')}
+                    </button>
+                    <button
+                        onClick={() => handleSort('priority')}
+                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        Priority {getSortIcon('priority')}
+                    </button>
+                    <button
+                        onClick={() => handleSort('assignee')}
+                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        Assignee {getSortIcon('assignee')}
+                    </button>
+                    <button
+                        onClick={() => handleSort('updated_at')}
+                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        Last Updated {getSortIcon('updated_at')}
+                    </button>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="text-center text-sm text-gray-500 py-4">Loading test cases...</div>
+            ) : filteredTestCases.length === 0 ? (
+                <div className="text-center text-sm text-gray-500 py-4">No test cases found</div>
+            ) : (
+                <div className="grid gap-4">
+                    {sortedTestCases.map((testCase) => {
+                        const updatedAt = testCase.updated_at instanceof Date ? testCase.updated_at : new Date(testCase.updated_at);
+                        const linkedBugs = relationships[testCase.id] || [];
+
+                        return (
+                            <div
+                                key={testCase.id}
+                                className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(testCase.id)}
+                                            onChange={(e) => handleSelectItem(testCase.id, e.target.checked)}
+                                            className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
                                         />
-                                    ) : (
-                                        <Square
-                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
-                                            onClick={() => handleSelectAll(true)}
-                                        />
-                                    )}
+                                        <div className="text-sm font-medium text-gray-900 truncate max-w-md" title={testCase.title}>
+                                            {testCase.title || 'Untitled Test Case'}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={() => onView && onView(testCase)}
+                                            className="text-gray-400 hover:text-teal-600"
+                                            title="View"
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => onEdit && onEdit(testCase)}
+                                            className="text-gray-400 hover:text-teal-600"
+                                            title="Edit"
+                                        >
+                                            <Edit3 className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDuplicate(testCase)}
+                                            className="text-gray-400 hover:text-teal-600"
+                                            title="Duplicate"
+                                        >
+                                            <Copy className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(testCase.id, testCase.title)}
+                                            className="text-gray-400 hover:text-red-600"
+                                            title="Delete"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => onRun && onRun(testCase)}
+                                            className="text-gray-400 hover:text-teal-600"
+                                            title="Run"
+                                        >
+                                            <Play className="h-4 w-4" />
+                                        </button>
+                                    </div>
                                 </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('title')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Test Case
-                                    {getSortIcon('title')}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('status')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Status
-                                    {getSortIcon('status')}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('priority')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Priority
-                                    {getSortIcon('priority')}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('assignee')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Assignee
-                                    {getSortIcon('assignee')}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('updated_at')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Last Updated
-                                    {getSortIcon('updated_at')}
-                                </div>
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                                Linked Bugs
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Actions
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {loading ? (
-                            <tr>
-                                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
-                                    Loading test cases...
-                                </td>
-                            </tr>
-                        ) : filteredTestCases.length === 0 ? (
-                            <tr>
-                                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
-                                    No test cases found
-                                </td>
-                            </tr>
-                        ) : (
-                            sortedTestCases.map((testCase) => {
-                                const updatedAt = testCase.updated_at instanceof Date ? testCase.updated_at : new Date(testCase.updated_at);
-                                // Get linked bugs for this test case from the relationships object
-                                const linkedBugs = relationships[testCase.id] || [];
-                                
-                                return (
-                                    <tr key={testCase.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <div className="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedIds.includes(testCase.id)}
-                                                    onChange={(e) => handleSelectItem(testCase.id, e.target.checked)}
-                                                    className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-                                                />
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <div className="text-sm text-gray-900 truncate max-w-xs" title={testCase.title}>
-                                                {testCase.title || 'Untitled Test Case'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <span
-                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
-                                                    testCase.status
-                                                )}`}
-                                            >
-                                                {testCase.status || 'Draft'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <span
-                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityBadge(
-                                                    testCase.priority
-                                                )}`}
-                                            >
-                                                {testCase.priority || 'Low'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <div className="text-sm text-gray-900 truncate" title={testCase.assignee}>
-                                                {testCase.assignee || 'Unassigned'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <div className="text-sm text-gray-500">
-                                                {isValidDate(updatedAt)
-                                                    ? formatDistanceToNow(updatedAt, { addSuffix: true })
-                                                    : 'Invalid Date'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                                    <div>
+                                        <span className="text-xs font-medium text-gray-500">Status:</span>
+                                        <span
+                                            className={`ml-2 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
+                                                testCase.status
+                                            )}`}
+                                        >
+                                            {testCase.status || 'Draft'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs font-medium text-gray-500">Priority:</span>
+                                        <span
+                                            className={`ml-2 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityBadge(
+                                                testCase.priority
+                                            )}`}
+                                        >
+                                            {testCase.priority || 'Low'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs font-medium text-gray-500">Assignee:</span>
+                                        <span className="ml-2 text-sm text-gray-900 truncate" title={testCase.assignee}>
+                                            {testCase.assignee || 'Unassigned'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs font-medium text-gray-500">Last Updated:</span>
+                                        <span className="ml-2 text-sm text-gray-500">
+                                            {isValidDate(updatedAt)
+                                                ? formatDistanceToNow(updatedAt, { addSuffix: true })
+                                                : 'Invalid Date'}
+                                        </span>
+                                    </div>
+                                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
+                                        <span className="text-xs font-medium text-gray-500">Linked Bugs:</span>
+                                        <div className="mt-1">
                                             <MultiSelectDropdown
                                                 options={bugOptions}
                                                 value={linkedBugs}
                                                 onChange={(newBugs) => onLinkBug && onLinkBug(testCase.id, newBugs)}
                                                 placeholder="Link Bugs..."
                                             />
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex items-center space-x-2">
-                                                <button
-                                                    onClick={() => onView && onView(testCase)}
-                                                    className="text-gray-400 hover:text-teal-600"
-                                                    title="View"
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => onEdit && onEdit(testCase)}
-                                                    className="text-gray-400 hover:text-teal-600"
-                                                    title="Edit"
-                                                >
-                                                    <Edit3 className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDuplicate(testCase)}
-                                                    className="text-gray-400 hover:text-teal-600"
-                                                    title="Duplicate"
-                                                >
-                                                    <Copy className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(testCase.id, testCase.title)}
-                                                    className="text-gray-400 hover:text-red-600"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => onRun && onRun(testCase)}
-                                                    className="text-gray-400 hover:text-teal-600"
-                                                    title="Run"
-                                                >
-                                                    <Play className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };
 
-export default TestCaseTable;
+export default TestCaseList;

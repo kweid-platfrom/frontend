@@ -1,19 +1,23 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useState, useCallback, useEffect } from 'react';
 import { useApp } from '@/contexts/AppProvider';
 import { useSuite } from '@/contexts/SuiteContext';
 import { useEntitySync } from '@/hooks/useEntitySync';
 import PageLayout from '@/components/layout/PageLayout';
-import BugTracker from '@/components/BugTracker';
-import { FileText, Download, Filter, List, Table, Calendar, User, Flag, AlertTriangle, Clock } from 'lucide-react';
+import BugTable from '@/components/bug-report/BugTable';
 import BugReportButton from '@/components/modals/BugReportButton';
+import BugDetailsModal from '@/components/modals/BugDetailsModal';
+import BugFilters from '@/components/bug-report/BugFilters';
+import { FileText, Download } from 'lucide-react';
 import { BugAntIcon } from '@heroicons/react/24/outline';
 import { toast } from 'sonner';
 import firestoreService from '@/services/firestoreService';
+import { Timestamp } from 'firebase/firestore';
 
-export default function BugTrackerPage() {
+const BugTrackerPage = () => {
     const { user, userCapabilities, isAuthenticated, isLoading: appLoading } = useApp();
     const { activeSuite, isLoading: suiteLoading } = useSuite();
     const router = useRouter();
@@ -26,18 +30,21 @@ export default function BugTrackerPage() {
         requirementToTestCases: {},
     });
     const [filteredBugs, setFilteredBugs] = useState([]);
-    const [showFilters, setShowFilters] = useState(false);
     const [groupBy, setGroupBy] = useState('none');
     const [subGroupBy, setSubGroupBy] = useState('none');
     const [viewMode, setViewMode] = useState('table');
     const [selectedBugs, setSelectedBugs] = useState([]);
+    const [selectedBug, setSelectedBug] = useState(null);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
     const [filters, setFilters] = useState({
+        searchTerm: '',
         status: 'all',
         severity: 'all',
-        priority: 'all',
-        assignee: 'all',
-        environment: 'all',
-        search: ''
+        category: 'all',
+        assignedTo: 'all',
+        sprint: 'all',
+        dueDate: 'all',
     });
 
     const addNotification = useCallback((notification) => {
@@ -57,7 +64,6 @@ export default function BugTrackerPage() {
         });
     }, [addNotification]);
 
-    // Get orgId and accountType from activeSuite or user context
     const getOrgId = useCallback(() => {
         return activeSuite?.org_id || user?.org_id || null;
     }, [activeSuite, user]);
@@ -78,11 +84,10 @@ export default function BugTrackerPage() {
         handleError
     );
 
-    // Convert testCaseToBugs to bugToTestCases
     const bugToTestCases = useCallback(() => {
         const bugMap = {};
         Object.entries(relationships.testCaseToBugs).forEach(([testCaseId, bugIds]) => {
-            bugIds.forEach(bugId => {
+            bugIds.forEach((bugId) => {
                 if (!bugMap[bugId]) bugMap[bugId] = [];
                 bugMap[bugId].push(testCaseId);
             });
@@ -90,35 +95,55 @@ export default function BugTrackerPage() {
         return bugMap;
     }, [relationships.testCaseToBugs]);
 
-    // Apply filters to bugs
     const applyFilters = useCallback(() => {
         let filtered = [...bugs];
 
-        if (filters.search) {
-            filtered = filtered.filter(bug =>
-                bug.title?.toLowerCase().includes(filters.search.toLowerCase()) ||
-                bug.description?.toLowerCase().includes(filters.search.toLowerCase())
+        if (filters.searchTerm) {
+            filtered = filtered.filter(
+                (bug) =>
+                    bug.title?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+                    bug.description?.toLowerCase().includes(filters.searchTerm.toLowerCase())
             );
         }
 
         if (filters.status !== 'all') {
-            filtered = filtered.filter(bug => bug.status === filters.status);
+            filtered = filtered.filter((bug) => bug.status === filters.status);
         }
 
         if (filters.severity !== 'all') {
-            filtered = filtered.filter(bug => bug.severity === filters.severity);
+            filtered = filtered.filter((bug) => bug.severity === filters.severity);
         }
 
-        if (filters.priority !== 'all') {
-            filtered = filtered.filter(bug => bug.priority === filters.priority);
+        if (filters.category !== 'all') {
+            filtered = filtered.filter((bug) => bug.category === filters.category);
         }
 
-        if (filters.assignee !== 'all') {
-            filtered = filtered.filter(bug => bug.assigned_to === filters.assignee);
+        if (filters.assignedTo !== 'all') {
+            filtered = filtered.filter((bug) => bug.assigned_to === filters.assignedTo);
         }
 
-        if (filters.environment !== 'all') {
-            filtered = filtered.filter(bug => bug.environment === filters.environment);
+        if (filters.sprint !== 'all') {
+            filtered = filtered.filter((bug) => bug.sprint === filters.sprint);
+        }
+
+        if (filters.dueDate !== 'all') {
+            filtered = filtered.filter((bug) => {
+                if (filters.dueDate === 'overdue') return bug.due_date && new Date(bug.due_date) < new Date();
+                if (filters.dueDate === 'today') {
+                    const today = new Date();
+                    const due = new Date(bug.due_date);
+                    return due.getDate() === today.getDate() && due.getMonth() === today.getMonth() && due.getFullYear() === today.getFullYear();
+                }
+                if (filters.dueDate === 'this-week') {
+                    const today = new Date();
+                    const due = new Date(bug.due_date);
+                    const weekStart = new Date(today.setDate(today.getDate() - today.getDay()));
+                    const weekEnd = new Date(today.setDate(today.getDate() + 6));
+                    return due >= weekStart && due <= weekEnd;
+                }
+                if (filters.dueDate === 'no-due-date') return !bug.due_date;
+                return true;
+            });
         }
 
         setFilteredBugs(filtered);
@@ -128,139 +153,219 @@ export default function BugTrackerPage() {
         applyFilters();
     }, [bugs, filters, applyFilters]);
 
-    const groupingOptions = [
-        { value: 'none', label: 'No Grouping', icon: List },
-        { value: 'status', label: 'Status', icon: Clock },
-        { value: 'severity', label: 'Severity', icon: AlertTriangle },
-        { value: 'assignee', label: 'Assignee', icon: User },
-        { value: 'sprint', label: 'Sprint', icon: Flag },
-        { value: 'month', label: 'Month', icon: Calendar }
-    ];
+    const toggleBugSelection = useCallback(
+        (id, checked) => {
+            if (!userCapabilities.canViewBugs) {
+                toast.error("You don't have permission to select bugs");
+                return;
+            }
+            setSelectedBugs((prev) => {
+                const newSelection = checked
+                    ? [...new Set([...prev, id])]
+                    : prev.filter((selectedId) => selectedId !== id);
+                toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
+                return newSelection;
+            });
+        },
+        [userCapabilities]
+    );
 
-    const subGroupingOptions = [
-        { value: 'none', label: 'No Sub-grouping' },
-        { value: 'week', label: 'Week' },
-        { value: 'month', label: 'Month' }
-    ];
+    const handleBulkAction = useCallback(
+        async (action, ids) => {
+            if (!userCapabilities.canUpdateBugs && action !== 'delete') {
+                toast.error("You don't have permission to update bugs");
+                return;
+            }
+            if (!userCapabilities.canDeleteBugs && action === 'delete') {
+                toast.error("You don't have permission to delete bugs");
+                return;
+            }
+            if (!ids || ids.length === 0) {
+                toast.error("No bugs selected");
+                return;
+            }
+            try {
+                const orgId = getOrgId();
+                const accountType = getAccountType();
 
-    const toggleBugSelection = useCallback((id, checked) => {
-        if (!userCapabilities.canViewBugs) {
-            toast.error("You don't have permission to select bugs");
-            return;
-        }
-        setSelectedBugs(prev => {
-            const newSelection = checked
-                ? [...new Set([...prev, id])]
-                : prev.filter(selectedId => selectedId !== id);
-            console.log('BugTrackerPage toggleBugSelection:', { id, checked, newSelection });
-            toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
-            return newSelection;
-        });
-    }, [userCapabilities]);
+                let bugsCollectionPath;
+                if (accountType === 'individual') {
+                    bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+                } else {
+                    bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
+                }
 
-    const handleBulkAction = useCallback(async (action, ids) => {
-        if (!userCapabilities.canUpdateBugs && action !== 'delete') {
-            toast.error("You don't have permission to update bugs");
-            return;
-        }
-        if (!userCapabilities.canDeleteBugs && action === 'delete') {
-            toast.error("You don't have permission to delete bugs");
-            return;
-        }
-        if (!ids || ids.length === 0) {
-            toast.error("No bugs selected");
-            return;
-        }
+                if (action === 'delete') {
+                    if (!window.confirm(`Are you sure you want to delete ${ids.length} bug${ids.length > 1 ? 's' : ''}?`)) {
+                        return;
+                    }
+                    await Promise.all(ids.map((id) => firestoreService.deleteDocument(bugsCollectionPath, id)));
+                } else {
+                    await Promise.all(
+                        ids.map((id) =>
+                            firestoreService.updateDocument(bugsCollectionPath, id, {
+                                status: action === 'open' ? 'Open' : 'Closed',
+                                updated_at: Timestamp.fromDate(new Date()),
+                            })
+                        )
+                    );
+                }
+                setSelectedBugs([]);
+                addNotification({
+                    type: 'success',
+                    title: 'Success',
+                    message: `${ids.length} bug${ids.length > 1 ? 's' : ''} ${action}d successfully`,
+                });
+            } catch (error) {
+                handleError(error, `bulk ${action}`);
+            }
+        },
+        [userCapabilities.canUpdateBugs, userCapabilities.canDeleteBugs, getOrgId, getAccountType, addNotification, user.uid, activeSuite.suite_id, handleError]
+    );
+
+    const handleCreateBug = useCallback(
+        async (bugData) => {
+            if (!userCapabilities.canCreateBugs) {
+                toast.error("You don't have permission to create bugs");
+                return;
+            }
+            try {
+                const orgId = getOrgId();
+                const accountType = getAccountType();
+
+                let bugsCollectionPath;
+                if (accountType === 'individual') {
+                    bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+                } else {
+                    bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
+                }
+
+                const newBug = {
+                    ...bugData,
+                    created_at: Timestamp.fromDate(new Date()),
+                    suite_id: activeSuite.suite_id,
+                    status: 'New',
+                    severity: bugData.severity || 'Low',
+                    priority: bugData.priority || 'Low',
+                    environment: bugData.environment || 'Production',
+                    created_by: user?.email || 'anonymous',
+                };
+                const docRef = await firestoreService.createDocument(bugsCollectionPath, newBug);
+                addNotification({
+                    type: 'success',
+                    title: 'Bug Created',
+                    message: `Bug #${docRef.id.slice(-6)} created successfully`,
+                });
+            } catch (error) {
+                handleError(error, 'create bug');
+            }
+        },
+        [userCapabilities.canCreateBugs, getOrgId, getAccountType, activeSuite.suite_id, user?.email, user.uid, addNotification, handleError]
+    );
+
+    const handleEditBug = (bug) => {
+        setSelectedBug(bug);
+        setIsDetailsModalOpen(true);
+    };
+
+    const handleViewBug = (bug) => {
+        setSelectedBug(bug);
+        setIsDetailsModalOpen(true);
+    };
+
+    const handleSaveBug = async (bugData) => {
         try {
             const orgId = getOrgId();
             const accountType = getAccountType();
-            
+
             let bugsCollectionPath;
             if (accountType === 'individual') {
                 bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
             } else {
                 bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
             }
-            
-            if (action === 'delete') {
-                if (!window.confirm(`Are you sure you want to delete ${ids.length} bug${ids.length > 1 ? 's' : ''}?`)) {
-                    return;
-                }
-                await Promise.all(ids.map(id => firestoreService.deleteDocument(bugsCollectionPath, id)));
-            } else {
-                await Promise.all(ids.map(id => firestoreService.updateDocument(bugsCollectionPath, id, { status: action === 'reopen' ? 'open' : 'closed' })));
+
+            const timestamp = Timestamp.fromDate(new Date());
+            if (selectedBug) {
+                await firestoreService.updateDocument(bugsCollectionPath, selectedBug.id, {
+                    ...bugData,
+                    updated_at: timestamp,
+                });
+                addNotification({
+                    type: 'success',
+                    title: 'Success',
+                    message: 'Bug updated successfully',
+                });
             }
-            setSelectedBugs([]);
+            setIsDetailsModalOpen(false);
+        } catch (error) {
+            handleError(error, 'save bug');
+        }
+    };
+
+    const handleLinkTestCase = async (bugId, newTestCaseIds) => {
+        try {
+            const orgId = getOrgId();
+            const accountType = getAccountType();
+
+            let relationshipsCollectionPath;
+            if (accountType === 'individual') {
+                relationshipsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/relationships`;
+            } else {
+                relationshipsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/relationships`;
+            }
+
+            const existingTestCases = relationships.testCaseToBugs[bugId] || [];
+            const toAdd = newTestCaseIds.filter((id) => !existingTestCases.includes(id));
+            const toRemove = existingTestCases.filter((id) => !newTestCaseIds.includes(id));
+            const promises = [];
+
+            toAdd.forEach((testCaseId) => {
+                promises.push(
+                    firestoreService.createDocument(relationshipsCollectionPath, {
+                        suiteId: activeSuite.suite_id,
+                        sourceType: 'bug',
+                        sourceId: bugId,
+                        targetType: 'testCase',
+                        targetId: testCaseId,
+                        created_at: Timestamp.fromDate(new Date()),
+                        created_by: user?.email || 'anonymous',
+                    })
+                );
+            });
+
+            toRemove.forEach((testCaseId) => {
+                promises.push(
+                    firestoreService.deleteDocumentByQuery(relationshipsCollectionPath, [
+                        where('suiteId', '==', activeSuite.suite_id),
+                        where('sourceType', '==', 'bug'),
+                        where('sourceId', '==', bugId),
+                        where('targetType', '==', 'testCase'),
+                        where('targetId', '==', testCaseId),
+                    ])
+                );
+            });
+
+            await Promise.all(promises);
             addNotification({
                 type: 'success',
                 title: 'Success',
-                message: `${ids.length} bug${ids.length > 1 ? 's' : ''} ${action}d successfully`
+                message: `Linked ${newTestCaseIds.length} test case${newTestCaseIds.length > 1 ? 's' : ''} to bug`,
             });
         } catch (error) {
-            console.error(`Error performing bulk ${action}:`, error);
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: `Failed to ${action} bugs: ${error.message}`
-            });
+            handleError(error, 'link test cases');
         }
-    }, [userCapabilities, activeSuite, user, getOrgId, getAccountType, addNotification]);
-
-    const handleCreateBug = useCallback(async (bugData) => {
-        if (!userCapabilities.canCreateBugs) {
-            toast.error("You don't have permission to create bugs");
-            return;
-        }
-        try {
-            const orgId = getOrgId();
-            const accountType = getAccountType();
-            
-            let bugsCollectionPath;
-            if (accountType === 'individual') {
-                bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
-            } else {
-                bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
-            }
-            
-            const newBug = {
-                ...bugData,
-                created_at: new Date(),
-                suite_id: activeSuite.suite_id,
-                status: 'New',
-                severity: bugData.severity || 'Low',
-                priority: bugData.priority || 'Low',
-                environment: bugData.environment || 'Production',
-                created_by: user?.email || 'anonymous'
-            };
-            const docRef = await firestoreService.createDocument(bugsCollectionPath, newBug);
-            addNotification({
-                type: 'success',
-                title: 'Bug Created',
-                message: `Bug #${docRef.id.slice(-6)} created successfully`
-            });
-        } catch (error) {
-            console.error('Error creating bug:', error);
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: `Failed to create bug: ${error.message}`
-            });
-        }
-    }, [userCapabilities, activeSuite, user, getOrgId, getAccountType, addNotification]);
+    };
 
     const handleExportBugs = async () => {
         try {
             addNotification({
                 type: 'success',
                 title: 'Bugs Exported',
-                message: 'Bugs exported successfully'
+                message: 'Bugs exported successfully',
             });
         } catch (error) {
-            addNotification({
-                type: 'error',
-                title: 'Export Failed',
-                message: `Failed to export bugs: ${error.message}`
-            });
+            handleError(error, 'export bugs');
         }
     };
 
@@ -268,25 +373,18 @@ export default function BugTrackerPage() {
         addNotification({
             type: 'info',
             title: 'Report Generation',
-            message: 'Report generation is not yet implemented'
+            message: 'Report generation is not yet implemented',
         });
     };
 
-    const clearFilters = () => {
-        setFilters({
-            status: 'all',
-            severity: 'all',
-            priority: 'all',
-            assignee: 'all',
-            environment: 'all',
-            search: ''
-        });
-        addNotification({
-            type: 'success',
-            title: 'Filters Cleared',
-            message: 'All filters have been reset'
-        });
-    };
+    const teamMembers = Array.from(new Set(bugs.map(bug => bug.assigned_to).filter(Boolean))).map(email => ({
+        name: email,
+    }));
+
+    const sprints = Array.from(new Set(bugs.map(bug => bug.sprint).filter(Boolean))).map(sprint => ({
+        id: sprint,
+        name: sprint,
+    }));
 
     if (appLoading || suiteLoading) {
         return null;
@@ -296,7 +394,7 @@ export default function BugTrackerPage() {
         addNotification({
             type: 'error',
             title: 'Access Denied',
-            message: 'Please log in and select a test suite to access the bug tracker.'
+            message: 'Please log in and select a test suite to access the bug tracker.',
         });
         router.push('/login');
         return null;
@@ -306,7 +404,7 @@ export default function BugTrackerPage() {
         addNotification({
             type: 'error',
             title: 'Subscription Required',
-            message: 'Your subscription does not allow access to the bug tracker. Please upgrade your plan.'
+            message: 'Your subscription does not allow access to the bug tracker. Please upgrade your plan.',
         });
         router.push('/pricing');
         return null;
@@ -344,104 +442,91 @@ export default function BugTrackerPage() {
                     </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border p-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Group by:</span>
-                                <select
-                                    value={groupBy}
-                                    onChange={(e) => setGroupBy(e.target.value)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent min-w-0"
-                                >
-                                    {groupingOptions.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                                {(groupBy === 'sprint' || groupBy === 'month') && (
-                                    <select
-                                        value={subGroupBy}
-                                        onChange={(e) => setSubGroupBy(e.target.value)}
-                                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent min-w-0"
-                                    >
-                                        {subGroupingOptions.map(option => (
-                                            <option key={option.value} value={option.value}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                )}
-                            </div>
-                            <div className="flex items-center border rounded-lg overflow-hidden">
-                                <button
-                                    onClick={() => setViewMode('list')}
-                                    className={`flex items-center px-3 py-2 text-sm transition-colors ${
-                                        viewMode === 'list'
-                                            ? 'bg-teal-600 text-white'
-                                            : 'bg-white text-gray-700 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    <List className="h-4 w-4 mr-1" />
-                                    <span className="hidden sm:inline">List</span>
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('table')}
-                                    className={`flex items-center px-3 py-2 text-sm transition-colors border-l ${
-                                        viewMode === 'table'
-                                            ? 'bg-teal-600 text-white'
-                                            : 'bg-white text-gray-700 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    <Table className="h-4 w-4 mr-1" />
-                                    <span className="hidden sm:inline">Table</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-2">
-                            <button
-                                onClick={clearFilters}
-                                className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors whitespace-nowrap"
-                            >
-                                Clear filters
-                            </button>
-                            <button
-                                onClick={() => setShowFilters(!showFilters)}
-                                className={`flex items-center px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${
-                                    showFilters
-                                        ? 'bg-teal-600 text-white border-teal-600'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                }`}
-                            >
-                                <Filter className="h-4 w-4 mr-2" />
-                                Filters
-                            </button>
-                        </div>
-                    </div>
+                    <BugFilters
+                        filters={filters}
+                        setFilters={setFilters}
+                        teamMembers={teamMembers}
+                        sprints={sprints}
+                        isExpanded={isFiltersExpanded}
+                        setIsExpanded={setIsFiltersExpanded}
+                        groupBy={groupBy}
+                        setGroupBy={setGroupBy}
+                        subGroupBy={subGroupBy}
+                        setSubGroupBy={setSubGroupBy}
+                        viewMode={viewMode}
+                        setViewMode={setViewMode}
+                    />
                 </div>
-                <BugTracker
-                    bugs={bugs || []}
-                    filteredBugs={filteredBugs || []}
+                <BugTable
+                    bugs={filteredBugs || []}
                     testCases={testCases}
-                    recordings={recordings}
                     relationships={bugToTestCases()}
                     selectedBugs={selectedBugs}
                     onToggleSelection={toggleBugSelection}
                     onBulkAction={handleBulkAction}
-                    showFilters={showFilters}
-                    setShowFilters={setShowFilters}
-                    groupBy={groupBy}
-                    setGroupBy={setGroupBy}
-                    subGroupBy={subGroupBy}
-                    setSubGroupBy={setSubGroupBy}
-                    viewMode={viewMode}
-                    setViewMode={setViewMode}
-                    onCreateBug={handleCreateBug}
-                    filters={filters}
-                    setFilters={setFilters}
-                    activeSuite={activeSuite}
+                    onView={handleViewBug}
+                    onEdit={handleEditBug}
+                    onDuplicate={async (bug) => {
+                        try {
+                            const orgId = getOrgId();
+                            const accountType = getAccountType();
+                            let bugsCollectionPath;
+                            if (accountType === 'individual') {
+                                bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+                            } else {
+                                bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
+                            }
+                            const timestamp = Timestamp.fromDate(new Date());
+                            const duplicatedBug = {
+                                ...bug,
+                                title: `${bug.title} (Copy)`,
+                                created_at: timestamp,
+                                updated_at: timestamp,
+                                suite_id: activeSuite.suite_id,
+                                created_by: user?.email || 'anonymous',
+                            };
+                            await firestoreService.createDocument(bugsCollectionPath, duplicatedBug);
+                            addNotification({
+                                type: 'success',
+                                title: 'Success',
+                                message: 'Bug duplicated successfully',
+                            });
+                        } catch (error) {
+                            handleError(error, 'duplicate bug');
+                        }
+                    }}
+                    onDelete={async (id) => {
+                        try {
+                            const orgId = getOrgId();
+                            const accountType = getAccountType();
+                            let bugsCollectionPath;
+                            if (accountType === 'individual') {
+                                bugsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.suite_id}/bugs`;
+                            } else {
+                                bugsCollectionPath = `organizations/${orgId}/testSuites/${activeSuite.suite_id}/bugs`;
+                            }
+                            await firestoreService.deleteDocument(bugsCollectionPath, id);
+                            addNotification({
+                                type: 'success',
+                                title: 'Success',
+                                message: 'Bug deleted successfully',
+                            });
+                        } catch (error) {
+                            handleError(error, 'delete bug');
+                        }
+                    }}
+                    onLinkTestCase={handleLinkTestCase}
                 />
+                {isDetailsModalOpen && (
+                    <BugDetailsModal
+                        bug={selectedBug}
+                        onClose={() => setIsDetailsModalOpen(false)}
+                        onSave={handleSaveBug}
+                    />
+                )}
             </div>
         </PageLayout>
     );
-}
+};
+
+export default BugTrackerPage;

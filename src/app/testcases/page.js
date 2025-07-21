@@ -7,13 +7,14 @@ import { useSuite } from '@/contexts/SuiteContext';
 import { useEntitySync } from '@/hooks/useEntitySync';
 import PageLayout from '@/components/layout/PageLayout';
 import TestCaseTable from '@/components/testCase/TestCaseTable';
+import TestCaseList from '@/components/testCase/TestCaseList';
 import TestCaseModal from '@/components/testCase/TestCaseModal';
 import FilterBar from '@/components/testCase/FilterBar';
 import ImportModal from '@/components/testCase/ImportModal';
 import AIGenerationModal from '@/components/testCase/AIGenerationModal';
 import TraceabilityMatrix from '@/components/testCase/TraceabilityMatrix';
 import firestoreService from '@/services/firestoreService';
-import { where, orderBy, Timestamp } from 'firebase/firestore';
+import { where, Timestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 const notify = (type, title, message, persistent = false) => {
@@ -41,12 +42,17 @@ function TestCasesPageContent() {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
+    const [viewMode, setViewMode] = useState('table'); // Default to table view
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     const [filters, setFilters] = useState({
         status: 'all',
         priority: 'all',
         assignee: 'all',
         tags: [],
         search: '',
+        executionType: 'all',
+        automationStatus: 'all',
+        lastUpdated: 'all',
     });
 
     const handleError = useCallback(
@@ -57,33 +63,34 @@ function TestCasesPageContent() {
         []
     );
 
-    // Get orgId and accountType - use actual values, not functions
+    // Get orgId and accountType
     const orgId = activeSuite?.organizationId || user?.organizationId || null;
     const accountType = activeSuite?.accountType || user?.accountType || 'individual';
 
     // Use the hook with proper parameters
     useEntitySync(
-        !appLoading && !suiteLoading && !!activeSuite?.id && !!user?.uid, // isAuthenticated
-        activeSuite?.id, // activeSuiteId
-        orgId, // orgId (actual value, not function)
-        accountType, // accountType (actual value, not function)
-        setTestCases, // setTestCases
-        setBugs, // setBugs
-        setRecordings, // setRecordings
-        setRelationships, // setRelationships
-        handleError // handleError
+        !appLoading && !suiteLoading && !!activeSuite?.id && !!user?.uid,
+        activeSuite?.id,
+        orgId,
+        accountType,
+        setTestCases,
+        setBugs,
+        setRecordings,
+        setRelationships,
+        handleError
     );
 
     const applyFilters = useCallback(() => {
-        console.log('Applying filters to testCases:', testCases);
+        console.log('Applying filters to testCases:', { testCases, filters });
         let filtered = [...testCases];
 
         if (filters.search) {
-            filtered = filtered.filter(
-                (tc) =>
-                    tc.title?.toLowerCase().includes(filters.search.toLowerCase()) ||
-                    tc.description?.toLowerCase().includes(filters.search.toLowerCase()) ||
-                    tc.tags?.some((tag) => tag.toLowerCase().includes(filters.search.toLowerCase()))
+            filtered = filtered.filter((tc) =>
+                [
+                    tc.title?.toLowerCase(),
+                    tc.description?.toLowerCase(),
+                    ...(tc.tags || []).map((tag) => tag.toLowerCase()),
+                ].some((field) => field?.includes(filters.search.toLowerCase()))
             );
         }
 
@@ -96,14 +103,34 @@ function TestCasesPageContent() {
         }
 
         if (filters.assignee !== 'all') {
-            filtered = filtered.filter((tc) => tc.assignee === filters.assignee);
+            filtered = filtered.filter((tc) => tc.assignee === filters.assignee || (!tc.assignee && filters.assignee === ''));
         }
 
-        if (filters.tags.length > 0) {
-            filtered = filtered.filter((tc) => filters.tags.some((tag) => tc.tags?.includes(tag)));
+        if (filters.tags?.length > 0) {
+            filtered = filtered.filter((tc) => tc.tags && filters.tags.every((tag) => tc.tags.includes(tag)));
         }
 
-        console.log('Filtered testCases:', filtered);
+        if (filters.executionType !== 'all') {
+            filtered = filtered.filter((tc) => tc.executionType === filters.executionType);
+        }
+
+        if (filters.automationStatus !== 'all') {
+            filtered = filtered.filter((tc) => tc.automationStatus === filters.automationStatus);
+        }
+
+        if (filters.lastUpdated !== 'all') {
+            filtered = filtered.filter((tc) => {
+                const updatedAt = tc.updated_at instanceof Date ? tc.updated_at : new Date(tc.updated_at);
+                const now = new Date();
+                if (filters.lastUpdated === 'today') return updatedAt.toDateString() === now.toDateString();
+                if (filters.lastUpdated === 'week') return updatedAt >= new Date(now.setDate(now.getDate() - 7));
+                if (filters.lastUpdated === 'month') return updatedAt >= new Date(now.setDate(now.getDate() - 30));
+                if (filters.lastUpdated === 'quarter') return updatedAt >= new Date(now.setDate(now.getDate() - 90));
+                return true;
+            });
+        }
+
+        console.log('Filtered testCases:', { filtered, count: filtered.length });
         setFilteredTestCases(filtered);
     }, [testCases, filters]);
 
@@ -111,7 +138,6 @@ function TestCasesPageContent() {
         async (testCaseData) => {
             try {
                 let testCasesCollectionPath;
-                
                 if (accountType === 'individual') {
                     testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
                 } else {
@@ -120,17 +146,16 @@ function TestCasesPageContent() {
 
                 const timestamp = Timestamp.fromDate(new Date());
                 console.log('Saving test case:', { ...testCaseData, updated_at: timestamp });
-                
-                let result;
+
                 if (selectedTestCase) {
-                    result = await firestoreService.updateDocument(testCasesCollectionPath, selectedTestCase.id, {
+                    await firestoreService.updateDocument(testCasesCollectionPath, selectedTestCase.id, {
                         ...testCaseData,
                         updated_at: timestamp,
                         created_by: user?.email || 'anonymous',
                         suite_id: activeSuite.id,
                     });
                 } else {
-                    result = await firestoreService.createDocument(testCasesCollectionPath, {
+                    await firestoreService.createDocument(testCasesCollectionPath, {
                         ...testCaseData,
                         created_at: timestamp,
                         updated_at: timestamp,
@@ -155,7 +180,6 @@ function TestCasesPageContent() {
         async (testCaseId, newBugIds) => {
             try {
                 let relationshipsCollectionPath;
-                
                 if (accountType === 'individual') {
                     relationshipsCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/relationships`;
                 } else {
@@ -204,7 +228,7 @@ function TestCasesPageContent() {
 
     const handleCreateTestCase = () => {
         if (!activeSuite?.id) {
-            notify('error', 'Error', 'Please select a suite first');
+            notify('error', 'Error', 'Please select a test suite first');
             return;
         }
         setSelectedTestCase(null);
@@ -219,7 +243,6 @@ function TestCasesPageContent() {
     const handleDeleteTestCase = async (id) => {
         try {
             let testCasesCollectionPath;
-            
             if (accountType === 'individual') {
                 testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
             } else {
@@ -236,7 +259,6 @@ function TestCasesPageContent() {
     const handleDuplicateTestCase = async (testCase) => {
         try {
             let testCasesCollectionPath;
-            
             if (accountType === 'individual') {
                 testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
             } else {
@@ -263,7 +285,6 @@ function TestCasesPageContent() {
     const handleBulkAction = async (action, selectedIds) => {
         try {
             let testCasesCollectionPath;
-            
             if (accountType === 'individual') {
                 testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
             } else {
@@ -294,7 +315,6 @@ function TestCasesPageContent() {
         setIsImportModalOpen(false);
         try {
             let testCasesCollectionPath;
-            
             if (accountType === 'individual') {
                 testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
             } else {
@@ -325,7 +345,6 @@ function TestCasesPageContent() {
         setIsAIModalOpen(false);
         try {
             let testCasesCollectionPath;
-            
             if (accountType === 'individual') {
                 testCasesCollectionPath = `individualAccounts/${user.uid}/testSuites/${activeSuite.id}/testCases`;
             } else {
@@ -352,33 +371,48 @@ function TestCasesPageContent() {
         }
     };
 
-    // Update loading state based on testCases length and loading states
+    // Update loading state and track initial load
     useEffect(() => {
-        const isLoading = appLoading || suiteLoading;
+        const isLoading = appLoading || suiteLoading || !initialLoadComplete;
         console.log('TestCasesPage: Loading state updated', { 
             appLoading, 
             suiteLoading, 
+            initialLoadComplete,
             testCasesLength: testCases.length,
+            filteredTestCasesLength: filteredTestCases.length,
             isLoading 
         });
         setLoading(isLoading);
-    }, [appLoading, suiteLoading, testCases.length]);
+        if (!appLoading && !suiteLoading && testCases.length > 0 && !initialLoadComplete) {
+            setInitialLoadComplete(true);
+        }
+    }, [appLoading, suiteLoading, testCases.length, initialLoadComplete, filteredTestCases.length]);
 
+    // Apply filters when testCases or filters change
     useEffect(() => {
         applyFilters();
     }, [testCases, filters, applyFilters]);
 
-    // Add debug logging for testCases changes
+    // Debug viewMode changes
+    useEffect(() => {
+        console.log('View mode changed:', { viewMode });
+        notify('info', 'View Changed', `Switched to ${viewMode} view`);
+    }, [viewMode]);
+
+    // Debug testCases and filteredTestCases
     useEffect(() => {
         console.log('TestCases state updated:', {
-            length: testCases.length,
-            testCases: testCases.slice(0, 3), // Log first 3 for debugging
+            testCasesLength: testCases.length,
+            testCases: testCases.slice(0, 3),
+            filteredTestCasesLength: filteredTestCases.length,
+            filteredTestCases: filteredTestCases.slice(0, 3),
             activeSuiteId: activeSuite?.id,
             userId: user?.uid,
             orgId,
-            accountType
+            accountType,
+            viewMode
         });
-    }, [testCases, activeSuite?.id, user?.uid, orgId, accountType]);
+    }, [testCases, filteredTestCases, activeSuite?.id, user?.uid, orgId, accountType, viewMode]);
 
     if (appLoading || suiteLoading) {
         return <div>Loading...</div>;
@@ -402,7 +436,7 @@ function TestCasesPageContent() {
                     <div className="flex items-center">
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Test Cases</h1>
                         <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
-                            {testCases.length} {testCases.length === 1 ? 'test case' : 'test cases'}
+                            {filteredTestCases.length} {filteredTestCases.length === 1 ? 'test case' : 'test cases'}
                         </span>
                     </div>
                     <div className="flex items-center space-x-2 overflow-x-auto">
@@ -433,20 +467,52 @@ function TestCasesPageContent() {
                     </div>
                 </div>
 
-                <FilterBar filters={filters} onFiltersChange={setFilters} testCases={testCases} />
+                <FilterBar
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    testCases={testCases}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                />
 
-                <div className="bg-white rounded-lg shadow">
-                    <TestCaseTable
-                        testCases={filteredTestCases}
-                        bugs={bugs}
-                        relationships={relationships.testCaseToBugs}
-                        loading={loading}
-                        onEdit={handleEditTestCase}
-                        onDelete={handleDeleteTestCase}
-                        onDuplicate={handleDuplicateTestCase}
-                        onBulkAction={handleBulkAction}
-                        onLinkBug={handleLinkBug}
-                    />
+                <div key={viewMode} className="transition-opacity duration-300">
+                    {loading ? (
+                        <div className="text-center py-8 text-gray-500">Loading test cases...</div>
+                    ) : filteredTestCases.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                            No test cases found. Try adjusting the filters or creating a new test case.
+                        </div>
+                    ) : viewMode === 'table' ? (
+                        <TestCaseTable
+                            testCases={filteredTestCases}
+                            bugs={bugs}
+                            relationships={relationships.testCaseToBugs}
+                            filters={filters}
+                            loading={loading}
+                            onEdit={handleEditTestCase}
+                            onDelete={handleDeleteTestCase}
+                            onDuplicate={handleDuplicateTestCase}
+                            onBulkAction={handleBulkAction}
+                            onView={handleEditTestCase}
+                            onRun={() => notify('info', 'Run', 'Run functionality not implemented yet')}
+                            onLinkBug={handleLinkBug}
+                        />
+                    ) : (
+                        <TestCaseList
+                            testCases={filteredTestCases}
+                            bugs={bugs}
+                            relationships={relationships.testCaseToBugs}
+                            filters={filters}
+                            loading={loading}
+                            onEdit={handleEditTestCase}
+                            onDelete={handleDeleteTestCase}
+                            onDuplicate={handleDuplicateTestCase}
+                            onBulkAction={handleBulkAction}
+                            onView={handleEditTestCase}
+                            onRun={() => notify('info', 'Run', 'Run functionality not implemented yet')}
+                            onLinkBug={handleLinkBug}
+                        />
+                    )}
                 </div>
 
                 {isModalOpen && (

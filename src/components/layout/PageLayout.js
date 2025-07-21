@@ -173,7 +173,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         return (
             <>
                 <Head>
-                    <title>{pageTitle} - QA Platform</title>
+                    <title>{pageTitle} - Assura</title>
                 </Head>
                 <div className="flex items-center justify-center min-h-screen bg-gray-50">
                     <div className="text-center">
@@ -181,7 +181,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                             className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4"
                             aria-label="Loading"
                         />
-                        <p className="text-lg text-gray-600 mb-2">Loading QA Platform</p>
+                        <p className="text-lg text-gray-600 mb-2">Loading your workspace</p>
                         <p className="text-sm text-gray-500">
                             {requiresTestSuite ? 'Checking your test suites...' : 'Please wait...'}
                         </p>
@@ -196,7 +196,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         return (
             <>
                 <Head>
-                    <title>{pageTitle} - QA Platform</title>
+                    <title>{pageTitle} - Assura</title>
                 </Head>
                 <div className="flex items-center justify-center min-h-screen bg-gray-50">
                     <div className="text-center max-w-md">
@@ -208,7 +208,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                             <h2 className="text-lg font-semibold text-blue-800 mb-2">
                                 Authentication Required
                             </h2>
-                            <p className="text-blue-600 mb-4">Please sign in to access the QA Platform.</p>
+                            <p className="text-blue-600 mb-4">Please sign in to access Assura.</p>
                         </div>
                     </div>
                 </div>
@@ -221,7 +221,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         return (
             <>
                 <Head>
-                    <title>{pageTitle} - QA Platform</title>
+                    <title>{pageTitle} - Assura</title>
                 </Head>
                 <div className="flex items-center justify-center min-h-screen bg-gray-50">
                     <div className="text-center max-w-md">
@@ -251,7 +251,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         return (
             <>
                 <Head>
-                    <title>Create Your First Test Suite - QA Platform</title>
+                    <title>Create Your First Test Suite - Assura</title>
                 </Head>
                 <div className="min-h-screen bg-gray-50">
                     <div className="flex items-center justify-center min-h-screen">
@@ -261,7 +261,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                                     <Plus className="w-8 h-8 text-teal-600" aria-label="Create test suite" />
                                 </div>
                                 <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                                    Welcome to QA Platform!
+                                    Welcome to Assura!
                                 </h2>
                                 <p className="text-gray-600 mb-4">
                                     To get started, you need to create your first test suite. This will be your working

@@ -1,18 +1,18 @@
-// components/TestCases/FilterBar.js
 'use client'
 
 import { useState, useMemo } from 'react';
+import { List, Table, ChevronUp, ChevronDown } from 'lucide-react';
 
-export default function FilterBar({ filters, onFiltersChange, testCases }) {
+export default function FilterBar({ filters, onFiltersChange, testCases, viewMode, setViewMode }) {
     const [isExpanded, setIsExpanded] = useState(false);
-    
+
     // Extract unique values for filter options
     const filterOptions = useMemo(() => {
         const statuses = [...new Set(testCases.map(tc => tc.status))];
         const priorities = [...new Set(testCases.map(tc => tc.priority))];
         const assignees = [...new Set(testCases.map(tc => tc.assignee).filter(Boolean))];
         const allTags = [...new Set(testCases.flatMap(tc => tc.tags || []))];
-        
+
         return { statuses, priorities, assignees, allTags };
     }, [testCases]);
 
@@ -61,17 +61,22 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
     };
 
     return (
-        <div className="bg-white rounded-lg shadow p-4">
-            {/* Search and Toggle */}
-            <div className="flex items-center justify-between gap-4 mb-4">
-                <div className="flex-1 max-w-md">
+        <div className="bg-white rounded-lg shadow p-4 mb-4">
+            {/* Search and Quick Filters Row */}
+            <div className="flex items-center gap-4 mb-4 flex-wrap">
+                {/* Search Bar */}
+                <div className="flex-1 min-w-64 max-w-md">
                     <div className="relative">
                         <input
                             type="text"
                             placeholder="Search test cases..."
                             value={filters.search}
                             onChange={(e) => handleFilterChange('search', e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 h-10 ${
+                                filters.search 
+                                    ? 'bg-teal-50 border-teal-500' 
+                                    : 'border-gray-300'
+                            }`}
                         />
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,33 +85,18 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                         </div>
                     </div>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                    {hasActiveFilters() && (
-                        <button
-                            onClick={clearFilters}
-                            className="px-3 py-2 text-sm text-red-600 hover:text-red-800 font-medium"
-                        >
-                            Clear Filters ({getActiveFiltersCount()})
-                        </button>
-                    )}
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 font-medium"
-                    >
-                        {isExpanded ? 'Less Filters' : 'More Filters'}
-                    </button>
-                </div>
-            </div>
 
-            {/* Quick Filters */}
-            <div className="flex flex-wrap gap-3 mb-4">
+                {/* Quick Filters */}
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">Status:</label>
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
                     <select
                         value={filters.status}
                         onChange={(e) => handleFilterChange('status', e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                        className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-32 ${
+                            filters.status !== 'all' 
+                                ? 'bg-teal-50 border-teal-500' 
+                                : 'border-gray-300'
+                        }`}
                     >
                         <option value="all">All</option>
                         {filterOptions.statuses.map(status => (
@@ -118,11 +108,15 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">Priority:</label>
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Priority:</label>
                     <select
                         value={filters.priority}
                         onChange={(e) => handleFilterChange('priority', e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                        className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-32 ${
+                            filters.priority !== 'all' 
+                                ? 'bg-teal-50 border-teal-500' 
+                                : 'border-gray-300'
+                        }`}
                     >
                         <option value="all">All</option>
                         {filterOptions.priorities.map(priority => (
@@ -134,11 +128,15 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">Assignee:</label>
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Assignee:</label>
                     <select
                         value={filters.assignee}
                         onChange={(e) => handleFilterChange('assignee', e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                        className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-40 ${
+                            filters.assignee !== 'all' 
+                                ? 'bg-teal-50 border-teal-500' 
+                                : 'border-gray-300'
+                        }`}
                     >
                         <option value="all">All</option>
                         <option value="">Unassigned</option>
@@ -148,6 +146,53 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                             </option>
                         ))}
                     </select>
+                </div>
+
+                {/* Action Buttons and View Toggle */}
+                <div className="flex items-center gap-2 ml-auto">
+                    {hasActiveFilters() && (
+                        <button
+                            onClick={clearFilters}
+                            className="px-3 py-2 text-sm text-red-600 hover:text-red-800 font-medium h-10"
+                        >
+                            Clear Filters ({getActiveFiltersCount()})
+                        </button>
+                    )}
+                    
+                    {/* View Mode Buttons - Enhanced for smooth transition */}
+                    <div className="flex">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`px-4 py-3 text-sm transition-colors duration-200 ${
+                                viewMode === 'list'
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                            title="List View"
+                        >
+                            <List className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('table')}
+                            className={`px-4 py-3 text-sm transition-colors duration-200 ${
+                                viewMode === 'table'
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                            title="Table View"
+                        >
+                            <Table className="h-4 w-4" />
+                        </button>
+                    </div>
+                    
+                    {/* Expand/Collapse Toggle */}
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="p-2 hover:bg-gray-200 rounded h-10 flex items-center justify-center"
+                        title={isExpanded ? 'Hide additional filters' : 'Show additional filters'}
+                    >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
                 </div>
             </div>
 
@@ -189,7 +234,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                                 <select
                                     value={filters.executionType || 'all'}
                                     onChange={(e) => handleFilterChange('executionType', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10"
                                 >
                                     <option value="all">All</option>
                                     <option value="manual">Manual</option>
@@ -205,7 +250,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                                 <select
                                     value={filters.automationStatus || 'all'}
                                     onChange={(e) => handleFilterChange('automationStatus', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10"
                                 >
                                     <option value="all">All</option>
                                     <option value="none">None</option>
@@ -222,7 +267,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                                 <select
                                     value={filters.lastUpdated || 'all'}
                                     onChange={(e) => handleFilterChange('lastUpdated', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10"
                                 >
                                     <option value="all">All Time</option>
                                     <option value="today">Today</option>
@@ -292,7 +337,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases }) {
                         
                         {filters.search && (
                             <span className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
-                                Search: &quot;{filters.search}&quot;
+                                Search: {filters.search}
                                 <button
                                     onClick={() => handleFilterChange('search', '')}
                                     className="ml-1 text-gray-600 hover:text-gray-800"

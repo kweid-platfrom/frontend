@@ -153,7 +153,7 @@ const AppSidebar = ({
                         </div>
                         <div className={`ml-3 overflow-hidden transition-all duration-300 ease-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
                             <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-purple-600 to-teal-700 bg-clip-text text-transparent">
-                                Validly
+                                Assura
                             </span>
                         </div>
                     </div>
