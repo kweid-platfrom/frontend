@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-'use client'
-import { useState, useEffect, Fragment } from 'react';
+'use client';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog, Transition } from '@headlessui/react';
 import { useApp } from '../../contexts/AppProvider';
@@ -12,300 +11,314 @@ import {
     ChartBarIcon,
     PlayIcon,
     SparklesIcon,
-    LockClosedIcon
+    LockClosedIcon,
 } from '@heroicons/react/24/outline';
 
-const CreateTestSuiteModal = ({
-    isOpen,
-    onClose,
-    isFirstSuite = false,
-    onSuccess
-}) => {
+const CreateTestSuiteModal = ({ isOpen, onClose, isFirstSuite = false, onSuccess, availableOrganizations, checkSuiteNameExists, getSuiteLimit }) => {
     const router = useRouter();
     const {
         accountSummary,
         userCapabilities,
-        isLoading: capabilitiesLoading,
+        isLoading: globalLoading,
         createTestSuite,
         addNotification,
-        shouldFetchSuites,
-        isAuthenticated,
-        user
+        user,
+        hasFeatureAccess,
+        subscriptionStatus,
+        switchSuite,
     } = useApp();
 
     const [suiteName, setSuiteName] = useState('');
     const [description, setDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedOrgId, setSelectedOrgId] = useState(null);
 
     const features = [
         {
             icon: DocumentTextIcon,
             title: 'Smart Test Case Creation',
             description: 'AI-powered test case generation with automated step creation',
-            capability: 'testCases'
+            capability: 'test_cases',
         },
         {
             icon: BugAntIcon,
             title: 'Intelligent Bug Tracking',
             description: 'Screen recording integration with detailed context capture',
-            capability: 'recordings'
+            capability: 'recordings',
         },
         {
             icon: PlayIcon,
             title: 'Automated Test Execution',
             description: 'Generate and run Cypress scripts with real-time reporting',
-            capability: 'automatedScripts'
+            capability: 'automation',
         },
         {
             icon: ChartBarIcon,
             title: 'Advanced Analytics',
             description: 'Comprehensive QA metrics and performance insights',
-            capability: 'analytics'
-        }
+            capability: 'reports',
+        },
     ];
 
-    const getUserOrgInfo = () => {
+    const getUserOrgInfo = useCallback(() => {
         if (!accountSummary?.profile) {
-            console.log('No profile available for org info');
-            return { isAdmin: false, orgId: null, orgName: null };
+            console.error('getUserOrgInfo: No profile available');
+            return { isAdmin: false, orgId: null, orgName: null, accountType: 'individual' };
         }
 
-        const { role, organizationId, organizationName, memberships } = accountSummary.profile;
+        const { role, organizationId, organizationName, memberships, accountType } = accountSummary.profile;
         const isAdmin = role === 'Admin' || memberships?.some(m => m.status === 'active' && m.role === 'Admin');
+        const resolvedAccountType = accountType || 'individual';
 
         return {
             isAdmin,
-            orgId: organizationId || (isAdmin ? memberships?.find(m => m.role === 'Admin')?.org_id : null),
-            orgName: organizationName || (isAdmin ? 'Your Organization' : null)
+            orgId: isAdmin ? organizationId || memberships?.find(m => m.role === 'Admin')?.org_id : null,
+            orgName: isAdmin ? organizationName || 'Your Organization' : null,
+            accountType: resolvedAccountType,
         };
-    };
+    }, [accountSummary?.profile]);
 
     useEffect(() => {
         if (!isOpen) {
             setSuiteName('');
             setDescription('');
+            setSelectedOrgId(null);
         }
     }, [isOpen]);
 
-    useEffect(() => {
-        if (isOpen) {
-            console.log('CreateTestSuiteModal opened:', {
-                isAuthenticated,
-                shouldFetchSuites,
-                hasProfile: !!accountSummary?.profile,
-                canCreateSuite: userCapabilities?.canCreateSuite,
-                suiteLimit: userCapabilities?.limits?.suites,
-                userId: accountSummary?.user?.uid,
-                emailVerified: accountSummary?.user?.emailVerified
-            });
-        }
-    }, [isOpen, isAuthenticated, shouldFetchSuites, accountSummary, userCapabilities]);
+    const handleCreateSuite = useCallback(
+        async (e) => {
+            e.preventDefault();
 
-    const validatePermissions = () => {
-        // Check authentication
-        if (!isAuthenticated || !accountSummary?.user?.emailVerified) {
-            throw new Error('User not authenticated or email not verified');
-        }
-
-        // Check if user profile is loaded
-        if (!shouldFetchSuites || !accountSummary?.profile) {
-            throw new Error('User profile not loaded or insufficient permissions');
-        }
-
-        // Check suite creation limits
-        if (!isFirstSuite && !userCapabilities?.canCreateSuite) {
-            const suiteLimit = userCapabilities?.limits?.suites || 1;
-            throw new Error(`Suite limit reached. Your current plan allows ${suiteLimit === -1 ? 'unlimited' : suiteLimit} suites.`);
-        }
-
-        return true;
-    };
-
-    const handleCreateSuite = async (e) => {
-        e.preventDefault();
-
-        if (!suiteName.trim()) {
-            addNotification({
-                type: 'error',
-                title: 'Suite name required',
-                message: 'Please enter a name for your test suite.',
-                persistent: false
-            });
-            return;
-        }
-
-        setIsLoading(true);
-
-        // Prepare suite data first (before try block to ensure it's available in catch)
-        const orgInfo = getUserOrgInfo();
-        const suiteData = {
-            name: suiteName.trim(),
-            description: description.trim() || '',
-            tags: [],
-            ownerType: orgInfo.isAdmin ? 'organization' : 'individual',
-            ownerId: orgInfo.isAdmin ? orgInfo.orgId : accountSummary?.user?.uid,
-            created_by: accountSummary?.user?.uid,
-            access_control: {
-                ownerType: orgInfo.isAdmin ? 'organization' : 'individual',
-                ownerId: orgInfo.isAdmin ? orgInfo.orgId : accountSummary?.user?.uid
-            },
-            ...(orgInfo.isAdmin && {
-                organizationId: orgInfo.orgId,
-                organizationName: orgInfo.orgName
-            })
-        };
-
-        try {
-            // Validate permissions first
-            validatePermissions();
-
-            // Validate suite data
-            if (!suiteData.ownerId || !suiteData.created_by) {
-                throw new Error('Missing required fields: ownerId or created_by');
+            if (!suiteName.trim()) {
+                addNotification({
+                    type: 'error',
+                    title: 'Suite name required',
+                    message: 'Please enter a name for your test suite.',
+                    persistent: false,
+                });
+                return;
             }
 
-            // Refresh auth token to ensure we have the latest permissions
-            console.log('Refreshing Firebase auth token...');
-            await user.getIdToken(true);
+            setIsLoading(true);
 
-            // Additional validation for organization suites
-            if (orgInfo.isAdmin && suiteData.organizationId) {
-                const isOrgAdmin = accountSummary?.profile?.account_memberships?.some(
-                    membership => membership.org_id === suiteData.organizationId &&
-                        membership.status === 'active' &&
-                        membership.role === 'Admin'
-                );
-
-                if (!isOrgAdmin) {
-                    throw new Error('Only organization administrators can create test suites for the organization');
-                }
-            }
-
-            console.log('Creating suite with data:', suiteData);
-
-            // Try to create suite with retry logic
-            let retries = 2; // Reduced from 3 to 2
-            let lastError = null;
-            
-            while (retries > 0) {
-                try {
-                    await createTestSuite(suiteData);
-                    break; // Success, exit retry loop
-                } catch (error) {
-                    lastError = error;
-                    retries--;
-                    
-                    console.error(`Suite creation attempt failed:`, {
-                        error: error.message,
-                        code: error.code,
-                        retriesLeft: retries
-                    });
-
-                    if (retries === 0) {
-                        throw error; // No more retries, throw the error
-                    }
-
-                    // Wait before retry, but refresh token first
-                    console.log(`Retrying suite creation (${retries} attempts left)...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // Refresh token before retry
-                    try {
-                        await user.getIdToken(true);
-                    } catch (tokenError) {
-                        console.error('Token refresh failed:', tokenError);
-                        throw new Error('Authentication token refresh failed');
-                    }
-                }
-            }
-
-            // Success notification
-            addNotification({
-                type: 'success',
-                title: 'Test suite created successfully!',
-                message: `${suiteName} is ready for testing.`,
-                persistent: false
-            });
-
-            // Reset form
-            setSuiteName('');
-            setDescription('');
-
-            // Handle navigation
-            if (isFirstSuite) {
-                onClose();
-                setTimeout(() => {
-                    router.push('/dashboard');
-                }, 150);
-            } else {
-                onClose();
-                onSuccess?.();
-            }
-
-        } catch (error) {
-            console.error('Detailed createTestSuite error:', {
-                errorCode: error.code,
-                errorMessage: error.message,
-                suiteData: {
-                    name: suiteData.name,
-                    ownerType: suiteData.ownerType,
-                    ownerId: suiteData.ownerId,
-                    created_by: suiteData.created_by
+            const orgInfo = getUserOrgInfo();
+            const suiteData = {
+                name: suiteName.trim(),
+                description: description.trim() || '',
+                tags: [],
+                ownerType: orgInfo.isAdmin && selectedOrgId ? 'organization' : 'individual',
+                ownerId: orgInfo.isAdmin && selectedOrgId ? selectedOrgId : accountSummary?.user?.uid,
+                created_by: accountSummary?.user?.uid,
+                access_control: {
+                    ownerType: orgInfo.isAdmin && selectedOrgId ? 'organization' : 'individual',
+                    ownerId: orgInfo.isAdmin && selectedOrgId ? selectedOrgId : accountSummary?.user?.uid,
+                    admins: [accountSummary?.user?.uid],
+                    members: [accountSummary?.user?.uid],
+                    permissions_matrix: {},
                 },
-                userAuth: {
-                    uid: accountSummary?.user?.uid,
-                    emailVerified: accountSummary?.user?.emailVerified,
-                    hasProfile: !!accountSummary?.profile
+                ...(orgInfo.isAdmin && selectedOrgId && {
+                    organizationId: selectedOrgId,
+                    organizationName: availableOrganizations?.find(org => org.org_id === selectedOrgId)?.name || 'Organization',
+                }),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+
+            try {
+                if (!suiteData.ownerId || !suiteData.created_by) {
+                    throw new Error('Missing required fields: ownerId or created_by');
                 }
-            });
 
-            let errorMessage = 'Failed to create test suite';
-            let errorDescription = '';
+                if (!orgInfo.accountType) {
+                    throw new Error('Account type not specified');
+                }
 
-            // Enhanced error handling
-            if (error.message.includes('Suite limit reached')) {
-                errorDescription = 'You\'ve reached your test suite limit. Upgrade to create more.';
-            } else if (error.message.includes('Only organization administrators can create')) {
-                errorDescription = 'You need admin permissions to create organization test suites.';
-            } else if (error.message.includes('User profile not loaded')) {
-                errorDescription = 'Your profile is still loading. Please wait a moment and try again.';
-            } else if (error.message.includes('User not authenticated')) {
-                errorDescription = 'Please log in and verify your email to create test suites.';
-            } else if (error.code === 'permission-denied') {
-                errorDescription = 'Permission denied. Please check your account permissions or contact support.';
-            } else if (error.code === 'unauthenticated') {
-                errorDescription = 'Your session has expired. Please log in again.';
-            } else if (error.code === 'invalid-argument') {
-                errorDescription = 'Invalid suite data. Please check your input and try again.';
-            } else if (error.code === 'unavailable') {
-                errorDescription = 'Service temporarily unavailable. Please try again in a moment.';
-            } else if (error.message.includes('Authentication token refresh failed')) {
-                errorDescription = 'Authentication failed. Please log out and log back in.';
-            } else {
-                errorDescription = error.message || 'An unexpected error occurred. Please try again or contact support.';
+                // Check suite name uniqueness
+                const nameExists = await checkSuiteNameExists(suiteData.name, suiteData.ownerType, suiteData.ownerId);
+                if (nameExists) {
+                    throw new Error('A suite with this name already exists.');
+                }
+
+                // Check suite limit
+                const limit = await getSuiteLimit(suiteData.ownerType === 'organization' ? suiteData.organizationId : suiteData.ownerId);
+                if (limit.maxAllowed !== -1 && limit.currentCount >= limit.maxAllowed) {
+                    throw new Error('Suite limit reached');
+                }
+
+                console.log('Refreshing Firebase auth token...');
+                await user.getIdToken(true);
+
+                if (orgInfo.isAdmin && selectedOrgId) {
+                    const isOrgAdmin = accountSummary?.profile?.memberships?.some(
+                        (membership) =>
+                            membership.org_id === selectedOrgId &&
+                            membership.status === 'active' &&
+                            membership.role === 'Admin'
+                    );
+                    if (!isOrgAdmin) {
+                        throw new Error('Only organization administrators can create test suites for the organization');
+                    }
+                }
+
+                console.log('Creating suite with data:', suiteData);
+
+                let retries = 2;
+                let lastError = null;
+
+                while (retries > 0) {
+                    try {
+                        const newSuite = await createTestSuite(suiteData);
+                        addNotification({
+                            type: 'success',
+                            title: 'Test Suite Created',
+                            message: `${suiteName} is ready for testing.`,
+                            persistent: false,
+                        });
+
+                        setSuiteName('');
+                        setDescription('');
+                        setSelectedOrgId(null);
+
+                        if (isFirstSuite) {
+                            await switchSuite(newSuite.suite_id);
+                            onClose();
+                            setTimeout(() => router.push('/dashboard'), 150);
+                        } else {
+                            await switchSuite(newSuite.suite_id);
+                            onClose();
+                            onSuccess?.(newSuite);
+                        }
+                        return;
+                    } catch (error) {
+                        lastError = error;
+                        retries--;
+
+                        console.error(`Suite creation attempt failed:`, {
+                            error: error.message,
+                            code: error.code,
+                            retriesLeft: retries,
+                            suiteData,
+                        });
+
+                        if (retries === 0) {
+                            throw error;
+                        }
+
+                        console.log(`Retrying suite creation (${retries} attempts left)...`);
+                        await new Promise((resolve) => setTimeout(resolve, 1000));
+                        await user.getIdToken(true);
+                    }
+                }
+
+                throw lastError;
+            } catch (error) {
+                console.error('Detailed createTestSuite error:', {
+                    errorCode: error.code,
+                    errorMessage: error.message,
+                    suiteData: {
+                        name: suiteData.name,
+                        ownerType: suiteData.ownerType,
+                        ownerId: suiteData.ownerId,
+                        created_by: suiteData.created_by,
+                        accountType: orgInfo.accountType,
+                    },
+                    userAuth: {
+                        uid: accountSummary?.user?.uid,
+                        emailVerified: accountSummary?.user?.emailVerified,
+                        hasProfile: !!accountSummary?.profile,
+                        accountType: orgInfo.accountType,
+                    },
+                });
+
+                let errorMessage = 'Failed to create test suite';
+                let errorDescription = '';
+
+                switch (true) {
+                    case error.message.includes('Suite limit reached'):
+                        errorDescription = 'You\'ve reached your test suite limit. Upgrade to create more.';
+                        break;
+                    case error.message.includes('A suite with this name already exists'):
+                        errorDescription = 'A suite with this name already exists. Please choose a different name.';
+                        break;
+                    case error.message.includes('Only organization administrators can create'):
+                        errorDescription = 'You need admin permissions to create organization test suites.';
+                        break;
+                    case error.message.includes('User profile not loaded'):
+                        errorDescription = 'Your profile is still loading. Please wait a moment and try again.';
+                        break;
+                    case error.message.includes('User not authenticated'):
+                        errorDescription = 'Please log in and verify your email to create test suites.';
+                        break;
+                    case error.message.includes('Suite limit not defined'):
+                        errorDescription = 'Suite limit configuration missing. Contact support.';
+                        break;
+                    case error.message.includes('Cannot create suites during registration'):
+                        errorDescription = 'Cannot create suites while registration is in progress.';
+                        break;
+                    case error.code === 'permission-denied':
+                        errorDescription = 'Permission denied. Please check your account permissions or contact support.';
+                        break;
+                    case error.code === 'unauthenticated':
+                        errorDescription = 'Your session has expired. Please log in again.';
+                        break;
+                    case error.code === 'invalid-argument':
+                        errorDescription = 'Invalid suite data. Please check your input and try again.';
+                        break;
+                    case error.code === 'unavailable':
+                        errorDescription = 'Service temporarily unavailable. Please try again in a moment.';
+                        break;
+                    case error.message.includes('Authentication token refresh failed'):
+                        errorDescription = 'Authentication failed. Please log out and log back in.';
+                        break;
+                    case error.message.includes('Account type not specified'):
+                        errorDescription = 'Account type is missing. Please ensure your profile is complete.';
+                        break;
+                    default:
+                        errorDescription = error.message || 'An unexpected error occurred. Please try again or contact support.';
+                }
+
+                addNotification({
+                    type: 'error',
+                    title: errorMessage,
+                    message: errorDescription,
+                    persistent: true,
+                });
+            } finally {
+                setIsLoading(false);
             }
+        },
+        [
+            suiteName,
+            description,
+            selectedOrgId,
+            getUserOrgInfo,
+            accountSummary,
+            createTestSuite,
+            checkSuiteNameExists,
+            getSuiteLimit,
+            addNotification,
+            user,
+            isFirstSuite,
+            onClose,
+            onSuccess,
+            router,
+            switchSuite,
+            availableOrganizations,
+        ]
+    );
 
-            addNotification({
-                type: 'error',
-                title: errorMessage,
-                message: errorDescription,
-                persistent: true
-            });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         if (!isLoading && !isFirstSuite) {
             onClose();
         }
-    };
+    }, [isLoading, isFirstSuite, onClose]);
 
-    const renderLimitWarning = () => {
-        if (isFirstSuite || capabilitiesLoading || !userCapabilities) return null;
+    const renderLimitWarning = useCallback(() => {
+        if (isFirstSuite || globalLoading || !userCapabilities) return null;
 
         if (!userCapabilities.canCreateSuite) {
+            const suiteLimit = userCapabilities.limits?.individualSuites || userCapabilities.limits?.organizationSuites || 0;
             return (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
                     <div className="flex items-center space-x-2">
@@ -313,20 +326,19 @@ const CreateTestSuiteModal = ({
                         <h4 className="font-medium text-red-800">Suite Limit Reached</h4>
                     </div>
                     <p className="text-sm text-red-700 mt-1">
-                        {userCapabilities.limits?.suites === 1
+                        {suiteLimit === 1
                             ? 'You can only create 1 test suite on your current plan.'
-                            : 'You\'ve reached your test suite limit. Upgrade to create more.'
-                        }
+                            : `You've reached your limit of ${suiteLimit} test suites. Upgrade to create more.`}
                     </p>
                 </div>
             );
         }
 
         return null;
-    };
+    }, [isFirstSuite, globalLoading, userCapabilities]);
 
-    const renderSubscriptionInfo = () => {
-        if (capabilitiesLoading) {
+    const renderSubscriptionInfo = useCallback(() => {
+        if (globalLoading) {
             return (
                 <div className="p-4 rounded-xl border bg-gray-50 border-gray-200 animate-pulse">
                     <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
@@ -335,60 +347,77 @@ const CreateTestSuiteModal = ({
             );
         }
 
-        if (!userCapabilities) {
+        if (!userCapabilities || !userCapabilities.limits) {
             return null;
         }
 
         const orgInfo = getUserOrgInfo();
-        const subscription = userCapabilities.subscription || {
-            isTrialActive: false,
-            isPaid: false,
-            displayName: 'Free Plan'
+        const subscription = {
+            isTrialActive: subscriptionStatus?.isTrial || userCapabilities.isTrialActive || false,
+            isPaid: subscriptionStatus?.isValid && !subscriptionStatus?.isTrial,
+            displayName:
+                subscriptionStatus?.isTrial || userCapabilities.isTrialActive ? 'Trial Plan' :
+                subscriptionStatus?.isValid ? 'Pro Plan' : 'Free Plan',
         };
 
+        const suiteLimit = userCapabilities.limits.individualSuites || userCapabilities.limits.organizationSuites || 0;
+
         return (
-            <div className={`p-4 rounded-xl border ${subscription.isTrialActive ? 'bg-blue-50 border-blue-200' :
-                subscription.isPaid ? 'bg-green-50 border-green-200' :
-                    'bg-gray-50 border-gray-200'
-                }`}>
+            <div
+                className={`p-4 rounded-xl border ${subscription.isTrialActive
+                        ? 'bg-blue-50 border-blue-200'
+                        : subscription.isPaid
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-gray-50 border-gray-200'
+                    }`}
+            >
                 <div className="flex items-center space-x-2 mb-2">
-                    <div className={`w-2 h-2 rounded-full ${subscription.isTrialActive ? 'bg-blue-400' :
-                        subscription.isPaid ? 'bg-green-400' :
-                            'bg-gray-400'
-                        }`}></div>
-                    <p className={`text-sm font-medium ${subscription.isTrialActive ? 'text-blue-800' :
-                        subscription.isPaid ? 'text-green-800' :
-                            'text-gray-800'
-                        }`}>
+                    <div
+                        className={`w-2 h-2 rounded-full ${subscription.isTrialActive
+                                ? 'bg-blue-400'
+                                : subscription.isPaid
+                                    ? 'bg-green-400'
+                                    : 'bg-gray-400'
+                            }`}
+                    ></div>
+                    <p
+                        className={`text-sm font-medium ${subscription.isTrialActive
+                                ? 'text-blue-800'
+                                : subscription.isPaid
+                                    ? 'text-green-800'
+                                    : 'text-gray-800'
+                            }`}
+                    >
                         {subscription.displayName}
                     </p>
                 </div>
-                <p className={`text-xs ${subscription.isTrialActive ? 'text-blue-700' :
-                    subscription.isPaid ? 'text-green-700' :
-                        'text-gray-700'
-                    }`}>
-                    {userCapabilities.limits?.suites === -1 ? 'Unlimited' : userCapabilities.limits?.suites || 1} test suites included
+                <p
+                    className={`text-xs ${subscription.isTrialActive
+                            ? 'text-blue-700'
+                            : subscription.isPaid
+                                ? 'text-green-700'
+                                : 'text-gray-700'
+                        }`}
+                >
+                    {suiteLimit === -1 || suiteLimit === Infinity ? 'Unlimited' : suiteLimit} test suites included
                     {orgInfo.orgId && (
                         <span>
                             {' • '}
-                            {orgInfo.isAdmin ? `Creating for: ${orgInfo.orgName} (Admin)` : `Individual suite`}
+                            {orgInfo.isAdmin && selectedOrgId ? `Creating for: ${availableOrganizations?.find(org => org.org_id === selectedOrgId)?.name || 'Organization'} (Admin)` : `Individual suite`}
                         </span>
                     )}
                 </p>
             </div>
         );
-    };
+    }, [globalLoading, userCapabilities, getUserOrgInfo, subscriptionStatus, selectedOrgId, availableOrganizations]);
 
-    const isFeatureAvailable = (capability) => {
-        if (!userCapabilities) return false;
-        const subscription = userCapabilities.subscription || { isTrialActive: false };
-        return userCapabilities.features?.[capability] || subscription.isTrialActive;
-    };
-
-    const canUserCreateSuite = () => {
-        if (isFirstSuite) return true;
-        return userCapabilities?.canCreateSuite || false;
-    };
+    const isFeatureAvailable = useCallback(
+        (capability) => {
+            if (!userCapabilities) return false;
+            return hasFeatureAccess(capability) || userCapabilities.isTrialActive;
+        },
+        [userCapabilities, hasFeatureAccess]
+    );
 
     return (
         <Transition appear show={isOpen} as={Fragment}>
@@ -440,8 +469,7 @@ const CreateTestSuiteModal = ({
                                     <p className="text-teal-100 max-w-3xl">
                                         {isFirstSuite
                                             ? "Let's create your first test suite to get started. This will be your dedicated workspace for organizing test cases, tracking bugs, and managing your QA workflow."
-                                            : "Set up a new test suite to organize your testing activities. You can perform functional, regression, integration, and performance testing all within the same suite."
-                                        }
+                                            : 'Set up a new test suite to organize your testing activities. You can perform functional, regression, integration, and performance testing all within the same suite.'}
                                     </p>
                                 </div>
 
@@ -460,27 +488,38 @@ const CreateTestSuiteModal = ({
                                                     const isAvailable = isFeatureAvailable(feature.capability);
 
                                                     return (
-                                                        <div key={index} className={`flex items-start space-x-3 p-4 rounded-xl border transition-all duration-200 ${isAvailable
-                                                            ? 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-100 hover:border-teal-200'
-                                                            : 'bg-gray-50 border-gray-200 opacity-60'
-                                                            }`}>
-                                                            <div className={`flex-shrink-0 p-2 rounded-lg ${isAvailable ? 'bg-teal-100' : 'bg-gray-200'
-                                                                }`}>
-                                                                <feature.icon className={`h-5 w-5 ${isAvailable ? 'text-teal-600' : 'text-gray-500'
-                                                                    }`} />
+                                                        <div
+                                                            key={index}
+                                                            className={`flex items-start space-x-3 p-4 rounded-xl border transition-all duration-200 ${isAvailable
+                                                                    ? 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-100 hover:border-teal-200'
+                                                                    : 'bg-gray-50 border-gray-200 opacity-60'
+                                                                }`}
+                                                        >
+                                                            <div
+                                                                className={`flex-shrink-0 p-2 rounded-lg ${isAvailable ? 'bg-teal-100' : 'bg-gray-200'
+                                                                    }`}
+                                                            >
+                                                                <feature.icon
+                                                                    className={`h-5 w-5 ${isAvailable ? 'text-teal-600' : 'text-gray-500'
+                                                                        }`}
+                                                                />
                                                             </div>
                                                             <div className="text-left">
                                                                 <div className="flex items-center space-x-2">
-                                                                    <h4 className={`font-medium text-sm ${isAvailable ? 'text-gray-900' : 'text-gray-600'
-                                                                        }`}>
+                                                                    <h4
+                                                                        className={`font-medium text-sm ${isAvailable ? 'text-gray-900' : 'text-gray-600'
+                                                                            }`}
+                                                                    >
                                                                         {feature.title}
                                                                     </h4>
                                                                     {!isAvailable && (
                                                                         <LockClosedIcon className="h-3 w-3 text-gray-400" />
                                                                     )}
                                                                 </div>
-                                                                <p className={`text-xs mt-1 ${isAvailable ? 'text-gray-600' : 'text-gray-500'
-                                                                    }`}>
+                                                                <p
+                                                                    className={`text-xs mt-1 ${isAvailable ? 'text-gray-600' : 'text-gray-500'
+                                                                        }`}
+                                                                >
                                                                     {feature.description}
                                                                     {!isAvailable && ' (Premium feature)'}
                                                                 </p>
@@ -497,8 +536,36 @@ const CreateTestSuiteModal = ({
                                             {renderLimitWarning()}
 
                                             <form onSubmit={handleCreateSuite} className="space-y-6">
+                                                {userCapabilities?.canCreateOrganizationSuite && availableOrganizations?.length > 0 && (
+                                                    <div>
+                                                        <label
+                                                            htmlFor="organization"
+                                                            className="block text-sm font-medium text-gray-700 mb-2"
+                                                        >
+                                                            Organization (Optional)
+                                                        </label>
+                                                        <select
+                                                            id="organization"
+                                                            value={selectedOrgId || ''}
+                                                            onChange={(e) => setSelectedOrgId(e.target.value || null)}
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                                                            disabled={isLoading || (!userCapabilities?.canCreateSuite && !isFirstSuite)}
+                                                        >
+                                                            <option value="">Individual Suite</option>
+                                                            {availableOrganizations.map(org => (
+                                                                <option key={org.org_id} value={org.org_id}>
+                                                                    {org.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
                                                 <div>
-                                                    <label htmlFor="suiteName" className="block text-sm font-medium text-gray-700 mb-2">
+                                                    <label
+                                                        htmlFor="suiteName"
+                                                        className="block text-sm font-medium text-gray-700 mb-2"
+                                                    >
                                                         Test Suite Name *
                                                     </label>
                                                     <input
@@ -508,13 +575,16 @@ const CreateTestSuiteModal = ({
                                                         onChange={(e) => setSuiteName(e.target.value)}
                                                         placeholder="e.g., E-commerce Application Testing"
                                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
-                                                        disabled={isLoading || (!canUserCreateSuite() && !isFirstSuite)}
+                                                        disabled={isLoading || (!userCapabilities?.canCreateSuite && !isFirstSuite)}
                                                         autoFocus
                                                     />
                                                 </div>
 
                                                 <div>
-                                                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                                                    <label
+                                                        htmlFor="description"
+                                                        className="block text-sm font-medium text-gray-700 mb-2"
+                                                    >
                                                         Description (Optional)
                                                     </label>
                                                     <textarea
@@ -524,7 +594,7 @@ const CreateTestSuiteModal = ({
                                                         placeholder="Describe what this test suite will cover..."
                                                         rows={3}
                                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors resize-none"
-                                                        disabled={isLoading || (!canUserCreateSuite() && !isFirstSuite)}
+                                                        disabled={isLoading || (!userCapabilities?.canCreateSuite && !isFirstSuite)}
                                                     />
                                                 </div>
 
@@ -542,7 +612,11 @@ const CreateTestSuiteModal = ({
 
                                                     <button
                                                         type="submit"
-                                                        disabled={isLoading || !suiteName.trim() || (!canUserCreateSuite() && !isFirstSuite)}
+                                                        disabled={
+                                                            isLoading ||
+                                                            !suiteName.trim() ||
+                                                            (!userCapabilities?.canCreateSuite && !isFirstSuite)
+                                                        }
                                                         className="flex-1 bg-gradient-to-r from-teal-600 to-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:from-teal-700 hover:to-blue-700 focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
                                                     >
                                                         {isLoading ? (

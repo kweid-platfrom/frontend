@@ -1,4 +1,6 @@
 import { serverTimestamp } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../config/firebase"; // Adjust path as needed
 import firestoreService from "./firestoreService";
 
 class AccountSetupError extends Error {
@@ -10,6 +12,56 @@ class AccountSetupError extends Error {
 }
 
 let isSetupInProgress = false;
+
+// Helper function to wait for auth state to be ready
+const waitForAuthState = (user, maxWaitTime = 5000) => {
+    return new Promise((resolve) => {
+        if (!user) {
+            resolve(null);
+            return;
+        }
+
+        let unsubscribe;
+        const timeout = setTimeout(() => {
+            if (unsubscribe) unsubscribe();
+            resolve(user); // Resolve with current user even if not fully ready
+        }, maxWaitTime);
+
+        unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser && currentUser.uid === user.uid) {
+                clearTimeout(timeout);
+                if (unsubscribe) unsubscribe();
+                resolve(currentUser);
+            }
+        });
+    });
+};
+
+// Helper function to retry operations with exponential backoff
+const retryWithBackoff = async (operation, maxRetries = 3, baseDelay = 1000) => {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            console.warn(`Attempt ${attempt + 1} failed:`, error.message);
+            
+            // Don't retry if it's not a permissions error
+            if (!error.message.includes('permissions') && 
+                !error.message.includes('Access denied') &&
+                !error.code?.includes('permission')) {
+                throw error;
+            }
+
+            if (attempt === maxRetries - 1) {
+                throw error;
+            }
+
+            // Exponential backoff
+            const delay = baseDelay * Math.pow(2, attempt);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+};
 
 export const getAccountSetupStatus = async (userId) => {
     try {
@@ -23,7 +75,7 @@ export const getAccountSetupStatus = async (userId) => {
         }
 
         const userData = result.data;
-        const hasBasicInfo = userData.profile_info?.name?.first && userData.email; // Changed from primary_email
+        const hasBasicInfo = userData.profile_info?.name?.first && userData.email;
         const hasAccountStructure = userData.account_memberships?.length > 0;
 
         const isComplete = hasBasicInfo && hasAccountStructure;
@@ -110,15 +162,17 @@ export const handlePostVerification = async (userId) => {
 
         const userStatus = await getAccountSetupStatus(userId);
         if (userStatus.exists && userStatus.userData && !userStatus.userData.auth_metadata?.email_verified) {
-            const updateResult = await firestoreService.updateDocument('users', userId, {
-                auth_metadata: {
-                    ...userStatus.userData.auth_metadata,
-                    email_verified: true,
-                },
-                profile_info: {
-                    ...userStatus.userData.profile_info,
-                    updated_at: serverTimestamp(),
-                },
+            // Wait for auth state and retry with backoff
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+                await waitForAuthState(currentUser);
+            }
+
+            const updateResult = await retryWithBackoff(async () => {
+                return await firestoreService.updateDocument('users', userId, {
+                    'auth_metadata.email_verified': true,
+                    'auth_metadata.last_login': serverTimestamp(),
+                });
             });
 
             if (!updateResult.success) {
@@ -168,17 +222,20 @@ export const setupAccount = async (setupData) => {
             }
         }
 
-        // CRITICAL FIX: Use the exact email from Firebase Auth without modification
-        const email = user.email; // Don't lowercase or trim here
+        // Wait for auth state to be properly established
+        console.log('Waiting for auth state to be ready...');
+        await waitForAuthState(user);
+
+        const email = user.email;
         const accountType = setupData.accountType || determineAccountType(email);
 
         console.log('Setting up account for user:', { userId, email, accountType });
 
-        // CRITICAL FIX: Match your security rules exactly
+        // Create user profile with retry logic
         const userProfileData = {
             user_id: userId,
-            email: email, // Use 'email' not 'primary_email' to match security rules
-            primary_email: email.toLowerCase().trim(), // Keep this for app logic
+            email: email,
+            primary_email: email.toLowerCase().trim(),
             profile_info: {
                 name: {
                     first: setupData.firstName || '',
@@ -203,8 +260,11 @@ export const setupAccount = async (setupData) => {
             environment: 'production',
         };
 
-        console.log('Creating user profile:', userProfileData);
-        const userResult = await firestoreService.createOrUpdateUserProfile(userProfileData);
+        console.log('Creating user profile with retry logic...');
+        const userResult = await retryWithBackoff(async () => {
+            return await firestoreService.createOrUpdateUserProfile(userProfileData);
+        });
+
         if (!userResult.success) {
             throw new AccountSetupError(userResult.error.message || 'Failed to create user profile', userResult.error.code);
         }
@@ -212,6 +272,7 @@ export const setupAccount = async (setupData) => {
         let organizationData = null;
 
         if (accountType === 'individual') {
+            // Create individual account data
             const individualAccountData = {
                 user_id: userId,
                 account_type: 'individual',
@@ -225,23 +286,28 @@ export const setupAccount = async (setupData) => {
                 status: 'active',
             };
 
-            console.log('Creating individual account:', individualAccountData);
-            const individualResult = await firestoreService.createDocument('individualAccounts', individualAccountData, userId);
+            console.log('Creating individual account with retry logic...');
+            const individualResult = await retryWithBackoff(async () => {
+                return await firestoreService.createDocument('individualAccounts', individualAccountData, userId);
+            });
+
             if (!individualResult.success) {
                 throw new AccountSetupError(individualResult.error.message || 'Failed to create individual account', individualResult.error.code);
             }
 
-            const userUpdate = await firestoreService.updateDocument('users', userId, {
+            // Update user profile with account memberships
+            const membershipUpdate = {
                 account_memberships: [{
                     account_id: userId,
                     account_type: 'individual',
                     role: 'Admin',
                     status: 'active',
-                }],
-                profile_info: {
-                    ...userResult.data.profile_info,
-                    updated_at: serverTimestamp(),
-                },
+                }]
+            };
+
+            console.log('Updating user with membership (with retry)...');
+            const userUpdate = await retryWithBackoff(async () => {
+                return await firestoreService.updateDocument('users', userId, membershipUpdate);
             });
 
             if (!userUpdate.success) {
@@ -250,61 +316,70 @@ export const setupAccount = async (setupData) => {
 
             console.log('Individual account created successfully:', individualResult);
         } else if (accountType === 'organization' && setupData.organizationName) {
-            console.log('Starting organization setup transaction...');
-            const transactionResult = await firestoreService.executeTransaction(async () => {
-                const orgId = `org_${userId}`;
-                const now = serverTimestamp();
+            console.log('Starting organization setup...');
+            
+            const orgId = `org_${userId}`;
+            const orgData = {
+                id: orgId,
+                name: setupData.organizationName,
+                ownerId: userId,
+                created_by: userId,
+                domain: email.split('@')[1],
+                is_active: true,
+                description: '',
+                settings: {},
+            };
 
-                const orgData = {
-                    id: orgId,
-                    name: setupData.organizationName,
-                    ownerId: userId, // Changed from owner_id to match security rules
-                    created_by: userId, // Add this field for security rules
-                    domain: email.split('@')[1],
-                    is_active: true,
-                    created_at: now,
-                    updated_at: now,
-                };
-
-                const membershipData = {
-                    user_id: userId,
-                    email: email.toLowerCase().trim(),
-                    role: 'Admin',
-                    status: 'active',
-                    joined_at: now,
-                    created_at: now,
-                    updated_at: now,
-                };
-
-                const userUpdates = {
-                    account_memberships: [{
-                        account_id: orgId,
-                        account_type: 'organization',
-                        role: 'Admin',
-                        status: 'active',
-                    }],
-                    profile_info: {
-                        ...userResult.data.profile_info,
-                        updated_at: now,
-                    },
-                    organization_id: orgId,
-                };
-
-                await firestoreService.createDocument('organizations', orgData, orgId);
-                await firestoreService.createDocument(`organizations/${orgId}/members`, membershipData, userId);
-                await firestoreService.updateDocument('users', userId, userUpdates);
-
-                return { orgId, orgData, membershipData, userUpdates };
+            // Create organization with retry logic
+            const orgResult = await retryWithBackoff(async () => {
+                return await firestoreService.createDocument('organizations', orgData, orgId);
             });
 
-            if (!transactionResult.success) {
-                throw new AccountSetupError(transactionResult.error.message || 'Transaction failed', transactionResult.error.code);
+            if (!orgResult.success) {
+                throw new AccountSetupError(orgResult.error.message || 'Failed to create organization', orgResult.error.code);
             }
 
-            console.log('Organization setup completed successfully:', transactionResult.data);
-            organizationData = transactionResult.data;
+            // Create member record
+            const membershipData = {
+                user_id: userId,
+                email: email.toLowerCase().trim(),
+                role: 'Admin',
+                status: 'active',
+                joined_at: serverTimestamp(),
+            };
+
+            const memberResult = await retryWithBackoff(async () => {
+                return await firestoreService.createDocument(`organizations/${orgId}/members`, membershipData, userId);
+            });
+
+            if (!memberResult.success) {
+                throw new AccountSetupError(memberResult.error.message || 'Failed to create organization membership', memberResult.error.code);
+            }
+
+            // Update user profile with organization membership
+            const orgMembershipUpdate = {
+                account_memberships: [{
+                    account_id: orgId,
+                    account_type: 'organization',
+                    role: 'Admin',
+                    status: 'active',
+                }],
+                organization_id: orgId,
+            };
+
+            const userOrgUpdate = await retryWithBackoff(async () => {
+                return await firestoreService.updateDocument('users', userId, orgMembershipUpdate);
+            });
+
+            if (!userOrgUpdate.success) {
+                throw new AccountSetupError(userOrgUpdate.error.message || 'Failed to update user with organization membership', userOrgUpdate.error.code);
+            }
+
+            console.log('Organization setup completed successfully');
+            organizationData = { orgId, orgData, membershipData };
         }
 
+        console.log('Account setup completed successfully');
         return {
             success: true,
             userId,

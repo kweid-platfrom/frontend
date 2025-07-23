@@ -1,343 +1,343 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { useUserProfile } from './userProfileContext';
-import { suiteService } from '../services/suiteService'; // Assumed to wrap FirestoreService
+import { suiteService } from '../services/suiteService';
 
 const SuiteContext = createContext();
 
 export const useSuite = () => {
     const context = useContext(SuiteContext);
-    if (!context) {
-        throw new Error('useSuite must be used within a SuiteProvider');
-    }
+    if (!context) throw new Error('useSuite must be used within a SuiteProvider');
     return context;
 };
 
 export const SuiteProvider = ({ children }) => {
     const { user } = useAuth();
-    const {
-        userProfile,
-        isLoading: profileLoading,
-        error: profileError,
-        isNewUser,
-        isProfileLoaded,
-    } = useUserProfile();
+    const { userProfile, isLoading: profileLoading, error: profileError, isProfileLoaded } = useUserProfile();
 
     const [suites, setSuites] = useState([]);
     const [activeSuite, setActiveSuite] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isFetching, setIsFetching] = useState(false);
     const [error, setError] = useState(null);
+    const [lastFetchTime, setLastFetchTime] = useState(null);
 
-    const fetchingRef = useRef(false);
-    const initializedRef = useRef(false);
-    const currentUserIdRef = useRef(null);
-
-    const cache = useRef({
-        suites: null,
-        timestamp: null,
-    });
-
-    const isRegistering = useCallback(() => {
-        return typeof window !== 'undefined' && window.isRegistering;
-    }, []);
+    const subscriptionRef = useRef(null);
+    const fetchAbortController = useRef(null);
+    const cache = useRef({ suites: null, timestamp: null, version: 0 });
+    const CACHE_DURATION = 5 * 60 * 1000;
 
     const isCacheValid = useCallback(() => {
-        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-        return cache.current.timestamp && Date.now() - cache.current.timestamp < CACHE_DURATION;
+        return cache.current.timestamp && Date.now() - cache.current.timestamp < CACHE_DURATION && cache.current.suites !== null;
+    }, [CACHE_DURATION]);
+
+    const clearCache = useCallback(() => {
+        cache.current = { suites: null, timestamp: null, version: cache.current.version + 1 };
     }, []);
 
-    const isAuthenticated = useMemo(() => {
-        return !!(user && user.uid && user.emailVerified);
-    }, [user]);
+    const isAuthenticated = useMemo(() => user && user.uid, [user]);
+    const shouldFetchSuites = useMemo(() => isAuthenticated && isProfileLoaded && !profileLoading && !profileError, [isAuthenticated, isProfileLoaded, profileLoading, profileError]);
 
-    const shouldFetchSuites = useMemo(() => {
-        if (isRegistering()) {
-            console.log('shouldFetchSuites: false - registration in progress');
-            return false;
-        }
-        if (!isAuthenticated) {
-            console.log('shouldFetchSuites: false - user not authenticated or email not verified', {
-                user: !!user,
-                uid: !!user?.uid,
-                emailVerified: user?.emailVerified,
-            });
-            return false;
-        }
-        if (isNewUser) {
-            console.log('shouldFetchSuites: false - new user detected');
-            return false;
-        }
-        if (!isProfileLoaded || profileLoading) {
-            console.log('shouldFetchSuites: false - profile not loaded or loading', {
-                isProfileLoaded,
-                profileLoading,
-                hasProfile: !!userProfile,
-            });
-            return false;
-        }
-        if (profileError) {
-            console.log('shouldFetchSuites: false - profile error:', profileError);
-            return false;
-        }
-        return true;
-    }, [isRegistering, isAuthenticated, isNewUser, isProfileLoaded, profileLoading, profileError, user, userProfile]);
+    const availableOrganizations = useMemo(() => {
+        return userProfile?.account_memberships
+            ?.filter(m => m.status === 'active' && m.role === 'Admin')
+            .map(m => ({ id: m.org_id, name: m.org_name || m.org_id, role: m.role })) || [];
+    }, [userProfile?.account_memberships]);
 
-    const canCreateSuite = useMemo(() => {
-        if (!isAuthenticated || !userProfile || isRegistering()) return false;
-        return true; // Async check handled in createTestSuite
-    }, [isAuthenticated, userProfile, isRegistering]);
+    const { individualSuites, organizationSuites, totalSuites } = useMemo(() => {
+        const individual = suites.filter(s => s.ownerType === 'individual');
+        const organization = suites.filter(s => s.ownerType === 'organization');
+        const organizationGroups = organization.reduce((groups, suite) => {
+            const orgId = suite.ownerId;
+            if (!groups[orgId]) {
+                const orgInfo = availableOrganizations.find(org => org.id === orgId);
+                groups[orgId] = {
+                    organizationId: orgId,
+                    organizationName: orgInfo?.name || orgId,
+                    role: orgInfo?.role || 'Member',
+                    suites: [],
+                    suiteCount: 0
+                };
+            }
+            groups[orgId].suites.push(suite);
+            groups[orgId].suiteCount++;
+            return groups;
+        }, {});
+        return {
+            individualSuites: individual,
+            organizationSuites: Object.values(organizationGroups),
+            totalSuites: suites.length
+        };
+    }, [suites, availableOrganizations]);
 
-    const getSuiteLimit = useCallback(async () => {
-        if (isRegistering()) return 0;
+    const getSuiteLimit = useCallback(async (organizationId = null) => {
+        if (!user?.uid) return { canCreate: false, maxAllowed: 0, remaining: 0 };
         try {
-            const result = await suiteService.canCreateNewSuite(user.uid);
-            return result.maxAllowed || 0;
+            const result = await suiteService.canCreateNewSuite(user.uid, organizationId);
+            return result;
         } catch (error) {
             console.error('Error getting suite limit:', error);
-            return 0;
+            return { canCreate: false, maxAllowed: 0, remaining: 0, message: 'Error checking limits' };
         }
-    }, [isRegistering, user?.uid]);
+    }, [user?.uid]);
 
-    const fetchUserSuites = useCallback(async (userId = null, forceRefresh = false) => {
-        if (isRegistering()) {
-            console.log('Skipping suite fetch - registration in progress');
-            return [];
-        }
-        if (!userId || !shouldFetchSuites) {
-            console.log('Skipping fetch - missing requirements:', {
-                userId: !!userId,
-                shouldFetchSuites,
-                isRegistering: isRegistering(),
-                isAuthenticated,
-            });
-            return [];
-        }
-        if (fetchingRef.current && !forceRefresh) {
-            console.log('Already fetching, skipping...');
-            return cache.current.suites || [];
-        }
+    const fetchUserSuites = useCallback(async (userId, options = {}) => {
+        const { forceRefresh = false, silent = false } = options;
+        if (!userId || !shouldFetchSuites) return { suites: cache.current.suites || [], fromCache: true };
+
+        if (!forceRefresh && isCacheValid() && cache.current.suites) return { suites: cache.current.suites, fromCache: true };
+        if (isFetching && !forceRefresh) return { suites: cache.current.suites || [], fromCache: true };
+
+        if (fetchAbortController.current) fetchAbortController.current.abort();
+        fetchAbortController.current = new AbortController();
 
         try {
-            if (!forceRefresh && isCacheValid() && cache.current.suites) {
-                console.log('Using cached suites');
-                return cache.current.suites;
+            if (!silent) {
+                setIsFetching(true);
+                setIsLoading(true);
+                setError(null);
             }
 
-            fetchingRef.current = true;
-            setIsLoading(true);
-            setError(null);
-
-            console.log('Fetching suites for userId:', userId);
             const result = await suiteService.getUserSuites(userId);
-            if (!result.success) {
-                throw new Error(result.error?.message || 'Failed to fetch suites');
-            }
+            if (!result.success) throw new Error(result.error || 'Failed to fetch suites');
 
-            const userSuites = result.data.map(suite => ({
-                suite_id: suite.id, // Map FirestoreService id to suite_id
-                ...suite,
-            }));
-
-            cache.current = {
-                suites: userSuites,
-                timestamp: Date.now(),
-            };
-
-            return userSuites;
+            cache.current = { suites: result.suites, timestamp: Date.now(), version: cache.current.version + 1 };
+            setLastFetchTime(new Date());
+            return { suites: result.suites, fromCache: false };
         } catch (error) {
-            console.error('Error fetching suites:', error);
-            const errorMessage = error.code === 'permission-denied'
-                ? 'You do not have permission to access test suites.'
-                : error.message || 'Failed to fetch test suites.';
-            setError(errorMessage);
-            return cache.current.suites || [];
+            if (error.name === 'AbortError') return { suites: cache.current.suites || [], fromCache: true };
+            const errorMessage = error.code === 'permission-denied' ? 'No permission to access suites' : error.message || 'Failed to fetch suites';
+            if (!silent) setError(errorMessage);
+            return { suites: cache.current.suites || [], fromCache: true, error: errorMessage };
         } finally {
-            setIsLoading(false);
-            fetchingRef.current = false;
+            fetchAbortController.current = null;
+            if (!silent) {
+                setIsFetching(false);
+                setIsLoading(false);
+            }
         }
-    }, [isRegistering, shouldFetchSuites, isCacheValid, isAuthenticated]);
+    }, [shouldFetchSuites, isCacheValid, isFetching]);
 
     const setActiveSuiteWithStorage = useCallback((suite) => {
-        if (isRegistering()) {
-            console.log('Skipping active suite setting - registration in progress');
+        if (suite && !suites.find(s => s.suite_id === suite.suite_id)) {
+            console.warn('Attempting to set active suite not in list');
             return;
         }
         setActiveSuite(suite);
-        if (suite?.suite_id && typeof window !== 'undefined') {
-            localStorage.setItem('activeSuiteId', suite.suite_id);
-        } else if (typeof window !== 'undefined') {
-            localStorage.removeItem('activeSuiteId');
+        if (typeof window !== 'undefined') {
+            try {
+                if (suite?.suite_id) {
+                    localStorage.setItem('activeSuiteId', suite.suite_id);
+                    localStorage.setItem('activeSuiteTimestamp', Date.now().toString());
+                } else {
+                    localStorage.removeItem('activeSuiteId');
+                    localStorage.removeItem('activeSuiteTimestamp');
+                }
+            } catch (storageError) {
+                console.warn('Failed to update localStorage:', storageError);
+            }
         }
-    }, [isRegistering]);
+    }, [suites]);
 
-    const refetchSuites = useCallback(async (forceRefresh = true) => {
-        if (isRegistering()) {
-            console.log('Skipping refetch - registration in progress');
-            return;
-        }
-        if (!shouldFetchSuites) {
-            console.log('Cannot refetch - missing requirements:', { shouldFetchSuites, isAuthenticated });
-            return;
-        }
+    const refetchSuites = useCallback(async (options = {}) => {
+        const { forceRefresh = true, silent = false, updateActiveSuite = true } = options;
+        if (!shouldFetchSuites || !user?.uid) return { success: false, error: 'Cannot fetch suites' };
+
         try {
-            if (forceRefresh) cache.current = { suites: null, timestamp: null };
-            const userSuites = await fetchUserSuites(user.uid, forceRefresh);
-            setSuites(userSuites);
-            if (userSuites.length > 0) {
-                const savedSuiteId = localStorage.getItem('activeSuiteId');
-                const activeSuiteItem = userSuites.find(s => s.suite_id === savedSuiteId) || userSuites[0];
-                setActiveSuiteWithStorage(activeSuiteItem);
-                console.log('Set active suite:', activeSuiteItem?.suite_id);
-            } else {
+            if (forceRefresh) clearCache();
+            const fetchResult = await fetchUserSuites(user.uid, { forceRefresh, silent });
+            setSuites(fetchResult.suites);
+
+            if (updateActiveSuite && fetchResult.suites.length > 0) {
+                let activeSuiteToSet = null;
+                if (typeof window !== 'undefined') {
+                    const savedSuiteId = localStorage.getItem('activeSuiteId');
+                    const savedTimestamp = localStorage.getItem('activeSuiteTimestamp');
+                    const isRecentlySaved = savedTimestamp && Date.now() - parseInt(savedTimestamp) < 24 * 60 * 60 * 1000;
+                    if (savedSuiteId && isRecentlySaved) {
+                        activeSuiteToSet = fetchResult.suites.find(s => s.suite_id === savedSuiteId);
+                    }
+                }
+                setActiveSuiteWithStorage(activeSuiteToSet || fetchResult.suites[0]);
+            } else if (updateActiveSuite) {
                 setActiveSuiteWithStorage(null);
             }
-        } catch (error) {
-            console.error('Error refetching suites:', error);
-            setError(`Failed to fetch test suites: ${error.message}`);
-        }
-    }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, isAuthenticated, isRegistering]);
 
-    const createTestSuite = useCallback(async (suiteData) => {
-        if (isRegistering()) {
-            throw new Error('Cannot create test suites during registration');
+            return { success: true, suites: fetchResult.suites, fromCache: fetchResult.fromCache, count: fetchResult.suites.length };
+        } catch (error) {
+            if (!silent) setError(error.message || 'Failed to fetch suites');
+            return { success: false, error: error.message || 'Failed to fetch suites' };
         }
-        if (!isAuthenticated) {
-            throw new Error('User not authenticated or email not verified');
-        }
-        if (!userProfile) {
-            throw new Error('User profile not loaded');
-        }
-        if (!suiteData.name) {
-            throw new Error('Suite name is required');
+    }, [user?.uid, fetchUserSuites, setActiveSuiteWithStorage, shouldFetchSuites, clearCache]);
+
+    const checkSuiteNameExists = useCallback(async (name, organizationId = null) => {
+        if (!name || typeof name !== 'string') return { exists: false, error: 'Invalid suite name' };
+        const trimmedName = name.trim();
+        if (trimmedName.length < 3 || trimmedName.length > 100) {
+            return { exists: false, error: 'Suite name must be 3-100 characters' };
         }
 
         try {
-            const canCreateResult = await suiteService.canCreateNewSuite(user.uid);
-            if (!canCreateResult.canCreate) {
-                throw new Error(canCreateResult.message || 'Cannot create new suite due to limits');
+            const result = await suiteService.checkSuiteNameExists(trimmedName, user.uid, organizationId);
+            return {
+                exists: result.exists,
+                error: result.exists ? `Suite "${trimmedName}" already exists` : result.error
+            };
+        } catch (error) {
+            return { exists: false, error: 'Unable to verify suite name' };
+        }
+    }, [user?.uid]);
+
+    const createTestSuite = useCallback(async (suiteData, organizationId = null) => {
+        if (!isAuthenticated || !userProfile || !suiteData.name) {
+            throw new Error('Missing required data');
+        }
+
+        try {
+            const trimmedName = suiteData.name.trim();
+            if (trimmedName.length < 3 || trimmedName.length > 100) {
+                throw new Error('Suite name must be 3-100 characters');
+            }
+
+            const nameCheck = await checkSuiteNameExists(trimmedName, organizationId);
+            if (nameCheck.exists) throw new Error(nameCheck.error);
+
+            const canCreateResult = await getSuiteLimit(organizationId);
+            if (!canCreateResult.canCreate) throw new Error(canCreateResult.message);
+
+            if (organizationId && !availableOrganizations.some(org => org.id === organizationId)) {
+                throw new Error('No admin access to specified organization');
             }
 
             const formattedSuiteData = {
-                name: suiteData.name,
-                description: suiteData.description || '',
-                ownerType: suiteData.organizationId ? 'organization' : 'individual',
-                ownerId: suiteData.organizationId || user.uid,
-                tags: suiteData.tags || [],
+                name: trimmedName,
+                description: suiteData.description?.trim() || '',
+                tags: Array.isArray(suiteData.tags) ? suiteData.tags : [],
                 settings: suiteData.settings || {},
                 access_control: {
-                    ownerType: suiteData.organizationId ? 'organization' : 'individual',
-                    ownerId: suiteData.organizationId || user.uid,
-                    admins: suiteData.access_control?.admins || [],
-                    members: suiteData.access_control?.members || [user.uid],
-                    permissions_matrix: suiteData.access_control?.permissions_matrix || {},
-                },
+                    ownerType: organizationId ? 'organization' : 'individual',
+                    ownerId: organizationId || user.uid,
+                    admins: [user.uid],
+                    members: [user.uid],
+                    permissions_matrix: suiteData.access_control?.permissions_matrix || {}
+                }
             };
 
-            const result = await suiteService.createSuite(formattedSuiteData, user.uid, {
-                capabilities: { limits: { testSuites: canCreateResult.maxAllowed } },
-            });
+            const result = await suiteService.createSuite(formattedSuiteData, user.uid, organizationId);
+            if (!result.success) throw new Error(result.error);
 
-            if (!result.success) {
-                throw new Error(result.error?.message || 'Failed to create suite');
-            }
+            setSuites(prev => [result.suite, ...prev]);
+            setActiveSuiteWithStorage(result.suite);
+            clearCache();
+            setTimeout(() => refetchSuites({ silent: true, updateActiveSuite: false }), 1000);
 
-            const newSuite = {
-                suite_id: result.docId, // Map FirestoreService docId to suite_id
-                ...result.data,
-            };
-
-            setSuites(prevSuites => [newSuite, ...prevSuites]);
-            setActiveSuiteWithStorage(newSuite);
-            cache.current = { suites: null, timestamp: null };
-
-            setTimeout(() => refetchSuites(true), 100);
-
-            console.log('Suite created successfully:', newSuite);
-            return newSuite;
+            return result.suite;
         } catch (error) {
-            console.error('Error creating test suite:', error);
-            const errorMessage = error.code === 'permission-denied'
-                ? 'You do not have permission to create a test suite.'
-                : error.message || 'Failed to create test suite.';
-            throw new Error(errorMessage);
+            throw new Error(error.message || 'Failed to create suite');
         }
-    }, [user, userProfile, refetchSuites, setActiveSuiteWithStorage, isRegistering, isAuthenticated]);
+    }, [user, userProfile, isAuthenticated, availableOrganizations, getSuiteLimit, setActiveSuiteWithStorage, refetchSuites, checkSuiteNameExists, clearCache]);
+
+    const switchSuite = useCallback(async (suiteId) => {
+        if (!suiteId || !user?.uid) return { success: false, error: 'Missing required parameters' };
+        try {
+            const result = await suiteService.switchSuite(user.uid, suiteId);
+            if (!result.success) throw new Error(result.error);
+            setActiveSuiteWithStorage(suites.find(s => s.suite_id === suiteId));
+            return { success: true, suite: result.suite };
+        } catch (error) {
+            setError(error.message || 'Failed to switch suite');
+            return { success: false, error: error.message || 'Failed to switch suite' };
+        }
+    }, [user?.uid, suites, setActiveSuiteWithStorage]);
 
     useEffect(() => {
-        const userId = user?.uid;
-        if (userId !== currentUserIdRef.current) {
-            console.log('User changed, resetting suite context');
-            currentUserIdRef.current = userId;
-            initializedRef.current = false;
-            fetchingRef.current = false;
-            cache.current = { suites: null, timestamp: null };
-            setSuites([]);
-            setActiveSuite(null);
-            setError(null);
+        if (!shouldFetchSuites || !user?.uid) return;
+
+        const unsubscribe = suiteService.subscribeToSuites(
+            updatedSuites => {
+                setSuites(updatedSuites);
+                cache.current = { suites: updatedSuites, timestamp: Date.now(), version: cache.current.version + 1 };
+
+                if (typeof window !== 'undefined') {
+                    const savedSuiteId = localStorage.getItem('activeSuiteId');
+                    const savedTimestamp = localStorage.getItem('activeSuiteTimestamp');
+                    const isRecentlySaved = savedTimestamp && Date.now() - parseInt(savedTimestamp) < 24 * 60 * 60 * 1000;
+                    const activeSuiteItem = savedSuiteId && isRecentlySaved ? updatedSuites.find(s => s.suite_id === savedSuiteId) : null;
+                    setActiveSuiteWithStorage(activeSuiteItem || (updatedSuites.length > 0 ? updatedSuites[0] : null));
+                }
+                setError(null);
+            },
+            user.uid
+        );
+
+        subscriptionRef.current = unsubscribe;
+        return () => unsubscribe && unsubscribe();
+    }, [shouldFetchSuites, user?.uid, setActiveSuiteWithStorage]);
+
+    useEffect(() => {
+        if (shouldFetchSuites && user?.uid && suites.length === 0) {
+            refetchSuites({ forceRefresh: false, silent: false });
         }
-        if (shouldFetchSuites && !initializedRef.current && !isRegistering()) {
-            initializedRef.current = true;
-            refetchSuites(false);
-        }
-    }, [shouldFetchSuites, refetchSuites, isRegistering, user?.uid, isAuthenticated, profileLoading, isNewUser]);
+    }, [shouldFetchSuites, user?.uid, suites.length, refetchSuites]);
 
     useEffect(() => {
         return () => {
-            suiteService.cleanup(); // Cleanup Firestore subscriptions
+            if (subscriptionRef.current) subscriptionRef.current();
+            if (fetchAbortController.current) fetchAbortController.current.abort();
+            suiteService.cleanup();
         };
     }, []);
 
-    const value = useMemo(() => {
-        if (isRegistering()) {
-            return {
-                suites: [],
-                userTestSuites: [],
-                activeSuite: null,
-                setActiveSuite: () => {},
-                isLoading: false,
-                loading: false,
-                error: null,
-                canCreateSuite: false,
-                createTestSuite: () => Promise.reject(new Error('Cannot create test suites during registration')),
-                refetchSuites: () => Promise.resolve(),
-                fetchUserSuites: () => Promise.resolve([]),
-                getSuiteLimit: () => 0,
-                shouldFetchSuites: false,
-                isAuthenticated: false,
-            };
-        }
-
-        return {
-            suites,
-            userTestSuites: suites,
-            activeSuite,
-            setActiveSuite: setActiveSuiteWithStorage,
-            isLoading,
-            loading: isLoading,
-            error,
-            canCreateSuite,
-            createTestSuite,
-            refetchSuites,
-            fetchUserSuites,
-            getSuiteLimit,
-            shouldFetchSuites,
-            isAuthenticated,
-        };
-    }, [
+    const value = useMemo(() => ({
         suites,
+        userTestSuites: suites,
+        individualSuites,
+        organizationSuites,
         activeSuite,
-        setActiveSuiteWithStorage,
-        isLoading,
-        error,
-        canCreateSuite,
+        totalSuites,
+        setActiveSuite: setActiveSuiteWithStorage,
+        switchSuite,
         createTestSuite,
+        checkSuiteNameExists,
         refetchSuites,
         fetchUserSuites,
+        availableOrganizations,
         getSuiteLimit,
+        isLoading,
+        isFetching,
+        error,
+        canCreateSuite: isAuthenticated && userProfile,
         shouldFetchSuites,
         isAuthenticated,
-        isRegistering,
+        lastFetchTime,
+        clearCache,
+        isCacheValid: isCacheValid(),
+        cacheVersion: cache.current.version
+    }), [
+        suites,
+        individualSuites,
+        organizationSuites,
+        activeSuite,
+        totalSuites,
+        setActiveSuiteWithStorage,
+        switchSuite,
+        createTestSuite,
+        checkSuiteNameExists,
+        refetchSuites,
+        fetchUserSuites,
+        availableOrganizations,
+        getSuiteLimit,
+        isLoading,
+        isFetching,
+        error,
+        isAuthenticated,
+        userProfile,
+        shouldFetchSuites,
+        lastFetchTime,
+        clearCache,
+        isCacheValid
     ]);
 
     return <SuiteContext.Provider value={value}>{children}</SuiteContext.Provider>;

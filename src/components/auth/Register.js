@@ -1,9 +1,16 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import {
+    createUserWithEmailAndPassword,
+    sendEmailVerification,
+    signInWithPopup,
+    GoogleAuthProvider,
+    signOut,
+    onAuthStateChanged
+} from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import { clearRegistrationState, handlePostVerification, setupAccount } from '../../services/accountSetup'; // Added setupAccount import
+import { clearRegistrationState, handlePostVerification, setupAccount, getAccountSetupStatus } from '../../services/accountSetup';
 import { validateEmailForAccountType, getEmailDomainInfo, suggestAccountType } from '../../utils/emailDomainValidator';
 import { FcGoogle } from 'react-icons/fc';
 import AccountTypeStep from './reg/AccountTypeStep';
@@ -140,6 +147,9 @@ const Register = () => {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
+            // Wait a bit for auth state to propagate
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
             // Check if account already exists
             const setupStatus = await getAccountSetupStatus(user.uid);
 
@@ -172,8 +182,23 @@ const Register = () => {
             console.log('Google sign-up: Setting up account with data:', setupData);
             const setupResult = await setupAccount(setupData);
 
-            if (!setupResult.success) {
-                throw new Error('Failed to setup account: ' + setupResult.error.message);
+            if (!setupResult.success && !setupResult.skipped) {
+                // Even if setup "failed", check if the user actually exists now
+                const recheckStatus = await getAccountSetupStatus(user.uid);
+                if (recheckStatus.exists && recheckStatus.hasBasicInfo) {
+                    console.log('Account appears to have been created despite error, proceeding...');
+                    await handlePostVerification(user.uid);
+                    addNotification({
+                        type: 'success',
+                        title: 'Account Created',
+                        message: 'Account created successfully with Google!',
+                        persistent: false,
+                    });
+                    clearRegistrationState();
+                    router.push('/dashboard');
+                    return;
+                }
+                throw new Error('Failed to setup account: ' + setupResult.error?.message);
             }
 
             console.log('Google account setup successful:', setupResult);
@@ -270,6 +295,22 @@ const Register = () => {
             console.log('Firebase user created:', userCredential.user.uid);
             const user = userCredential.user;
 
+            // Wait for auth state to propagate
+            console.log('Waiting for auth state to propagate...');
+            await new Promise(resolve => {
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    if (currentUser && currentUser.uid === user.uid) {
+                        unsubscribe();
+                        resolve();
+                    }
+                });
+                // Fallback timeout
+                setTimeout(() => {
+                    unsubscribe();
+                    resolve();
+                }, 3000);
+            });
+
             // Parse full name
             const [firstName, ...lastNameParts] = formData.fullName.trim().split(' ');
             const lastName = lastNameParts.join(' ');
@@ -290,8 +331,14 @@ const Register = () => {
             const setupResult = await setupAccount(setupData);
             console.log('Account setup result:', setupResult);
 
-            if (!setupResult.success) {
-                throw new Error('Failed to setup account: ' + setupResult.error.message);
+            if (!setupResult.success && !setupResult.skipped) {
+                // Even if setup "failed", check if the user actually exists now
+                const recheckStatus = await getAccountSetupStatus(user.uid);
+                if (recheckStatus.exists && recheckStatus.hasBasicInfo) {
+                    console.log('Account appears to have been created despite error, proceeding...');
+                } else {
+                    throw new Error('Failed to setup account: ' + setupResult.error?.message);
+                }
             }
 
             // Send verification email

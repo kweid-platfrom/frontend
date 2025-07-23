@@ -2,173 +2,141 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Head from 'next/head';
-import { useApp } from '@/contexts/AppProvider';
-import { useSuite } from '@/contexts/SuiteContext';
-import { useUserProfile } from '@/contexts/userProfileContext';
+import { usePathname } from 'next/navigation';
+import { useApp, useAppNotifications, useAppFeatures } from '@/contexts/AppProvider';
 import { Loader2, AlertTriangle, AlertCircle, Plus } from 'lucide-react';
 import CreateTestSuiteModal from '@/components/modals/CreateTestSuiteModal';
 
 const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false }) => {
+    const pathname = usePathname();
     const {
-        isLoading: appLoading,
-        error: appError,
-        breadcrumbs,
         isAuthenticated,
-        userCapabilities,
-        accountSummary,
-    } = useApp();
-
-    const {
-        suites,
-        isLoading: suiteLoading,
-        error: suiteError,
-        refetchSuites,
-        createTestSuite,
-        canCreateSuite,
-        shouldFetchSuites,
-        hasEverCreatedSuite,
-    } = useSuite();
-
-    const {
         userProfile,
-        isLoading: profileLoading,
-        error: profileError,
-        isNewUser,
-        isProfileLoaded,
-    } = useUserProfile();
+        loading: appLoading,
+        error: appError,
+        suites,
+        activeSuite,
+        switchSuite,
+        refreshAll,
+        createTestSuite,
+        checkSuiteNameExists,
+        getSuiteLimit,
+        availableOrganizations,
+    } = useApp();
+    const { addNotification } = useAppNotifications();
+    useAppFeatures();
 
-    // Modal states
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [showFirstSuiteModal, setShowFirstSuiteModal] = useState(false);
+    const [isCreatingFirstSuite, setIsCreatingFirstSuite] = useState(false);
+    const [firstSuiteCreated, setFirstSuiteCreated] = useState(false);
+    const modalTriggeredRef = useRef(false);
 
-    // Ref to prevent multiple checks in the same session
-    const firstSuiteCheckRef = useRef(false);
+    const pageTitle = useMemo(() => title || 'QA Platform', [title]);
 
-    const pageTitle = useMemo(
-        () => title || breadcrumbs?.[breadcrumbs.length - 1] || 'QA Platform',
-        [title, breadcrumbs],
-    );
-
-    // Helper function to check if we're in registration mode
     const isRegistering = useCallback(() => {
         return typeof window !== 'undefined' && window.isRegistering;
     }, []);
 
-    // Enhanced loading state
+    const isProfileReady = useMemo(() => {
+        return userProfile && !appLoading && !isRegistering();
+    }, [userProfile, appLoading, isRegistering]);
+
     const isSystemInitializing = useMemo(() => {
-        if (appLoading) return true;
-        if (isRegistering()) return true;
-        if (profileLoading || !isProfileLoaded) return true;
-        if (requiresTestSuite && suiteLoading) return true;
-        if (isAuthenticated && !isNewUser && !userProfile && !profileError) return true;
-        return false;
-    }, [
-        appLoading,
-        isRegistering,
-        profileLoading,
-        isProfileLoaded,
-        requiresTestSuite,
-        suiteLoading,
-        isAuthenticated,
-        isNewUser,
-        userProfile,
-        profileError,
-    ]);
+        return appLoading || isRegistering() || (isAuthenticated && !userProfile) || isCreatingFirstSuite;
+    }, [appLoading, isRegistering, isAuthenticated, userProfile, isCreatingFirstSuite]);
 
-    // Permission denied state
-    const shouldShowPermissionDenied = useMemo(() => {
-        if (isSystemInitializing) return false;
-        if (!isAuthenticated) return false;
-        if (!requiresTestSuite) return false;
-        if (!isProfileLoaded || isNewUser) return false;
-        return !shouldFetchSuites;
-    }, [
-        isSystemInitializing,
-        isAuthenticated,
-        requiresTestSuite,
-        isProfileLoaded,
-        isNewUser,
-        shouldFetchSuites,
-    ]);
-
-    // First suite modal logic
-    const shouldShowFirstSuiteModal = useMemo(() => {
-        if (isSystemInitializing) return false;
-        return (
-            requiresTestSuite &&
-            isAuthenticated &&
-            isProfileLoaded &&
-            !isNewUser &&
-            shouldFetchSuites &&
-            !suiteLoading &&
-            Array.isArray(suites) &&
-            suites.length === 0 &&
-            canCreateSuite &&
-            !firstSuiteCheckRef.current &&
-            hasEverCreatedSuite === false
+    const canAccessSuites = useMemo(() => {
+        if (!isAuthenticated || !userProfile) return false;
+        const hasIndividualAccess = userProfile.accountType === 'individual';
+        const hasOrgAdminAccess = userProfile.account_memberships?.some(
+            membership => membership.status === 'active' && membership.role === 'Admin'
         );
-    }, [
-        isSystemInitializing,
-        requiresTestSuite,
-        isAuthenticated,
-        isProfileLoaded,
-        isNewUser,
-        shouldFetchSuites,
-        suiteLoading,
-        suites,
-        canCreateSuite,
-        hasEverCreatedSuite,
-    ]);
+        return hasIndividualAccess || hasOrgAdminAccess;
+    }, [isAuthenticated, userProfile]);
 
-    // Show first suite modal
+    const shouldShowPermissionDenied = useMemo(() => {
+        if (isSystemInitializing || !isAuthenticated || !requiresTestSuite || !isProfileReady) return false;
+        return !canAccessSuites;
+    }, [isSystemInitializing, isAuthenticated, requiresTestSuite, isProfileReady, canAccessSuites]);
+
+    const canCreateSuite = useMemo(() => {
+        if (!isAuthenticated || !userProfile) return false;
+        if (userProfile.accountType === 'individual') return true;
+        return userProfile.account_memberships?.some(
+            membership => membership.status === 'active' && membership.role === 'Admin'
+        ) || false;
+    }, [isAuthenticated, userProfile]);
+
+    const needsFirstSuite = useMemo(() => {
+        if (!requiresTestSuite || !isAuthenticated || !isProfileReady || !canAccessSuites || !canCreateSuite) return false;
+        return Array.isArray(suites) && suites.length === 0 && !firstSuiteCreated;
+    }, [requiresTestSuite, isAuthenticated, isProfileReady, canAccessSuites, canCreateSuite, suites, firstSuiteCreated]);
+
+    const shouldShowBlockingModal = useMemo(() => {
+        return !isSystemInitializing && pathname === '/dashboard' && needsFirstSuite;
+    }, [isSystemInitializing, pathname, needsFirstSuite]);
+
     useEffect(() => {
-        if (shouldShowFirstSuiteModal) {
+        if (shouldShowBlockingModal && !modalTriggeredRef.current && !showFirstSuiteModal) {
+            console.log('Showing first suite modal - blocking dashboard access');
             setShowFirstSuiteModal(true);
-            firstSuiteCheckRef.current = true;
+            modalTriggeredRef.current = true;
         }
-    }, [shouldShowFirstSuiteModal]);
+    }, [shouldShowBlockingModal, showFirstSuiteModal]);
 
-    // Handlers
-    const handleCreateModalClose = useCallback(() => {
-        setIsCreateModalOpen(false);
-    }, []);
+    useEffect(() => {
+        if (Array.isArray(suites) && suites.length > 0 && !firstSuiteCreated) {
+            console.log('User has suites, resetting modal states');
+            setShowFirstSuiteModal(false);
+            setFirstSuiteCreated(false);
+            modalTriggeredRef.current = false;
+        }
+    }, [suites, firstSuiteCreated]);
 
     const handleFirstSuiteSuccess = useCallback(
         async (suiteData) => {
             try {
-                await createTestSuite(suiteData);
+                setIsCreatingFirstSuite(true);
+                console.log('Creating first test suite:', suiteData.name);
+                const newSuite = await createTestSuite(suiteData);
+                if (!newSuite) throw new Error('Failed to create test suite');
+                console.log('First suite created successfully:', newSuite);
+                setFirstSuiteCreated(true);
                 setShowFirstSuiteModal(false);
-                if (refetchSuites) {
-                    await refetchSuites(true);
+                if (!activeSuite) {
+                    await switchSuite(newSuite.suite_id);
                 }
+                addNotification({
+                    type: 'success',
+                    title: 'Test Suite Created',
+                    message: `"${suiteData.name}" has been created successfully.`,
+                });
+                await refreshAll();
+                console.log('Dashboard should now be accessible');
             } catch (error) {
                 console.error('Error creating first suite:', error);
-                // Notification handled by AppProvider
+                addNotification({
+                    type: 'error',
+                    title: 'Failed to Create Test Suite',
+                    message: error?.message || 'Could not create test suite. Please try again.',
+                    persistent: true,
+                });
+                setShowFirstSuiteModal(true);
+            } finally {
+                setIsCreatingFirstSuite(false);
             }
         },
-        [createTestSuite, refetchSuites],
+        [createTestSuite, activeSuite, switchSuite, addNotification, refreshAll]
     );
 
-    const handleNewSuiteSuccess = useCallback(
-        async (suiteData) => {
-            try {
-                await createTestSuite(suiteData);
-                setIsCreateModalOpen(false);
-                if (refetchSuites) {
-                    await refetchSuites(true);
-                }
-            } catch (error) {
-                console.error('Error creating new suite:', error);
-                // Notification handled by AppProvider
-            }
-        },
-        [createTestSuite, refetchSuites],
-    );
+    const handleModalClose = useCallback(() => {
+        if (firstSuiteCreated || (Array.isArray(suites) && suites.length > 0)) {
+            setShowFirstSuiteModal(false);
+        }
+    }, [firstSuiteCreated, suites]);
 
-    // Combined error state
-    const error = useMemo(() => appError || suiteError || profileError, [appError, suiteError, profileError]);
+    const error = useMemo(() => appError, [appError]);
 
-    // Loading state
     if (isSystemInitializing) {
         return (
             <>
@@ -181,9 +149,11 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                             className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4"
                             aria-label="Loading"
                         />
-                        <p className="text-lg text-gray-600 mb-2">Loading your workspace</p>
+                        <p className="text-lg text-gray-600 mb-2">
+                            {isCreatingFirstSuite ? 'Creating your test suite...' : 'Loading your workspace'}
+                        </p>
                         <p className="text-sm text-gray-500">
-                            {requiresTestSuite ? 'Checking your test suites...' : 'Please wait...'}
+                            {requiresTestSuite ? 'Setting up your test environment...' : 'Please wait...'}
                         </p>
                     </div>
                 </div>
@@ -191,7 +161,6 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         );
     }
 
-    // Authentication check
     if (!isAuthenticated) {
         return (
             <>
@@ -216,7 +185,6 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         );
     }
 
-    // Permission denied
     if (shouldShowPermissionDenied) {
         return (
             <>
@@ -234,7 +202,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                             <p className="text-orange-600 mb-4">
                                 You don&apos;t have permission to access test suites.
                             </p>
-                            {accountSummary?.profile?.accountType === 'organization' && (
+                            {userProfile?.accountType === 'organization' && (
                                 <p className="text-sm text-orange-500">
                                     Contact your organization admin to gain access.
                                 </p>
@@ -246,42 +214,42 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         );
     }
 
-    // First suite modal
-    if (shouldShowFirstSuiteModal) {
+    if (showFirstSuiteModal && needsFirstSuite) {
         return (
             <>
                 <Head>
                     <title>Create Your First Test Suite - Assura</title>
                 </Head>
-                <div className="min-h-screen bg-gray-50">
-                    <div className="flex items-center justify-center min-h-screen">
-                        <div className="text-center max-w-md mb-8">
-                            <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-lg">
-                                <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <Plus className="w-8 h-8 text-teal-600" aria-label="Create test suite" />
-                                </div>
-                                <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                                    Welcome to Assura!
-                                </h2>
-                                <p className="text-gray-600 mb-4">
-                                    To get started, you need to create your first test suite. This will be your working
-                                    environment for managing QA activities.
-                                </p>
+                <div className="fixed inset-0 z-50 min-h-screen bg-gray-50 flex items-center justify-center">
+                    <div className="max-w-2xl w-full mx-4">
+                        <div className="bg-white rounded-lg shadow-xl p-8 text-center mb-8">
+                            <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Plus className="w-8 h-8 text-teal-600" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Assura!</h2>
+                            <p className="text-gray-600 mb-6">
+                                Let&apos;s get you started by creating your first test suite.
+                                This will organize your test cases and help you track your QA activities.
+                            </p>
+                            <div className="text-sm text-gray-500">
+                                You need at least one test suite to access the dashboard.
                             </div>
                         </div>
+                        <CreateTestSuiteModal
+                            isOpen={true}
+                            onClose={handleModalClose}
+                            isFirstSuite={true}
+                            onSuccess={handleFirstSuiteSuccess}
+                            availableOrganizations={availableOrganizations}
+                            checkSuiteNameExists={checkSuiteNameExists}
+                            getSuiteLimit={getSuiteLimit}
+                        />
                     </div>
-                    <CreateTestSuiteModal
-                        isOpen={showFirstSuiteModal}
-                        onClose={() => {}} // Prevent closing for first suite
-                        isFirstSuite={true}
-                        onSuccess={handleFirstSuiteSuccess}
-                    />
                 </div>
             </>
         );
     }
 
-    // Error state
     if (error) {
         return (
             <>
@@ -311,7 +279,9 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         );
     }
 
-    // Main page layout
+    const isDashboardEmpty = Array.isArray(suites) && suites.length > 0 && 
+        (!children || (Array.isArray(children) && children.length === 0));
+
     return (
         <>
             <Head>
@@ -319,12 +289,12 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
             </Head>
             <div className="min-h-screen bg-gray-50">
                 <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    {toolbar && (
+                    {(toolbar || (requiresTestSuite && Array.isArray(suites) && suites.length > 0)) && (
                         <div className="mb-6 flex justify-between items-center">
                             <div className="flex items-center space-x-4">
                                 <div className="flex items-center space-x-2">
                                     <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
-                                    {requiresTestSuite && suites?.length > 0 && (
+                                    {requiresTestSuite && Array.isArray(suites) && suites.length > 0 && (
                                         <span
                                             className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600"
                                             aria-label={`Number of test suites: ${suites.length}`}
@@ -334,35 +304,28 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                                     )}
                                 </div>
                             </div>
-                            <div className="flex items-center space-x-3">{toolbar}</div>
+                            {toolbar && (
+                                <div className="flex items-center space-x-3">{toolbar}</div>
+                            )}
                         </div>
                     )}
                     <div className="w-full">
-                        {requiresTestSuite && suites?.length === 0 && hasEverCreatedSuite === true ? (
+                        {requiresTestSuite && isDashboardEmpty ? (
                             <div className="flex items-center justify-center min-h-[60vh]">
                                 <div className="text-center max-w-full">
                                     <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
                                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                             <Plus
                                                 className="w-8 h-8 text-gray-400"
-                                                aria-label="Create test suite"
+                                                aria-label="Empty dashboard"
                                             />
                                         </div>
                                         <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                                            No Test Suites
+                                            Your Test Suite is Ready
                                         </h3>
                                         <p className="text-gray-600 mb-4">
-                                            You don&apos;t have any test suites at the moment. Create a new one to get
-                                            started.
+                                            Add test cases to get started with your QA activities.
                                         </p>
-                                        {userCapabilities?.canCreateSuite && (
-                                            <button
-                                                onClick={() => setIsCreateModalOpen(true)}
-                                                className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
-                                            >
-                                                Create Test Suite
-                                            </button>
-                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -372,12 +335,6 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                     </div>
                 </div>
             </div>
-            <CreateTestSuiteModal
-                isOpen={isCreateModalOpen}
-                onClose={handleCreateModalClose}
-                isFirstSuite={false}
-                onSuccess={handleNewSuiteSuccess}
-            />
         </>
     );
 };

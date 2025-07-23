@@ -1,18 +1,16 @@
 import { useCallback } from 'react';
-import firestoreService from '../services/firestoreService';
+import { useEntityData } from '../contexts/EntityProvider';
 
 export const useEntityManagement = (
     testCases,
     bugs,
     recordings,
-    setTestCases,
-    setBugs,
-    setRecordings,
     setRelationships,
     canCreateResource,
-    addNotification,
-    handleError
+    addNotification
 ) => {
+    const { createTestCase, createBug, createRecording, linkBugToTestCase, unlinkBugFromTestCase } = useEntityData();
+
     const addTestCase = useCallback(
         async (testCaseData, suiteId) => {
             if (!suiteId || typeof suiteId !== 'string') {
@@ -33,20 +31,27 @@ export const useEntityManagement = (
                 });
                 return null;
             }
-            const data = { name: testCaseData.name, description: testCaseData.description || '' };
-            const result = await firestoreService.createSuiteAsset(suiteId, 'testCases', data);
-            if (!result.success) {
-                handleError(result.error, 'test case creation');
+            try {
+                const data = { name: testCaseData.name, description: testCaseData.description || '' };
+                const result = await createTestCase(data);
+                if (!result) return null;
+                addNotification({
+                    type: 'success',
+                    title: 'Test Case Created',
+                    message: `Test case ${result.name} created successfully.`,
+                });
+                return result.id;
+            } catch (error) {
+                addNotification({
+                    type: 'error',
+                    title: 'Test Case Creation Failed',
+                    message: error.message || 'Failed to create test case.',
+                    persistent: true,
+                });
                 return null;
             }
-            addNotification({
-                type: 'success',
-                title: 'Test Case Created',
-                message: `Test case ${result.data.name} created successfully.`,
-            });
-            return result.docId;
         },
-        [canCreateResource, testCases.length, addNotification, handleError]
+        [canCreateResource, testCases.length, addNotification, createTestCase]
     );
 
     const addBug = useCallback(
@@ -69,20 +74,27 @@ export const useEntityManagement = (
                 });
                 return null;
             }
-            const data = { title: bugData.title, description: bugData.description || '' };
-            const result = await firestoreService.createSuiteAsset(suiteId, 'bugs', data);
-            if (!result.success) {
-                handleError(result.error, 'bug creation');
+            try {
+                const data = { title: bugData.title, description: bugData.description || '' };
+                const result = await createBug(data);
+                if (!result) return null;
+                addNotification({
+                    type: 'success',
+                    title: 'Bug Created',
+                    message: `Bug ${result.title} created successfully.`,
+                });
+                return result.id;
+            } catch (error) {
+                addNotification({
+                    type: 'error',
+                    title: 'Bug Creation Failed',
+                    message: error.message || 'Failed to create bug.',
+                    persistent: true,
+                });
                 return null;
             }
-            addNotification({
-                type: 'success',
-                title: 'Bug Created',
-                message: `Bug ${result.data.title} created successfully.`,
-            });
-            return result.docId;
         },
-        [canCreateResource, bugs.length, addNotification, handleError]
+        [canCreateResource, bugs.length, addNotification, createBug]
     );
 
     const addRecording = useCallback(
@@ -105,21 +117,27 @@ export const useEntityManagement = (
                 });
                 return null;
             }
-            const data = { name: recordingData.name, url: recordingData.url || '' };
-            const result = await firestoreService.createSuiteAsset(suiteId, 'recordings', data);
-            if (!result.success) {
-                handleError(result.error, 'recording creation');
+            try {
+                const data = { name: recordingData.name, url: recordingData.url || '' };
+                const result = await createRecording(data);
+                if (!result) return null;
+                addNotification({
+                    type: 'success',
+                    title: 'Recording Created',
+                    message: `Recording ${result.name} created successfully.`,
+                });
+                return result.id;
+            } catch (error) {
+                addNotification({
+                    type: 'error',
+                    title: 'Recording Creation Failed',
+                    message: error.message || 'Failed to create recording.',
+                    persistent: true,
+                });
                 return null;
             }
-            setRecordings((prev) => [...prev, result.data]);
-            addNotification({
-                type: 'success',
-                title: 'Recording Created',
-                message: `Recording ${result.data.name} created successfully.`,
-            });
-            return result.docId;
         },
-        [canCreateResource, recordings.length, setRecordings, addNotification, handleError]
+        [canCreateResource, recordings.length, addNotification, createRecording]
     );
 
     const linkEntities = useCallback(
@@ -142,27 +160,33 @@ export const useEntityManagement = (
                 });
                 return;
             }
-            const relationshipKey = `${sourceType}To${targetType.charAt(0).toUpperCase() + targetType.slice(1)}`;
-            const relationshipData = { sourceType, sourceId, targetType, targetId, suiteId };
-            const result = await firestoreService.createDocument('relationships', relationshipData);
-            if (!result.success) {
-                handleError(result.error, 'entity linking');
-                return;
+            if (sourceType === 'testCase' && targetType === 'bug') {
+                try {
+                    const result = await linkBugToTestCase(sourceId, targetId);
+                    if (!result) return;
+                    addNotification({
+                        type: 'success',
+                        title: 'Entities Linked',
+                        message: `${sourceType} linked to ${targetType} successfully.`,
+                    });
+                } catch (error) {
+                    addNotification({
+                        type: 'error',
+                        title: 'Entity Linking Failed',
+                        message: error.message || 'Failed to link entities.',
+                        persistent: true,
+                    });
+                }
+            } else {
+                addNotification({
+                    type: 'error',
+                    title: 'Unsupported Operation',
+                    message: `Linking ${sourceType} to ${targetType} is not supported.`,
+                    persistent: true,
+                });
             }
-            setRelationships((prev) => ({
-                ...prev,
-                [relationshipKey]: {
-                    ...prev[relationshipKey],
-                    [sourceId]: [...(prev[relationshipKey][sourceId] || []), targetId],
-                },
-            }));
-            addNotification({
-                type: 'success',
-                title: 'Entities Linked',
-                message: `${sourceType} linked to ${targetType} successfully.`,
-            });
         },
-        [addNotification, handleError, setRelationships]
+        [addNotification, linkBugToTestCase]
     );
 
     const unlinkEntities = useCallback(
@@ -185,26 +209,33 @@ export const useEntityManagement = (
                 });
                 return;
             }
-            const relationshipKey = `${sourceType}To${targetType.charAt(0).toUpperCase() + targetType.slice(1)}`;
-            const result = await firestoreService.deleteDocument('relationships', `${sourceType}_${sourceId}_${targetType}_${targetId}_${suiteId}`);
-            if (!result.success) {
-                handleError(result.error, 'entity unlinking');
-                return;
+            if (sourceType === 'testCase' && targetType === 'bug') {
+                try {
+                    const result = await unlinkBugFromTestCase(sourceId, targetId);
+                    if (!result) return;
+                    addNotification({
+                        type: 'success',
+                        title: 'Entities Unlinked',
+                        message: `${sourceType} unlinked from ${targetType} successfully.`,
+                    });
+                } catch (error) {
+                    addNotification({
+                        type: 'error',
+                        title: 'Entity Unlinking Failed',
+                        message: error.message || 'Failed to unlink entities.',
+                        persistent: true,
+                    });
+                }
+            } else {
+                addNotification({
+                    type: 'error',
+                    title: 'Unsupported Operation',
+                    message: `Unlinking ${sourceType} from ${targetType} is not supported.`,
+                    persistent: true,
+                });
             }
-            setRelationships((prev) => ({
-                ...prev,
-                [relationshipKey]: {
-                    ...prev[relationshipKey],
-                    [sourceId]: (prev[relationshipKey][sourceId] || []).filter((id) => id !== targetId),
-                },
-            }));
-            addNotification({
-                type: 'success',
-                title: 'Entities Unlinked',
-                message: `${sourceType} unlinked from ${targetType} successfully.`,
-            });
         },
-        [addNotification, handleError, setRelationships]
+        [addNotification, unlinkBugFromTestCase]
     );
 
     return { addTestCase, addBug, addRecording, linkEntities, unlinkEntities };

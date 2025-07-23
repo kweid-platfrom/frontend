@@ -30,30 +30,28 @@ const VerifyEmail = () => {
     const [message, setMessage] = useState('');
     const [registrationData, setRegistrationData] = useState(null);
     const [showOnboardingOption, setShowOnboardingOption] = useState(false);
+    const [isRedirecting, setIsRedirecting] = useState(false);
 
-    const handleEmailVerified = useCallback(async (user) => {
+    const handleEmailVerified = useCallback(async () => {
+        if (isRedirecting) return; // Prevent multiple calls
+        
+        setIsRedirecting(true);
+        console.log('Starting post-verification redirect process');
+
         try {
-            if (!user) {
-                throw new Error('User not authenticated');
-            }
+            // Always redirect to login with verified flag
+            // The login page can handle the rest of the flow
+            setTimeout(() => {
+                router.push('/login?verified=true');
+            }, 1500);
 
-            // Perform post-verification cleanup
-            await handlePostVerification(user.uid);
-            console.log('Post-verification completed for user:', user.uid);
-
-            // Clear registration state
-            await clearRegistrationState();
-            console.log('Registration state cleared after verification');
-
-            // Redirect to dashboard
-            router.push('/dashboard');
         } catch (error) {
-            console.error('Post-verification error:', error);
-            setStatus('error');
-            setMessage('Failed to complete verification process. Please sign in to continue.');
+            console.error('Redirect error:', error);
+            setIsRedirecting(false);
+            // Fallback - immediate redirect
             router.push('/login?verified=true');
         }
-    }, [router]);
+    }, [router, isRedirecting]);
 
     useEffect(() => {
         // Check for pending registration data
@@ -105,48 +103,9 @@ const VerifyEmail = () => {
                     throw error;
                 }
 
-                // Set success state
+                // Set success state first
                 setStatus('success');
                 setMessage('Your email has been verified successfully!');
-
-                // Update user document
-                if (info?.data?.email) {
-                    try {
-                        await retryOperation(async () => {
-                            const usersRef = collection(db, 'users');
-                            const q = query(usersRef, where('email', '==', info.data.email));
-                            const querySnapshot = await getDocs(q);
-
-                            if (!querySnapshot.empty) {
-                                const userDoc = querySnapshot.docs[0];
-                                await updateDoc(doc(db, 'users', userDoc.id), {
-                                    'auth_metadata.email_verified': true,
-                                    emailVerified: true,
-                                    'profile_info.updated_at': new Date().toISOString(),
-                                    onboardingStatus: {
-                                        emailVerified: true,
-                                        needsSuiteCreation: true,
-                                    },
-                                });
-                                console.log('User document updated successfully:', userDoc.id);
-                            } else {
-                                console.warn('No user document found for email:', info.data.email);
-                            }
-                        }, 2, 1000);
-                    } catch (error) {
-                        console.error('Error updating user document (non-critical):', error);
-                    }
-                }
-
-                // Handle post-verification for authenticated user
-                if (auth.currentUser?.uid) {
-                    try {
-                        await handlePostVerification(auth.currentUser.uid);
-                        console.log('Post-verification handling completed successfully');
-                    } catch (error) {
-                        console.error('Error in post-verification handling (non-critical):', error);
-                    }
-                }
 
                 // Handle onboarding flow
                 if (registrationData?.isNewRegistration) {
@@ -156,13 +115,19 @@ const VerifyEmail = () => {
                 } else {
                     // Wait to show success message, then redirect
                     setTimeout(() => {
-                        handleEmailVerified(auth.currentUser);
+                        handleEmailVerified();
                     }, 2000);
                 }
+
+                // Perform background cleanup operations AFTER setting success state
+                // These run in the background and won't affect the UI
+                performBackgroundCleanup(info?.data?.email, auth.currentUser?.uid);
+
             } catch (error) {
                 console.error('Email verification failed:', error);
                 setStatus('error');
                 let errorMessage = 'Failed to verify email. Please try again.';
+                
                 if (error.code === 'auth/expired-action-code') {
                     errorMessage = 'This verification link has expired. Please request a new one.';
                 } else if (error.code === 'auth/invalid-action-code') {
@@ -172,22 +137,83 @@ const VerifyEmail = () => {
                 } else if (error.message?.includes('permission-denied')) {
                     errorMessage = 'Permission denied. Please try signing in again.';
                 }
+                
                 setMessage(errorMessage);
             } finally {
-                // Ensure registration state is cleared even on error
-                await clearRegistrationState();
+                // Ensure registration state is cleared even on error (non-blocking)
+                clearRegistrationState().catch(error => {
+                    console.warn('Failed to clear registration state:', error);
+                });
             }
         };
 
         verifyEmail();
     }, [searchParams, registrationData, handleEmailVerified]);
 
+    // Background cleanup that runs completely separately from UI state
+    const performBackgroundCleanup = (email, userId) => {
+        // Run in the background without affecting UI
+        setTimeout(async () => {
+            try {
+                // Update user document
+                if (email) {
+                    try {
+                        const usersRef = collection(db, 'users');
+                        const q = query(usersRef, where('email', '==', email));
+                        const querySnapshot = await getDocs(q);
+
+                        if (!querySnapshot.empty) {
+                            const userDoc = querySnapshot.docs[0];
+                            await updateDoc(doc(db, 'users', userDoc.id), {
+                                'auth_metadata.email_verified': true,
+                                emailVerified: true,
+                                'profile_info.updated_at': new Date().toISOString(),
+                                onboardingStatus: {
+                                    emailVerified: true,
+                                    needsSuiteCreation: true,
+                                },
+                            });
+                            console.log('Background: User document updated successfully');
+                        }
+                    } catch (error) {
+                        console.warn('Background: User document update failed:', error);
+                    }
+                }
+
+                // Handle post-verification
+                if (userId) {
+                    try {
+                        await handlePostVerification(userId);
+                        console.log('Background: Post-verification completed');
+                    } catch (error) {
+                        console.warn('Background: Post-verification failed:', error);
+                    }
+                }
+
+                // Clear registration state
+                try {
+                    await clearRegistrationState();
+                    console.log('Background: Registration state cleared');
+                } catch (error) {
+                    console.warn('Background: Failed to clear registration state:', error);
+                }
+            } catch (error) {
+                console.warn('Background cleanup error:', error);
+            }
+        }, 100); // Small delay to ensure it runs after state is set
+    };
+
     const handleContinueOnboarding = async () => {
         try {
             localStorage.removeItem('pendingRegistration');
             localStorage.setItem('startOnboarding', 'true');
             localStorage.setItem('needsSuiteCreation', 'true');
-            await clearRegistrationState();
+            
+            // Clear registration state (non-blocking)
+            clearRegistrationState().catch(error => {
+                console.warn('Failed to clear registration state during onboarding:', error);
+            });
+            
             router.push('/login?verified=true&continue=onboarding');
         } catch (error) {
             console.error('Error during onboarding setup:', error);
@@ -198,7 +224,12 @@ const VerifyEmail = () => {
     const handleGoToLogin = async () => {
         try {
             localStorage.removeItem('pendingRegistration');
-            await clearRegistrationState();
+            
+            // Clear registration state (non-blocking)
+            clearRegistrationState().catch(error => {
+                console.warn('Failed to clear registration state during login redirect:', error);
+            });
+            
             router.push('/login?verified=true');
         } catch (error) {
             console.error('Error during navigation to login:', error);
@@ -239,7 +270,8 @@ const VerifyEmail = () => {
                             <p className="text-slate-600 mb-4">
                                 {status === 'verifying' && 'Please wait while we verify your email address...'}
                                 {status === 'success' && showOnboardingOption && 'Ready to set up your account! Create your first test suite to get started.'}
-                                {status === 'success' && !showOnboardingOption && message}
+                                {status === 'success' && !showOnboardingOption && isRedirecting && 'Redirecting you to sign in...'}
+                                {status === 'success' && !showOnboardingOption && !isRedirecting && message}
                                 {status === 'error' && message}
                             </p>
                             {status === 'success' && registrationData && (
@@ -274,9 +306,10 @@ const VerifyEmail = () => {
                                 </p>
                             </div>
                         ) : status === 'success' && !showOnboardingOption ? (
-                            <p className="text-sm text-slate-500">
-                                Redirecting you to the dashboard...
-                            </p>
+                            <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                                {isRedirecting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                {isRedirecting ? 'Redirecting you to sign in...' : 'Preparing to redirect...'}
+                            </div>
                         ) : (
                             status === 'error' && (
                                 <div className="space-y-3">

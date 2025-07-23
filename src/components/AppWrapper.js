@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo, Suspense, memo, lazy } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useApp, useAppNavigation, useAppNotifications } from '../contexts/AppProvider';
+import { useApp, useAppNavigation, useAppNotifications, useAppFeatures } from '../contexts/AppProvider';
 import LoadingSpinner from './common/LoadingSpinner';
 import ErrorBoundary from './common/ErrorBoundary';
 import NotificationCenter from './notifications/NotificationCenter';
@@ -70,9 +70,9 @@ const LoadingState = memo(({
     }, []);
 
     const getMessage = () => {
-        if (authLoading) return `Initializing workspace${dots}`;
-        if (isInitializing) return `Setting up your environment${dots}`;
-        if (appLoading) return `Loading your data${dots}`;
+        if (authLoading) return `Authenticating${dots}`;
+        if (isInitializing) return `Initializing workspace${dots}`;
+        if (appLoading) return `Loading suites${dots}`;
         if (isRetrying) return `Retrying connection${dots}`;
         return `Loading${dots}`;
     };
@@ -97,7 +97,7 @@ const AppWrapper = ({ children }) => {
     const pathname = usePathname();
     const {
         isAuthenticated,
-        currentUser,
+        user,
         loading: authLoading,
         authError,
         userProfile,
@@ -108,9 +108,10 @@ const AppWrapper = ({ children }) => {
         userCapabilities,
         suites,
         activeSuite,
-        setActiveSuite,
-        refreshAll,
+        switchSuite,
+        refetchSuites,
         clearError,
+        subscriptionStatus,
     } = useApp();
     const {
         activeModule,
@@ -120,29 +121,24 @@ const AppWrapper = ({ children }) => {
         navigateToModule,
     } = useAppNavigation();
     const { notifications, addNotification } = useAppNotifications();
+    const { featureFlags } = useAppFeatures();
 
     const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
     const [isRetrying, setIsRetrying] = useState(false);
     const [isInitializing, setIsInitializing] = useState(true);
 
-    // Memoized computed values with proper dependencies
     const isPublicPage = useMemo(() => PUBLIC_PAGES.has(pathname), [pathname]);
     const isMinimalLayout = useMemo(() => MINIMAL_LAYOUT_PATHS.has(pathname), [pathname]);
     const skipAuthCheck = useMemo(() => NO_AUTH_CHECK_PAGES.has(pathname), [pathname]);
-    const unreadCount = useMemo(() => 
-        notifications.filter(n => !n.read).length, 
-        [notifications]
-    );
+    const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
 
-    // Optimized page type detection
     const pageType = useMemo(() => {
         if (isPublicPage) return 'public';
         if (isMinimalLayout) return 'minimal';
         return 'full';
     }, [isPublicPage, isMinimalLayout]);
 
-    // Optimized loading state calculation
     const loadingState = useMemo(() => {
         if (skipAuthCheck) return null;
         if (isPublicPage) return null;
@@ -162,30 +158,20 @@ const AppWrapper = ({ children }) => {
             retryCount,
             isInitializing: isInitializing && isAuthenticated
         } : null;
-    }, [
-        skipAuthCheck, 
-        isPublicPage, 
-        authLoading, 
-        isAuthenticated, 
-        isInitialized, 
-        appLoading, 
-        isRetrying, 
-        isInitializing, 
-        retryCount
-    ]);
+    }, [skipAuthCheck, isPublicPage, authLoading, isAuthenticated, isInitialized, appLoading, isRetrying, isInitializing, retryCount]);
 
-    // Optimized retry mechanism with exponential backoff
     const handleRetry = useCallback(async () => {
+        if (retryCount >= 3) return;
         setIsRetrying(true);
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Max 5 seconds
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
         
         try {
             await new Promise(resolve => setTimeout(resolve, delay));
-            await refreshAll();
+            await refetchSuites({ forceRefresh: true });
             addNotification({
                 type: 'success',
-                title: 'Retry Successful',
-                message: 'Application data has been refreshed.',
+                title: 'Data Refreshed',
+                message: 'Suite data has been successfully refreshed.',
             });
             setRetryCount(0);
             clearError();
@@ -194,22 +180,20 @@ const AppWrapper = ({ children }) => {
             addNotification({
                 type: 'error',
                 title: 'Retry Failed',
-                message: error?.message || 'Failed to refresh application data',
+                message: error?.message || 'Failed to refresh suite data',
                 persistent: true,
             });
+            setRetryCount(prev => prev + 1);
         } finally {
             setIsRetrying(false);
         }
-    }, [refreshAll, addNotification, clearError, retryCount]);
+    }, [refetchSuites, addNotification, clearError, retryCount]);
 
-    // Optimized error handling with memoization
     const handleError = useCallback(
         (error, context = 'application') => {
             console.error(`AppWrapper ${context} error:`, error);
             const errorMessage = error?.message || 'An unexpected error occurred';
-            const isRetryable =
-                error?.retryable ||
-                ['unavailable', 'deadline-exceeded', 'aborted'].includes(error?.code);
+            const isRetryable = error?.retryable || ['unavailable', 'deadline-exceeded', 'aborted'].includes(error?.code);
 
             addNotification({
                 type: 'error',
@@ -218,31 +202,24 @@ const AppWrapper = ({ children }) => {
                 persistent: !isRetryable,
                 action: isRetryable && retryCount < 3 ? { label: 'Retry', onClick: handleRetry } : undefined,
             });
-
-            if (isRetryable && retryCount < 3) {
-                setRetryCount(prev => prev + 1);
-            }
         },
         [addNotification, handleRetry, retryCount],
     );
 
-    // Handle authentication errors with cleanup
     useEffect(() => {
         if (authError) handleError(authError, 'authentication');
     }, [authError, handleError]);
 
-    // Handle general app errors with cleanup
     useEffect(() => {
         if (appError) handleError(appError, 'application');
     }, [appError, handleError]);
 
-    // Optimized authentication guard with debouncing and cleanup
     useEffect(() => {
         const handleAuthRedirect = debounce(() => {
             if (!isPublicPage && isInitialized && !isAuthenticated && !authLoading && !skipAuthCheck) {
                 const redirectCount = parseInt(localStorage.getItem('redirectCount') || '0', 10);
                 if (redirectCount > 2) {
-                    console.warn('Redirect loop detected. Stopping redirect to login.');
+                    console.warn('Redirect loop detected.');
                     addNotification({
                         type: 'error',
                         title: 'Redirect Error',
@@ -255,17 +232,10 @@ const AppWrapper = ({ children }) => {
                 localStorage.setItem('redirectCount', (redirectCount + 1).toString());
                 localStorage.setItem('redirectAfterAuth', pathname);
                 router.replace('/login');
-            } else if (
-                isPublicPage &&
-                isInitialized &&
-                isAuthenticated &&
-                currentUser &&
-                currentUser.emailVerified &&
-                !skipAuthCheck
-            ) {
+            } else if (isPublicPage && isInitialized && isAuthenticated && user?.emailVerified && !skipAuthCheck) {
                 const redirectCount = parseInt(localStorage.getItem('redirectCount') || '0', 10);
                 if (redirectCount > 2) {
-                    console.warn('Redirect loop detected. Stopping redirect.');
+                    console.warn('Redirect loop detected.');
                     addNotification({
                         type: 'error',
                         title: 'Redirect Error',
@@ -280,9 +250,8 @@ const AppWrapper = ({ children }) => {
                 localStorage.removeItem('redirectAfterAuth');
                 addNotification({
                     type: 'info',
-                    title: 'Already Signed In',
-                    message: 'You are already signed in. Redirecting to your dashboard.',
-                    persistent: false,
+                    title: 'Authenticated',
+                    message: 'Redirecting to your dashboard.',
                 });
                 router.replace(redirectTo);
             } else {
@@ -290,44 +259,19 @@ const AppWrapper = ({ children }) => {
             }
         }, 300);
 
-        if (typeof window !== 'undefined') {
-            handleAuthRedirect();
-        }
+        handleAuthRedirect();
+        return () => handleAuthRedirect.cancel();
+    }, [isPublicPage, isInitialized, isAuthenticated, authLoading, user, pathname, router, addNotification, skipAuthCheck]);
 
-        return () => {
-            handleAuthRedirect.cancel();
-        };
-    }, [
-        isPublicPage,
-        isInitialized,
-        isAuthenticated,
-        authLoading,
-        currentUser,
-        pathname,
-        router,
-        addNotification,
-        skipAuthCheck,
-    ]);
-
-    // Optimized upgrade prompt logic with early returns
     useEffect(() => {
         if (!userCapabilities || !isAuthenticated || isPublicPage) return;
 
-        const { isTrialActive, trialDaysRemaining, hasActiveSubscription } = userCapabilities;
-        
-        if (hasActiveSubscription) {
-            setShowUpgradePrompt(false);
-            return;
-        }
+        const { hasActiveSubscription, isTrialActive, trialDaysRemaining } = userCapabilities;
 
-        const shouldShowUpgrade = !hasActiveSubscription && 
-            ((isTrialActive && trialDaysRemaining <= 7) || !isTrialActive);
+        setShowUpgradePrompt(!hasActiveSubscription && (!isTrialActive || trialDaysRemaining <= 7));
 
-        setShowUpgradePrompt(shouldShowUpgrade);
-
-        if (isTrialActive && trialDaysRemaining <= 3) {
+        if (isTrialActive && trialDaysRemaining <= 7) {
             const notificationKey = `trial-warning-${trialDaysRemaining}`;
-            
             if (trialDaysRemaining > 0) {
                 addNotification({
                     id: notificationKey,
@@ -350,7 +294,6 @@ const AppWrapper = ({ children }) => {
         }
     }, [userCapabilities, isAuthenticated, isPublicPage, addNotification, router]);
 
-    // Mark initialization as complete
     useEffect(() => {
         if (isInitialized && isAuthenticated) {
             const timer = setTimeout(() => setIsInitializing(false), 500);
@@ -358,17 +301,14 @@ const AppWrapper = ({ children }) => {
         }
     }, [isInitialized, isAuthenticated]);
 
-    // Early return for loading state
     if (loadingState) {
         return <LoadingState {...loadingState} />;
     }
 
-    // Early return for error state
     if (appError && !isPublicPage) {
         return <ErrorDisplay error={appError} onRetry={handleRetry} canRetry={retryCount < 3} />;
     }
 
-    // Render appropriate layout based on page type
     const renderLayout = () => {
         switch (pageType) {
             case 'public':
@@ -408,22 +348,23 @@ const AppWrapper = ({ children }) => {
                         <ErrorBoundary>
                             <NotificationCenter />
                             <Suspense fallback={<div className="h-2" />}>
-                                {userCapabilities?.isTrialActive && (
+                                {subscriptionStatus?.showTrialBanner && (
                                     <TrialBanner
-                                        daysRemaining={userCapabilities.trialDaysRemaining || 0}
-                                        subscriptionType={accountSummary?.subscription?.plan || 'individual_free'}
+                                        daysRemaining={userCapabilities?.trialDaysRemaining || 0}
+                                        subscriptionType={subscriptionStatus?.plan || 'individual_free'}
                                         onUpgradeClick={() => router.push('/upgrade')}
                                     />
                                 )}
                             </Suspense>
                             <AppHeader
-                                user={currentUser}
+                                user={user}
                                 userProfile={userProfile}
                                 activeSuite={activeSuite}
                                 notificationCount={unreadCount}
                                 onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                                 userCapabilities={userCapabilities || {}}
                                 accountSummary={accountSummary || {}}
+                                featureFlags={featureFlags}
                             />
                             <main className="flex-1 bg-white">
                                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -434,16 +375,16 @@ const AppWrapper = ({ children }) => {
                     </div>
                 );
 
-            default: // full layout
+            default:
                 return (
                     <div className="min-h-screen bg-gray-50">
                         <ErrorBoundary>
                             <NotificationCenter />
                             <Suspense fallback={<div className="h-2" />}>
-                                {userCapabilities?.isTrialActive && (
+                                {subscriptionStatus?.showTrialBanner && (
                                     <TrialBanner
-                                        daysRemaining={userCapabilities.trialDaysRemaining || 0}
-                                        subscriptionType={accountSummary?.subscription?.plan || 'individual_free'}
+                                        daysRemaining={userCapabilities?.trialDaysRemaining || 0}
+                                        subscriptionType={subscriptionStatus?.plan || 'individual_free'}
                                         onUpgradeClick={() => router.push('/upgrade')}
                                     />
                                 )}
@@ -453,31 +394,33 @@ const AppWrapper = ({ children }) => {
                                     <AppSidebar
                                         open={!sidebarCollapsed}
                                         onClose={() => setSidebarCollapsed(true)}
-                                        user={currentUser}
+                                        user={user}
                                         userProfile={userProfile}
                                         activeSuite={activeSuite}
                                         suites={suites || []}
                                         userCapabilities={userCapabilities || {}}
-                                        subscription={accountSummary?.subscription || {}}
+                                        subscription={subscriptionStatus || {}}
                                         currentPath={pathname}
                                         activeModule={activeModule}
                                         onNavigate={navigateToModule}
                                         onError={(error) => handleError(error, 'sidebar')}
                                         accountSummary={accountSummary || {}}
+                                        featureFlags={featureFlags}
                                     />
                                 </Suspense>
                                 <div className="flex-1 flex flex-col overflow-hidden">
                                     <AppHeader
-                                        user={currentUser}
+                                        user={user}
                                         userProfile={userProfile}
                                         activeSuite={activeSuite}
                                         notificationCount={unreadCount}
                                         onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                                        onSuiteChange={setActiveSuite}
+                                        onSuiteChange={switchSuite}
                                         suites={suites || []}
                                         userCapabilities={userCapabilities || {}}
                                         onError={(error) => handleError(error, 'header')}
                                         accountSummary={accountSummary || {}}
+                                        featureFlags={featureFlags}
                                     />
                                     <AppBreadcrumbs
                                         breadcrumbs={breadcrumbs || []}
@@ -504,9 +447,10 @@ const AppWrapper = ({ children }) => {
                                     <UpgradePrompt
                                         isOpen={showUpgradePrompt}
                                         onClose={() => setShowUpgradePrompt(false)}
-                                        subscription={accountSummary?.subscription || {}}
+                                        subscription={subscriptionStatus || {}}
                                         userCapabilities={userCapabilities || {}}
                                         onError={(error) => handleError(error, 'upgrade prompt')}
+                                        featureFlags={featureFlags}
                                     />
                                 )}
                             </Suspense>

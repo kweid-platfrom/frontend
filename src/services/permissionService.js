@@ -1,32 +1,16 @@
 import firestoreService from './firestoreService';
-import { getCompleteAccountInfo, getUserCapabilities, canInviteTeamMembers as accountCanInviteTeamMembers } from './accountService';
+import { getCompleteAccountInfo, getUserCapabilities } from './accountService';
+import subscriptionService from './subscriptionService';
 
-/**
- * Check if the user has an individual account
- * @param {Object} userProfile - User profile object
- * @returns {boolean} Whether the account is individual
- */
 export function isIndividualAccount(userProfile) {
     return userProfile?.accountType === 'individual';
 }
 
-/**
- * Check if the user has an organization account
- * @param {Object} userProfile - User profile object
- * @returns {boolean} Whether the account is organization
- */
 export function isOrganizationAccount(userProfile) {
     return userProfile?.accountType === 'organization';
 }
 
 const PermissionService = {
-    /**
-     * Check if a user has a specific permission
-     * @param {string} userId - User ID
-     * @param {string} permission - Permission to check
-     * @param {Object} context - Context object containing suiteId or organizationId
-     * @returns {Promise<boolean>} Whether the user has the permission
-     */
     async hasPermission(userId, permission, context = {}) {
         try {
             const { suiteId, organizationId } = context;
@@ -36,29 +20,41 @@ const PermissionService = {
             }
 
             const { userProfile } = accountInfo.data;
-
             if (!userProfile || !userProfile.isActive) {
                 return false;
             }
 
+            const subscription = await subscriptionService.getSubscription(userId);
+            if (!subscription.success) {
+                return false;
+            }
+
+            // Check feature access for free tier
+            const restrictedFeatures = ['test_cases', 'reports', 'automation', 'team_management'];
+            if (subscription.data.isTrialActive || subscriptionService.isPaidPlan(userProfile.subscriptionPlan)) {
+                // Trial or paid plans have full access
+            } else {
+                // Free tier restrictions
+                if (restrictedFeatures.includes(permission)) {
+                    return false;
+                }
+                if (permission === 'invite_team_members' && isOrganizationAccount(userProfile)) {
+                    return false;
+                }
+            }
+
             switch (permission) {
                 case 'create_suite':
-                    const capabilitiesResult = await getUserCapabilities(userId);
-                    if (!capabilitiesResult.success) {
-                        return false;
-                    }
-                    return capabilitiesResult.data.remaining.testSuites !== 0;
+                    const suiteCheck = await getUserCapabilities(userId);
+                    if (!suiteCheck.success) return false;
+                    return suiteCheck.data.remaining.testSuites !== 0;
 
                 case 'view_suite':
                 case 'edit_suite':
                 case 'delete_suite':
-                    if (!suiteId) {
-                        return false;
-                    }
+                    if (!suiteId) return false;
                     const suite = await firestoreService.getDocument('testSuites', suiteId);
-                    if (!suite.success || !suite.data) {
-                        return false;
-                    }
+                    if (!suite.success || !suite.data) return false;
                     return (
                         suite.data.createdBy === userId ||
                         suite.data.permissions?.[userId] === 'admin' ||
@@ -69,16 +65,25 @@ const PermissionService = {
                     );
 
                 case 'invite_team_members':
-                    const inviteResult = await accountCanInviteTeamMembers(userId);
-                    return inviteResult.success && inviteResult.data.canInvite;
+                    if (isIndividualAccount(userProfile)) return false;
+                    const inviteCheck = await getUserCapabilities(userId);
+                    if (!inviteCheck.success) return false;
+                    return inviteCheck.data.canInviteTeamMembers;
 
                 case 'manage_organization':
-                    if (!organizationId) {
-                        return false;
-                    }
+                    if (!organizationId || isIndividualAccount(userProfile)) return false;
                     return userProfile.account_memberships?.some(
                         (m) => m.org_id === organizationId && m.role === 'Admin' && m.status === 'active'
                     );
+
+                case 'test_cases':
+                case 'reports':
+                case 'automation':
+                    return subscriptionService.hasFeatureAccess(subscription.data, permission);
+
+                case 'team_management':
+                    if (isIndividualAccount(userProfile)) return false;
+                    return subscriptionService.hasFeatureAccess(subscription.data, permission);
 
                 default:
                     return false;
@@ -89,19 +94,10 @@ const PermissionService = {
         }
     },
 
-    /**
-     * Check if a user has a specific role in an organization
-     * @param {string} userId - User ID
-     * @param {string} role - Role to check
-     * @param {string} organizationId - Organization ID
-     * @returns {Promise<boolean>} Whether the user has the role
-     */
     async hasRole(userId, role, organizationId) {
         try {
             const accountInfo = await getCompleteAccountInfo(userId);
-            if (!accountInfo.success) {
-                return false;
-            }
+            if (!accountInfo.success) return false;
 
             const { userProfile } = accountInfo.data;
             return userProfile.account_memberships?.some(
@@ -113,12 +109,6 @@ const PermissionService = {
         }
     },
 
-    /**
-     * Get all permissions for a user
-     * @param {string} userId - User ID
-     * @param {Object} context - Context object containing suiteId or organizationId
-     * @returns {Promise<Object>} User's permissions
-     */
     async getUserPermissions(userId, context = {}) {
         try {
             const permissions = {
@@ -128,26 +118,24 @@ const PermissionService = {
                 canDeleteSuite: false,
                 canInviteTeamMembers: false,
                 canManageOrganization: false,
+                canAccessTestCases: false,
+                canAccessReports: false,
+                canAccessAutomation: false,
+                canAccessTeamManagement: false,
             };
 
             const { suiteId, organizationId } = context;
 
             permissions.canCreateSuite = await this.hasPermission(userId, 'create_suite', { suiteId, organizationId });
-            permissions.canViewSuite = suiteId
-                ? await this.hasPermission(userId, 'view_suite', { suiteId, organizationId })
-                : true;
-            permissions.canEditSuite = suiteId
-                ? await this.hasPermission(userId, 'edit_suite', { suiteId, organizationId })
-                : false;
-            permissions.canDeleteSuite = suiteId
-                ? await this.hasPermission(userId, 'delete_suite', { suiteId, organizationId })
-                : false;
-            permissions.canInviteTeamMembers = await this.hasPermission(userId, 'invite_team_members', {
-                organizationId,
-            });
-            permissions.canManageOrganization = organizationId
-                ? await this.hasPermission(userId, 'manage_organization', { organizationId })
-                : false;
+            permissions.canViewSuite = suiteId ? await this.hasPermission(userId, 'view_suite', { suiteId, organizationId }) : true;
+            permissions.canEditSuite = suiteId ? await this.hasPermission(userId, 'edit_suite', { suiteId, organizationId }) : false;
+            permissions.canDeleteSuite = suiteId ? await this.hasPermission(userId, 'delete_suite', { suiteId, organizationId }) : false;
+            permissions.canInviteTeamMembers = await this.hasPermission(userId, 'invite_team_members', { organizationId });
+            permissions.canManageOrganization = organizationId ? await this.hasPermission(userId, 'manage_organization', { organizationId }) : false;
+            permissions.canAccessTestCases = await this.hasPermission(userId, 'test_cases', { suiteId, organizationId });
+            permissions.canAccessReports = await this.hasPermission(userId, 'reports', { suiteId, organizationId });
+            permissions.canAccessAutomation = await this.hasPermission(userId, 'automation', { suiteId, organizationId });
+            permissions.canAccessTeamManagement = await this.hasPermission(userId, 'team_management', { organizationId });
 
             return permissions;
         } catch (error) {
@@ -159,91 +147,49 @@ const PermissionService = {
                 canDeleteSuite: false,
                 canInviteTeamMembers: false,
                 canManageOrganization: false,
+                canAccessTestCases: false,
+                canAccessReports: false,
+                canAccessAutomation: false,
+                canAccessTeamManagement: false,
             };
         }
     },
 
-    /**
-     * Check if a user can create a new suite
-     * @param {string} userId - User ID
-     * @returns {Promise<boolean>} Whether the user can create a suite
-     */
     async canCreateSuite(userId) {
         return this.hasPermission(userId, 'create_suite');
     },
 
-    /**
-     * Check if a user can view a suite
-     * @param {string} userId - User ID
-     * @param {string} suiteId - Suite ID
-     * @returns {Promise<boolean>} Whether the user can view the suite
-     */
     async canViewSuite(userId, suiteId) {
         return this.hasPermission(userId, 'view_suite', { suiteId });
     },
 
-    /**
-     * Check if a user can edit a suite
-     * @param {string} userId - User ID
-     * @param {string} suiteId - Suite ID
-     * @returns {Promise<boolean>} Whether the user can edit the suite
-     */
     async canEditSuite(userId, suiteId) {
         return this.hasPermission(userId, 'edit_suite', { suiteId });
     },
 
-    /**
-     * Check if a user can delete a suite
-     * @param {string} userId - User ID
-     * @param {string} suiteId - Suite ID
-     * @returns {Promise<boolean>} Whether the user can delete the suite
-     */
     async canDeleteSuite(userId, suiteId) {
         return this.hasPermission(userId, 'delete_suite', { suiteId });
     },
 
-    /**
-     * Check if a user can invite team members
-     * @param {string} userId - User ID
-     * @param {string} organizationId - Organization ID
-     * @returns {Promise<boolean>} Whether the user can invite team members
-     */
     async canInviteTeamMembers(userId, organizationId) {
         return this.hasPermission(userId, 'invite_team_members', { organizationId });
     },
 
-    /**
-     * Check if a user can manage an organization
-     * @param {string} userId - User ID
-     * @param {string} organizationId - Organization ID
-     * @returns {Promise<boolean>} Whether the user can manage the organization
-     */
     async canManageOrganization(userId, organizationId) {
         return this.hasPermission(userId, 'manage_organization', { organizationId });
     },
 
-    /**
-     * Assign a role to a user in an organization
-     * @param {string} userId - User ID
-     * @param {string} organizationId - Organization ID
-     * @param {string} role - Role to assign
-     * @returns {Promise<boolean>} Whether the role was assigned successfully
-     */
     async assignRole(userId, organizationId, role) {
         try {
             const accountInfo = await getCompleteAccountInfo(userId);
-            if (!accountInfo.success) {
-                return false;
-            }
+            if (!accountInfo.success) return false;
 
             const { userProfile } = accountInfo.data;
             const membership = userProfile.account_memberships?.find(
                 (m) => m.org_id === organizationId
             );
 
-            if (!membership) {
-                return false;
-            }
+            if (!membership) return false;
 
             const updatedMembership = { ...membership, role, status: 'active' };
             const updatedMemberships = userProfile.account_memberships.map((m) =>
@@ -261,18 +207,10 @@ const PermissionService = {
         }
     },
 
-    /**
-     * Remove a role from a user in an organization
-     * @param {string} userId - User ID
-     * @param {string} organizationId - Organization ID
-     * @returns {Promise<boolean>} Whether the role was removed successfully
-     */
     async removeRole(userId, organizationId) {
         try {
             const accountInfo = await getCompleteAccountInfo(userId);
-            if (!accountInfo.success) {
-                return false;
-            }
+            if (!accountInfo.success) return false;
 
             const { userProfile } = accountInfo.data;
             const updatedMemberships = userProfile.account_memberships?.filter(

@@ -1,8 +1,8 @@
-'use client'
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
-import { auth, environment } from "../config/firebase";
-import { useRouter } from "next/navigation";
+'use client';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { auth, environment } from '../config/firebase';
+import { useRouter } from 'next/navigation';
 import {
     fetchUserData,
     updateUserProfile as updateUserProfileService,
@@ -10,8 +10,9 @@ import {
     getUserEmail,
     getUserAccountType,
     getCurrentAccountInfo,
-} from "../services/userService";
-import PermissionService, { isOrganizationAccount, isIndividualAccount } from "../services/permissionService";
+    createUserDocument,
+} from '../services/userService';
+import PermissionService, { isOrganizationAccount, isIndividualAccount } from '../services/permissionService';
 import {
     signInWithGoogle as authSignInWithGoogle,
     logInWithEmail as authLoginWithEmail,
@@ -27,7 +28,7 @@ import {
     linkAuthProvider as authLinkProvider,
     unlinkAuthProvider as authUnlinkProvider,
     refreshAuthSession as authRefreshSession,
-} from "../services/authService";
+} from '../services/authService';
 
 const AuthContext = createContext();
 
@@ -85,7 +86,7 @@ export const AuthProvider = ({ children }) => {
                 const searchParams = new URLSearchParams(window.location.search);
                 const isVerificationCallback = searchParams.get('mode') === 'verifyEmail';
 
-                if (isVerificationCallback && currentPath !== "/verify-email") {
+                if (isVerificationCallback && currentPath !== '/verify-email') {
                     router.push(`/verify-email${window.location.search}`);
                     return;
                 }
@@ -96,22 +97,42 @@ export const AuthProvider = ({ children }) => {
 
             if (result.error) {
                 console.error('fetchUserData error:', result.error);
-                setAuthError(result.error);
+                setAuthError(result.error.message || 'Failed to fetch user data');
                 setUserPermissions(null);
-                setUserProfile({});
+                setUserProfile(null);
                 setPermissionChecker(null);
                 return;
             }
 
-            if (!result.userData && !result.isNewUser) {
+            if (!result.userData && result.isNewUser) {
+                // Create new user document aligned with userService schema
+                const userData = {
+                    email: user.email,
+                    display_name: user.displayName || '',
+                    profile_picture: user.photoURL || null,
+                    environment: environment || 'development',
+                };
+                try {
+                    const newProfile = await createUserDocument(user, userData, authSource);
+                    setUserProfile(newProfile);
+                } catch (error) {
+                    console.error('Error creating user document:', error);
+                    setAuthError(error.message || 'Failed to create user profile');
+                    setUserPermissions(null);
+                    setUserProfile(null);
+                    setPermissionChecker(null);
+                    return;
+                }
+            } else if (!result.userData) {
                 setAuthError('Failed to load user data');
                 setUserPermissions(null);
-                setUserProfile({});
+                setUserProfile(null);
                 setPermissionChecker(null);
                 return;
+            } else {
+                setUserProfile(result.userData);
             }
 
-            setUserProfile(result.userData || {});
             const permissions = await PermissionService.getUserPermissions(user.uid);
             setUserPermissions(permissions);
             const checker = {
@@ -123,14 +144,14 @@ export const AuthProvider = ({ children }) => {
             if (typeof window !== 'undefined') {
                 const currentPath = window.location.pathname;
                 const noRedirectPaths = [
-                    "/verify-email",
-                    "/handle-email-verification",
-                    "/dashboard",
-                    "/settings",
-                    "/profile",
-                    "/suites",
-                    "/bugs",
-                    "/admin",
+                    '/verify-email',
+                    '/handle-email-verification',
+                    '/dashboard',
+                    '/settings',
+                    '/profile',
+                    '/suites',
+                    '/bugs',
+                    '/admin',
                 ];
 
                 if (noRedirectPaths.some(path => currentPath.startsWith(path)) || skipEmailVerificationRedirect) {
@@ -138,21 +159,21 @@ export const AuthProvider = ({ children }) => {
                 }
 
                 const needsEmailVerification = authSource === 'email' && !user.emailVerified;
-                const isOnAuthPage = ["/login", "/register"].includes(currentPath);
+                const isOnAuthPage = ['/login', '/register'].includes(currentPath);
 
                 if (needsEmailVerification && !isOnAuthPage) {
-                    router.push("/verify-email");
+                    router.push('/verify-email');
                     return;
                 }
 
-                const shouldRedirectToDashboard = ["/login", "/", "/register"].includes(currentPath);
+                const shouldRedirectToDashboard = ['/login', '/', '/register'].includes(currentPath);
                 if (shouldRedirectToDashboard && user.emailVerified) {
-                    router.push("/dashboard");
+                    router.push('/dashboard');
                 }
             }
         } catch (error) {
             console.error('Error in processUserAuthentication:', error);
-            setAuthError(error.message);
+            setAuthError(error.message || 'Authentication error');
         } finally {
             processingAuth.current = false;
             setLoading(false);
@@ -175,7 +196,7 @@ export const AuthProvider = ({ children }) => {
             } catch (error) {
                 if (mounted) {
                     console.error('Redirect result error:', error);
-                    setAuthError(error.message);
+                    setAuthError(error.message || 'Failed to process redirect result');
                 }
             } finally {
                 if (mounted) {
@@ -206,8 +227,8 @@ export const AuthProvider = ({ children }) => {
             const result = await authLoginWithEmail(email, password);
             return { success: true, user: result.user };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Login failed');
+            return { success: false, error: error.message || 'Login failed' };
         }
     };
 
@@ -221,8 +242,8 @@ export const AuthProvider = ({ children }) => {
                 isNewUser: result.user.metadata.creationTime === result.user.metadata.lastSignInTime,
             };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Google sign-in failed');
+            return { success: false, error: error.message || 'Google sign-in failed' };
         }
     };
 
@@ -234,8 +255,8 @@ export const AuthProvider = ({ children }) => {
             return { success: true, user: result.user };
         } catch (error) {
             setSkipEmailVerificationRedirect(false);
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Registration failed');
+            return { success: false, error: error.message || 'Registration failed' };
         } finally {
             setTimeout(() => setSkipEmailVerificationRedirect(false), 1000);
         }
@@ -247,8 +268,8 @@ export const AuthProvider = ({ children }) => {
             await authRegisterWithEmailLink(email, name);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Email link registration failed');
+            return { success: false, error: error.message || 'Email link registration failed' };
         }
     };
 
@@ -258,8 +279,8 @@ export const AuthProvider = ({ children }) => {
             const result = await authCompleteEmailLinkSignIn(email, url, password);
             return { success: true, user: result.user };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Email link sign-in failed');
+            return { success: false, error: error.message || 'Email link sign-in failed' };
         }
     };
 
@@ -269,8 +290,8 @@ export const AuthProvider = ({ children }) => {
             await authSetUserPassword(password);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Password update failed');
+            return { success: false, error: error.message || 'Password update failed' };
         }
     };
 
@@ -280,19 +301,19 @@ export const AuthProvider = ({ children }) => {
             await authResetPassword(email);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Password reset failed');
+            return { success: false, error: error.message || 'Password reset failed' };
         }
     };
 
     const confirmPasswordReset = async (code, newPassword) => {
         setAuthError(null);
         try {
-            await authConfirmPasswordReset(code, newPassword);
+            await animationFrame(authConfirmPasswordReset(code, newPassword));
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Password reset confirmation failed');
+            return { success: false, error: error.message || 'Password reset confirmation failed' };
         }
     };
 
@@ -305,8 +326,8 @@ export const AuthProvider = ({ children }) => {
             await authResendVerificationEmail(currentUser);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Failed to resend verification email');
+            return { success: false, error: error.message || 'Failed to resend verification email' };
         }
     };
 
@@ -322,11 +343,11 @@ export const AuthProvider = ({ children }) => {
                 localStorage.clear();
             }
 
-            router.push("/login");
+            router.push('/login');
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Account deletion failed');
+            return { success: false, error: error.message || 'Account deletion failed' };
         }
     };
 
@@ -339,8 +360,8 @@ export const AuthProvider = ({ children }) => {
             await authLinkProvider(currentUser, provider);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Provider linking failed');
+            return { success: false, error: error.message || 'Provider linking failed' };
         }
     };
 
@@ -353,8 +374,8 @@ export const AuthProvider = ({ children }) => {
             await authUnlinkProvider(currentUser, providerId);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Provider unlinking failed');
+            return { success: false, error: error.message || 'Provider unlinking failed' };
         }
     };
 
@@ -367,8 +388,8 @@ export const AuthProvider = ({ children }) => {
             await authRefreshSession(currentUser);
             return { success: true };
         } catch (error) {
-            setAuthError(error.message);
-            return { success: false, error: error.message };
+            setAuthError(error.message || 'Session refresh failed');
+            return { success: false, error: error.message || 'Session refresh failed' };
         }
     };
 
@@ -380,43 +401,56 @@ export const AuthProvider = ({ children }) => {
             await authLogout();
 
             if (typeof window !== 'undefined') {
-                localStorage.removeItem("emailForVerification");
-                localStorage.removeItem("registrationData");
-                localStorage.removeItem("emailForSignIn");
-                localStorage.removeItem("registeredUserName");
-                localStorage.removeItem("emailSentTimestamp");
+                localStorage.removeItem('emailForVerification');
+                localStorage.removeItem('registrationData');
+                localStorage.removeItem('emailForSignIn');
+                localStorage.removeItem('registeredUserName');
+                localStorage.removeItem('emailSentTimestamp');
             }
 
-            router.push("/login");
+            router.push('/login');
             return { success: true };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, error: error.message || 'Sign out failed' };
         }
     };
 
-    // ===== PERMISSION CHECKING METHODS =====
-    const hasPermission = useCallback((capability) => {
-        return permissionChecker ? permissionChecker.can(capability) : false;
-    }, [permissionChecker]);
+    const hasPermission = useCallback(
+        (capability) => {
+            return permissionChecker ? permissionChecker.can(capability) : false;
+        },
+        [permissionChecker]
+    );
 
-    const hasRole = useCallback((role, organizationId) => {
-        return permissionChecker ? permissionChecker.isAdmin(organizationId) : false;
-    }, [permissionChecker]);
+    const hasRole = useCallback(
+        (role, organizationId) => {
+            return permissionChecker ? permissionChecker.isAdmin(organizationId) : false;
+        },
+        [permissionChecker]
+    );
 
-    const hasAnyRole = useCallback((roles, organizationId) => {
-        return roles.some(role => hasRole(role, organizationId));
-    }, [hasRole]);
+    const hasAnyRole = useCallback(
+        (roles, organizationId) => {
+            return roles.some((role) => hasRole(role, organizationId));
+        },
+        [hasRole]
+    );
 
-    const isAdmin = useCallback((organizationId) => {
-        return permissionChecker ? permissionChecker.isAdmin(organizationId) : false;
-    }, [permissionChecker]);
+    const isAdmin = useCallback(
+        (organizationId) => {
+            return permissionChecker ? permissionChecker.isAdmin(organizationId) : false;
+        },
+        [permissionChecker]
+    );
 
-    const getPrimaryUserRole = useCallback((organizationId) => {
-        if (!userProfile || !organizationId) return 'member';
-        return PermissionService.hasRole(userProfile.user_id, 'Admin', organizationId) ? 'Admin' : 'Member';
-    }, [userProfile]);
+    const getPrimaryUserRole = useCallback(
+        (organizationId) => {
+            if (!userProfile || !organizationId) return 'Member';
+            return userService.isUserAdminOfAccount(userProfile, organizationId) ? 'Admin' : 'Member';
+        },
+        [userProfile]
+    );
 
-    // ===== DATA MANAGEMENT METHODS =====
     const refreshUserData = useCallback(async () => {
         if (!currentUser?.uid) return false;
 
@@ -437,36 +471,57 @@ export const AuthProvider = ({ children }) => {
             }
 
             return false;
-        } catch {
+        } catch (error) {
+            setAuthError(error.message || 'Failed to refresh user data');
             return false;
         } finally {
             setLoading(false);
         }
     }, [currentUser]);
 
-    const updateUserProfile = useCallback(async (userId, updates) => {
-        try {
-            setLoading(true);
-            const result = await updateUserProfileService(userId, updates, currentUser?.uid);
-
-            if (result) {
-                await refreshUserData();
-                return true;
+    const updateUserProfile = useCallback(
+        async (userId, updates) => {
+            if (!currentUser?.uid || userId !== currentUser.uid) {
+                throw new Error('Unauthorized to update profile');
             }
+            try {
+                setLoading(true);
+                // Map updates to userService expected fields
+                const mappedUpdates = {
+                    ...(updates.firstName && { firstName: updates.firstName }),
+                    ...(updates.lastName && { lastName: updates.lastName }),
+                    ...(updates.displayName && { display_name: updates.displayName }),
+                    ...(updates.avatarURL && { profile_picture: updates.avatarURL }),
+                    ...(updates.bio && { bio: updates.bio }),
+                    ...(updates.location && { location: updates.location }),
+                    ...(updates.phone && { phone: updates.phone }),
+                    ...(updates.timezone && { timezone: updates.timezone }),
+                    ...(typeof updates.emailVerified === 'boolean' && { email_verified: updates.emailVerified }),
+                    ...(updates.environment && { environment: updates.environment }),
+                    ...(updates.organizationId && { organizationId: updates.organizationId }),
+                    ...(updates.account_memberships && { account_memberships: updates.account_memberships }),
+                };
+                const result = await updateUserProfileService(userId, mappedUpdates, currentUser.uid);
 
-            return false;
-        } catch (error) {
-            throw new Error('Failed to update user profile', error);
-        } finally {
-            setLoading(false);
-        }
-    }, [currentUser, refreshUserData]);
+                if (result) {
+                    await refreshUserData();
+                    return true;
+                }
 
-    // ===== UTILITY METHODS =====
+                return false;
+            } catch (error) {
+                throw new Error(error.message || 'Failed to update user profile');
+            } finally {
+                setLoading(false);
+            }
+        },
+        [currentUser, refreshUserData]
+    );
+
     const redirectToEmailVerification = useCallback(() => {
         if (currentUser && !currentUser.emailVerified) {
             setSkipEmailVerificationRedirect(false);
-            router.push("/verify-email");
+            router.push('/verify-email');
         }
     }, [currentUser, router]);
 
@@ -476,15 +531,17 @@ export const AuthProvider = ({ children }) => {
 
     const getLinkedProviders = useCallback(() => {
         if (!currentUser?.providerData) return [];
-        return currentUser.providerData.map(provider => provider.providerId);
+        return currentUser.providerData.map((provider) => provider.providerId);
     }, [currentUser]);
 
-    const isProviderLinked = useCallback((providerId) => {
-        const linkedProviders = getLinkedProviders();
-        return linkedProviders.includes(providerId);
-    }, [getLinkedProviders]);
+    const isProviderLinked = useCallback(
+        (providerId) => {
+            const linkedProviders = getLinkedProviders();
+            return linkedProviders.includes(providerId);
+        },
+        [getLinkedProviders]
+    );
 
-    // ===== COMPUTED VALUES =====
     const displayName = getUserDisplayName(userProfile);
     const email = getUserEmail(userProfile);
     const accountType = getUserAccountType(userProfile);
@@ -543,11 +600,7 @@ export const AuthProvider = ({ children }) => {
         linkProvider,
     };
 
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    );
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export default AuthProvider;
