@@ -2,7 +2,7 @@
 // hooks/useUserProfile.js - Aligned with UserProfileContext
 import { useState, useCallback } from 'react';
 import { useUserProfile as useUserProfileContext } from '../contexts/userProfileContext';
-import { getUserDisplayName, getUserEmail } from '../services/userService';
+import { getUserDisplayName, getUserEmail } from '../../services/userService';
 
 export const useUserProfile = () => {
     const { 

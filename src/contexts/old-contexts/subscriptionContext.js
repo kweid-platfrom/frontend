@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import subscriptionService from '../services/subscriptionService';
-import { useAccountCapabilities } from '../hooks/useAccountCapabilities';
-import { getUserUsageStats } from '../services/accountLimits';
+import subscriptionService from '../../services/subscriptionService';
+import { useAccountCapabilities } from '../../hooks/old-hooks/useAccountCapabilities';
+import { getUserUsageStats } from '../../services/accountLimits';
 
 const SubscriptionContext = createContext();
 

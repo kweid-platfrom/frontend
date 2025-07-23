@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle, Clock, Zap, Bot, Tags, TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
-import { useTestMetrics } from '../../hooks/useTestCaseMetrics';
+import { useTestMetrics } from '../../hooks/old-hooks/useTestCaseMetrics';
 
 const TestCaseMetrics = ({ suiteId, sprintId = null, options = {} }) => {
     const {

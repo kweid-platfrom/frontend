@@ -18,7 +18,6 @@ import PersonalInfoStep from './reg/PersonalInfoStep';
 import ReviewStep from './reg/ReviewStep';
 import { Mail, Square } from 'lucide-react';
 import BackgroundDecorations from '../BackgroundDecorations';
-import { useAppNotifications } from '../../contexts/AppProvider';
 import '../../app/globals.css';
 
 const GoogleSignUp = ({ onGoogleRegister, loading }) => {
@@ -40,7 +39,6 @@ const GoogleSignUp = ({ onGoogleRegister, loading }) => {
 
 const Register = () => {
     const router = useRouter();
-    const { addNotification } = useAppNotifications();
     const [currentStep, setCurrentStep] = useState(1);
     const [accountType, setAccountType] = useState('individual');
     const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -50,6 +48,7 @@ const Register = () => {
     const [emailDomainInfo, setEmailDomainInfo] = useState(null);
     const [emailValidation, setEmailValidation] = useState(null);
     const [showAccountTypeSuggestion, setShowAccountTypeSuggestion] = useState(false);
+    const [toast, setToast] = useState({ type: '', message: '', title: '', persistent: false });
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -124,7 +123,7 @@ const Register = () => {
             }));
         }
 
-        addNotification({
+        setToast({
             type: 'success',
             title: 'Account Type Switched',
             message: `Switched to ${newAccountType} account type`,
@@ -155,7 +154,7 @@ const Register = () => {
 
             if (setupStatus.exists && setupStatus.userData?.auth_metadata?.email_verified) {
                 await handlePostVerification(user.uid);
-                addNotification({
+                setToast({
                     type: 'success',
                     title: 'Welcome Back',
                     message: 'Welcome back!',
@@ -188,7 +187,7 @@ const Register = () => {
                 if (recheckStatus.exists && recheckStatus.hasBasicInfo) {
                     console.log('Account appears to have been created despite error, proceeding...');
                     await handlePostVerification(user.uid);
-                    addNotification({
+                    setToast({
                         type: 'success',
                         title: 'Account Created',
                         message: 'Account created successfully with Google!',
@@ -203,7 +202,7 @@ const Register = () => {
 
             console.log('Google account setup successful:', setupResult);
             await handlePostVerification(user.uid);
-            addNotification({
+            setToast({
                 type: 'success',
                 title: 'Account Created',
                 message: 'Account created successfully with Google!',
@@ -221,7 +220,7 @@ const Register = () => {
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 errorMessage = 'An account already exists with this email using a different sign-in method.';
             }
-            addNotification({
+            setToast({
                 type: 'error',
                 title: 'Google Sign-Up Failed',
                 message: errorMessage,
@@ -349,7 +348,7 @@ const Register = () => {
                     handleCodeInApp: false,
                 });
                 console.log('Email verification sent');
-                addNotification({
+                setToast({
                     type: 'success',
                     title: 'Account Created',
                     message: 'Account created successfully! Please check your email.',
@@ -357,7 +356,7 @@ const Register = () => {
                 });
             } catch (emailError) {
                 console.error('Error sending verification email:', emailError);
-                addNotification({
+                setToast({
                     type: 'success',
                     title: 'Account Created',
                     message: 'Account created successfully! Verification email will be sent shortly.',
@@ -383,7 +382,7 @@ const Register = () => {
             } else if (error.code === 'auth/invalid-email') {
                 errorMessage = 'Please enter a valid email address.';
             }
-            addNotification({
+            setToast({
                 type: 'error',
                 title: 'Account Creation Failed',
                 message: errorMessage,
@@ -405,14 +404,14 @@ const Register = () => {
                     url: `${window.location.origin}/verify-email`,
                     handleCodeInApp: false,
                 });
-                addNotification({
+                setToast({
                     type: 'success',
                     title: 'Email Resent',
                     message: 'Verification email resent. Please check your inbox and spam folder.',
                     persistent: false,
                 });
             } else {
-                addNotification({
+                setToast({
                     type: 'info',
                     title: 'Verification Required',
                     message: 'Please sign in to resend the verification email.',
@@ -423,7 +422,7 @@ const Register = () => {
             }
         } catch (error) {
             console.error('Error resending verification email:', error);
-            addNotification({
+            setToast({
                 type: 'error',
                 title: 'Resend Failed',
                 message: 'Failed to resend verification email. Please try again.',
@@ -598,6 +597,11 @@ const Register = () => {
                     </div>
                 </div>
             </div>
+            {toast.message && (
+                <div className={`fixed bottom-4 right-4 p-4 rounded-lg text-white ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'}`}>
+                    <strong>{toast.title}</strong>: {toast.message}
+                </div>
+            )}
         </div>
     );
 };

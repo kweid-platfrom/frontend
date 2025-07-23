@@ -1,6 +1,6 @@
 // hooks/useTestMetrics.js - Complete React Hook for Test Metrics Management
 import { useState, useEffect, useCallback, useRef } from 'react';
-import testMetricsService from '../services/TestCaseMetricsService';
+import testMetricsService from '../../services/TestCaseMetricsService';
 
 export const useTestMetrics = (suiteId, sprintId = null, options = {}) => {
     const {

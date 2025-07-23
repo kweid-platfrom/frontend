@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { useUserProfile } from './userProfileContext';
-import { suiteService } from '../services/suiteService';
+import { suiteService } from '../../services/suiteService';
 
 const SuiteContext = createContext();
 

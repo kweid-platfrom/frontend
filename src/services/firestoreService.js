@@ -545,8 +545,17 @@ class FirestoreService {
         );
     }
 
-    // ===== BATCH OPERATIONS =====
+    // ===== FETCH SUBSCRIPTIONS =====
+    async getSubscription(userId = null) {
+        const targetUserId = userId || this.getCurrentUserId();
+        if (!targetUserId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+        return await this.getDocument('subscriptions', targetUserId);
+    }
+    
 
+    // ===== BATCH OPERATIONS =====
     async executeBatch(operations) {
         try {
             const batch = writeBatch(this.db);

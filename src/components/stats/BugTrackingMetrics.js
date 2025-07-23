@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 import { BugAntIcon } from '@heroicons/react/24/outline';
-import { useBugTrackingMetrics } from '../../hooks/useBugTrackingMetrics';
+import { useBugTrackingMetrics } from '../../hooks/old-hooks/useBugTrackingMetrics';
 import { useApp } from '../../contexts/AppProvider';
 
 const BugTrackingMetrics = ({ filters = {} }) => {

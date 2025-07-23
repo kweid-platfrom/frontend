@@ -1,7 +1,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { where, orderBy } from 'firebase/firestore';
-import firestoreService from '../services/firestoreService';
+import firestoreService from '../../services/firestoreService';
 import { useSubscription } from '../contexts/subscriptionContext';
 
 export const useEntitySync = (

@@ -1,7 +1,7 @@
 // hooks/useFirestore.js - React hook for Firestore service integration
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useApp } from '../contexts/AppProvider';
-import firestoreService from '../services/firestoreService';
+import { useApp } from '../../contexts/AppProvider';
+import firestoreService from '../../services/firestoreService';
 
 /**
  * Custom hook for Firestore operations with app context integration

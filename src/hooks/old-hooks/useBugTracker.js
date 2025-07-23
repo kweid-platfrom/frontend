@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { useApp } from '../contexts/AppProvider';
-import firestoreService from '../services/firestoreService';
+import { useApp } from '../../contexts/AppProvider';
+import firestoreService from '../../services/firestoreService';
 import { orderBy } from 'firebase/firestore';
 import {
     getTeamMemberName,
@@ -13,7 +13,7 @@ import {
     VALID_BUG_STATUSES,
     VALID_BUG_SEVERITIES,
     VALID_ENVIRONMENTS
-} from '../utils/bugUtils';
+} from '../../utils/bugUtils';
 
 const VALID_FREQUENCIES = ['Always', 'Often', 'Sometimes', 'Rarely', 'Once'];
 const DEFAULT_ENVIRONMENTS = ['Development', 'Staging', 'Production', 'Testing', 'Unknown'];

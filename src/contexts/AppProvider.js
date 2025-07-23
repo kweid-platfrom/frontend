@@ -1,667 +1,264 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-'use client';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { createContext, useReducer, useEffect, useMemo } from 'react';
+import { auth } from '../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import firestoreService from '../services/firestoreService';
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { AuthProvider, useAuth } from './AuthProvider';
-import { UserProfileProvider, useUserProfile } from './userProfileContext';
-import { SubscriptionProvider, useSubscription } from './subscriptionContext';
-import { SuiteProvider, useSuite } from './SuiteContext';
-import { EntityProvider, useEntityContext } from './EntityProvider';
-import useAppInitialization from '../hooks/useAppInitialization';
+// Import state slices
+import { authReducer, authInitialState } from './slices/authSlice';
+import { suiteReducer, suiteInitialState } from './slices/suiteSlice';
+import { subscriptionReducer, subscriptionInitialState } from './slices/subscriptionSlice';
+import { uiReducer, uiInitialState } from './slices/uiSlice';
 
-const NO_AUTH_CHECK_PAGES = ['/login', '/register', '/verify-email'];
-
+// Create the main App Context
 const AppContext = createContext();
 
-export const useApp = () => {
-    const context = useContext(AppContext);
-    if (!context) throw new Error('useApp must be used within an AppProvider');
-    return context;
+// Initial combined state with dashboardMetrics and sprint support
+const initialState = {
+    auth: authInitialState,
+    suite: {
+        ...suiteInitialState,
+        sprints: [],
+        activeSprint: null,
+    },
+    subscription: subscriptionInitialState,
+    ui: uiInitialState,
+    dashboardMetrics: { testCases: 0, bugs: 0, recordings: 0, recentActivity: [] },
+    loading: true,
+    error: null,
 };
 
-const EntityProviderWrapper = ({ children }) => {
-    return <EntityProvider>{children}</EntityProvider>;
+// Combined reducer with dashboard and sprint actions
+const appReducer = (state, action) => {
+    switch (action.type) {
+        // Auth actions
+        case 'AUTH_SET_USER':
+        case 'AUTH_SET_LOADING':
+        case 'AUTH_SET_ERROR':
+        case 'AUTH_LOGOUT':
+            return { ...state, auth: authReducer(state.auth, action) };
+
+        // Suite actions (including sprints)
+        case 'SUITE_SET_SUITES':
+        case 'SUITE_SET_ACTIVE':
+        case 'SUITE_ADD_SUITE':
+        case 'SUITE_UPDATE_SUITE':
+        case 'SUITE_DELETE_SUITE':
+        case 'SUITE_SET_SPRINTS':
+        case 'SUITE_SET_ACTIVE_SPRINT':
+        case 'SUITE_ADD_SPRINT':
+        case 'SUITE_SET_LOADING':
+        case 'SUITE_SET_ERROR':
+            return { ...state, suite: suiteReducer(state.suite, action) };
+
+        // Subscription actions
+        case 'SUBSCRIPTION_SET_PLAN':
+        case 'SUBSCRIPTION_SET_TRIAL':
+        case 'SUBSCRIPTION_SET_LOADING':
+        case 'SUBSCRIPTION_SET_ERROR':
+        case 'SUBSCRIPTION_TRIGGER_DOWNGRADE':
+            return { ...state, subscription: subscriptionReducer(state.subscription, action) };
+
+        // UI actions
+        case 'UI_SET_MODAL':
+        case 'UI_CLOSE_MODAL':
+        case 'UI_SET_OVERLAY':
+        case 'UI_CLOSE_OVERLAY':
+        case 'UI_SET_NOTIFICATION':
+        case 'UI_CLEAR_NOTIFICATION':
+            return { ...state, ui: uiReducer(state.ui, action) };
+
+        // Dashboard actions
+        case 'DASHBOARD_SET_METRICS':
+            return { ...state, dashboardMetrics: action.payload };
+
+        // Global actions
+        case 'SET_LOADING':
+            return { ...state, loading: action.payload };
+        case 'SET_ERROR':
+            return { ...state, error: action.payload };
+        case 'CLEAR_ERROR':
+            return { ...state, error: null };
+
+        default:
+            return state;
+    }
 };
 
-const UnifiedAppProvider = ({ children }) => {
-    const auth = useAuth();
-    const userProfile = useUserProfile();
-    const subscription = useSubscription();
-    const suite = useSuite();
-    const pathname = usePathname();
-    const router = useRouter();
-
-    const [notifications, setNotifications] = useState([]);
-    const [isInitialized, setIsInitialized] = useState(false);
-    const [globalLoading, setGlobalLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [appPreferences, setAppPreferences] = useState({
-        theme: 'system',
-        language: 'en',
-        notifications: { email: true, push: true, inApp: true },
-    });
-    const [breadcrumbs, setBreadcrumbs] = useState([]);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [activeModule, setActiveModule] = useState(pathname?.split('/')[1] || null);
-
-    const featureFlags = useMemo(() => ({
-        betaFeatures: subscription.hasFeatureAccess?.('beta_features') || false,
-        advancedReports: subscription.hasFeatureAccess?.('reports') || false,
-        teamCollaboration: subscription.hasFeatureAccess?.('team_management') || false,
-        apiAccess: subscription.hasFeatureAccess?.('api_access') || false,
-        automation: subscription.hasFeatureAccess?.('automation') || false,
-        bugTracker: true,
-        organizationSuites: subscription.hasFeatureAccess?.('organization_suites') || false,
-    }), [subscription]);
-
-    const isAuthenticated = useMemo(() => auth.currentUser && auth.currentUser.uid && auth.currentUser.emailVerified, [auth.currentUser]);
-
-    const shouldInitialize = useMemo(() => {
-        if (NO_AUTH_CHECK_PAGES.includes(pathname)) return false;
-        if (!isAuthenticated) return false;
-        if (!userProfile.isProfileLoaded || userProfile.isLoading || userProfile.error) return false;
-        return true;
-    }, [pathname, isAuthenticated, userProfile.isProfileLoaded, userProfile.isLoading, userProfile.error]);
-
-    const addNotification = useCallback((notification) => {
-        const id = Date.now().toString();
-        const newNotification = { id, timestamp: new Date(), read: false, ...notification };
-        setNotifications((prev) => [newNotification, ...prev.slice(0, 49)]); // Limit to 50 notifications
-        if (notification.type === 'success' || notification.type === 'info') {
-            setTimeout(() => setNotifications((prev) => prev.filter((n) => n.id !== id)), 5000);
-        }
-        return id;
-    }, []);
-
-    const removeNotification = useCallback((id) => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, []);
-
-    const markNotificationAsRead = useCallback((id) => {
-        setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    }, []);
-
-    const clearAllNotifications = useCallback(() => {
-        setNotifications([]);
-    }, []);
-
-    const navigateToModule = useCallback((module) => {
-        setActiveModule(module);
-        const moduleMap = {
-            dashboard: ['Dashboard'],
-            bugs: ['Bug Tracker'],
-            testcases: ['Test Cases'],
-            recordings: ['Recordings'],
-            automation: ['Automation'],
-            reports: ['Reports'],
-            settings: ['Settings'],
-            upgrade: ['Upgrade'],
-        };
-        setBreadcrumbs(moduleMap[module] || [module]);
-    }, []);
-
-    const updateBreadcrumbs = useCallback((crumbs) => {
-        setBreadcrumbs(crumbs);
-    }, []);
-
-    const hasFeatureAccess = useCallback(
-        (feature) => subscription.hasFeatureAccess?.(feature) || feature === 'bugTracker',
-        [subscription]
-    );
-
-    const checkFeatureLimit = useCallback(
-        (feature, currentUsage) => {
-            const limit = subscription.getResourceLimit?.(feature) || (feature === 'bugTracker' ? -1 : 0);
-            return {
-                canUse: limit === -1 || currentUsage < limit,
-                unlimited: limit === -1,
-                limit,
-                remaining: Math.max(0, limit - currentUsage),
-                usage: currentUsage,
-            };
-        },
-        [subscription]
-    );
-
-    const canCreateResource = useCallback(
-        (resourceType, currentCount = 0) =>
-            subscription.canCreateResource?.(resourceType) || resourceType === 'bugs',
-        [subscription]
-    );
-
-    const getResourceLimit = useCallback(
-        (resourceType) => subscription.getResourceLimit?.(resourceType) || (resourceType === 'bugs' ? -1 : 0),
-        [subscription]
-    );
-
-    const isLoading = useMemo(() => {
-        return userProfile.isLoading || subscription.isLoading || suite.isLoading || globalLoading;
-    }, [userProfile.isLoading, subscription.isLoading, suite.isLoading, globalLoading]);
-
-    const userCapabilities = useMemo(() => {
-        if (!isAuthenticated || !subscription.subscriptionStatus) {
-            return {
-                canViewSuite: false,
-                canEditSuite: false,
-                canDeleteSuite: false,
-                canInviteTeamMembers: false,
-                canManageOrganization: false,
-                canViewBugs: false,
-                canCreateBugs: false,
-                canUpdateBugs: false,
-                canDeleteBugs: false,
-                canManageBugs: false,
-                hasActiveSubscription: false,
-                isTrialActive: false,
-                trialDaysRemaining: 0,
-                canCreateSuite: false,
-                canCreateIndividualSuite: false,
-                canCreateOrganizationSuite: false,
-                limits: {},
-            };
-        }
-
-        const userRole = userProfile.userProfile?.role || auth.getPrimaryUserRole?.(userProfile.userProfile?.organizationId) || 'member';
-        const accountType = userProfile.accountType || 'individual';
-        const suiteLimit = suite.getSuiteLimit(accountType === 'organization' ? userProfile.userProfile?.organizationId : auth.currentUser?.uid);
-
-        return {
-            canViewSuite: suite.shouldFetchSuites,
-            canEditSuite: userRole === 'Editor' || userRole === 'Admin',
-            canDeleteSuite: userRole === 'Admin',
-            canInviteTeamMembers: auth.canInviteTeamMembers && hasFeatureAccess('invite_team_members'),
-            canManageOrganization: auth.canManageOrganization && hasFeatureAccess('team_management'),
-            canViewBugs: true,
-            canCreateBugs: true,
-            canUpdateBugs: userRole === 'Editor' || userRole === 'Admin',
-            canDeleteBugs: userRole === 'Admin',
-            canManageBugs: userRole === 'Admin',
-            hasActiveSubscription: subscription.subscriptionStatus?.isValid || false,
-            isTrialActive: subscription.subscriptionStatus?.isTrial || false,
-            trialDaysRemaining: subscription.subscriptionStatus?.trialDaysRemaining || 0,
-            canCreateSuite: suite.canCreateSuite,
-            canCreateIndividualSuite: suite.canCreateSuite && (accountType === 'individual' || suite.availableOrganizations.length === 0),
-            canCreateOrganizationSuite: suite.canCreateSuite && hasFeatureAccess('organization_suites') && suite.availableOrganizations.length > 0,
-            limits: {
-                individualSuites: suiteLimit.then(res => res.maxAllowed).catch(() => 0),
-                organizationSuites: suiteLimit.then(res => res.maxAllowed).catch(() => 0),
-                currentIndividualSuites: suite.individualSuites?.length || 0,
-                currentOrganizationSuites: suite.organizationSuites?.reduce((total, org) => total + org.suites.length, 0) || 0,
-            },
-        };
-    }, [isAuthenticated, subscription.subscriptionStatus, userProfile.userProfile?.role, userProfile.userProfile?.organizationId, userProfile.accountType, auth, suite, hasFeatureAccess]);
-
-    const accountSummary = useMemo(() => {
-        if (!isAuthenticated || !userProfile.userProfile || !auth.currentUser) return null;
-
-        return {
-            user: {
-                uid: auth.currentUser.uid,
-                email: userProfile.email || auth.currentUser.email,
-                displayName: userProfile.displayName || auth.currentUser.displayName,
-                emailVerified: auth.currentUser.emailVerified,
-                photoURL: auth.currentUser.photoURL,
-                avatarInitials: userProfile.avatarInitials,
-            },
-            profile: {
-                accountType: userProfile.accountType,
-                organizationId: userProfile.userProfile.organizationId,
-                organizationName: userProfile.userProfile.organizationName,
-                role: auth.getPrimaryUserRole?.(userProfile.userProfile.organizationId) || 'member',
-                memberships: userProfile.userProfile.account_memberships || [],
-            },
-            subscription: {
-                plan: subscription.subscriptionStatus?.subscriptionPlan || 'individual_free',
-                status: subscription.subscriptionStatus?.subscriptionStatus || 'inactive',
-                isValid: subscription.subscriptionStatus?.isValid || false,
-                isTrial: subscription.subscriptionStatus?.isTrial || false,
-                trialDaysRemaining: subscription.subscriptionStatus?.trialDaysRemaining || 0,
-                billingCycle: subscription.subscriptionStatus?.billingCycle || 'monthly',
-                nextBillingDate: subscription.subscriptionStatus?.nextBillingDate,
-                willCancelAt: subscription.subscriptionStatus?.willCancelAt,
-                isExpired: subscription.subscriptionStatus?.isExpired || false,
-                showTrialBanner: subscription.subscriptionStatus?.showTrialBanner || false,
-                showUpgradePrompt: subscription.subscriptionStatus?.showUpgradePrompt || false,
-            },
-            suites: {
-                total: suite.suites?.length || 0,
-                individual: suite.individualSuites?.length || 0,
-                organization: suite.organizationSuites?.reduce((total, org) => total + org.suites.length, 0) || 0,
-                active: suite.activeSuite,
-                availableOrganizations: suite.availableOrganizations || [],
-                organizationGroups: suite.organizationSuites || [],
-                limits: {
-                    individual: userCapabilities.limits.individualSuites,
-                    organization: userCapabilities.limits.organizationSuites,
-                },
-            },
-        };
-    }, [
-        isAuthenticated,
-        userProfile.userProfile,
-        userProfile.email,
-        userProfile.displayName,
-        userProfile.avatarInitials,
-        userProfile.accountType,
-        auth,
-        subscription.subscriptionStatus,
-        suite.suites,
-        suite.individualSuites,
-        suite.organizationSuites,
-        suite.activeSuite,
-        suite.availableOrganizations,
-        userCapabilities,
-    ]);
-
-    const { initializeApp } = useAppInitialization(
-        isAuthenticated,
-        pathname,
-        userProfile,
-        subscription,
-        suite,
-        setIsInitialized,
-        setGlobalLoading,
-        setError,
-        setAppPreferences,
-        addNotification
-    );
-
-    useEffect(() => {
-        if (shouldInitialize) initializeApp();
-    }, [shouldInitialize, initializeApp]);
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            try {
-                localStorage.setItem('appPreferences', JSON.stringify(appPreferences));
-            } catch (error) {
-                console.warn('Error saving app preferences:', error);
-            }
-        }, 500);
-        return () => clearTimeout(timeoutId);
-    }, [appPreferences]);
-
-    const refreshAll = useCallback(async () => {
-        setGlobalLoading(true);
-        try {
-            await Promise.allSettled([
-                auth.refreshUserData?.(),
-                userProfile.refreshProfile?.(),
-                suite.refetchSuites?.({ forceRefresh: true }),
-                subscription.updateSubscriptionStatus?.(auth.currentUser?.uid),
-            ]);
-        } catch (error) {
-            setError(error.message || 'Failed to refresh data');
-        } finally {
-            setGlobalLoading(false);
-        }
-    }, [auth, userProfile, suite, subscription]);
-
-    const signOut = useCallback(async () => {
-        try {
-            setNotifications([]);
-            setActiveModule(null);
-            setBreadcrumbs([]);
-            setError(null);
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem('appPreferences');
-                localStorage.removeItem('appPreferencesLoaded');
-                localStorage.removeItem('activeSuiteId');
-                localStorage.removeItem('activeSuiteTimestamp');
-            }
-            await auth.signOut();
-            router.push('/login');
-        } catch (error) {
-            addNotification({
-                type: 'error',
-                title: 'Sign Out Error',
-                message: 'Failed to sign out. Please try again.',
-            });
-        }
-    }, [auth, router, addNotification]);
-
-    const clearError = useCallback(() => setError(null), []);
-
-    const value = useMemo(() => ({
-        ...auth,
-        user: auth.currentUser,
-        isAuthenticated,
-        loading: auth.loading,
-        userProfile: userProfile.userProfile,
-        isLoading,
-        isUpdating: userProfile.isUpdating,
-        displayName: userProfile.displayName,
-        avatarInitials: userProfile.avatarInitials,
-        email: userProfile.email,
-        accountType: userProfile.accountType,
-        isAdmin: userProfile.isAdmin,
-        currentAccount: userProfile.currentAccount,
-        hasAdminPermission: userProfile.hasAdminPermission,
-        isNewUser: userProfile.isNewUser,
-        isProfileLoaded: userProfile.isProfileLoaded,
-        fetchUserProfile: userProfile.fetchUserProfile,
-        updateProfile: userProfile.updateProfile,
-        updateProfileField: userProfile.updateProfileField,
-        setupNewUserProfile: userProfile.setupNewUserProfile,
-        refreshProfile: userProfile.refreshProfile,
-        clearProfile: userProfile.clearProfile,
-        subscription: subscription.subscriptionStatus,
-        subscriptionStatus: subscription.subscriptionStatus,
-        hasFeatureAccess,
-        getFeatureLimits: subscription.getFeatureLimits,
-        updateSubscriptionStatus: subscription.updateSubscriptionStatus,
-        canCreateResource,
-        getResourceLimit,
-        createCheckoutSession: subscription.createCheckoutSession,
-        cancelSubscription: subscription.cancelSubscription,
-        reactivateSubscription: subscription.reactivateSubscription,
-        getBillingHistory: subscription.getBillingHistory,
-        updatePaymentMethod: subscription.updatePaymentMethod,
-        billingConfig: subscription.billingConfig,
-        capabilities: subscription.capabilities,
-        suites: suite.suites,
-        userTestSuites: suite.userTestSuites,
-        individualSuites: suite.individualSuites,
-        organizationSuites: suite.organizationSuites,
-        availableOrganizations: suite.availableOrganizations,
-        activeSuite: suite.activeSuite,
-        setActiveSuite: suite.setActiveSuite,
-        switchSuite: suite.switchSuite,
-        createTestSuite: suite.createTestSuite,
-        checkSuiteNameExists: suite.checkSuiteNameExists,
-        refetchSuites: suite.refetchSuites,
-        fetchUserSuites: suite.fetchUserSuites,
-        getSuiteLimit: suite.getSuiteLimit,
-        shouldFetchSuites: suite.shouldFetchSuites,
-        canCreateSuite: suite.canCreateSuite,
-        isInitialized,
-        error,
-        accountSummary,
-        userCapabilities,
-        notifications,
-        addNotification,
-        removeNotification,
-        markNotificationAsRead,
-        clearAllNotifications,
-        activeModule,
-        breadcrumbs,
-        sidebarCollapsed,
-        setSidebarCollapsed,
-        navigateToModule,
-        updateBreadcrumbs,
-        featureFlags,
-        appPreferences,
-        setAppPreferences,
-        refreshAll,
-        clearError,
-        signOut,
-        checkFeatureLimit,
-    }), [
-        appPreferences,
-        auth,
-        isAuthenticated,
-        userProfile,
-        subscription,
-        suite,
-        isLoading,
-        hasFeatureAccess,
-        canCreateResource,
-        getResourceLimit,
-        isInitialized,
-        error,
-        accountSummary,
-        userCapabilities,
-        notifications,
-        addNotification,
-        removeNotification,
-        markNotificationAsRead,
-        clearAllNotifications,
-        activeModule,
-        breadcrumbs,
-        sidebarCollapsed,
-        navigateToModule,
-        updateBreadcrumbs,
-        featureFlags,
-        refreshAll,
-        clearError,
-        signOut,
-        checkFeatureLimit,
-    ]);
-
-    return (
-        <AppContext.Provider value={value}>
-            <EntityProviderWrapper>
-                {children}
-            </EntityProviderWrapper>
-        </AppContext.Provider>
-    );
-};
-
+// AppProvider Component
 export const AppProvider = ({ children }) => {
-    return (
-        <AuthProvider>
-            <UserProfileProvider>
-                <SubscriptionProvider>
-                    <SuiteProvider>
-                        <UnifiedAppProvider>{children}</UnifiedAppProvider>
-                    </SuiteProvider>
-                </SubscriptionProvider>
-            </UserProfileProvider>
-        </AuthProvider>
+    const [state, dispatch] = useReducer(appReducer, initialState);
+
+    // Authentication effect
+    useEffect(() => {
+        dispatch({ type: 'AUTH_SET_LOADING', payload: true });
+
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            try {
+                if (user) {
+                    const userProfileResult = await firestoreService.getUserProfile(user.uid);
+                    if (userProfileResult.success) {
+                        dispatch({
+                            type: 'AUTH_SET_USER',
+                            payload: { ...user, profile: userProfileResult.data },
+                        });
+                        await loadUserTestSuites(user.uid);
+                        await loadSubscriptionData(user.uid);
+                    } else {
+                        console.error('Failed to load user profile:', userProfileResult.error);
+                        dispatch({ type: 'AUTH_SET_ERROR', payload: userProfileResult.error.message });
+                    }
+                } else {
+                    dispatch({ type: 'AUTH_LOGOUT' });
+                    dispatch({ type: 'SUITE_SET_SUITES', payload: [] });
+                    dispatch({ type: 'SUITE_SET_SPRINTS', payload: [] });
+                    dispatch({ type: 'SUITE_SET_ACTIVE_SPRINT', payload: null });
+                    dispatch({ type: 'SUBSCRIPTION_SET_PLAN', payload: null });
+                    dispatch({ type: 'DASHBOARD_SET_METRICS', payload: { testCases: 0, bugs: 0, recordings: 0, recentActivity: [] } });
+                }
+            } catch (error) {
+                console.error('Auth state change error:', error);
+                dispatch({ type: 'AUTH_SET_ERROR', payload: error.message });
+            } finally {
+                dispatch({ type: 'AUTH_SET_LOADING', payload: false });
+                dispatch({ type: 'SET_LOADING', payload: false });
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Load user test suites
+    const loadUserTestSuites = async () => {
+        dispatch({ type: 'SUITE_SET_LOADING', payload: true });
+        try {
+            const suitesResult = await firestoreService.getUserTestSuites();
+            if (suitesResult.success) {
+                dispatch({ type: 'SUITE_SET_SUITES', payload: suitesResult.data });
+                if (suitesResult.data.length > 0 && !state.suite.activeSuite) {
+                    dispatch({ type: 'SUITE_SET_ACTIVE', payload: suitesResult.data[0] });
+                }
+            } else {
+                dispatch({ type: 'SUITE_SET_ERROR', payload: suitesResult.error.message });
+            }
+        } catch (error) {
+            dispatch({ type: 'SUITE_SET_ERROR', payload: error.message });
+        } finally {
+            dispatch({ type: 'SUITE_SET_LOADING', payload: false });
+        }
+    };
+
+    // Load subscription data
+    const loadSubscriptionData = async (userId) => {
+        dispatch({ type: 'SUBSCRIPTION_SET_LOADING', payload: true });
+        try {
+            const individualResult = await firestoreService.getIndividualAccount(userId);
+            if (individualResult.success) {
+                const accountData = individualResult.data;
+                dispatch({
+                    type: 'SUBSCRIPTION_SET_PLAN',
+                    payload: {
+                        accountType: 'individual',
+                        plan: accountData.subscription?.plan || 'free',
+                        status: accountData.subscription?.status || 'inactive',
+                        trialEndsAt: accountData.subscription?.trialEndsAt,
+                        isTrialActive: accountData.subscription?.isTrialActive || false,
+                        features: getFeatureAccess('individual', accountData.subscription?.plan || 'free'),
+                        limits: getAccountLimits('individual', accountData.subscription?.plan || 'free'),
+                    },
+                });
+            } else {
+                dispatch({
+                    type: 'SUBSCRIPTION_SET_PLAN',
+                    payload: {
+                        accountType: 'individual',
+                        plan: 'free',
+                        status: 'inactive',
+                        isTrialActive: false,
+                        features: getFeatureAccess('individual', 'free'),
+                        limits: getAccountLimits('individual', 'free'),
+                    },
+                });
+            }
+        } catch (error) {
+            dispatch({ type: 'SUBSCRIPTION_SET_ERROR', payload: error.message });
+        } finally {
+            dispatch({ type: 'SUBSCRIPTION_SET_LOADING', payload: false });
+        }
+    };
+
+    // Helper function to get feature access
+    const getFeatureAccess = (accountType, plan) => {
+        const features = {
+            individual: {
+                free: { testCases: false, reports: false, recordings: false, testAutomation: false, maxSuites: 1 },
+                trial: { testCases: true, reports: true, recordings: true, testAutomation: true, maxSuites: 5 },
+                paid: { testCases: true, reports: true, recordings: true, testAutomation: true, maxSuites: 5 },
+            },
+            organization: {
+                free: { testCases: false, reports: false, recordings: false, testAutomation: false, teamMembers: false, maxSuites: 3 },
+                trial: { testCases: true, reports: true, recordings: true, testAutomation: true, teamMembers: true, maxSuites: 10 },
+                pro: { testCases: true, reports: true, recordings: true, testAutomation: true, teamMembers: true, maxSuites: 10 },
+                enterprise: { testCases: true, reports: true, recordings: true, testAutomation: true, teamMembers: true, maxSuites: -1 },
+            },
+        };
+        return features[accountType]?.[plan] || features.individual.free;
+    };
+
+    // Helper function to get account limits
+    const getAccountLimits = (accountType, plan) => {
+        const limits = {
+            individual: { free: { suites: 1, writeCap: 100 }, trial: { suites: 5, writeCap: -1 }, paid: { suites: 5, writeCap: 1000 } },
+            organization: {
+                free: { suites: 3, writeCap: 100, members: 1 },
+                trial: { suites: 10, writeCap: -1, members: -1 },
+                pro: { suites: 10, writeCap: 2000, members: 50 },
+                enterprise: { suites: -1, writeCap: -1, members: -1 },
+            },
+        };
+        return limits[accountType]?.[plan] || limits.individual.free;
+    };
+
+    // Action creators
+    const actions = {
+        setUser: (user) => dispatch({ type: 'AUTH_SET_USER', payload: user }),
+        logout: () => dispatch({ type: 'AUTH_LOGOUT' }),
+        setActiveSuite: (suite) => dispatch({ type: 'SUITE_SET_ACTIVE', payload: suite }),
+        addSuite: (suite) => dispatch({ type: 'SUITE_ADD_SUITE', payload: suite }),
+        updateSuite: (suite) => dispatch({ type: 'SUITE_UPDATE_SUITE', payload: suite }),
+        deleteSuite: (suiteId) => dispatch({ type: 'SUITE_DELETE_SUITE', payload: suiteId }),
+        setSprints: (sprints) => dispatch({ type: 'SUITE_SET_SPRINTS', payload: sprints }),
+        setActiveSprint: (sprint) => dispatch({ type: 'SUITE_SET_ACTIVE_SPRINT', payload: sprint }),
+        addSprint: (sprint) => dispatch({ type: 'SUITE_ADD_SPRINT', payload: sprint }),
+        updateSubscription: (subscriptionData) => dispatch({ type: 'SUBSCRIPTION_SET_PLAN', payload: subscriptionData }),
+        triggerDowngrade: () => dispatch({ type: 'SUBSCRIPTION_TRIGGER_DOWNGRADE' }),
+        showModal: (modalType, props = {}) => dispatch({ type: 'UI_SET_MODAL', payload: { type: modalType, props } }),
+        closeModal: () => dispatch({ type: 'UI_CLOSE_MODAL' }),
+        showOverlay: (overlayType, props = {}) => dispatch({ type: 'UI_SET_OVERLAY', payload: { type: overlayType, props } }),
+        closeOverlay: () => dispatch({ type: 'UI_CLOSE_OVERLAY' }),
+        showNotification: (notification) => dispatch({ type: 'UI_SET_NOTIFICATION', payload: notification }),
+        clearNotification: () => dispatch({ type: 'UI_CLEAR_NOTIFICATION' }),
+        setDashboardMetrics: (metrics) => dispatch({ type: 'DASHBOARD_SET_METRICS', payload: metrics }),
+        setError: (error) => dispatch({ type: 'SET_ERROR', payload: error }),
+        clearError: () => dispatch({ type: 'CLEAR_ERROR' }),
+    };
+
+    // Memoized context value
+    const contextValue = useMemo(
+        () => ({
+            state,
+            actions,
+            isAuthenticated: !!state.auth.user,
+            hasActiveSuite: !!state.suite.activeSuite,
+            hasActiveSprint: !!state.suite.activeSprint,
+            canCreateSuite: state.suite.suites.length < (state.subscription.plan?.limits?.suites || 1),
+            hasFeatureAccess: (feature) => state.subscription.plan?.features?.[feature] || false,
+            isLoading: state.loading || state.auth.loading || state.suite.loading || state.subscription.loading,
+        }),
+        [state],
     );
-};
 
-export const useAppEntityData = () => {
-    const entityContext = useEntityContext();
-    return {
-        testCases: entityContext.testCases,
-        bugs: entityContext.bugs,
-        recordings: entityContext.recordings,
-        relationships: entityContext.relationships,
-        createTestCase: entityContext.createTestCase,
-        updateTestCase: entityContext.updateTestCase,
-        deleteTestCase: entityContext.deleteTestCase,
-        createBug: entityContext.createBug,
-        updateBug: entityContext.updateBug,
-        deleteBug: entityContext.deleteBug,
-        createRecording: entityContext.createRecording,
-        updateRecording: entityContext.updateRecording,
-        deleteRecording: entityContext.deleteRecording,
-        createRelationship: entityContext.createRelationship,
-        getTestCaseById: entityContext.getTestCaseById,
-        getBugById: entityContext.getBugById,
-        getRecordingById: entityContext.getRecordingById,
-        getBugsForTestCase: entityContext.getBugsForTestCase,
-        getRecordingsForBug: entityContext.getRecordingsForBug,
-        getTestCasesForRequirement: entityContext.getTestCasesForRequirement,
-        isLoading: entityContext.isLoading,
-        isInitialized: entityContext.isInitialized,
-        errors: entityContext.errors,
-        clearError: entityContext.clearError,
-        clearAllErrors: entityContext.clearAllErrors,
-        refreshData: entityContext.refreshData,
-        accountType: entityContext.accountType,
-        orgId: entityContext.orgId,
-        activeSuiteId: entityContext.activeSuiteId,
-    };
-};
-
-export const useAppAuth = () => {
-    const {
-        currentUser,
-        signIn,
-        signInWithGoogle,
-        registerWithEmail,
-        registerWithEmailLink,
-        completeEmailLinkSignIn,
-        setUserPassword,
-        resetPassword,
-        confirmPasswordReset,
-        resendVerificationEmail,
-        deleteAccount,
-        linkProvider,
-        unlinkProvider,
-        refreshSession,
-        signOut,
-        loading,
-        authError,
-        isProviderLinked,
-    } = useApp();
-    return {
-        user: currentUser,
-        signIn,
-        signInWithGoogle,
-        signUp: registerWithEmail,
-        registerWithEmailLink,
-        completeEmailLinkSignIn,
-        setUserPassword,
-        resetPassword,
-        confirmPasswordReset,
-        resendVerificationEmail,
-        deleteAccount,
-        linkProvider,
-        unlinkProvider,
-        refreshSession,
-        signOut,
-        loading,
-        error: authError,
-        isProviderLinked,
-    };
-};
-
-export const useAppSubscription = () => {
-    const {
-        subscription,
-        subscriptionStatus,
-        hasFeatureAccess,
-        getFeatureLimits,
-        canCreateResource,
-        getResourceLimit,
-        createCheckoutSession,
-        cancelSubscription,
-        reactivateSubscription,
-        getBillingHistory,
-        updatePaymentMethod,
-        billingConfig,
-        capabilities,
-    } = useApp();
-    return {
-        subscription,
-        subscriptionStatus,
-        hasFeatureAccess,
-        getFeatureLimits,
-        canCreateResource,
-        getResourceLimit,
-        createCheckoutSession,
-        cancelSubscription,
-        reactivateSubscription,
-        getBillingHistory,
-        updatePaymentMethod,
-        billingConfig,
-        capabilities,
-    };
-};
-
-export const useAppSuites = () => {
-    const {
-        suites,
-        individualSuites,
-        organizationSuites,
-        availableOrganizations,
-        activeSuite,
-        setActiveSuite,
-        switchSuite,
-        createTestSuite,
-        checkSuiteNameExists,
-        refetchSuites,
-        fetchUserSuites,
-        canCreateSuite,
-        getSuiteLimit,
-    } = useApp();
-    return {
-        suites,
-        userTestSuites: suites,
-        individualSuites,
-        organizationSuites,
-        availableOrganizations,
-        activeSuite,
-        setActiveSuite,
-        switchSuite,
-        createTestSuite,
-        checkSuiteNameExists,
-        refetchSuites,
-        fetchUserSuites,
-        canCreateSuite,
-        getSuiteLimit,
-    };
-};
-
-export const useAppProfile = () => {
-    const { userProfile, refreshProfile, updateProfile, updateProfileField, isLoading, avatarInitials } = useApp();
-    return {
-        userProfile,
-        refreshProfile,
-        updateProfile,
-        updateProfileField,
-        loading: isLoading,
-        avatarInitials,
-    };
-};
-
-export const useAppNavigation = () => {
-    const {
-        activeModule,
-        breadcrumbs,
-        sidebarCollapsed,
-        setSidebarCollapsed,
-        navigateToModule,
-        updateBreadcrumbs,
-    } = useApp();
-    return {
-        activeModule,
-        breadcrumbs,
-        sidebarCollapsed,
-        setSidebarCollapsed,
-        navigateToModule,
-        updateBreadcrumbs,
-    };
-};
-
-export const useAppNotifications = () => {
-    const {
-        notifications,
-        addNotification,
-        removeNotification,
-        markNotificationAsRead,
-        clearAllNotifications,
-    } = useApp();
-    return {
-        notifications,
-        addNotification,
-        removeNotification,
-        markNotificationAsRead,
-        clearAllNotifications,
-    };
-};
-
-export const useAppFeatures = () => {
-    const {
-        featureFlags,
-        hasFeatureAccess,
-        checkFeatureLimit,
-        userCapabilities,
-        canCreateResource,
-        getResourceLimit,
-    } = useApp();
-    return {
-        featureFlags,
-        hasFeatureAccess,
-        checkFeatureLimit,
-        userCapabilities,
-        canCreateResource,
-        getResourceLimit,
-    };
+    return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 };
 
 export default AppProvider;

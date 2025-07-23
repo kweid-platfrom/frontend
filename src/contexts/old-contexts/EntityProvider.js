@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import { useEntitySync } from '../hooks/useEntitySync';
+import { useEntitySync } from '../../hooks/old-hooks/useEntitySync';
 import { useAuth } from './AuthProvider';
 import { useSubscription } from './subscriptionContext';
-import firestoreService from '../services/firestoreService';
+import firestoreService from '../../services/firestoreService';
 
 // Create the context
 const EntityContext = createContext();

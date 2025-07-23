@@ -13,7 +13,7 @@ import {
     hasPermission,
     getAvatarInitials,
     subscribeToUserData,
-} from '../services/userService';
+} from '../../services/userService';
 
 const UserProfileContext = createContext();
 

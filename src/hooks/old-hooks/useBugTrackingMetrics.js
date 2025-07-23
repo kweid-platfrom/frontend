@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useApp } from '../contexts/AppProvider';
-import bugTrackingService from '../services/bugTrackingService';
+import { useApp } from '../../contexts/AppProvider';
+import bugTrackingService from '../../services/bugTrackingService';
 
 export const useBugTrackingMetrics = (filters = {}) => {
     const [metrics, setMetrics] = useState(null);

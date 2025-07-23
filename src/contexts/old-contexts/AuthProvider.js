@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
-import { auth, environment } from '../config/firebase';
+import { auth, environment } from '../../config/firebase';
 import { useRouter } from 'next/navigation';
 import {
     fetchUserData,
@@ -11,8 +11,8 @@ import {
     getUserAccountType,
     getCurrentAccountInfo,
     createUserDocument,
-} from '../services/userService';
-import PermissionService, { isOrganizationAccount, isIndividualAccount } from '../services/permissionService';
+} from '../../services/userService';
+import PermissionService, { isOrganizationAccount, isIndividualAccount } from '../../services/permissionService';
 import {
     signInWithGoogle as authSignInWithGoogle,
     logInWithEmail as authLoginWithEmail,
@@ -28,7 +28,7 @@ import {
     linkAuthProvider as authLinkProvider,
     unlinkAuthProvider as authUnlinkProvider,
     refreshAuthSession as authRefreshSession,
-} from '../services/authService';
+} from '../../services/authService';
 
 const AuthContext = createContext();
 
