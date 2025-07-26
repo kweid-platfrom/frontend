@@ -1,4 +1,4 @@
-// components/LoadingScreen.js
+// components/common/LoadingScreen.js
 import React from 'react';
 
 const LoadingScreen = ({ message = "Loading..." }) => {

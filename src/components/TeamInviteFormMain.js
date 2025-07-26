@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { Loader2, X, Folder, Plus, Users, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "../context/AuthProvider";
+// import { useAuth } from "../context/AuthProvider";
 import InviteDialogs from "./InviteDialogs";
-import SuiteSelector from "./SuiteSelector";
+// import SuiteSelector from "./SuiteSelector";
 import "../app/globals.css";
 
 const TeamInviteFormMain = ({
@@ -100,23 +100,23 @@ const TeamInviteFormMain = ({
         return emailList.every((email) => !email.trim() || emailRegex.test(email));
     };
 
-    const handleSuiteSelection = (suiteId) => {
-        setSelectedSuites(prev => {
-            if (prev.includes(suiteId)) {
-                return prev.filter(id => id !== suiteId);
-            } else {
-                return [...prev, suiteId];
-            }
-        });
-    };
+    // const handleSuiteSelection = (suiteId) => {
+    //     setSelectedSuites(prev => {
+    //         if (prev.includes(suiteId)) {
+    //             return prev.filter(id => id !== suiteId);
+    //         } else {
+    //             return [...prev, suiteId];
+    //         }
+    //     });
+    // };
 
-    const handleSelectAllSuites = () => {
-        if (selectedSuites.length === organizationSuites.length) {
-            setSelectedSuites([]);
-        } else {
-            setSelectedSuites(organizationSuites.map(p => p.id));
-        }
-    };
+    // const handleSelectAllSuites = () => {
+    //     if (selectedSuites.length === organizationSuites.length) {
+    //         setSelectedSuites([]);
+    //     } else {
+    //         setSelectedSuites(organizationSuites.map(p => p.id));
+    //     }
+    // };
 
     const handleSendInvitesClick = (e) => {
         e.preventDefault();
@@ -329,14 +329,14 @@ const TeamInviteFormMain = ({
                 </div>
 
                 {/* Suite Selection - Only show if there are multiple suites */}
-                {organizationSuites.length > 1 && (
+                {/* {organizationSuites.length > 1 && (
                     <SuiteSelector
                         organizationSuites={organizationSuites}
                         selectedSuites={selectedSuites}
                         onSuiteSelection={handleSuiteSelection}
                         onSelectAllSuites={handleSelectAllSuites}
                     />
-                )}
+                )} */}
 
                 {/* Single suite info */}
                 {organizationSuites.length === 1 && (

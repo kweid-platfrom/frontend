@@ -7,23 +7,14 @@ export const useBugs = () => {
     const { state, actions } = useApp();
 
     return {
-        // State
-        bugs: state.bugs.bugs,
+        // Only computed/convenience values - not direct forwarding
         selectedBugs: state.ui.selectedItems.bugs,
-        loading: state.bugs.loading,
-        error: state.bugs.error,
-
-        // Actions
-        loadBugs: actions.loadBugs,
-        createBug: actions.createBug,
-        updateBug: actions.updateBug,
-        deleteBug: actions.deleteBug,
-        selectBugs: (bugs) => actions.updateSelection('bugs', bugs),
-        clearBugSelection: () => actions.updateSelection('bugs', []),
-        linkTestCasesToBug: actions.linkTestCasesToBug,
-        unlinkTestCaseFromBug: actions.unlinkTestCaseFromBug,
-
-        // Computed
-        canCreateBugs: state.subscription.planLimits.canCreateTestCases, // Bugs tied to test case access
+        canCreateBugs: state.subscription.planLimits.canCreateTestCases,
+        
+        // Convenience methods that add value
+        selectBugs: (bugs) => actions.ui.updateSelection('bugs', bugs),
+        clearBugSelection: () => actions.ui.updateSelection('bugs', []),
+        
+        // Components would access state.bugs.bugs and actions.bugs.* directly via useApp()
     };
 };

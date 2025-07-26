@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { useApp } from '../contexts/AppProvider';
-import firestoreService from '../services/firestoreService';
+import firestoreService from './firestoreService';
 
 // Utility function to get date range filter
 const getDateRange = (timeRange) => {

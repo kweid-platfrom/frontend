@@ -10,7 +10,6 @@ const initialState = {
         linkResources: false,
         upgradePrompt: false,
     },
-    toasts: [],
     featureLocks: {
         testCasesLocked: false,
         recordingsLocked: false,
@@ -39,20 +38,15 @@ const uiReducer = (state, action) => {
                 ...state,
                 modals: { ...state.modals, [action.payload]: false },
             };
-        case 'TOAST_ADD':
-            return {
-                ...state,
-                toasts: [...state.toasts, { id: Date.now(), ...action.payload }],
-            };
-        case 'TOAST_REMOVE':
-            return {
-                ...state,
-                toasts: state.toasts.filter((toast) => toast.id !== action.payload),
-            };
         case 'NOTIFICATION_ADD':
             return {
                 ...state,
-                notifications: [...state.notifications, { id: Date.now(), ...action.payload }],
+                notifications: [...state.notifications, {
+                    id: action.payload.id || `notification-${Date.now()}`,
+                    type: action.payload.type || 'info',
+                    message: action.payload.message,
+                    duration: action.payload.duration || 10000,
+                }],
             };
         case 'NOTIFICATION_REMOVE':
             return {
@@ -74,6 +68,8 @@ const uiReducer = (state, action) => {
                 ...state,
                 selectedItems: { testCases: [], bugs: [], recordings: [], sprints: [] },
             };
+        case 'CLEAR_UI':
+            return initialState;
         default:
             return state;
     }
@@ -89,12 +85,20 @@ export const useUI = () => {
         closeModal: (modalName) => {
             dispatch({ type: 'MODAL_CLOSE', payload: modalName });
         },
-        showNotification: (type, message, duration = 5000) => {
-            const notificationId = Date.now();
-            dispatch({ type: 'NOTIFICATION_ADD', payload: { type, message, duration } });
-            setTimeout(() => {
-                dispatch({ type: 'NOTIFICATION_REMOVE', payload: notificationId });
-            }, duration);
+        showNotification: ({ id, type, message, duration }) => {
+            const payload = { id, type, message, duration: duration || 10000 };
+            dispatch({ type: 'NOTIFICATION_ADD', payload });
+            if (payload.duration) {
+                setTimeout(() => {
+                    dispatch({ type: 'NOTIFICATION_REMOVE', payload: payload.id });
+                }, payload.duration);
+            }
+        },
+        removeNotification: (id) => {
+            dispatch({ type: 'NOTIFICATION_REMOVE', payload: id });
+        },
+        clearUI: () => {
+            dispatch({ type: 'CLEAR_UI' });
         },
         updateFeatureLocks: (planLimits) => {
             dispatch({

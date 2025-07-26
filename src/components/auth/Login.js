@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendEmailVerification } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendEmailVerification, onAuthStateChanged } from "firebase/auth";
 import { auth } from "../../config/firebase";
 import BackgroundDecorations from "@/components/BackgroundDecorations";
 import "../../app/globals.css";
@@ -25,16 +25,6 @@ const Login = () => {
     const router = useRouter();
     const hasNavigated = useRef(false);
 
-    // Debug initialization state
-    useEffect(() => {
-        console.log("Login.js state:", {
-            isLoading: false,
-            isAuthenticated: !!auth.currentUser,
-            emailVerified: auth.currentUser?.emailVerified,
-            hasNavigated: hasNavigated.current,
-        });
-    }, []);
-
     // Handle URL parameters for feedback messages
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -46,16 +36,20 @@ const Login = () => {
         }
     }, []);
 
-    // Redirect authenticated users to dashboard
+    // Listen to Firebase auth state changes
     useEffect(() => {
-        if (auth.currentUser?.emailVerified && !hasNavigated.current) {
-            hasNavigated.current = true;
-            setToast({ type: "success", message: "Welcome back! You have successfully signed in.", duration: 3000 });
-            router.push("/dashboard");
-        }
-        if (!auth.currentUser) {
-            hasNavigated.current = false;
-        }
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            console.log("Auth state changed:", { user, emailVerified: user?.emailVerified });
+            if (user?.emailVerified && !hasNavigated.current) {
+                hasNavigated.current = true;
+                setToast({ type: "success", message: "Welcome back! You have successfully signed in.", duration: 3000 });
+                router.push("/dashboard");
+            } else if (!user) {
+                hasNavigated.current = false;
+            }
+        });
+
+        return () => unsubscribe();
     }, [router]);
 
     const validateForm = () => {
@@ -93,7 +87,11 @@ const Login = () => {
             setShowVerificationHelper(false);
             setUnverifiedUser(null);
         } catch (error) {
-            setToast({ type: "error", message: error.message || "Failed to send verification email.", duration: 5000 });
+            const errorMessages = {
+                'auth/too-many-requests': "Too many attempts. Please try again later.",
+                'auth/user-not-found': "User not found.",
+            };
+            setToast({ type: "error", message: errorMessages[error.code] || "Failed to send verification email.", duration: 5000 });
         }
 
         setLoadingResendVerification(false);
@@ -120,7 +118,13 @@ const Login = () => {
             }
             setToast({ type: "success", message: "Login successful!", duration: 3000 });
         } catch (error) {
-            setToast({ type: "error", message: error.message || "Login failed.", duration: 5000 });
+            const errorMessages = {
+                'auth/user-not-found': "No account found with this email.",
+                'auth/wrong-password': "Incorrect password.",
+                'auth/invalid-email': "Invalid email format.",
+                'auth/too-many-requests': "Too many attempts. Please try again later.",
+            };
+            setToast({ type: "error", message: errorMessages[error.code] || error.message || "Login failed.", duration: 5000 });
         }
 
         setLoadingEmailLogin(false);
@@ -143,7 +147,11 @@ const Login = () => {
             }
             setToast({ type: "success", message: "Login successful!", duration: 3000 });
         } catch (error) {
-            setToast({ type: "error", message: error.message || "Google login failed.", duration: 5000 });
+            const errorMessages = {
+                'auth/popup-closed-by-user': "Google sign-in was cancelled.",
+                'auth/too-many-requests': "Too many attempts. Please try again later.",
+            };
+            setToast({ type: "error", message: errorMessages[error.code] || error.message || "Google login failed.", duration: 5000 });
         }
 
         setLoadingGoogleLogin(false);

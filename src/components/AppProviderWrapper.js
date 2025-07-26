@@ -2,251 +2,262 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { useApp } from '../context/AppProvider';
+import { usePathname, useRouter } from 'next/navigation';
+import { AppProvider, useApp } from '../context/AppProvider';
 import { useSuiteAccess } from '../hooks/useSuiteAccess';
 import LoadingScreen from './common/LoadingScreen';
 import CreateSuiteModal from './modals/createSuiteModal';
+import Register from './auth/Register';
+import Login from './auth/Login';
+import PageLayout from './layout/PageLayout';
+import NotificationBanner from './notifications/NotificationBanner';
+import { toast } from 'sonner';
 
 const AppProviderWrapper = ({ children }) => {
     const pathname = usePathname();
-    const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/email-verification'];
-
-    // Skip authentication logic for public routes
+    
+    const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
     const isPublicRoute = publicRoutes.includes(pathname);
+    
+    // For public routes: NO AppProvider wrapping, no PageLayout
+    if (isPublicRoute) {
+        return (
+            <div className="public-route">
+                {children}
+            </div>
+        );
+    }
 
+    // For protected routes: wrap with AppProvider and include PageLayout
+    return (
+        <AppProvider>
+            <ProtectedRouteContent>{children}</ProtectedRouteContent>
+        </AppProvider>
+    );
+};
+
+// This component runs INSIDE AppProvider, so it can use useApp
+const ProtectedRouteContent = ({ children }) => {
+    const router = useRouter();
     const { state, actions, isAuthenticated, isLoading } = useApp();
-    const { needsSuiteCreation, shouldShowSuiteModal, createSuite } = useSuiteAccess();
-    const { currentPlan, trialEndsAt, isTrialActive } = state.subscription;
-    const daysRemainingInTrial = trialEndsAt
-        ? Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24))
-        : 0;
-    
-    // Initialize appReady state properly
-    const [appReady, setAppReady] = useState(() => {
-        // Only set to true initially for public routes
-        return isPublicRoute;
-    });
-    
-    // Add state to track if we've already processed the access check
-    const [accessCheckProcessed, setAccessCheckProcessed] = useState(false);
-    
-    const [toast, setToast] = useState({ type: '', message: '', duration: 5000 });
+    const { needsSuiteCreation, shouldShowSuiteModal, createSuite, suiteCreationBlocked } = useSuiteAccess();
+    const [appReady, setAppReady] = useState(false);
+    const [authMode, setAuthMode] = useState('login');
 
+    // Helper functions
+    const needsEmailVerification = () => {
+        return state.auth.currentUser?.uid && 
+               state.auth.currentUser?.emailVerified === false &&
+               state.auth.isInitialized;
+    };
+
+    const isFullyAuthenticated = () => {
+        return isAuthenticated && 
+               state.auth.currentUser?.uid && 
+               state.auth.currentUser?.emailVerified === true;
+    };
+
+    const shouldShowAuthUI = () => {
+        return state.auth.isInitialized && 
+               !isAuthenticated && 
+               !state.auth.currentUser?.uid;
+    };
+
+    // Main authentication and app readiness logic
     useEffect(() => {
-        // Skip auth initialization for public routes or if already initialized
-        if (isPublicRoute || state.auth.isInitialized) {
-            setAppReady(isPublicRoute);
+        // Wait for auth initialization
+        if (!state.auth.isInitialized) {
+            setAppReady(false);
             return;
         }
 
-        console.log('🚀 Initializing app via AppProvider...');
-        actions.auth.initializeAuth().catch((error) => {
-            console.error('❌ Auth initialization error:', error);
-            setToast({
-                type: 'error',
-                message: 'Failed to initialize app. Please try again later.',
-                duration: 5000,
-            });
-        });
-    }, [actions.auth, isPublicRoute, state.auth.isInitialized]);
-
-    useEffect(() => {
-        // Skip logic for public routes or if auth is not initialized
-        if (isPublicRoute || !state.auth.isInitialized) {
-            setAppReady(isPublicRoute);
-            setAccessCheckProcessed(isPublicRoute);
-            return;
-        }
-
-        // Don't re-process if we've already handled the access check and nothing critical changed
-        if (accessCheckProcessed && !state.auth.loading) {
-            return;
-        }
-
-        if (!state.auth.loading) {
-            console.log('🔍 Evaluating app access...', {
-                isAuthenticated,
-                suitesCount: state.suites.suites.length,
-                activeSuites: state.suites.suites.filter((s) => s.status === 'active').length,
-                isTrialActive,
-                currentPlan,
-                trialEndsAt,
-                daysRemainingInTrial,
-                needsSuiteCreation,
-                accessCheckProcessed,
-            });
-
-            if (!isAuthenticated) {
-                setAppReady(false);
-                setAccessCheckProcessed(true);
-                actions.ui.closeModal('createSuite');
-                return;
-            }
-
-            if (needsSuiteCreation) {
-                console.log('🔒 Suite creation required');
-                actions.ui.openModal('createSuite');
-                setAppReady(false);
-                setAccessCheckProcessed(true);
-                return;
-            }
-
-            // Check trial expiry
-            if (isTrialActive && trialEndsAt && new Date() > new Date(trialEndsAt)) {
-                console.log('🔒 Trial expired');
-                actions.subscription.handleTrialExpiry(state.suites, actions.suites).catch((error) => {
-                    console.error('❌ Error handling trial expiry:', error);
-                    setToast({
-                        type: 'error',
-                        message: 'Error updating subscription. Please contact support.',
-                        duration: 5000,
-                    });
-                });
-                setAppReady(false);
-                setAccessCheckProcessed(true);
-                return;
-            }
-
-            console.log('✅ App access validated, ready');
+        // If user needs email verification, redirect
+        if (needsEmailVerification()) {
             actions.ui.closeModal('createSuite');
-            setAppReady(true);
-            setAccessCheckProcessed(true);
+            actions.suites.clearSuites();
+            router.push('/verify-email');
+            setAppReady(false);
+            return;
         }
+
+        // If not authenticated, show auth UI
+        if (shouldShowAuthUI()) {
+            setAppReady(false);
+            return;
+        }
+
+        // If authenticated but no profile data, fetch it
+        if (isAuthenticated && state.auth.currentUser?.uid && !state.auth.profileLoaded) {
+            console.log('Fetching user profile data...');
+            actions.auth.refreshUserProfile()
+                .then(() => {
+                    console.log('User profile loaded successfully');
+                })
+                .catch((error) => {
+                    console.error('Failed to load user profile:', error);
+                    // Don't block the app if profile fetch fails
+                });
+        }
+
+        // Wait for app data to load
+        if (state.auth.loading || state.subscription.loading || state.suites.loading) {
+            setAppReady(false);
+            return;
+        }
+
+        // Check trial expiry
+        if (state.subscription.isTrialActive && 
+            state.subscription.trialEndsAt && 
+            new Date() > new Date(state.subscription.trialEndsAt)) {
+            actions.subscription.handleTrialExpiry(state.suites, actions.suites, actions.ui)
+                .catch((error) => {
+                    console.error('Error handling trial expiry:', error);
+                    toast.error(error.message || 'Error updating subscription. Please contact support.');
+                });
+            setAppReady(false);
+            return;
+        }
+
+        // Check if suite creation is needed
+        if (isFullyAuthenticated() && needsSuiteCreation && !suiteCreationBlocked && shouldShowSuiteModal) {
+            // Don't open modal if it's already open or if we just created a suite
+            if (!state.ui.modals?.createSuite?.isOpen) {
+                actions.ui.openModal('createSuite');
+            }
+            setAppReady(false);
+            return;
+        }
+
+        // All checks passed - close any open modals and set ready
+        if (state.ui.modals?.createSuite?.isOpen) {
+            actions.ui.closeModal('createSuite');
+        }
+        setAppReady(true);
     }, [
-        state.auth.loading,
         state.auth.isInitialized,
+        state.auth.loading,
+        state.auth.profileLoaded, // Add this dependency
         isAuthenticated,
-        state.suites.suites.length,
+        state.auth.currentUser?.uid,
+        state.auth.currentUser?.emailVerified,
+        state.subscription.loading,
+        state.suites.loading,
         needsSuiteCreation,
-        isTrialActive,
-        trialEndsAt,
-        accessCheckProcessed,
-        isPublicRoute,
+        suiteCreationBlocked,
+        shouldShowSuiteModal,
+        state.subscription.isTrialActive,
+        state.subscription.trialEndsAt,
     ]);
 
     const handleSuiteCreated = async (newSuite) => {
-        console.log('✅ Creating suite:', newSuite.name);
         try {
             const result = await createSuite({
                 ...newSuite,
-                ownerType: state.auth.accountType,
-                ownerId: state.auth.currentUser.uid,
+                ownerType: state.auth.accountType || 'individual',
+                ownerId: state.auth.currentUser?.uid,
                 status: 'active',
             });
+
             if (result.success) {
+                // Close modal immediately
                 actions.ui.closeModal('createSuite');
-                // Reset access check so it re-evaluates with the new suite
-                setAccessCheckProcessed(false);
+                
+                // Activate the suite
+                actions.suites.activateSuite(result.data);
+                
+                // Set app as ready to prevent re-rendering loops
                 setAppReady(true);
-                setToast({
-                    type: 'success',
-                    message: `Welcome to ${newSuite.name}! Your workspace is ready.`,
-                    duration: 5000,
-                });
+                
+                // Show success message
+                toast.success(`Welcome to ${newSuite.name}! Your workspace is ready.`, { duration: 5000 });
+                
+                // Force a small delay to ensure state is stable before proceeding
+                setTimeout(() => {
+                    setAppReady(true);
+                }, 100);
             } else {
-                setToast({ type: 'error', message: result.error.message, duration: 5000 });
+                toast.error(result.error?.message || 'Failed to create suite', { duration: 5000 });
             }
         } catch (error) {
-            setToast({ type: 'error', message: error.message, duration: 5000 });
+            console.error('Suite creation error:', error);
+            toast.error(error.message || 'An unexpected error occurred', { duration: 5000 });
         }
     };
 
-    // Toast component
-    const ToastComponent = () => (
-        toast.message && (
-            <div
-                className={`fixed bottom-4 right-4 p-4 rounded-lg text-white z-50 ${
-                    toast.type === 'success' 
-                        ? 'bg-green-600' 
-                        : toast.type === 'error' 
-                        ? 'bg-red-600' 
-                        : 'bg-yellow-600'
-                }`}
-            >
-                {toast.message}
-            </div>
-        )
-    );
+    const handleRegistrationComplete = () => {
+        toast.success('Registration completed! Welcome to QAID!', { duration: 5000 });
+    };
 
-    // For public routes, render children directly
-    if (isPublicRoute) {
+    const handleLoginComplete = () => {
+        // Auth state will update automatically
+    };
+
+    const getLoadingMessage = () => {
+        if (!state.auth.isInitialized) return "Initializing application...";
+        if (state.auth.loading) return "Authenticating...";
+        if (needsEmailVerification()) return "Redirecting to email verification...";
+        if (state.subscription.loading) return "Loading subscription info...";
+        if (state.suites.loading) return "Loading workspaces...";
+        if (isLoading) return "Preparing your workspace...";
+        return "Loading...";
+    };
+
+    // Show loading when necessary
+    if (!state.auth.isInitialized || 
+        (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
+        return <LoadingScreen message={getLoadingMessage()} />;
+    }
+
+    // Show authentication UI
+    if (shouldShowAuthUI()) {
         return (
-            <div className="app-wrapper">
-                {children}
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50">
+                {authMode === 'register' ? (
+                    <Register
+                        onRegistrationComplete={handleRegistrationComplete}
+                        onSwitchToLogin={() => setAuthMode('login')}
+                    />
+                ) : (
+                    <Login
+                        onLoginComplete={handleLoginComplete}
+                        onSwitchToRegister={() => setAuthMode('register')}
+                    />
+                )}
                 <div id="modal-root" />
                 <div id="toast-root" />
-                <ToastComponent />
             </div>
         );
     }
 
-    // Show loading screen while initializing or loading
-    if (state.auth.loading || !state.auth.isInitialized || isLoading) {
+    // Show suite creation modal
+    if (isFullyAuthenticated() && needsSuiteCreation && shouldShowSuiteModal && !suiteCreationBlocked && !appReady) {
         return (
-            <LoadingScreen
-                message={
-                    !state.auth.isInitialized
-                        ? 'Initializing application...'
-                        : 'Loading your workspace...'
-                }
-            />
-        );
-    }
-
-    // Show auth prompt if not authenticated
-    if (!isAuthenticated) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="max-w-md w-full space-y-8 p-8">
-                    <div className="text-center">
-                        <h2 className="mt-6 text-3xl font-bold text-gray-900">
-                            Welcome to QA Platform
-                        </h2>
-                        <p className="mt-2 text-sm text-gray-600">
-                            Please sign in to access your test management workspace
-                        </p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Show suite creation modal if needed
-    if (needsSuiteCreation && shouldShowSuiteModal) {
-        return (
-            <div className="app-wrapper">
-                <LoadingScreen message="Setting up your workspace..." />
-                <div id="modal-root">
-                    <CreateSuiteModal
-                        isOpen={true}
-                        onSuiteCreated={handleSuiteCreated}
-                        accountType={state.auth.accountType}
-                        planLimits={state.subscription.planLimits}
-                        isRequired={true}
-                    />
-                </div>
+            <>
+                <CreateSuiteModal
+                    isOpen={true}
+                    onSuiteCreated={handleSuiteCreated}
+                    accountType={state.auth.accountType || 'individual'}
+                    isRequired={true}
+                />
+                <div id="modal-root" />
                 <div id="toast-root" />
-                <ToastComponent />
-            </div>
+            </>
         );
     }
 
-    // Only render main app if everything is ready
+    // Show loading if app not ready
     if (!appReady) {
-        return (
-            <LoadingScreen message="Preparing your workspace..." />
-        );
+        return <LoadingScreen message="Preparing your workspace..." />;
     }
 
-    // Main app render
+    // Render protected content with PageLayout
     return (
-        <div className="app-wrapper">
+        <PageLayout>
+            <NotificationBanner />
             {children}
             <div id="modal-root" />
             <div id="toast-root" />
-            <ToastComponent />
-        </div>
+        </PageLayout>
     );
 };
 

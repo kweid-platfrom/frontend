@@ -2,22 +2,22 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../../context/AuthProvider';
+import { useApp } from '../../context/AppProvider';
 import { LogOut, Loader2 } from 'lucide-react';
 
 const SignOutButton = ({ className = '', variant = 'icon' }) => {
     const [loading, setLoading] = useState(false);
-    const { signOut } = useAuth();
+    const { actions } = useApp();
     const router = useRouter();
 
     const handleSignOut = async () => {
         setLoading(true);
         try {
-            const result = await signOut();
+            const result = await actions.auth.signOut();
 
-            // ✅ Optional: fallback redirect if AuthProvider doesn't push
+            // Optional: fallback redirect if AuthProvider doesn't push
             if (result?.success && typeof window !== 'undefined') {
-                router.push('login'); // ✅ relative path to avoid /auth/login issue
+                router.push('/login'); // relative path to avoid /auth/login issue
             }
         } catch (error) {
             console.error('Error signing out:', error);

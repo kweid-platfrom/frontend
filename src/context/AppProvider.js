@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { createContext, useContext, useEffect } from 'react';
-import { useAuth } from './slices/authSlice';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { useAuth as useAuthSlice } from './slices/authSlice';
 import { useSuites } from './slices/suiteSlice';
 import { useTestCases } from './slices/testCaseSlice';
 import { useBugs } from './slices/bugSlice';
@@ -13,12 +13,13 @@ import { useTeam } from './slices/teamSlice';
 import { useAutomation } from './slices/automationSlice';
 import { useUI } from './slices/uiSlice';
 import { toast } from 'sonner';
+import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import firestoreService from '../services/firestoreService';
 
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-    const auth = useAuth();
+    const auth = useAuthSlice();
     const suites = useSuites();
     const testCases = useTestCases();
     const bugs = useBugs();
@@ -29,200 +30,421 @@ export const AppProvider = ({ children }) => {
     const automation = useAutomation();
     const ui = useUI();
 
+    const [suitesLoaded, setSuitesLoaded] = useState(false);
+    const [suiteSubscriptionActive, setSuiteSubscriptionActive] = useState(false);
+
+    const unsubscribeSuitesRef = useRef(null);
+    const assetUnsubscribersRef = useRef({});
+    const retryTimeoutRef = useRef(null);
+
     const linkTestCasesToBug = async (bugId, testCaseIds) => {
-        try {
-            const result = await firestoreService.batchLinkTestCasesToBug(bugId, testCaseIds);
+        return handleFirebaseOperation(
+            () => firestoreService.batchLinkTestCasesToBug(bugId, testCaseIds),
+            'Test cases linked to bug',
+            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+        ).then((result) => {
             if (result.success) {
                 bugs.actions.updateBug(bugId, result.data.bug);
                 result.data.testCases.forEach((tc) => {
                     testCases.actions.updateTestCase(tc.id, tc);
                 });
-                toast.success('Test cases linked to bug', { duration: 5000 });
-                return result;
-            } else {
-                toast.error(result.error.message, { duration: 5000 });
-                return result;
             }
-        } catch (error) {
-            toast.error(error.message, { duration: 5000 });
-            return { success: false, error: error.message };
-        }
+            return result;
+        });
     };
 
     const unlinkTestCaseFromBug = async (bugId, testCaseId) => {
-        try {
-            const result = await firestoreService.batchUnlinkTestCaseFromBug(bugId, testCaseId);
+        return handleFirebaseOperation(
+            () => firestoreService.batchUnlinkTestCaseFromBug(bugId, testCaseId),
+            'Test case unlinked from bug',
+            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+        ).then((result) => {
             if (result.success) {
                 bugs.actions.updateBug(bugId, result.data.bug);
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
-                toast.success('Test case unlinked from bug', { duration: 5000 });
-                return result;
-            } else {
-                toast.error(result.error.message, { duration: 5000 });
-                return result;
             }
-        } catch (error) {
-            toast.error(error.message, { duration: 5000 });
-            return { success: false, error: error.message };
-        }
+            return result;
+        });
     };
 
     const linkBugsToTestCase = async (testCaseId, bugIds) => {
-        try {
-            const result = await firestoreService.batchLinkBugsToTestCase(testCaseId, bugIds);
+        return handleFirebaseOperation(
+            () => firestoreService.batchLinkBugsToTestCase(testCaseId, bugIds),
+            'Bugs linked to test case',
+            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+        ).then((result) => {
             if (result.success) {
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
                 result.data.bugs.forEach((bug) => {
                     bugs.actions.updateBug(bug.id, bug);
                 });
-                toast.success('Bugs linked to test case', { duration: 5000 });
-                return result;
-            } else {
-                toast.error(result.error.message, { duration: 5000 });
-                return result;
             }
-        } catch (error) {
-            toast.error(error.message, { duration: 5000 });
-            return { success: false, error: error.message };
-        }
+            return result;
+        });
     };
 
     const unlinkBugFromTestCase = async (testCaseId, bugId) => {
-        try {
-            const result = await firestoreService.batchUnlinkBugFromTestCase(testCaseId, bugId);
+        return handleFirebaseOperation(
+            () => firestoreService.batchUnlinkBugFromTestCase(testCaseId, bugId),
+            'Bug unlinked from test case',
+            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+        ).then((result) => {
             if (result.success) {
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
                 bugs.actions.updateBug(bugId, result.data.bug);
-                toast.success('Bug unlinked from test case', { duration: 5000 });
-                return result;
-            } else {
-                toast.error(result.error.message, { duration: 5000 });
-                return result;
             }
-        } catch (error) {
-            toast.error(error.message, { duration: 5000 });
-            return { success: false, error: error.message };
-        }
+            return result;
+        });
     };
 
     const addTestCasesToSprint = async (sprintId, testCaseIds) => {
-        try {
-            const result = await firestoreService.addTestCasesToSprint(sprintId, testCaseIds);
+        return handleFirebaseOperation(
+            () => firestoreService.addTestCasesToSprint(sprintId, testCaseIds),
+            'Test cases added to sprint',
+            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+        ).then((result) => {
             if (result.success) {
                 sprints.actions.updateSprint(sprintId, result.data);
-                toast.success('Test cases added to sprint', { duration: 5000 });
-                return result;
-            } else {
-                toast.error(result.error.message, { duration: 5000 });
-                return result;
             }
-        } catch (error) {
-            toast.error(error.message, { duration: 5000 });
-            return { success: false, error: error.message };
-        }
+            return result;
+        });
     };
 
     const addBugsToSprint = async (sprintId, bugIds) => {
-        try {
-            const result = await firestoreService.addBugsToSprint(sprintId, bugIds);
+        return handleFirebaseOperation(
+            () => firestoreService.addBugsToSprint(sprintId, bugIds),
+            'Bugs added to sprint',
+            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+        ).then((result) => {
             if (result.success) {
                 sprints.actions.updateSprint(sprintId, result.data);
-                toast.success('Bugs added to sprint', { duration: 5000 });
-                return result;
-            } else {
-                toast.error(result.error.message, { duration: 5000 });
-                return result;
             }
+            return result;
+        });
+    };
+
+    // Enhanced auth actions for the new useAuth hook
+    const logout = async () => {
+        return auth.actions.signOut();
+    };
+
+    const initializeAuth = () => {
+        return auth.actions.initializeAuth();
+    };
+
+    // Use the refreshUserProfile from auth slice instead of manual implementation
+    const refreshUserProfile = async () => {
+        // Check if the auth slice has the refreshUserProfile action
+        if (auth.actions.refreshUserProfile) {
+            return auth.actions.refreshUserProfile();
+        }
+        
+        // Fallback to manual implementation if not available
+        if (auth.state.currentUser?.uid) {
+            try {
+                const profileResult = await firestoreService.getUserProfile(auth.state.currentUser.uid);
+                if (profileResult.success) {
+                    auth.actions.restoreAuth({
+                        user: auth.state.currentUser,
+                        accountType: profileResult.data.accountType || 'individual',
+                    });
+                }
+                return profileResult;
+            } catch (error) {
+                console.error('Error refreshing user profile:', error);
+                throw error;
+            }
+        }
+    };
+
+    const clearState = () => {
+        console.log('Clearing all app state');
+        try {
+            if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+                retryTimeoutRef.current = null;
+            }
+
+            if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
+                unsubscribeSuitesRef.current();
+                unsubscribeSuitesRef.current = null;
+            }
+
+            Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+                if (typeof unsubscribe === 'function') {
+                    unsubscribe();
+                }
+            });
+            assetUnsubscribersRef.current = {};
+
+            auth.actions.clearAuthState();
+            if (suites.actions.clearSuites) {
+                suites.actions.clearSuites();
+            } else {
+                suites.actions.loadSuitesSuccess([]);
+            }
+            testCases.actions.loadTestCasesSuccess([]);
+            bugs.actions.loadBugsSuccess([]);
+            recordings.actions.loadRecordingsSuccess([]);
+            sprints.actions.loadSprintsSuccess([]);
+            subscription.actions.clearSubscription?.();
+            team.actions.clearTeam?.();
+            automation.actions.clearAutomation?.();
+            ui.actions.clearUI?.();
+            setSuitesLoaded(false);
+            setSuiteSubscriptionActive(false);
         } catch (error) {
-            toast.error(error.message, { duration: 5000 });
-            return { success: false, error: error.message };
+            console.error('Error clearing state:', error);
+            toast.error(getFirebaseErrorMessage(error), { duration: 5000 });
         }
     };
 
     useEffect(() => {
+        console.log('Initializing auth...');
         auth.actions.initializeAuth();
     }, []);
 
     useEffect(() => {
-        if (auth.state.isAuthenticated && auth.state.currentUser) {
-            const unsubscribeSuites = firestoreService.subscribeToUserTestSuites(
-                (suites) => suites.actions.loadSuitesSuccess(suites),
-                (error) => {
-                    suites.actions.loadSuitesError(error.message);
-                    toast.error(error.message, { duration: 5000 });
-                }
-            );
-            return () => {
-                if (unsubscribeSuites) unsubscribeSuites();
-            };
+        console.log('Auth state changed:', {
+            isAuthenticated: auth.state.isAuthenticated,
+            currentUser: auth.state.currentUser?.uid,
+            authInitialized: auth.state.isInitialized,
+            authLoading: auth.state.loading,
+            profileLoaded: auth.state.profileLoaded, // Add this for debugging
+            subscriptionLoading: subscription.state.loading,
+            suiteSubscriptionActive,
+        });
+
+        if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+            retryTimeoutRef.current = null;
         }
-    }, [auth.state.isAuthenticated, auth.state.currentUser]);
+
+        if (!auth.state.isInitialized || auth.state.loading || subscription.state.loading) {
+            console.log('Waiting for auth and subscription initialization...');
+            setSuitesLoaded(false);
+            setSuiteSubscriptionActive(false);
+            return;
+        }
+
+        if (auth.state.isAuthenticated && auth.state.currentUser) {
+            console.log('User authenticated, setting up subscriptions...');
+            suites.actions.loadSuitesStart();
+            setSuitesLoaded(false);
+
+            if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
+                unsubscribeSuitesRef.current();
+                unsubscribeSuitesRef.current = null;
+            }
+
+            let retryCount = 0;
+            const maxRetries = 3;
+            const retryDelay = 2000;
+
+            const setupSuiteSubscription = () => {
+                handleFirebaseOperation(
+                    () => new Promise((resolve, reject) => {
+                        console.log(`Setting up suite subscription (attempt ${retryCount + 1}/${maxRetries + 1})`);
+                        unsubscribeSuitesRef.current = firestoreService.subscribeToUserTestSuites(
+                            (fetchedSuites) => {
+                                const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
+                                console.log('Suites fetched successfully, count:', safeSuites.length,
+                                    'suites:', safeSuites.map(s => ({ id: s.id, name: s.name })));
+                                resolve(safeSuites);
+                            },
+                            (error) => reject(error)
+                        );
+                    }),
+                    'Suites loaded successfully',
+                    (errorMessage) => {
+                        if (suites.state.testSuites.length === 0 && errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
+                            toast.error(errorMessage, { duration: 5000 });
+                        } else {
+                            console.debug('Ignoring error as suites are already loaded or permission denied:', errorMessage);
+                        }
+                    }
+                ).then((result) => {
+                    if (result.success) {
+                        suites.actions.loadSuitesSuccess(result.data);
+                        setSuitesLoaded(true);
+                        setSuiteSubscriptionActive(true);
+                        retryCount = 0;
+                    } else if (suites.state.testSuites.length === 0 && retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying suite subscription in ${retryDelay * retryCount}ms (attempt ${retryCount}/${maxRetries})`);
+                        retryTimeoutRef.current = setTimeout(setupSuiteSubscription, retryDelay * retryCount);
+                    } else {
+                        suites.actions.loadSuitesSuccess([]);
+                        setSuitesLoaded(true);
+                        setSuiteSubscriptionActive(false);
+                    }
+                }).catch((error) => {
+                    console.error('Unexpected error setting up suite subscription:', error);
+                    suites.actions.loadSuitesSuccess([]);
+                    setSuitesLoaded(true);
+                    setSuiteSubscriptionActive(false);
+                    toast.error(getFirebaseErrorMessage(error), { duration: 5000 });
+                });
+            };
+
+            if (subscription.state.isTrialActive || subscription.state.isSubscriptionActive) {
+                setupSuiteSubscription();
+            } else {
+                console.log('Subscription not active, skipping suite subscription');
+                suites.actions.loadSuitesSuccess([]);
+                setSuitesLoaded(true);
+                setSuiteSubscriptionActive(false);
+                ui.actions.showNotification({
+                    id: 'subscription-inactive',
+                    type: 'warning',
+                    message: 'Your subscription is not active. Upgrade to access test suites!',
+                    duration: 10000,
+                });
+            }
+
+            return () => {
+                console.log('Cleaning up auth effect');
+                if (retryTimeoutRef.current) {
+                    clearTimeout(retryTimeoutRef.current);
+                    retryTimeoutRef.current = null;
+                }
+                if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
+                    unsubscribeSuitesRef.current();
+                    unsubscribeSuitesRef.current = null;
+                }
+                setSuiteSubscriptionActive(false);
+            };
+        } else {
+            console.log('User not authenticated, clearing state');
+            if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
+                unsubscribeSuitesRef.current();
+                unsubscribeSuitesRef.current = null;
+            }
+            clearState();
+            subscription.actions.loadSubscriptionInfo(
+                { accountType: 'individual', currentUser: null },
+                ui.actions
+            );
+            suites.actions.loadSuitesSuccess([]);
+            setSuitesLoaded(true);
+            setSuiteSubscriptionActive(false);
+        }
+    }, [auth.state.isInitialized, auth.state.isAuthenticated, auth.state.currentUser?.uid, subscription.state.loading, subscription.state.isTrialActive, subscription.state.isSubscriptionActive]);
 
     useEffect(() => {
-        if (auth.state.isAuthenticated && suites.state.activeSuite?.id) {
-            const suiteId = suites.state.activeSuite.id;
-            const unsubscribeTestCases = firestoreService.subscribeToTestCases(
-                suiteId,
-                (testCases) => testCases.actions.loadTestCasesSuccess(testCases),
-                (error) => {
-                    testCases.actions.loadTestCasesError(error.message);
-                    toast.error(error.message, { duration: 5000 });
+        if (!auth.state.isAuthenticated || !suites.state.activeSuite?.id || !suitesLoaded || !suiteSubscriptionActive) {
+            console.log('Clearing assets - conditions not met:', {
+                authenticated: auth.state.isAuthenticated,
+                activeSuite: !!suites.state.activeSuite?.id,
+                suitesLoaded,
+                suiteSubscriptionActive
+            });
+
+            Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+                if (typeof unsubscribe === 'function') {
+                    unsubscribe();
                 }
-            );
-            const unsubscribeBugs = firestoreService.subscribeToBugs(
-                suiteId,
-                (bugs) => bugs.actions.loadBugsSuccess(bugs),
-                (error) => {
-                    bugs.actions.loadBugsError(error.message);
-                    toast.error(error.message, { duration: 5000 });
-                }
-            );
-            const unsubscribeRecordings = firestoreService.subscribeToRecordings(
-                suiteId,
-                (recordings) => recordings.actions.loadRecordingsSuccess(recordings),
-                (error) => {
-                    recordings.actions.loadRecordingsError(error.message);
-                    toast.error(error.message, { duration: 5000 });
-                }
-            );
-            const unsubscribeSprints = firestoreService.subscribeToSprints(
-                suiteId,
-                (sprints) => sprints.actions.loadSprintsSuccess(sprints),
-                (error) => {
-                    sprints.actions.loadSprintsError(error.message);
-                    toast.error(error.message, { duration: 5000 });
-                }
-            );
-            return () => {
-                if (unsubscribeTestCases) unsubscribeTestCases();
-                if (unsubscribeBugs) unsubscribeBugs();
-                if (unsubscribeRecordings) unsubscribeRecordings();
-                if (unsubscribeSprints) unsubscribeSprints();
-            };
+            });
+            assetUnsubscribersRef.current = {};
+
+            testCases.actions.loadTestCasesSuccess([]);
+            bugs.actions.loadBugsSuccess([]);
+            recordings.actions.loadRecordingsSuccess([]);
+            sprints.actions.loadSprintsSuccess([]);
+            return;
         }
-    }, [auth.state.isAuthenticated, suites.state.activeSuite?.id]);
+
+        const suiteId = suites.state.activeSuite.id;
+        console.log('Setting up asset subscriptions for suite:', suiteId);
+
+        Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        });
+        assetUnsubscribersRef.current = {};
+
+        const subscribeAsset = (type, action, loadSuccess) => {
+            return handleFirebaseOperation(
+                () => new Promise((resolve, reject) => {
+                    assetUnsubscribersRef.current[type] = firestoreService[`subscribeTo${type}`](
+                        suiteId,
+                        (assets) => {
+                            const safeAssets = Array.isArray(assets) ? assets : [];
+                            console.log(`${type} loaded:`, safeAssets.length);
+                            resolve(safeAssets);
+                        },
+                        (error) => reject(error)
+                    );
+                }),
+                `${type} loaded successfully`,
+                (errorMessage) => {
+                    if (errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
+                        toast.error(`Failed to load ${type.toLowerCase()}: ${errorMessage}`, { duration: 5000 });
+                    }
+                }
+            ).then((result) => {
+                if (result.success) {
+                    loadSuccess(result.data);
+                } else {
+                    loadSuccess([]);
+                }
+            }).catch((error) => {
+                console.error(`Error setting up ${type.toLowerCase()} subscription:`, error);
+                loadSuccess([]);
+            });
+        };
+
+        subscribeAsset('TestCases', 'testCases', testCases.actions.loadTestCasesSuccess);
+        subscribeAsset('Bugs', 'bugs', bugs.actions.loadBugsSuccess);
+        subscribeAsset('Recordings', 'recordings', recordings.actions.loadRecordingsSuccess);
+        subscribeAsset('Sprints', 'sprints', sprints.actions.loadSprintsSuccess);
+
+        return () => {
+            console.log('Cleaning up asset subscriptions');
+            Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+                if (typeof unsubscribe === 'function') {
+                    unsubscribe();
+                }
+            });
+            assetUnsubscribersRef.current = {};
+        };
+    }, [auth.state.isAuthenticated, suites.state.activeSuite?.id, suitesLoaded, suiteSubscriptionActive]);
 
     useEffect(() => {
         if (!auth.state.isAuthenticated || !subscription.state.isTrialActive) return;
+
+        console.log('Setting up trial expiry check');
         const checkTrialExpiry = () => {
             const { trialEndsAt } = subscription.state;
             if (trialEndsAt && new Date() > new Date(trialEndsAt)) {
-                subscription.actions.handleTrialExpiry(suites.state, suites.actions);
+                console.log('Trial expired');
+                subscription.actions.handleTrialExpiry(suites.state, suites.actions, ui.actions);
             } else if (trialEndsAt) {
                 const daysRemaining = Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
                 if (daysRemaining <= 7) {
-                    ui.actions.showNotification(
-                        'warning',
-                        `Your trial expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}. Upgrade to continue using all features!`,
-                        10000
-                    );
+                    console.log(`Trial expiring in ${daysRemaining} days`);
+                    ui.actions.showNotification({
+                        id: `trial-warning-${daysRemaining}`,
+                        type: 'warning',
+                        message: `Your trial expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}. Upgrade to continue using all features!`,
+                        duration: 10000,
+                    });
                 }
             }
         };
+
         checkTrialExpiry();
         const interval = setInterval(checkTrialExpiry, 60000);
         return () => clearInterval(interval);
     }, [auth.state.isAuthenticated, subscription.state.isTrialActive, subscription.state.trialEndsAt]);
+
+    useEffect(() => {
+        return () => {
+            console.log('App provider unmounting, cleaning up');
+            clearState();
+        };
+    }, []);
 
     const value = {
         state: {
@@ -238,7 +460,12 @@ export const AppProvider = ({ children }) => {
             ui: ui.state,
         },
         actions: {
-            auth: auth.actions,
+            auth: {
+                ...auth.actions,
+                logout,
+                initializeAuth,
+                refreshUserProfile,
+            },
             suites: suites.actions,
             testCases: testCases.actions,
             bugs: bugs.actions,
@@ -254,6 +481,7 @@ export const AppProvider = ({ children }) => {
             unlinkBugFromTestCase,
             addTestCasesToSprint,
             addBugsToSprint,
+            clearState,
         },
         isAuthenticated: auth.state.isAuthenticated,
         currentUser: auth.state.currentUser,
@@ -272,7 +500,8 @@ export const AppProvider = ({ children }) => {
             subscription.state.loading ||
             team.state.loading ||
             automation.state.loading ||
-            ui.state.loading,
+            ui.state.loading ||
+            !suitesLoaded,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -284,6 +513,29 @@ export const useApp = () => {
         throw new Error('useApp must be used within an AppProvider');
     }
     return context;
+};
+
+// Enhanced useAuth hook that uses the AppProvider context
+export const useAuth = () => {
+    const { state, actions } = useApp();
+    return {
+        // State
+        currentUser: state.auth.currentUser,
+        isAuthenticated: state.auth.isAuthenticated,
+        accountType: state.auth.accountType,
+        loading: state.auth.loading,
+        error: state.auth.error,
+        isInitialized: state.auth.isInitialized,
+        profileLoaded: state.auth.profileLoaded, // Add profileLoaded to the useAuth hook
+        // Actions
+        logout: actions.auth.logout,
+        initializeAuth: actions.auth.initializeAuth,
+        refreshUserProfile: actions.auth.refreshUserProfile,
+        // Also expose the original auth slice actions if needed
+        signOut: actions.auth.signOut,
+        clearAuthState: actions.auth.clearAuthState,
+        restoreAuth: actions.auth.restoreAuth,
+    };
 };
 
 export default AppProvider;

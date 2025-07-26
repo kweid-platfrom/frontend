@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { serverTimestamp } from "firebase/firestore";
-import { useApp } from "../../contexts/AppProvider";
+import { useApp } from "../../context/AppProvider";
 import BugReportForm from "../create-bug/BugReportForm";
 import BugReportSuccess from "../create-bug/BugReportSuccess";
 import { BugAntIcon } from "@heroicons/react/24/outline";

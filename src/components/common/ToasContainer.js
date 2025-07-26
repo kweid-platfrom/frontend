@@ -1,14 +1,17 @@
-// components/ToastContainer.js
 import React, { useEffect } from 'react';
 import { useApp } from '../context/AppProvider';
+import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
 const Toast = ({ toast, onRemove }) => {
     const { id, type, message, duration } = toast;
 
+    // Convert raw error messages to user-friendly ones
+    const displayMessage = type === 'error' ? getFirebaseErrorMessage(message) : message;
+
     useEffect(() => {
         const timer = setTimeout(() => {
             onRemove(id);
-        }, duration);
+        }, duration || 3500);
 
         return () => clearTimeout(timer);
     }, [id, duration, onRemove]);
@@ -46,14 +49,14 @@ const Toast = ({ toast, onRemove }) => {
             case 'warning':
                 return (
                     <svg className="w-5 h-5 mr-3 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0v3a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
                 );
             case 'info':
             default:
                 return (
-                    <svg className="w-5 h-5 mr-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    <svg className="w-5 h-5 mr-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 0 11-16 0 8 0 0116 0zm-7-4a1 0 11-2 0 1 1 0 012 0zM9 9a1 0 000 2v3a1 0 001 1h1a1 0 100-2v-3a1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                 );
         }
@@ -63,7 +66,7 @@ const Toast = ({ toast, onRemove }) => {
         <div className={`${getToastStyles()} transform transition-all duration-300 ease-in-out animate-slide-in-right`}>
             {getIcon()}
             <div className="flex-1">
-                {message}
+                {displayMessage}
             </div>
             <button
                 onClick={() => onRemove(id)}
@@ -79,26 +82,24 @@ const Toast = ({ toast, onRemove }) => {
 
 const ToastContainer = () => {
     const { state, actions } = useApp();
-    const { toasts } = state.ui;
+    const { alerts } = state.app;
 
     const handleRemoveToast = (toastId) => {
-        // Dispatch toast removal action
-        if (actions.removeToast) {
-            actions.removeToast(toastId);
+        if (actions.alerts?.remove) {
+            actions.alerts.remove(toastId);
         } else {
-            // Fallback: Filter out the toast if removeToast action doesn't exist
-            console.warn('removeToast action not found in context');
+            console.warn('remove alert action not found in context');
         }
     };
 
-    if (toasts.length === 0) return null;
+    if (!alerts?.length) return null;
 
     return (
         <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full">
-            {toasts.map((toast) => (
+            {alerts.map((alert) => (
                 <Toast
-                    key={toast.id}
-                    toast={toast}
+                    key={alert.id}
+                    toast={alert}
                     onRemove={handleRemoveToast}
                 />
             ))}

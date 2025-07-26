@@ -1,15 +1,34 @@
 'use client';
 
 import React from 'react';
-import PageLayout from '@/components/layout/PageLayout';
+import { useApp } from '../../context/AppProvider';
+import { useUI } from '../../hooks/useUI';
 
-const AutomationPage = () => {
+const Automation = () => {
+    const { state } = useApp();
+    const { toggleSidebar, sidebarOpen } = useUI();
+    const { automation } = state;
+
     return (
-        <PageLayout title="Automation">
-            <h1 className="text-2xl font-semibold mb-4">Automation Module</h1>
-            <p>This is where automation logic will go.</p>
-        </PageLayout>
+        <div className="min-h-screen bg-gray-50">
+            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h1 className="text-2xl font-bold text-gray-900">Automation</h1>
+                    <button
+                        onClick={toggleSidebar}
+                        className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+                    >
+                        {sidebarOpen ? 'Close' : 'Open'} Sidebar
+                    </button>
+                </div>
+                <div className="bg-white shadow rounded-lg p-6">
+                    <p className="text-gray-600">
+                        {automation.state ? 'Automation settings configured' : 'Configure automation'}
+                    </p>
+                </div>
+            </div>
+        </div>
     );
 };
 
-export default AutomationPage;
+export default Automation;
