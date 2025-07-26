@@ -15,10 +15,10 @@ import { toast } from 'sonner';
 
 const AppProviderWrapper = ({ children }) => {
     const pathname = usePathname();
-    
+
     const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
     const isPublicRoute = publicRoutes.includes(pathname);
-    
+
     // For public routes: NO AppProvider wrapping, no PageLayout
     if (isPublicRoute) {
         return (
@@ -46,21 +46,21 @@ const ProtectedRouteContent = ({ children }) => {
 
     // Helper functions
     const needsEmailVerification = () => {
-        return state.auth.currentUser?.uid && 
-               state.auth.currentUser?.emailVerified === false &&
-               state.auth.isInitialized;
+        return state.auth.currentUser?.uid &&
+            state.auth.currentUser?.emailVerified === false &&
+            state.auth.isInitialized;
     };
 
     const isFullyAuthenticated = () => {
-        return isAuthenticated && 
-               state.auth.currentUser?.uid && 
-               state.auth.currentUser?.emailVerified === true;
+        return isAuthenticated &&
+            state.auth.currentUser?.uid &&
+            state.auth.currentUser?.emailVerified === true;
     };
 
     const shouldShowAuthUI = () => {
-        return state.auth.isInitialized && 
-               !isAuthenticated && 
-               !state.auth.currentUser?.uid;
+        return state.auth.isInitialized &&
+            !isAuthenticated &&
+            !state.auth.currentUser?.uid;
     };
 
     // Main authentication and app readiness logic
@@ -106,8 +106,8 @@ const ProtectedRouteContent = ({ children }) => {
         }
 
         // Check trial expiry
-        if (state.subscription.isTrialActive && 
-            state.subscription.trialEndsAt && 
+        if (state.subscription.isTrialActive &&
+            state.subscription.trialEndsAt &&
             new Date() > new Date(state.subscription.trialEndsAt)) {
             actions.subscription.handleTrialExpiry(state.suites, actions.suites, actions.ui)
                 .catch((error) => {
@@ -161,16 +161,16 @@ const ProtectedRouteContent = ({ children }) => {
             if (result.success) {
                 // Close modal immediately
                 actions.ui.closeModal('createSuite');
-                
+
                 // Activate the suite
                 actions.suites.activateSuite(result.data);
-                
+
                 // Set app as ready to prevent re-rendering loops
                 setAppReady(true);
-                
+
                 // Show success message
                 toast.success(`Welcome to ${newSuite.name}! Your workspace is ready.`, { duration: 5000 });
-                
+
                 // Force a small delay to ensure state is stable before proceeding
                 setTimeout(() => {
                     setAppReady(true);
@@ -203,7 +203,7 @@ const ProtectedRouteContent = ({ children }) => {
     };
 
     // Show loading when necessary
-    if (!state.auth.isInitialized || 
+    if (!state.auth.isInitialized ||
         (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
         return <LoadingScreen message={getLoadingMessage()} />;
     }
@@ -236,7 +236,6 @@ const ProtectedRouteContent = ({ children }) => {
                 <CreateSuiteModal
                     isOpen={true}
                     onSuiteCreated={handleSuiteCreated}
-                    accountType={state.auth.accountType || 'individual'}
                     isRequired={true}
                 />
                 <div id="modal-root" />

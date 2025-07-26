@@ -1,4 +1,4 @@
-// components/RegistrationContainer.jsx
+// components/Register.jsx
 'use client'
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -7,6 +7,9 @@ import RegistrationForm from '../RegistrationForm';
 import EmailVerificationScreen from '../EmailVerificationScreen';
 import AccountTypeSelector from '../AccountTypeSelector';
 import { useRegistration } from '../../hooks/useRegistration';
+import { Loader2 } from 'lucide-react';
+import BackgroundDecorations from "@/components/BackgroundDecorations";
+import "../../app/globals.css";
 
 const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
     const [currentStep, setCurrentStep] = useState('register'); // 'register', 'verify', 'accountType', 'complete'
@@ -65,6 +68,31 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
         setIsGoogleSSO(false);
     };
 
+    // Loading state component with consistent styling
+    const LoadingState = ({ message = "Completing registration..." }) => (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
+            <BackgroundDecorations />
+            <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
+                <div className="w-full max-w-md">
+                    <div className="text-center mb-8">
+                        <div className="inline-block">
+                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                                QAID
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
+                        <div className="text-center py-8">
+                            <Loader2 className="animate-spin h-8 w-8 text-teal-600 mx-auto mb-4" />
+                            <p className="text-slate-600 text-sm sm:text-base">{message}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
     // Render appropriate step
     const renderCurrentStep = () => {
         switch (currentStep) {
@@ -96,20 +124,26 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
                 );
 
             default:
-                return (
-                    <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                        <p className="mt-2 text-gray-600">Completing registration...</p>
-                    </div>
-                );
+                return <LoadingState />;
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-                    {renderCurrentStep()}
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
+            <BackgroundDecorations />
+            <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
+                <div className="w-full max-w-md">
+                    <div className="text-center mb-8">
+                        <div className="inline-block">
+                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                                QAID
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
+                        {renderCurrentStep()}
+                    </div>
                 </div>
             </div>
         </div>

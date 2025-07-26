@@ -132,28 +132,52 @@ export const AppProvider = ({ children }) => {
         return auth.actions.initializeAuth();
     };
 
-    // Use the refreshUserProfile from auth slice instead of manual implementation
+    // In your AppProvider, replace the refreshUserProfile function with this:
+
     const refreshUserProfile = async () => {
-        // Check if the auth slice has the refreshUserProfile action
-        if (auth.actions.refreshUserProfile) {
-            return auth.actions.refreshUserProfile();
-        }
-        
-        // Fallback to manual implementation if not available
-        if (auth.state.currentUser?.uid) {
-            try {
+        try {
+            console.log('🔄 Refreshing user profile from AppProvider...');
+
+            // Use the auth slice's refreshUserProfile (which now includes complete profile loading)
+            if (auth.actions.refreshUserProfile) {
+                const result = await auth.actions.refreshUserProfile();
+                console.log('✅ Profile refreshed via auth slice:', result);
+                return result;
+            }
+
+            // Fallback implementation (should rarely be needed now)
+            if (auth.state.currentUser?.uid) {
                 const profileResult = await firestoreService.getUserProfile(auth.state.currentUser.uid);
+                console.log('📋 Profile fetched (fallback):', profileResult);
+
                 if (profileResult.success) {
+                    // Create enhanced user object with profile data
+                    const enhancedUser = {
+                        ...auth.state.currentUser,
+                        displayName: auth.state.currentUser.displayName || profileResult.data.displayName || profileResult.data.name,
+                        firstName: profileResult.data.firstName,
+                        lastName: profileResult.data.lastName,
+                        name: profileResult.data.name || profileResult.data.displayName,
+                        organizationName: profileResult.data.organizationName,
+                        organizationId: profileResult.data.organizationId,
+                        role: profileResult.data.role,
+                    };
+
                     auth.actions.restoreAuth({
-                        user: auth.state.currentUser,
+                        user: enhancedUser,
+                        profile: profileResult.data,
                         accountType: profileResult.data.accountType || 'individual',
                     });
+
+                    console.log('✅ Profile restored with enhanced data');
+                    return profileResult;
                 }
-                return profileResult;
-            } catch (error) {
-                console.error('Error refreshing user profile:', error);
-                throw error;
             }
+
+            throw new Error('No current user or profile data available');
+        } catch (error) {
+            console.error('Error refreshing user profile:', error);
+            throw error;
         }
     };
 

@@ -4,8 +4,11 @@ import React, { useState } from 'react';
 import { useRegistration } from '../hooks/useRegistration';
 import DomainSuggestion from './DomainSuggestion';
 import { isCustomDomain } from '../utils/domainValidation';
+import Link from 'next/link';
+import { Eye, EyeOff, Loader2, User, Building, ChevronDown } from 'lucide-react';
+import { FcGoogle } from "react-icons/fc";
 
-const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
+const RegistrationForm = ({ onSuccess }) => {
     const {
         loading,
         error,
@@ -28,8 +31,25 @@ const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
         preferences: {}
     });
 
+    const [showPassword, setShowPassword] = useState(false);
     const [showDomainSuggestion, setShowDomainSuggestion] = useState(false);
     const [validationErrors, setValidationErrors] = useState({});
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    const accountTypes = [
+        {
+            value: 'individual',
+            label: 'Individual',
+            description: 'Personal projects',
+            icon: User
+        },
+        {
+            value: 'organization',
+            label: 'Organization',
+            description: 'Team collaboration',
+            icon: Building
+        }
+    ];
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -73,6 +93,7 @@ const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
         if (accountType === 'organization') {
             setShowDomainSuggestion(false);
         }
+        setIsDropdownOpen(false);
     };
 
     const handleSuggestUpgrade = () => {
@@ -141,45 +162,85 @@ const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
         );
     }
 
+    const selectedAccountType = accountTypes.find(type => type.value === formData.accountType);
+
     return (
-        <div className="max-w-md mx-auto">
+        <div className="w-full">
+            <div className="text-center mb-8">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
+                <p className="text-base sm:text-lg text-slate-600">Start your testing journey today</p>
+            </div>
+
+            {/* Google Sign Up - Moved to top */}
+            <button
+                type="button"
+                onClick={handleGoogleSignUp}
+                disabled={loading}
+                className="w-full bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 font-medium sm:font-semibold border-2 border-slate-200 rounded px-3 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 sm:gap-3 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base mb-6"
+            >
+                <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="truncate">Continue with Google</span>
+                {loading && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center my-6">
+                <div className="flex-grow border-t border-slate-300"></div>
+                <span className="px-4 text-sm text-slate-500 font-medium bg-white">or</span>
+                <div className="flex-grow border-t border-slate-300"></div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Account Type Selection */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                {/* Account Type Selection - Custom Dropdown */}
+                <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 block">
                         Account Type
                     </label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="relative">
                         <button
                             type="button"
-                            onClick={() => handleAccountTypeChange('individual')}
-                            className={`p-3 border-2 rounded-lg text-left transition-colors ${
-                                formData.accountType === 'individual'
-                                    ? 'border-teal-500 bg-teal-50'
-                                    : 'border-gray-200 hover:border-gray-300'
-                            }`}
+                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-200 rounded text-slate-900 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 bg-white text-left flex items-center justify-between"
                         >
-                            <div className="font-medium">Individual</div>
-                            <div className="text-sm text-gray-500">Personal projects</div>
+                            <div className="flex items-center gap-3">
+                                <selectedAccountType.icon className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600" />
+                                <div>
+                                    <div className="font-medium">{selectedAccountType.label}</div>
+                                    <div className="text-xs text-slate-500">{selectedAccountType.description}</div>
+                                </div>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => handleAccountTypeChange('organization')}
-                            className={`p-3 border-2 rounded-lg text-left transition-colors ${
-                                formData.accountType === 'organization'
-                                    ? 'border-teal-500 bg-teal-50'
-                                    : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                        >
-                            <div className="font-medium">Organization</div>
-                            <div className="text-sm text-gray-500">Team collaboration</div>
-                        </button>
+
+                        {/* Dropdown Options */}
+                        {isDropdownOpen && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+                                {accountTypes.map((type) => (
+                                    <button
+                                        key={type.value}
+                                        type="button"
+                                        onClick={() => handleAccountTypeChange(type.value)}
+                                        className={`w-full px-3 sm:px-4 py-3 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg ${
+                                            formData.accountType === type.value ? 'bg-teal-50 border-l-2 border-l-teal-500' : ''
+                                        }`}
+                                    >
+                                        <type.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${formData.accountType === type.value ? 'text-teal-600' : 'text-slate-500'}`} />
+                                        <div>
+                                            <div className={`font-medium text-sm sm:text-base ${formData.accountType === type.value ? 'text-teal-900' : 'text-slate-900'}`}>
+                                                {type.label}
+                                            </div>
+                                            <div className="text-xs text-slate-500">{type.description}</div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Email Field */}
-                <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <div className="space-y-2">
+                    <label htmlFor="email" className="text-sm font-medium text-slate-700 block">
                         Email Address
                     </label>
                     <input
@@ -187,13 +248,13 @@ const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-teal-500 focus:border-teal-500 ${
-                            validationErrors.email ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="you@example.com"
+                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
+                            validationErrors.email ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
+                        } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        placeholder="name@company.com"
                     />
                     {validationErrors.email && (
-                        <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
+                        <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.email}</p>
                     )}
                 </div>
 
@@ -208,88 +269,99 @@ const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                 )}
 
                 {/* Password Field */}
-                <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <div className="space-y-2">
+                    <label htmlFor="password" className="text-sm font-medium text-slate-700 block">
                         Password
                     </label>
-                    <input
-                        type="password"
-                        id="password"
-                        value={formData.password}
-                        onChange={(e) => handleInputChange('password', e.target.value)}
-                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-teal-500 focus:border-teal-500 ${
-                            validationErrors.password ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="At least 8 characters"
-                    />
+                    <div className="relative">
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            id="password"
+                            value={formData.password}
+                            onChange={(e) => handleInputChange('password', e.target.value)}
+                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
+                                validationErrors.password ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
+                            } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                            placeholder="At least 6 characters"
+                        />
+                        <button
+                            type="button"
+                            className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                            onClick={() => setShowPassword(!showPassword)}
+                        >
+                            {showPassword ? <EyeOff size={18} className="sm:w-5 sm:h-5" /> : <Eye size={18} className="sm:w-5 sm:h-5" />}
+                        </button>
+                    </div>
                     {validationErrors.password && (
-                        <p className="mt-1 text-sm text-red-600">{validationErrors.password}</p>
+                        <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.password}</p>
                     )}
                 </div>
 
                 {/* Display Name */}
-                <div>
-                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
-                        Display Name
+                <div className="space-y-2">
+                    <label htmlFor="displayName" className="text-sm font-medium text-slate-700 block">
+                        Full Name
                     </label>
                     <input
                         type="text"
                         id="displayName"
                         value={formData.displayName}
                         onChange={(e) => handleInputChange('displayName', e.target.value)}
-                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-teal-500 focus:border-teal-500 ${
-                            validationErrors.displayName ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="Your name"
+                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
+                            validationErrors.displayName ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
+                        } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        placeholder="Enter your full name"
                     />
                     {validationErrors.displayName && (
-                        <p className="mt-1 text-sm text-red-600">{validationErrors.displayName}</p>
+                        <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.displayName}</p>
                     )}
                 </div>
 
                 {/* Organization Fields */}
-                {formData.accountType === 'organization' && (
-                    <div className="space-y-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                        <h4 className="font-medium text-gray-900">Organization Details</h4>
-                        
-                        <div>
-                            <label htmlFor="orgName" className="block text-sm font-medium text-gray-700">
-                                Organization Name
-                            </label>
-                            <input
-                                type="text"
-                                id="orgName"
-                                value={formData.organizationData.name}
-                                onChange={(e) => handleOrganizationDataChange('name', e.target.value)}
-                                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-teal-500 focus:border-teal-500 ${
-                                    validationErrors.organizationName ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                                placeholder="Your company name"
-                            />
-                            {validationErrors.organizationName && (
-                                <p className="mt-1 text-sm text-red-600">{validationErrors.organizationName}</p>
-                            )}
-                        </div>
+                <div className="min-h-0">
+                    {formData.accountType === 'organization' && (
+                        <div className="space-y-4 p-4 border border-teal-200 rounded-lg bg-teal-50/50 animate-in slide-in-from-top-2 duration-200">
+                            <h4 className="font-medium text-slate-900">Organization Details</h4>
+                            
+                            <div className="space-y-2">
+                                <label htmlFor="orgName" className="text-sm font-medium text-slate-700 block">
+                                    Organization Name
+                                </label>
+                                <input
+                                    type="text"
+                                    id="orgName"
+                                    value={formData.organizationData.name}
+                                    onChange={(e) => handleOrganizationDataChange('name', e.target.value)}
+                                    className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
+                                        validationErrors.organizationName ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
+                                    } focus:outline-none focus:ring focus:ring-teal-500/10 bg-white`}
+                                    placeholder="Your company name"
+                                />
+                                {validationErrors.organizationName && (
+                                    <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.organizationName}</p>
+                                )}
+                            </div>
 
-                        <div>
-                            <label htmlFor="orgDescription" className="block text-sm font-medium text-gray-700">
-                                Description (Optional)
-                            </label>
-                            <textarea
-                                id="orgDescription"
-                                value={formData.organizationData.description}
-                                onChange={(e) => handleOrganizationDataChange('description', e.target.value)}
-                                rows={3}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-teal-500 focus:border-teal-500"
-                                placeholder="Brief description of your organization..."
-                            />
+                            <div className="space-y-2">
+                                <label htmlFor="orgDescription" className="text-sm font-medium text-slate-700 block">
+                                    Description (Optional)
+                                </label>
+                                <textarea
+                                    id="orgDescription"
+                                    value={formData.organizationData.description}
+                                    onChange={(e) => handleOrganizationDataChange('description', e.target.value)}
+                                    rows={3}
+                                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-200 rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 bg-white resize-none"
+                                    placeholder="Brief description of your organization..."
+                                />
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* Error Display */}
                 {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                         <p className="text-sm text-red-600">{error}</p>
                     </div>
                 )}
@@ -298,51 +370,28 @@ const RegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                 <button
                     type="submit"
                     disabled={loading}
-                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-[#00897B] hover:bg-[#00796B] text-white font-medium sm:font-semibold rounded px-4 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg text-sm sm:text-base"
                 >
                     {loading ? 'Creating Account...' : 'Create Account'}
-                </button>
-
-                {/* Divider */}
-                <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-gray-300" />
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                        <span className="px-2 bg-white text-gray-500">Or</span>
-                    </div>
-                </div>
-
-                {/* Google Sign Up */}
-                <button
-                    type="button"
-                    onClick={handleGoogleSignUp}
-                    disabled={loading}
-                    className="w-full flex justify-center items-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    Continue with Google
+                    {loading && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
                 </button>
 
                 {/* Login Link */}
-                <div className="text-center">
-                    <span className="text-sm text-gray-600">
-                        Already have an account?{' '}
-                        <button
-                            type="button"
-                            onClick={onSwitchToLogin}
-                            className="font-medium text-teal-600 hover:text-teal-500"
-                        >
-                            Sign in
-                        </button>
-                    </span>
-                </div>
+                <p className="text-center text-slate-600 mt-4 sm:mt-6 text-xs sm:text-sm">
+                    Already have an account?{' '}
+                    <Link href="/login" className="text-teal-600 font-medium sm:font-semibold hover:text-teal-700 hover:underline transition-colors">
+                        Sign In
+                    </Link>
+                </p>
             </form>
+
+            {/* Click outside to close dropdown */}
+            {isDropdownOpen && (
+                <div 
+                    className="fixed inset-0 z-0" 
+                    onClick={() => setIsDropdownOpen(false)}
+                />
+            )}
         </div>
     );
 };
