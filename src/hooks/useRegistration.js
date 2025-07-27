@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import firestoreService from '../services/firestoreService';
-import { isCommonEmailProvider } from '../utils/domainValidation';
+import { isCustomDomain, extractDomainName } from '../utils/domainValidation';
 
 export const useRegistration = () => {
     const [loading, setLoading] = useState(false);
@@ -17,6 +17,8 @@ export const useRegistration = () => {
     const [registrationData, setRegistrationData] = useState(null);
 
     const googleProvider = new GoogleAuthProvider();
+    googleProvider.addScope('email');
+    googleProvider.addScope('profile');
 
     const validateRegistrationData = (data) => {
         const errors = {};
@@ -29,33 +31,48 @@ export const useRegistration = () => {
 
         if (!data.password && !data.isGoogleSSO) {
             errors.password = 'Password is required';
-        } else if (!data.isGoogleSSO && data.password.length < 8) {
-            errors.password = 'Password must be at least 8 characters';
+        } else if (!data.isGoogleSSO && data.password.length < 6) {
+            errors.password = 'Password must be at least 6 characters';
         }
 
         if (!data.displayName) {
-            errors.displayName = 'Display name is required';
+            errors.displayName = 'Full name is required';
         }
 
         if (!data.accountType) {
             errors.accountType = 'Please select an account type';
         }
 
-        // Organization-specific validation
-        if (data.accountType === 'organization') {
-            if (isCommonEmailProvider(data.email)) {
-                errors.email = 'Organization accounts require a custom domain email (not Gmail, Yahoo, etc.)';
-            }
-
-            if (!data.organizationData?.name) {
-                errors.organizationName = 'Organization name is required';
-            }
+        // Validate organization industry for organization accounts
+        if (data.accountType === 'organization' && !data.organizationIndustry) {
+            errors.organizationIndustry = 'Please select your organization industry';
         }
 
         return {
             isValid: Object.keys(errors).length === 0,
             errors
-        };
+    };
+    };
+
+    const parseDisplayName = (displayName) => {
+        if (!displayName) return { firstName: '', lastName: '' };
+        
+        const nameParts = displayName.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+        
+        return { firstName, lastName };
+    };
+
+    const determineAccountTypeFromEmail = (email) => {
+        if (!email) return 'individual';
+        
+        // If it's a custom domain (not gmail, yahoo, etc.), suggest organization
+        if (isCustomDomain(email)) {
+            return 'organization';
+        }
+        
+        return 'individual';
     };
 
     const storePendingRegistration = async (userData, authProvider = 'email') => {
@@ -66,6 +83,7 @@ export const useRegistration = () => {
             const pendingData = {
                 accountType: userData.accountType,
                 displayName: userData.displayName,
+                organizationIndustry: userData.organizationIndustry || null, // Store organization industry
                 organizationData: userData.organizationData || null,
                 preferences: userData.preferences || {},
                 authProvider,
@@ -118,7 +136,8 @@ export const useRegistration = () => {
             setRegistrationData({
                 email: userData.email,
                 accountType: userData.accountType,
-                displayName: userData.displayName
+                displayName: userData.displayName,
+                organizationIndustry: userData.organizationIndustry
             });
 
             return {
@@ -129,22 +148,42 @@ export const useRegistration = () => {
 
         } catch (error) {
             console.error('Email registration error:', error);
-            setError(error.message);
+            
+            let errorMessage = 'Registration failed. Please try again.';
+            
+            switch (error.code) {
+                case 'auth/email-already-in-use':
+                    errorMessage = 'An account with this email already exists.';
+                    break;
+                case 'auth/weak-password':
+                    errorMessage = 'Password is too weak. Please choose a stronger password.';
+                    break;
+                case 'auth/invalid-email':
+                    errorMessage = 'Please enter a valid email address.';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage = 'Network error. Please check your connection and try again.';
+                    break;
+                default:
+                    errorMessage = error.message || errorMessage;
+            }
+            
+            setError(errorMessage);
             return {
                 success: false,
-                error: error.message
+                error: errorMessage
             };
         } finally {
             setLoading(false);
         }
     };
 
-    const registerWithGoogle = async (accountTypeData) => {
+    const registerWithGoogle = async (preSelectedAccountType = null) => {
         setLoading(true);
         setError(null);
 
         try {
-            // Sign in with Google
+            // Sign in with Google - this handles account selection
             const result = await signInWithPopup(auth, googleProvider);
             const user = result.user;
 
@@ -152,16 +191,35 @@ export const useRegistration = () => {
                 throw new Error('Google account email is not verified');
             }
 
+            // Determine account type based on email domain or use pre-selected
+            const suggestedAccountType = determineAccountTypeFromEmail(user.email);
+            const accountType = preSelectedAccountType || suggestedAccountType;
+
+            // For custom domain emails, auto-extract organization name
+            let organizationData = null;
+            if (accountType === 'organization') {
+                const domainName = extractDomainName(user.email);
+                organizationData = {
+                    name: domainName || 'My Organization',
+                    description: `Organization for ${domainName || user.email.split('@')[1]}`
+                };
+            }
+
             const userData = {
                 email: user.email,
-                displayName: user.displayName || accountTypeData.displayName,
-                accountType: accountTypeData.accountType,
-                organizationData: accountTypeData.organizationData,
-                preferences: accountTypeData.preferences || {}
+                displayName: user.displayName || user.email.split('@')[0],
+                accountType: accountType,
+                organizationIndustry: accountType === 'organization' ? 'technology' : null, // Default industry for Google SSO organizations
+                organizationData: organizationData,
+                preferences: {},
+                isGoogleSSO: true
             };
 
-            // Validate the data (especially for organization accounts)
-            const validation = validateRegistrationData({ ...userData, isGoogleSSO: true });
+            console.log('Google SSO - Account type determined:', accountType);
+            console.log('Google SSO - User data:', userData);
+
+            // Validate the data
+            const validation = validateRegistrationData(userData);
             if (!validation.isValid) {
                 throw new Error(Object.values(validation.errors)[0]);
             }
@@ -169,18 +227,108 @@ export const useRegistration = () => {
             // Store pending registration data
             await storePendingRegistration(userData, 'google');
 
-            // Complete registration immediately since Google email is verified
-            const completionResult = await completeRegistration();
-
-            return {
-                success: true,
-                user: user,
-                needsVerification: false,
-                completionResult
-            };
+            // For individual accounts, complete registration immediately
+            // For organization accounts, let them provide org info first
+            if (accountType === 'individual') {
+                const completionResult = await completeRegistration();
+                return {
+                    success: true,
+                    user: user,
+                    needsVerification: false,
+                    completionResult,
+                    accountType: accountType
+                };
+            } else {
+                // Organization account - return success but don't complete yet
+                return {
+                    success: true,
+                    user: user,
+                    needsVerification: false,
+                    needsOrganizationInfo: true,
+                    accountType: accountType
+                };
+            }
 
         } catch (error) {
             console.error('Google registration error:', error);
+            
+            let errorMessage = 'Google sign-up failed. Please try again.';
+            
+            switch (error.code) {
+                case 'auth/popup-closed-by-user':
+                    errorMessage = 'Sign-up was cancelled. Please try again.';
+                    break;
+                case 'auth/popup-blocked':
+                    errorMessage = 'Popup was blocked. Please allow popups and try again.';
+                    break;
+                case 'auth/account-exists-with-different-credential':
+                    errorMessage = 'An account already exists with this email using a different sign-in method.';
+                    break;
+                default:
+                    errorMessage = error.message || errorMessage;
+            }
+            
+            setError(errorMessage);
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // This function now handles the verification completion differently based on account type
+    const completeEmailVerification = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const userId = auth.currentUser?.uid;
+            if (!userId) {
+                throw new Error('No authenticated user found');
+            }
+
+            // Get pending registration data
+            const pendingResult = await firestoreService.getDocument('pendingRegistrations', userId);
+            if (!pendingResult.success) {
+                throw new Error('No pending registration found');
+            }
+
+            const pendingData = pendingResult.data;
+            
+            console.log('Email verification completed for account type:', pendingData.accountType);
+
+            // For individual accounts, complete registration and sign out
+            if (pendingData.accountType === 'individual') {
+                const registrationResult = await completeRegistration();
+                if (registrationResult.success) {
+                    // Sign out user after successful registration
+                    await auth.signOut();
+                    return {
+                        success: true,
+                        registrationComplete: true,
+                        message: 'Registration completed successfully! Please log in to continue.',
+                        accountType: pendingData.accountType
+                    };
+                }
+                return registrationResult;
+            } else {
+                // For organization accounts, just return success - they need to provide org info
+                return {
+                    success: true,
+                    needsOrganizationInfo: true,
+                    accountType: pendingData.accountType,
+                    data: {
+                        displayName: pendingData.displayName,
+                        email: auth.currentUser.email,
+                        organizationIndustry: pendingData.organizationIndustry
+                    }
+                };
+            }
+
+        } catch (error) {
+            console.error('Email verification completion error:', error);
             setError(error.message);
             return {
                 success: false,
@@ -191,8 +339,7 @@ export const useRegistration = () => {
         }
     };
 
-    // Add this debugging to your completeRegistration method in useRegistration.js
-    const completeRegistration = async () => {
+    const completeRegistration = async (organizationData = null) => {
         setLoading(true);
         setError(null);
 
@@ -210,23 +357,42 @@ export const useRegistration = () => {
 
             const pendingData = pendingResult.data;
             const currentUser = auth.currentUser;
+            const { firstName, lastName } = parseDisplayName(pendingData.displayName);
 
             console.log('=== REGISTRATION DEBUG ===');
             console.log('Pending data from DB:', pendingData);
             console.log('Account type from pending data:', pendingData.accountType);
+            console.log('Organization industry from pending data:', pendingData.organizationIndustry);
 
-            // Prepare user data - EXPLICITLY preserve account_type
+            // Use organization data if provided (for organization flow)
+            const finalOrganizationData = organizationData || pendingData.organizationData;
+
+            // Validate organization data for organization accounts
+            if (pendingData.accountType === 'organization' && !finalOrganizationData?.name) {
+                throw new Error('Organization information is required for organization accounts');
+            }
+
+            // Prepare user data with proper name parsing
             const userData = {
                 user_id: userId,
                 email: currentUser.email,
                 display_name: pendingData.displayName,
-                account_type: pendingData.accountType,  // Make sure this is preserved
+                first_name: firstName,
+                last_name: lastName,
+                account_type: pendingData.accountType,
+                organization_industry: pendingData.organizationIndustry, // Include organization industry
                 preferences: pendingData.preferences || {},
-                authProvider: pendingData.authProvider
+                contact_info: {
+                    email: currentUser.email,
+                    phone: null
+                },
+                profile_picture: currentUser.photoURL || null,
+                account_memberships: []
             };
 
             console.log('User data being sent to createOrUpdateUserProfile:', userData);
-            console.log('Account type in userData:', userData.account_type);
+            console.log('Final account type:', userData.account_type);
+            console.log('Organization industry:', userData.organization_industry);
 
             // Create user profile
             const userResult = await firestoreService.createOrUpdateUserProfile(userData);
@@ -235,13 +401,31 @@ export const useRegistration = () => {
             }
 
             console.log('User profile creation result:', userResult);
-            console.log('Final user data account_type:', userResult.data?.account_type);
 
             let accountResult = null;
             let orgResult = null;
 
             // Create account based on type
-            if (pendingData.accountType === 'individual') {
+            if (pendingData.accountType === 'organization') {
+                console.log('Creating organization account...');
+                
+                // Enhanced organization data with industry
+                const enhancedOrgData = {
+                    name: finalOrganizationData.name,
+                    description: finalOrganizationData.description || '',
+                    industry: pendingData.organizationIndustry, // Include industry in organization data
+                    settings: finalOrganizationData.settings || {}
+                };
+                
+                orgResult = await firestoreService.createOrganization(enhancedOrgData);
+
+                if (!orgResult.success) {
+                    throw new Error(`Failed to create organization: ${orgResult.error.message}`);
+                }
+                
+                console.log('Organization created successfully:', orgResult.data);
+            } else {
+                // Create individual account for individual users
                 console.log('Creating individual account...');
                 const individualData = {
                     user_id: userId,
@@ -270,18 +454,6 @@ export const useRegistration = () => {
                     individualData,
                     userId
                 );
-
-            } else if (pendingData.accountType === 'organization') {
-                console.log('Creating organization account...');
-                orgResult = await firestoreService.createOrganization({
-                    name: pendingData.organizationData.name,
-                    description: pendingData.organizationData.description || '',
-                    settings: pendingData.organizationData.settings || {}
-                });
-
-                if (!orgResult.success) {
-                    throw new Error(`Failed to create organization: ${orgResult.error.message}`);
-                }
             }
 
             // Create subscription
@@ -320,11 +492,19 @@ export const useRegistration = () => {
             setPendingVerification(false);
             setRegistrationData(null);
 
+            // Sign out user after successful registration
+            await auth.signOut();
+
             console.log('=== REGISTRATION COMPLETE ===');
-            console.log('Final account type should be:', pendingData.accountType);
+            console.log('Final account type:', userData.account_type);
+            console.log('Organization industry:', userData.organization_industry);
+            console.log('Organization created:', !!orgResult);
 
             return {
                 success: true,
+                registrationComplete: true,
+                accountType: userData.account_type,
+                message: 'Registration completed successfully! Please log in to continue.',
                 data: {
                     user: userResult.data,
                     account: accountResult?.data,
@@ -332,7 +512,6 @@ export const useRegistration = () => {
                     subscription: subscriptionResult.data
                 }
             };
-
         } catch (error) {
             console.error('Registration completion error:', error);
             setError(error.message);
@@ -388,11 +567,13 @@ export const useRegistration = () => {
         registerWithEmail,
         registerWithGoogle,
         completeRegistration,
+        completeEmailVerification, // New function for email verification completion
         resendVerificationEmail,
         clearError,
         clearRegistrationState,
 
         // Utilities
-        validateRegistrationData
+        validateRegistrationData,
+        determineAccountTypeFromEmail
     };
-};
+}

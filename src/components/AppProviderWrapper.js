@@ -43,6 +43,7 @@ const ProtectedRouteContent = ({ children }) => {
     const { needsSuiteCreation, shouldShowSuiteModal, createSuite, suiteCreationBlocked } = useSuiteAccess();
     const [appReady, setAppReady] = useState(false);
     const [authMode, setAuthMode] = useState('login');
+    const [suiteCreationInProgress, setSuiteCreationInProgress] = useState(false); // Track suite creation
 
     // Helper functions
     const needsEmailVerification = () => {
@@ -118,69 +119,113 @@ const ProtectedRouteContent = ({ children }) => {
             return;
         }
 
-        // Check if suite creation is needed
-        if (isFullyAuthenticated() && needsSuiteCreation && !suiteCreationBlocked && shouldShowSuiteModal) {
-            // Don't open modal if it's already open or if we just created a suite
+        // FIX 3: Improved suite creation logic
+        const hasAnySuites = state.suites.testSuites && state.suites.testSuites.length > 0;
+        const hasActiveSuite = state.suites.activeSuite;
+
+        console.log('Suite readiness check:', {
+            isFullyAuthenticated: isFullyAuthenticated(),
+            hasAnySuites,
+            hasActiveSuite,
+            needsSuiteCreation,
+            suiteCreationBlocked,
+            shouldShowSuiteModal,
+            suiteCreationInProgress
+        });
+
+        // If user is authenticated but has no suites and isn't blocked, show suite creation modal
+        if (isFullyAuthenticated() && !hasAnySuites && !suiteCreationBlocked && !suiteCreationInProgress) {
+            // Don't open modal if it's already open
             if (!state.ui.modals?.createSuite?.isOpen) {
+                console.log('Opening suite creation modal - no suites found');
                 actions.ui.openModal('createSuite');
             }
             setAppReady(false);
             return;
         }
 
+        // If user has suites but no active suite, activate the first one
+        if (isFullyAuthenticated() && hasAnySuites && !hasActiveSuite && !suiteCreationInProgress) {
+            console.log('Activating first available suite:', state.suites.testSuites[0]);
+            actions.suites.activateSuite(state.suites.testSuites[0]);
+            // Continue to set app as ready
+        }
+
         // All checks passed - close any open modals and set ready
-        if (state.ui.modals?.createSuite?.isOpen) {
+        if (state.ui.modals?.createSuite?.isOpen && (hasAnySuites || suiteCreationBlocked)) {
+            console.log('Closing suite creation modal - conditions met');
             actions.ui.closeModal('createSuite');
         }
-        setAppReady(true);
+
+        // App is ready if user is authenticated and either has suites or creation is blocked
+        if (isFullyAuthenticated() && (hasAnySuites || suiteCreationBlocked)) {
+            setAppReady(true);
+        } else {
+            setAppReady(false);
+        }
     }, [
         state.auth.isInitialized,
         state.auth.loading,
-        state.auth.profileLoaded, // Add this dependency
+        state.auth.profileLoaded,
         isAuthenticated,
         state.auth.currentUser?.uid,
         state.auth.currentUser?.emailVerified,
         state.subscription.loading,
         state.suites.loading,
+        state.suites.testSuites?.length, // Track changes in suite count
+        state.suites.activeSuite?.id, // Track active suite changes
         needsSuiteCreation,
         suiteCreationBlocked,
         shouldShowSuiteModal,
         state.subscription.isTrialActive,
         state.subscription.trialEndsAt,
+        suiteCreationInProgress, // Track suite creation progress
     ]);
 
     const handleSuiteCreated = async (newSuite) => {
         try {
+            setSuiteCreationInProgress(true);
+            console.log('Creating suite with data:', newSuite);
+
             const result = await createSuite({
                 ...newSuite,
                 ownerType: state.auth.accountType || 'individual',
                 ownerId: state.auth.currentUser?.uid,
+                organizationId: state.auth.currentUser?.organizationId || null,
                 status: 'active',
             });
 
             if (result.success) {
+                console.log('Suite created successfully:', result.data);
+
                 // Close modal immediately
                 actions.ui.closeModal('createSuite');
-
-                // Activate the suite
-                actions.suites.activateSuite(result.data);
-
-                // Set app as ready to prevent re-rendering loops
-                setAppReady(true);
 
                 // Show success message
                 toast.success(`Welcome to ${newSuite.name}! Your workspace is ready.`, { duration: 5000 });
 
-                // Force a small delay to ensure state is stable before proceeding
+                // The suite should already be added to the state via the createSuite action
+                // The real-time subscription will also pick it up, but the action handles immediate state update
+
+                // Small delay to ensure state propagation
                 setTimeout(() => {
-                    setAppReady(true);
+                    setSuiteCreationInProgress(false);
+
+                    // Check if we have suites now and set app ready
+                    if (state.suites.testSuites?.length > 0) {
+                        setAppReady(true);
+                    }
                 }, 100);
+
             } else {
+                console.error('Suite creation failed:', result.error);
                 toast.error(result.error?.message || 'Failed to create suite', { duration: 5000 });
+                setSuiteCreationInProgress(false);
             }
         } catch (error) {
             console.error('Suite creation error:', error);
             toast.error(error.message || 'An unexpected error occurred', { duration: 5000 });
+            setSuiteCreationInProgress(false);
         }
     };
 
@@ -198,13 +243,14 @@ const ProtectedRouteContent = ({ children }) => {
         if (needsEmailVerification()) return "Redirecting to email verification...";
         if (state.subscription.loading) return "Loading subscription info...";
         if (state.suites.loading) return "Loading workspaces...";
+        if (suiteCreationInProgress) return "Creating your workspace...";
         if (isLoading) return "Preparing your workspace...";
         return "Loading...";
     };
 
     // Show loading when necessary
     if (!state.auth.isInitialized ||
-        (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
+        (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading || suiteCreationInProgress))) {
         return <LoadingScreen message={getLoadingMessage()} />;
     }
 
@@ -230,7 +276,13 @@ const ProtectedRouteContent = ({ children }) => {
     }
 
     // Show suite creation modal
-    if (isFullyAuthenticated() && needsSuiteCreation && shouldShowSuiteModal && !suiteCreationBlocked && !appReady) {
+    const shouldShowModal = isFullyAuthenticated() &&
+        (!state.suites.testSuites || state.suites.testSuites.length === 0) &&
+        !suiteCreationBlocked &&
+        !appReady &&
+        !suiteCreationInProgress;
+
+    if (shouldShowModal) {
         return (
             <>
                 <CreateSuiteModal

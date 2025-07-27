@@ -158,28 +158,63 @@ class FirestoreService {
     }
 
     // Fixed createOrUpdateUserProfile method in firestoreService.js
+    // Add this method to your FirestoreService class to fix the user profile creation
+
+    // Fixed createOrUpdateUserProfile method in firestoreService.js
+    // Fixed createOrUpdateUserProfile method in FirestoreService
     async createOrUpdateUserProfile(userData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
+
         try {
             const userRef = this.createDocRef('users', userId);
             const userDoc = await getDoc(userRef);
-
             const currentUser = this.getCurrentUser();
+
+            // CRITICAL: Check if user is part of an organization FIRST
+            const orgMembershipQuery = query(
+                this.createCollectionRef(`userMemberships/${userId}/organizations`),
+                where('status', '==', 'active')
+            );
+            const orgMembershipSnap = await getDocs(orgMembershipQuery);
+            const isOrgMember = !orgMembershipSnap.empty;
+
+            // Get organization ID if user is organization member
+            let userOrganizationId = null;
+            if (isOrgMember) {
+                const orgMembershipDoc = orgMembershipSnap.docs[0];
+                userOrganizationId = orgMembershipDoc.data().org_id;
+                console.log('User is organization member, org_id:', userOrganizationId);
+            }
+
+            // CRITICAL: Override account_type if user is organization member
+            let finalAccountType = userData.account_type || 'individual';
+            if (isOrgMember || userData.account_type === 'organization') {
+                finalAccountType = 'organization';
+            }
+
+            console.log('=== USER PROFILE DEBUG ===');
+            console.log('Input userData.account_type:', userData.account_type);
+            console.log('isOrgMember:', isOrgMember);
+            console.log('userOrganizationId:', userOrganizationId);
+            console.log('Final account_type:', finalAccountType);
 
             if (userDoc.exists()) {
                 console.log('User document exists, updating...', { userId, userData });
 
-                // FIXED: Include 'account_type' in allowed fields for updates
                 const allowedFields = [
                     'preferences',
                     'contact_info',
                     'profile_picture',
                     'display_name',
+                    'first_name',
+                    'last_name',
                     'account_memberships',
-                    'account_type'  // This was already here, which is good
+                    'account_type',
+                    'organizationId', // Add this field
+                    'organizationName' // Add this field
                 ];
 
                 const filteredData = {};
@@ -189,36 +224,79 @@ class FirestoreService {
                     }
                 });
 
+                // ENFORCE correct account_type and organizationId
+                filteredData.account_type = finalAccountType;
+                if (userOrganizationId) {
+                    filteredData.organizationId = userOrganizationId;
+
+                    // Optionally get organization name
+                    try {
+                        const orgDoc = await getDoc(this.createDocRef('organizations', userOrganizationId));
+                        if (orgDoc.exists()) {
+                            filteredData.organizationName = orgDoc.data().name;
+                        }
+                    } catch (error) {
+                        console.warn('Could not fetch organization name:', error);
+                    }
+                }
+
                 const updateData = this.addCommonFields(filteredData, true);
                 await updateDoc(userRef, updateData);
 
-                // Return the updated data
                 const existingData = userDoc.data();
                 const finalData = {
                     user_id: userId,
                     email: currentUser?.email,
-                    ...existingData,  // Keep existing data
-                    ...filteredData   // Override with new data
+                    ...existingData,
+                    ...filteredData
                 };
 
+                console.log('Updated user profile with account_type:', finalData.account_type);
+                console.log('Updated user profile with organizationId:', finalData.organizationId);
                 return { success: true, data: { id: userId, ...finalData } };
 
             } else {
                 console.log('Creating new user document...', { userId, userData });
 
-                // FIXED: For new users, preserve the account_type from userData
+                // Parse name for new users
+                const displayName = userData.display_name || '';
+                const nameParts = displayName.trim().split(' ');
+                const firstName = userData.first_name || nameParts[0] || '';
+                const lastName = userData.last_name || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
+
                 const createData = this.addCommonFields({
                     user_id: userId,
                     email: currentUser?.email,
-                    display_name: userData.display_name,
-                    account_type: userData.account_type,  // Explicitly preserve this
+                    display_name: displayName,
+                    first_name: firstName,
+                    last_name: lastName,
+                    account_type: finalAccountType, // Use the corrected account type
+                    organizationId: userOrganizationId, // CRITICAL: Add organization ID
+                    organizationName: null, // Will be populated if org exists
                     preferences: userData.preferences || {},
-                    contact_info: userData.contact_info || {},
-                    profile_picture: userData.profile_picture || null,
+                    contact_info: userData.contact_info || {
+                        email: currentUser?.email,
+                        phone: null
+                    },
+                    profile_picture: userData.profile_picture || currentUser?.photoURL || null,
                     account_memberships: userData.account_memberships || []
                 });
 
+                // Get organization name if user is org member
+                if (userOrganizationId) {
+                    try {
+                        const orgDoc = await getDoc(this.createDocRef('organizations', userOrganizationId));
+                        if (orgDoc.exists()) {
+                            createData.organizationName = orgDoc.data().name;
+                        }
+                    } catch (error) {
+                        console.warn('Could not fetch organization name during user creation:', error);
+                    }
+                }
+
                 console.log('Final createData before setDoc:', createData);
+                console.log('New user account_type:', createData.account_type);
+                console.log('New user organizationId:', createData.organizationId);
 
                 await setDoc(userRef, createData);
                 return { success: true, data: { id: userId, ...createData } };
@@ -253,7 +331,6 @@ class FirestoreService {
         return await this.getDocument('users', targetUserId);
     }
     // Updated createOrganization method in FirestoreService
-
     async createOrganization(orgData) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -268,48 +345,49 @@ class FirestoreService {
 
             const batch = writeBatch(this.db);
 
-            // Generate organization ID if not provided
+            // Generate organization ID
             const orgId = orgData.orgId || doc(this.createCollectionRef('organizations')).id;
             const orgRef = this.createDocRef('organizations', orgId);
 
-            // Prepare organization data with required fields
+            // Prepare organization data
             const organizationData = this.addCommonFields({
                 name: orgData.name,
                 description: orgData.description || '',
-                ownerId: userId, // Ensure ownerId is set
+                ownerId: userId,
                 settings: orgData.settings || {},
                 ...(orgData.customDomain && { customDomain: orgData.customDomain })
             });
 
-            console.log('Setting organization document with data:', organizationData);
             batch.set(orgRef, organizationData);
 
-            // Create member document for the creator with Admin role
+            // Create member document
             const memberRef = this.createDocRef('organizations', orgId, 'members', userId);
             const memberData = this.addCommonFields({
                 user_id: userId,
-                role: 'Admin', // Set as Admin for organization creator
+                role: 'Admin',
                 status: 'active',
                 joined_at: serverTimestamp()
             });
 
-            console.log('Setting member document with data:', memberData);
             batch.set(memberRef, memberData);
 
             // Create user membership document
             const userMembershipRef = this.createDocRef('userMemberships', userId, 'organizations', orgId);
             const userMembershipData = this.addCommonFields({
                 user_id: userId,
-                role: 'Admin', // Set as Admin for organization creator
+                role: 'Admin',
                 org_id: orgId,
                 status: 'active'
             });
 
-            console.log('Setting user membership document with data:', userMembershipData);
             batch.set(userMembershipRef, userMembershipData);
 
-            // Execute the batch
-            console.log('Executing batch write...');
+            // Update user profile to set account_type: "organization"
+            const userRef = this.createDocRef('users', userId);
+            const userUpdateData = this.addCommonFields({ account_type: 'organization' }, true);
+            batch.update(userRef, userUpdateData);
+
+            // Execute batch
             await batch.commit();
 
             console.log('Organization created successfully with ID:', orgId);
@@ -321,7 +399,6 @@ class FirestoreService {
                     memberRole: 'Admin'
                 }
             };
-
         } catch (error) {
             console.error('Error in createOrganization:', error);
             return this.handleFirestoreError(error, 'create organization');
@@ -336,6 +413,16 @@ class FirestoreService {
 
         if (!suiteData.name || !['individual', 'organization'].includes(suiteData.ownerType) || !suiteData.ownerId) {
             return { success: false, error: { message: 'Invalid test suite data: name, ownerType, and ownerId required' } };
+        }
+
+        const userProfile = await this.getUserProfile(userId);
+        if (!userProfile.success) {
+            return { success: false, error: { message: 'User profile not found' } };
+        }
+
+        // Prevent organization users from creating individual suites
+        if (suiteData.ownerType === 'individual' && userProfile.data.account_type === 'organization') {
+            return { success: false, error: { message: 'Organization users cannot create individual-owned test suites' } };
         }
 
         if (suiteData.ownerType === 'organization') {

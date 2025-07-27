@@ -19,30 +19,46 @@ export const useSuiteAccess = () => {
 
     // Add comprehensive safety checks for suites state
     const testSuites = state?.suites?.testSuites || [];
-    const hasCreatedSuite = state?.suites?.hasCreatedSuite || false;
+    const hasCreatedSuite = state?.suites?.hasCreatedSuite || testSuites.length > 0;
     const activeSuite = state?.suites?.activeSuite || null;
     const isAuthenticated = state?.auth?.isAuthenticated || false;
     
     const suiteCreationBlocked = testSuites.length >= planLimits.maxSuites && isAuthenticated;
 
-    return {
-        // State
-        hasCreatedSuite,
-        suiteCreationBlocked,
-        activeSuite,
-
-        // Actions
-        createSuite: async (suiteData) => {
+    // Enhanced createSuite function with better error handling and state management
+    const createSuite = async (suiteData) => {
+        try {
+            console.log('useSuiteAccess: Creating suite with data:', suiteData);
+            
             if (suiteCreationBlocked) {
-                return { success: false, error: `Cannot create suite: Maximum limit of ${planLimits.maxSuites} suites reached.` };
+                const error = `Cannot create suite: Maximum limit of ${planLimits.maxSuites} suites reached.`;
+                console.error('useSuiteAccess:', error);
+                return { success: false, error: { message: error } };
             }
             
-            // Add safety check for actions
+            // Enhanced safety check for actions
             if (!actions?.suites?.createSuite) {
-                return { success: false, error: 'Suite creation action not available' };
+                const error = 'Suite creation action not available. Please refresh the page and try again.';
+                console.error('useSuiteAccess:', error);
+                console.log('Available suite actions:', Object.keys(actions?.suites || {}));
+                return { success: false, error: { message: error } };
             }
             
-            // Fixed: Use the correct createSuite action from your suite slice
+            // Validate required authentication state
+            if (!state?.auth?.currentUser?.uid) {
+                const error = 'User authentication required to create a suite';
+                console.error('useSuiteAccess:', error);
+                return { success: false, error: { message: error } };
+            }
+
+            // Validate suite data
+            if (!suiteData?.name?.trim()) {
+                const error = 'Suite name is required';
+                console.error('useSuiteAccess:', error);
+                return { success: false, error: { message: error } };
+            }
+            
+            // Use the createSuite action from your suite slice
             const result = await actions.suites.createSuite(
                 suiteData, 
                 state?.auth || {}, 
@@ -50,15 +66,54 @@ export const useSuiteAccess = () => {
                 actions?.ui || {}
             );
             
-            // Note: The suite slice already handles updating the state in the reducer,
-            // so we don't need to manually update it here
+            console.log('useSuiteAccess: Suite creation result:', result);
+            
+            if (result.success) {
+                const createdSuite = result.data;
+                
+                // The suite should already be added to state via the createSuite action
+                // But let's ensure it's activated if no other suite is active
+                if (!activeSuite || testSuites.length === 0) {
+                    console.log('useSuiteAccess: Activating newly created suite');
+                    if (actions.suites.activateSuite) {
+                        actions.suites.activateSuite(createdSuite);
+                    }
+                }
+                
+                // Mark that user has created a suite (if action exists)
+                if (actions.suites.markSuiteCreated) {
+                    actions.suites.markSuiteCreated();
+                }
+                
+                return result;
+            }
+            
             return result;
-        },
+        } catch (error) {
+            console.error('useSuiteAccess: Error creating suite:', error);
+            return { 
+                success: false, 
+                error: { 
+                    message: error.message || 'An unexpected error occurred while creating the suite' 
+                } 
+            };
+        }
+    };
+
+    return {
+        // State
+        hasCreatedSuite,
+        suiteCreationBlocked,
+        activeSuite,
+        testSuites,
+
+        // Actions
+        createSuite,
         openCreateSuiteModal: () => actions?.ui?.openModal?.('createSuite'),
 
         // Computed
-        needsSuiteCreation: !hasCreatedSuite && isAuthenticated,
-        canAccessApp: hasCreatedSuite && activeSuite,
-        shouldShowSuiteModal: suiteCreationBlocked || (!hasCreatedSuite && isAuthenticated),
+        needsSuiteCreation: testSuites.length === 0 && isAuthenticated,
+        canAccessApp: testSuites.length > 0 && activeSuite,
+        shouldShowSuiteModal: !suiteCreationBlocked && testSuites.length === 0 && isAuthenticated,
     };
 };

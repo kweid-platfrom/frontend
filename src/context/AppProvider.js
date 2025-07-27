@@ -132,8 +132,7 @@ export const AppProvider = ({ children }) => {
         return auth.actions.initializeAuth();
     };
 
-    // In your AppProvider, replace the refreshUserProfile function with this:
-
+    // Fixed refreshUserProfile function
     const refreshUserProfile = async () => {
         try {
             console.log('🔄 Refreshing user profile from AppProvider...');
@@ -151,7 +150,7 @@ export const AppProvider = ({ children }) => {
                 console.log('📋 Profile fetched (fallback):', profileResult);
 
                 if (profileResult.success) {
-                    // Create enhanced user object with profile data
+                    // Create enhanced user object with profile data INCLUDING organizationId
                     const enhancedUser = {
                         ...auth.state.currentUser,
                         displayName: auth.state.currentUser.displayName || profileResult.data.displayName || profileResult.data.name,
@@ -159,14 +158,24 @@ export const AppProvider = ({ children }) => {
                         lastName: profileResult.data.lastName,
                         name: profileResult.data.name || profileResult.data.displayName,
                         organizationName: profileResult.data.organizationName,
-                        organizationId: profileResult.data.organizationId,
+                        organizationId: profileResult.data.organizationId, // CRITICAL: Include this
+                        orgId: profileResult.data.organizationId, // Alternative field name
                         role: profileResult.data.role,
+                        accountType: profileResult.data.account_type, // Use the correct field name
                     };
+
+                    // Log the enhanced user for debugging
+                    console.log('Enhanced user object:', {
+                        uid: enhancedUser.uid,
+                        accountType: enhancedUser.accountType,
+                        organizationId: enhancedUser.organizationId,
+                        orgId: enhancedUser.orgId
+                    });
 
                     auth.actions.restoreAuth({
                         user: enhancedUser,
                         profile: profileResult.data,
-                        accountType: profileResult.data.accountType || 'individual',
+                        accountType: profileResult.data.account_type || 'individual',
                     });
 
                     console.log('✅ Profile restored with enhanced data');
@@ -232,9 +241,11 @@ export const AppProvider = ({ children }) => {
         console.log('Auth state changed:', {
             isAuthenticated: auth.state.isAuthenticated,
             currentUser: auth.state.currentUser?.uid,
+            accountType: auth.state.accountType,
+            organizationId: auth.state.currentUser?.organizationId,
             authInitialized: auth.state.isInitialized,
             authLoading: auth.state.loading,
-            profileLoaded: auth.state.profileLoaded, // Add this for debugging
+            profileLoaded: auth.state.profileLoaded,
             subscriptionLoading: subscription.state.loading,
             suiteSubscriptionActive,
         });
@@ -265,19 +276,47 @@ export const AppProvider = ({ children }) => {
             const maxRetries = 3;
             const retryDelay = 2000;
 
+            // Replace the setupSuiteSubscription function in your AppProvider with this:
+
             const setupSuiteSubscription = () => {
                 handleFirebaseOperation(
                     () => new Promise((resolve, reject) => {
                         console.log(`Setting up suite subscription (attempt ${retryCount + 1}/${maxRetries + 1})`);
-                        unsubscribeSuitesRef.current = firestoreService.subscribeToUserTestSuites(
+
+                        const currentUser = auth.state.currentUser;
+                        const accountType = auth.state.accountType || currentUser?.accountType;
+
+                        console.log('Subscription setup details:', {
+                            accountType,
+                            organizationId: currentUser?.organizationId,
+                            uid: currentUser?.uid
+                        });
+
+                        // ✅ FIXED: Always use subscribeToUserTestSuites - it handles both individual and organization suites
+                        console.log('Setting up suite subscription for user:', currentUser?.uid);
+                        const subscriptionMethod = firestoreService.subscribeToUserTestSuites(
                             (fetchedSuites) => {
                                 const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
-                                console.log('Suites fetched successfully, count:', safeSuites.length,
-                                    'suites:', safeSuites.map(s => ({ id: s.id, name: s.name })));
+                                console.log('Suites fetched successfully:', {
+                                    count: safeSuites.length,
+                                    accountType,
+                                    suites: safeSuites.map(s => ({
+                                        id: s.id,
+                                        name: s.name,
+                                        ownerType: s.ownerType,
+                                        ownerId: s.ownerId,
+                                        organizationId: s.organizationId
+                                    }))
+                                });
                                 resolve(safeSuites);
                             },
-                            (error) => reject(error)
+                            (error) => {
+                                console.error('Suite subscription error:', error);
+                                reject(error);
+                            }
                         );
+
+                        unsubscribeSuitesRef.current = subscriptionMethod;
                     }),
                     'Suites loaded successfully',
                     (errorMessage) => {
@@ -293,6 +332,12 @@ export const AppProvider = ({ children }) => {
                         setSuitesLoaded(true);
                         setSuiteSubscriptionActive(true);
                         retryCount = 0;
+
+                        // Auto-activate first suite if no active suite and suites exist
+                        if (result.data.length > 0 && !suites.state.activeSuite) {
+                            console.log('Auto-activating first suite:', result.data[0].name);
+                            suites.actions.activateSuite(result.data[0]);
+                        }
                     } else if (suites.state.testSuites.length === 0 && retryCount < maxRetries) {
                         retryCount++;
                         console.log(`Retrying suite subscription in ${retryDelay * retryCount}ms (attempt ${retryCount}/${maxRetries})`);
@@ -353,7 +398,16 @@ export const AppProvider = ({ children }) => {
             setSuitesLoaded(true);
             setSuiteSubscriptionActive(false);
         }
-    }, [auth.state.isInitialized, auth.state.isAuthenticated, auth.state.currentUser?.uid, subscription.state.loading, subscription.state.isTrialActive, subscription.state.isSubscriptionActive]);
+    }, [
+        auth.state.isInitialized,
+        auth.state.isAuthenticated,
+        auth.state.currentUser?.uid,
+        auth.state.accountType, // Added this dependency
+        auth.state.currentUser?.organizationId, // Added this dependency
+        subscription.state.loading,
+        subscription.state.isTrialActive,
+        subscription.state.isSubscriptionActive
+    ]);
 
     useEffect(() => {
         if (!auth.state.isAuthenticated || !suites.state.activeSuite?.id || !suitesLoaded || !suiteSubscriptionActive) {
@@ -537,29 +591,6 @@ export const useApp = () => {
         throw new Error('useApp must be used within an AppProvider');
     }
     return context;
-};
-
-// Enhanced useAuth hook that uses the AppProvider context
-export const useAuth = () => {
-    const { state, actions } = useApp();
-    return {
-        // State
-        currentUser: state.auth.currentUser,
-        isAuthenticated: state.auth.isAuthenticated,
-        accountType: state.auth.accountType,
-        loading: state.auth.loading,
-        error: state.auth.error,
-        isInitialized: state.auth.isInitialized,
-        profileLoaded: state.auth.profileLoaded, // Add profileLoaded to the useAuth hook
-        // Actions
-        logout: actions.auth.logout,
-        initializeAuth: actions.auth.initializeAuth,
-        refreshUserProfile: actions.auth.refreshUserProfile,
-        // Also expose the original auth slice actions if needed
-        signOut: actions.auth.signOut,
-        clearAuthState: actions.auth.clearAuthState,
-        restoreAuth: actions.auth.restoreAuth,
-    };
 };
 
 export default AppProvider;

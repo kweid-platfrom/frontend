@@ -6,23 +6,45 @@ import { auth } from '../../config/firebase';
 import RegistrationForm from '../RegistrationForm';
 import EmailVerificationScreen from '../EmailVerificationScreen';
 import AccountTypeSelector from '../AccountTypeSelector';
+import OrganizationInfoForm from '../OrganizationForm';
 import { useRegistration } from '../../hooks/useRegistration';
 import { Loader2 } from 'lucide-react';
 import BackgroundDecorations from "@/components/BackgroundDecorations";
 import "../../app/globals.css";
 
 const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
-    const [currentStep, setCurrentStep] = useState('register'); // 'register', 'verify', 'accountType', 'complete'
+    const [currentStep, setCurrentStep] = useState('register'); // 'register', 'verify', 'accountType', 'organizationInfo', 'complete'
     const [userEmail, setUserEmail] = useState('');
-    const [ setIsGoogleSSO] = useState(false);
-    
+    const [userDisplayName, setUserDisplayName] = useState('');
+    const [setIsGoogleSSO] = useState(false);
+
     const {
         pendingVerification,
         registerWithGoogle,
+        completeRegistration,
         loading,
         error,
         clearRegistrationState
     } = useRegistration();
+
+    // Default handlers if not provided as props
+    const handleRegistrationCompleteDefault = (result) => {
+        console.log('Registration completed successfully:', result);
+        // Default behavior - you can redirect to dashboard or show success
+        // window.location.href = '/dashboard'; // or use your router
+        alert('Registration completed successfully!'); // Temporary - replace with proper handling
+    };
+
+    const handleSwitchToLoginDefault = () => {
+        console.log('Switching to login');
+        // Default behavior - you can redirect to login page
+        // window.location.href = '/login'; // or use your router
+        alert('Redirecting to login...'); // Temporary - replace with proper handling
+    };
+
+    // Use provided handlers or defaults
+    const actualOnRegistrationComplete = onRegistrationComplete || handleRegistrationCompleteDefault;
+    const actualOnSwitchToLogin = onSwitchToLogin || handleSwitchToLoginDefault;
 
     // Listen for auth state changes
     useEffect(() => {
@@ -41,9 +63,17 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
             setCurrentStep('verify');
             setUserEmail(result.user.email);
             setIsGoogleSSO(false);
+        } else if (result.needsOrganizationInfo) {
+            // Google SSO organization account
+            setCurrentStep('organizationInfo');
+            setUserEmail(result.user.email);
+            setUserDisplayName(result.user.displayName || '');
+            setIsGoogleSSO(true);
         } else {
-            // Google SSO - registration already completed
-            onRegistrationComplete(result);
+            // Individual account or complete registration
+            if (actualOnRegistrationComplete) {
+                actualOnRegistrationComplete(result);
+            }
         }
     };
 
@@ -51,13 +81,56 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
     const handleGoogleAccountTypeSelected = async (accountTypeData) => {
         const result = await registerWithGoogle(accountTypeData);
         if (result.success) {
-            onRegistrationComplete(result);
+            if (result.needsOrganizationInfo) {
+                setCurrentStep('organizationInfo');
+                setUserEmail(result.user.email);
+                setUserDisplayName(result.user.displayName || '');
+            } else if (actualOnRegistrationComplete) {
+                actualOnRegistrationComplete(result);
+            }
         }
     };
 
     // Handle email verification completion
     const handleVerificationComplete = (result) => {
-        onRegistrationComplete(result);
+        console.log('Verification completed with result:', result);
+
+        if (result.needsOrganizationInfo) {
+            // Organization account needs org info
+            setCurrentStep('organizationInfo');
+            setUserEmail(result.data?.email || userEmail);
+            setUserDisplayName(result.data?.displayName || '');
+        } else if (result.registrationComplete) {
+            // Registration completed - redirect to login
+            if (actualOnRegistrationComplete) {
+                actualOnRegistrationComplete(result);
+            }
+        } else {
+            console.error('Verification failed:', result.error);
+        }
+    };
+
+    // Handle organization info submission
+    const handleOrganizationInfoSubmit = async (organizationData) => {
+        try {
+            const result = await completeRegistration(organizationData);
+
+            // Log the result for debugging
+            console.log('completeRegistration result:', result);
+
+            if (result.registrationComplete && actualOnRegistrationComplete) {
+                actualOnRegistrationComplete(result);
+            }
+
+            // IMPORTANT: Return the result so OrganizationInfoForm can handle success
+            // If result doesn't have explicit success flag, add it
+            return { ...result, success: true };
+
+        } catch (error) {
+            console.error('Error completing organization registration:', error);
+            // Re-throw the error so OrganizationInfoForm can handle it
+            throw error;
+        }
     };
 
     // Handle back to registration
@@ -65,7 +138,13 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
         clearRegistrationState();
         setCurrentStep('register');
         setUserEmail('');
+        setUserDisplayName('');
         setIsGoogleSSO(false);
+    };
+
+    // Handle back from organization info to verification (for email users)
+    const handleBackToVerification = () => {
+        setCurrentStep('verify');
     };
 
     // Loading state component with consistent styling
@@ -100,7 +179,7 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
                 return (
                     <RegistrationForm
                         onSuccess={handleRegistrationSuccess}
-                        onSwitchToLogin={onSwitchToLogin}
+                        onSwitchToLogin={actualOnSwitchToLogin}
                     />
                 );
 
@@ -118,6 +197,18 @@ const Register = ({ onRegistrationComplete, onSwitchToLogin }) => {
                     <AccountTypeSelector
                         userEmail={userEmail}
                         onAccountTypeSelected={handleGoogleAccountTypeSelected}
+                        loading={loading}
+                        error={error}
+                    />
+                );
+
+            case 'organizationInfo':
+                return (
+                    <OrganizationInfoForm
+                        userEmail={userEmail}
+                        userDisplayName={userDisplayName}
+                        onSubmit={handleOrganizationInfoSubmit}
+                        onBack={handleBackToVerification}
                         loading={loading}
                         error={error}
                     />

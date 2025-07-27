@@ -1,6 +1,6 @@
 // components/DomainSuggestion.jsx
 import React from 'react';
-import { isCustomDomain, extractDomain } from '../utils/domainValidation';
+import { isCustomDomain, extractDomainName } from '../utils/domainValidation';
 
 const DomainSuggestion = ({ 
     email, 
@@ -13,7 +13,7 @@ const DomainSuggestion = ({
         return null;
     }
 
-    const domain = extractDomain(email);
+    const domain = extractDomainName(email);
 
     return (
         <div className={`bg-teal-50 border border-teal-200 rounded-lg p-4 ${className}`}>
@@ -27,7 +27,7 @@ const DomainSuggestion = ({
                     <h4 className="text-sm font-medium text-teal-800">
                         Organization Account Suggested
                     </h4>
-                    <p className="mt-1 text-sm text-teal-700">
+                    <p className="mt-1 text-xs text-teal-700">
                         We noticed you&apos;re using a custom domain email ({domain}). 
                         You might benefit from our organization features like team collaboration, 
                         advanced permissions, and centralized management.

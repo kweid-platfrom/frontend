@@ -7,6 +7,7 @@ import { isCustomDomain } from '../utils/domainValidation';
 import Link from 'next/link';
 import { Eye, EyeOff, Loader2, User, Building, ChevronDown } from 'lucide-react';
 import { FcGoogle } from "react-icons/fc";
+import { toast } from 'sonner';
 
 const RegistrationForm = ({ onSuccess }) => {
     const {
@@ -16,25 +17,22 @@ const RegistrationForm = ({ onSuccess }) => {
         registerWithEmail,
         registerWithGoogle,
         clearError,
-        validateRegistrationData
+        validateRegistrationData,
     } = useRegistration();
 
     const [formData, setFormData] = useState({
         email: '',
         password: '',
         displayName: '',
-        accountType: 'individual',
-        organizationData: {
-            name: '',
-            description: ''
-        },
+        accountType: 'individual', // Default to individual
+        organizationIndustry: '', // New field for organization industry
         preferences: {}
     });
 
     const [showPassword, setShowPassword] = useState(false);
     const [showDomainSuggestion, setShowDomainSuggestion] = useState(false);
-    const [validationErrors, setValidationErrors] = useState({});
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isIndustryDropdownOpen, setIsIndustryDropdownOpen] = useState(false);
 
     const accountTypes = [
         {
@@ -51,6 +49,28 @@ const RegistrationForm = ({ onSuccess }) => {
         }
     ];
 
+    const industries = [
+        { value: 'technology', label: 'Technology' },
+        { value: 'healthcare', label: 'Healthcare' },
+        { value: 'finance', label: 'Finance' },
+        { value: 'education', label: 'Education' },
+        { value: 'retail', label: 'Retail' },
+        { value: 'manufacturing', label: 'Manufacturing' },
+        { value: 'consulting', label: 'Consulting' },
+        { value: 'media', label: 'Media & Entertainment' },
+        { value: 'nonprofit', label: 'Non-profit' },
+        { value: 'government', label: 'Government' },
+        { value: 'other', label: 'Other' }
+    ];
+
+    // Show toast for errors
+    React.useEffect(() => {
+        if (error) {
+            toast.error(error);
+            clearError();
+        }
+    }, [error, clearError]);
+
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
             ...prev,
@@ -58,42 +78,42 @@ const RegistrationForm = ({ onSuccess }) => {
         }));
 
         // Show domain suggestion for individual accounts with custom domains
-        if (field === 'email' && value && isCustomDomain(value) && formData.accountType === 'individual') {
+        // Only trigger if account type is individual AND it's a custom domain
+        if (field === 'email' && value && formData.accountType === 'individual' && isCustomDomain(value)) {
             setShowDomainSuggestion(true);
+        } else if (field === 'email') {
+            // Hide suggestion if email changes and doesn't meet criteria
+            setShowDomainSuggestion(false);
         }
 
-        // Clear validation errors
-        if (validationErrors[field]) {
-            setValidationErrors(prev => ({
-                ...prev,
-                [field]: undefined
-            }));
-        }
-        
         clearError();
-    };
-
-    const handleOrganizationDataChange = (field, value) => {
-        setFormData(prev => ({
-            ...prev,
-            organizationData: {
-                ...prev.organizationData,
-                [field]: value
-            }
-        }));
     };
 
     const handleAccountTypeChange = (accountType) => {
         setFormData(prev => ({
             ...prev,
-            accountType
+            accountType,
+            // Clear organization industry when switching to individual
+            organizationIndustry: accountType === 'individual' ? '' : prev.organizationIndustry
         }));
 
         // Reset domain suggestion when switching to organization
         if (accountType === 'organization') {
             setShowDomainSuggestion(false);
+        } else if (accountType === 'individual' && formData.email && isCustomDomain(formData.email)) {
+            // Show domain suggestion if switching back to individual with custom domain
+            setShowDomainSuggestion(true);
         }
+        
         setIsDropdownOpen(false);
+    };
+
+    const handleIndustryChange = (industry) => {
+        setFormData(prev => ({
+            ...prev,
+            organizationIndustry: industry
+        }));
+        setIsIndustryDropdownOpen(false);
     };
 
     const handleSuggestUpgrade = () => {
@@ -111,28 +131,33 @@ const RegistrationForm = ({ onSuccess }) => {
         // Validate form data
         const validation = validateRegistrationData(formData);
         if (!validation.isValid) {
-            setValidationErrors(validation.errors);
+            const firstError = Object.values(validation.errors)[0];
+            toast.error(firstError);
             return;
         }
 
         const result = await registerWithEmail(formData);
         if (result.success) {
+            toast.success('Registration successful! Please check your email to verify your account.');
             onSuccess(result);
         }
     };
 
     const handleGoogleSignUp = async () => {
-        // For Google sign-up, we need account type selection first
-        // This would typically be handled in a modal or separate step
-        const accountTypeData = {
-            accountType: formData.accountType,
-            organizationData: formData.organizationData,
-            displayName: formData.displayName || undefined
-        };
-
-        const result = await registerWithGoogle(accountTypeData);
-        if (result.success) {
-            onSuccess(result);
+        try {
+            const result = await registerWithGoogle();
+            
+            if (result.success) {
+                if (result.needsOrganizationInfo) {
+                    toast.success('Google sign-up successful! Please provide your organization details.');
+                } else {
+                    toast.success('Google sign-up successful! Please log in to continue.');
+                }
+                onSuccess(result);
+            }
+        } catch (error) {
+            console.error('Google sign-up error:', error);
+            toast.error('Google sign-up failed. Please try again.');
         }
     };
 
@@ -163,6 +188,7 @@ const RegistrationForm = ({ onSuccess }) => {
     }
 
     const selectedAccountType = accountTypes.find(type => type.value === formData.accountType);
+    const selectedIndustry = industries.find(industry => industry.value === formData.organizationIndustry);
 
     return (
         <div className="w-full">
@@ -171,7 +197,7 @@ const RegistrationForm = ({ onSuccess }) => {
                 <p className="text-base sm:text-lg text-slate-600">Start your testing journey today</p>
             </div>
 
-            {/* Google Sign Up - Moved to top */}
+            {/* Google Sign Up */}
             <button
                 type="button"
                 onClick={handleGoogleSignUp}
@@ -191,7 +217,7 @@ const RegistrationForm = ({ onSuccess }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Account Type Selection - Custom Dropdown */}
+                {/* Account Type Selection */}
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 block">
                         Account Type
@@ -238,6 +264,45 @@ const RegistrationForm = ({ onSuccess }) => {
                     </div>
                 </div>
 
+                {/* Organization Industry Selection - Only show for organization accounts */}
+                {formData.accountType === 'organization' && (
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700 block">
+                            Industry <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setIsIndustryDropdownOpen(!isIndustryDropdownOpen)}
+                                className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-200 rounded text-slate-900 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 bg-white text-left flex items-center justify-between"
+                            >
+                                <span className={formData.organizationIndustry ? 'text-slate-900' : 'text-slate-400'}>
+                                    {selectedIndustry ? selectedIndustry.label : 'Select your industry'}
+                                </span>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isIndustryDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {/* Industry Dropdown Options */}
+                            {isIndustryDropdownOpen && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                                    {industries.map((industry) => (
+                                        <button
+                                            key={industry.value}
+                                            type="button"
+                                            onClick={() => handleIndustryChange(industry.value)}
+                                            className={`w-full px-3 sm:px-4 py-2.5 text-left hover:bg-slate-50 transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg text-sm sm:text-base ${
+                                                formData.organizationIndustry === industry.value ? 'bg-teal-50 text-teal-900 font-medium' : 'text-slate-900'
+                                            }`}
+                                        >
+                                            {industry.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Email Field */}
                 <div className="space-y-2">
                     <label htmlFor="email" className="text-sm font-medium text-slate-700 block">
@@ -248,18 +313,14 @@ const RegistrationForm = ({ onSuccess }) => {
                         id="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
-                            validationErrors.email ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
-                        } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-200 rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10"
                         placeholder="name@company.com"
+                        required
                     />
-                    {validationErrors.email && (
-                        <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.email}</p>
-                    )}
                 </div>
 
-                {/* Domain Suggestion */}
-                {showDomainSuggestion && (
+                {/* Domain Suggestion - Only show for individual accounts */}
+                {showDomainSuggestion && formData.accountType === 'individual' && (
                     <DomainSuggestion
                         email={formData.email}
                         currentAccountType={formData.accountType}
@@ -279,10 +340,10 @@ const RegistrationForm = ({ onSuccess }) => {
                             id="password"
                             value={formData.password}
                             onChange={(e) => handleInputChange('password', e.target.value)}
-                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
-                                validationErrors.password ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
-                            } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                            className="w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border border-slate-200 rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10"
                             placeholder="At least 6 characters"
+                            required
+                            minLength={6}
                         />
                         <button
                             type="button"
@@ -292,9 +353,6 @@ const RegistrationForm = ({ onSuccess }) => {
                             {showPassword ? <EyeOff size={18} className="sm:w-5 sm:h-5" /> : <Eye size={18} className="sm:w-5 sm:h-5" />}
                         </button>
                     </div>
-                    {validationErrors.password && (
-                        <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.password}</p>
-                    )}
                 </div>
 
                 {/* Display Name */}
@@ -307,62 +365,22 @@ const RegistrationForm = ({ onSuccess }) => {
                         id="displayName"
                         value={formData.displayName}
                         onChange={(e) => handleInputChange('displayName', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
-                            validationErrors.displayName ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
-                        } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-200 rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10"
                         placeholder="Enter your full name"
+                        required
                     />
-                    {validationErrors.displayName && (
-                        <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.displayName}</p>
-                    )}
                 </div>
 
-                {/* Organization Fields */}
-                <div className="min-h-0">
-                    {formData.accountType === 'organization' && (
-                        <div className="space-y-4 p-4 border border-teal-200 rounded-lg bg-teal-50/50 animate-in slide-in-from-top-2 duration-200">
-                            <h4 className="font-medium text-slate-900">Organization Details</h4>
-                            
-                            <div className="space-y-2">
-                                <label htmlFor="orgName" className="text-sm font-medium text-slate-700 block">
-                                    Organization Name
-                                </label>
-                                <input
-                                    type="text"
-                                    id="orgName"
-                                    value={formData.organizationData.name}
-                                    onChange={(e) => handleOrganizationDataChange('name', e.target.value)}
-                                    className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${
-                                        validationErrors.organizationName ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
-                                    } focus:outline-none focus:ring focus:ring-teal-500/10 bg-white`}
-                                    placeholder="Your company name"
-                                />
-                                {validationErrors.organizationName && (
-                                    <p className="text-red-600 text-xs font-medium mt-2">{validationErrors.organizationName}</p>
-                                )}
-                            </div>
-
-                            <div className="space-y-2">
-                                <label htmlFor="orgDescription" className="text-sm font-medium text-slate-700 block">
-                                    Description (Optional)
-                                </label>
-                                <textarea
-                                    id="orgDescription"
-                                    value={formData.organizationData.description}
-                                    onChange={(e) => handleOrganizationDataChange('description', e.target.value)}
-                                    rows={3}
-                                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-200 rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 bg-white resize-none"
-                                    placeholder="Brief description of your organization..."
-                                />
+                {/* Account Type Info */}
+                {formData.accountType === 'organization' && (
+                    <div className="p-4 border border-teal-200 rounded-lg bg-teal-50/50">
+                        <div className="flex items-start gap-3">
+                            <Building className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-teal-800">
+                                <p className="font-medium mb-1">Organization Account</p>
+                                <p>You&apos;ll be able to set up your organization details after verifying your email.</p>
                             </div>
                         </div>
-                    )}
-                </div>
-
-                {/* Error Display */}
-                {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                        <p className="text-sm text-red-600">{error}</p>
                     </div>
                 )}
 
@@ -385,11 +403,14 @@ const RegistrationForm = ({ onSuccess }) => {
                 </p>
             </form>
 
-            {/* Click outside to close dropdown */}
-            {isDropdownOpen && (
+            {/* Click outside to close dropdowns */}
+            {(isDropdownOpen || isIndustryDropdownOpen) && (
                 <div 
                     className="fixed inset-0 z-0" 
-                    onClick={() => setIsDropdownOpen(false)}
+                    onClick={() => {
+                        setIsDropdownOpen(false);
+                        setIsIndustryDropdownOpen(false);
+                    }}
                 />
             )}
         </div>

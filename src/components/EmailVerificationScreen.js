@@ -2,14 +2,18 @@
 // components/EmailVerificationScreen.jsx
 'use client'
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useEmailVerification } from '../hooks/useEmailVerification';
 import { useRegistration } from '../hooks/useRegistration';
+import { auth } from '../config/firebase';
+import { toast } from 'sonner';
 
 const EmailVerificationScreen = ({
     email,
-   onVerificationComplete,   // Changed from onVerificationComplete
+    onVerificationComplete,
     onBackToRegistration
 }) => {
+    const router = useRouter();
     const {
         isVerified,
         checkingVerification,
@@ -21,31 +25,44 @@ const EmailVerificationScreen = ({
     const {
         loading: registrationLoading,
         error: registrationError,
-        completeRegistration,
+        completeEmailVerification,
         resendVerificationEmail,
         clearError: clearRegistrationError
     } = useRegistration();
 
-    const [lastResend, setLastResend] = useState(null);
+    const [, setLastResend] = useState(null);
     const [resendCooldown, setResendCooldown] = useState(0);
+    const [isCompletingVerification, setIsCompletingVerification] = useState(false);
+
+    // Show toast for errors
+    useEffect(() => {
+        if (verificationError) {
+            toast.error(verificationError);
+            clearVerificationError();
+        }
+        if (registrationError) {
+            toast.error(registrationError);
+            clearRegistrationError();
+        }
+    }, [verificationError, registrationError, clearVerificationError, clearRegistrationError]);
 
     // Check verification status periodically
     useEffect(() => {
-        if (!isVerified) {
+        if (!isVerified && !isCompletingVerification) {
             const interval = setInterval(() => {
                 checkVerificationStatus();
             }, 3000); // Check every 3 seconds
 
             return () => clearInterval(interval);
         }
-    }, [isVerified, checkVerificationStatus]);
+    }, [isVerified, isCompletingVerification, checkVerificationStatus]);
 
     // Handle verification completion
     useEffect(() => {
-        if (isVerified) {
-            handleCompleteRegistration();
+        if (isVerified && !isCompletingVerification) {
+            handleCompleteEmailVerification();
         }
-    }, [isVerified]);
+    }, [isVerified, isCompletingVerification]);
 
     // Resend cooldown timer
     useEffect(() => {
@@ -92,40 +109,67 @@ const EmailVerificationScreen = ({
         return () => window.removeEventListener('focus', handleFocus);
     }, [checkVerificationStatus]);
 
-
-    const handleCompleteRegistration = async () => {
-        const result = await completeRegistration();
-        if (result.success) {
-             onVerificationComplete(result);  // Changed from onVerificationComplete
+    // Updated function to handle email verification completion
+    const handleCompleteEmailVerification = async () => {
+        if (isCompletingVerification) return; // Prevent multiple calls
+        
+        setIsCompletingVerification(true);
+        
+        try {
+            const result = await completeEmailVerification();
+            
+            if (result.success) {
+                if (result.registrationComplete) {
+                    // Individual account - redirect to login
+                    toast.success('Registration completed successfully! Please log in to continue.');
+                    setTimeout(() => {
+                        router.push('/login');
+                    }, 1500);
+                } else if (result.needsOrganizationInfo) {
+                    // Organization account - needs org info
+                    toast.success('Email verified! Please provide your organization details.');
+                    if (onVerificationComplete) {
+                        onVerificationComplete(result);
+                    }
+                } else {
+                    // Fallback
+                    if (onVerificationComplete) {
+                        onVerificationComplete(result);
+                    }
+                }
+            } else {
+                toast.error(result.error || 'Verification failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error completing email verification:', error);
+            toast.error('An error occurred during verification. Please try again.');
+        } finally {
+            setIsCompletingVerification(false);
         }
     };
 
     const handleResendEmail = async () => {
         if (resendCooldown > 0) return;
 
-        clearVerificationError();
-        clearRegistrationError();
-
         const result = await resendVerificationEmail();
         if (result.success) {
             setLastResend(new Date());
             setResendCooldown(60); // 60 second cooldown
+            toast.success('Verification email sent! Please check your inbox.');
         }
     };
 
     const handleCheckNow = async () => {
-        clearVerificationError();
         await checkVerificationStatus();
     };
 
-    const error = verificationError || registrationError;
-    const loading = checkingVerification || registrationLoading;
+    const loading = checkingVerification || registrationLoading || isCompletingVerification;
 
     return (
         <div className="max-w-md mx-auto text-center py-8">
             {/* Icon */}
-            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-auto w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mb-6">
+                <svg className="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
             </div>
@@ -157,23 +201,9 @@ const EmailVerificationScreen = ({
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
                         <span className="text-sm font-medium text-green-800">
-                            Email verified! Completing your registration...
+                            Email verified! Completing your setup...
                         </span>
                     </div>
-                </div>
-            )}
-
-            {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-
-            {lastResend && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-blue-600">
-                        Verification email sent! Please check your inbox.
-                    </p>
                 </div>
             )}
 
@@ -182,7 +212,7 @@ const EmailVerificationScreen = ({
                 <button
                     onClick={handleCheckNow}
                     disabled={loading || isVerified}
-                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                     {loading ? 'Checking...' : 'I\'ve Verified My Email'}
                 </button>
@@ -208,7 +238,7 @@ const EmailVerificationScreen = ({
                     Having trouble?{' '}
                     <button
                         onClick={onBackToRegistration}
-                        className="text-blue-600 hover:text-blue-800 underline"
+                        className="text-teal-600 hover:text-teal-800 underline"
                     >
                         Go back to registration
                     </button>
