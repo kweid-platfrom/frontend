@@ -11,7 +11,7 @@ const Team = () => {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-2xl font-bold text-gray-900">Team</h1>
                     <button

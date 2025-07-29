@@ -1,3 +1,4 @@
+// Old Dashboard
 'use client';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube } from 'lucide-react';

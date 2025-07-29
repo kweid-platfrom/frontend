@@ -1,3 +1,5 @@
+// Old BugTracker Page
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';

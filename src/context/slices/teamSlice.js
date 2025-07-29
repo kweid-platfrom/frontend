@@ -1,6 +1,6 @@
 import { useReducer } from 'react';
 import { where } from 'firebase/firestore';
-import firestoreService from '../../services/firestoreService';
+import { FirestoreService } from '../../services/firestoreService';
 import { toast } from 'sonner';
 
 const initialState = {
@@ -29,7 +29,7 @@ export const useTeam = () => {
         loadTeamMembers: async (suiteId) => {
             dispatch({ type: 'TEAM_LOADING' });
             try {
-                const result = await firestoreService.queryDocuments(
+                const result = await FirestoreService.queryDocuments(
                     `testSuites/${suiteId}/members`,
                     [where('status', '==', 'active')]
                 );
@@ -52,7 +52,7 @@ export const useTeam = () => {
                     return { success: false, error: 'Team invitation restricted' };
                 }
 
-                const result = await firestoreService.createDocument(
+                const result = await FirestoreService.createDocument(
                     `testSuites/${suiteId}/members`,
                     {
                         ...memberData,
@@ -80,7 +80,7 @@ export const useTeam = () => {
         },
         updateTeamMember: async (suiteId, memberId, updateData) => {
             try {
-                const result = await firestoreService.updateDocument(
+                const result = await FirestoreService.updateDocument(
                     `testSuites/${suiteId}/members`,
                     memberId,
                     updateData
@@ -107,7 +107,7 @@ export const useTeam = () => {
         },
         removeTeamMember: async (suiteId, memberId) => {
             try {
-                const result = await firestoreService.deleteDocument(
+                const result = await FirestoreService.deleteDocument(
                     `testSuites/${suiteId}/members`,
                     memberId
                 );

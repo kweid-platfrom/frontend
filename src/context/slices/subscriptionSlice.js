@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import firestoreService from '../../services/firestoreService';
+import { FirestoreService } from '../../services/firestoreService';
 import { toast } from 'sonner';
 
 const initialState = {
@@ -218,7 +218,7 @@ export const useSubscription = () => {
                     return;
                 }
 
-                const subscriptionResult = await firestoreService.getSubscriptionWithStatus(userId);
+                const subscriptionResult = await FirestoreService.getSubscriptionWithStatus(userId);
                 if (subscriptionResult.success) {
                     const subscriptionData = subscriptionResult.data;
                     const planLimits = getPlanLimits(accountType, subscriptionData.plan, subscriptionData.isTrialActive);

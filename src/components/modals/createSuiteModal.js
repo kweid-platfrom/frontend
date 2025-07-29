@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppProvider';
 import { toast } from 'sonner';
 import { useFirebaseOperation } from '../../utils/firebaseErrorHandler';
-import firestoreService from '../../services/firestoreService';
+import { FirestoreService } from '../../services/firestoreService';
 
 const CreateSuiteModal = ({
     isOpen,
@@ -52,13 +52,13 @@ const CreateSuiteModal = ({
             console.log('Syncing organization data...');
             
             // First, try to sync the user's organization data
-            const syncResult = await firestoreService.syncUserOrganizationData();
+            const syncResult = await FirestoreService.syncUserOrganizationData();
             
             if (syncResult.success) {
                 console.log('Organization data sync result:', syncResult);
                 
                 // Get the updated user profile
-                const profileResult = await firestoreService.getUserProfile();
+                const profileResult = await FirestoreService.getUserProfile();
                 if (profileResult.success) {
                     const profile = profileResult.data;
                     console.log('Updated user profile:', {
@@ -141,7 +141,7 @@ const CreateSuiteModal = ({
         }
 
         // Get the most current user profile to determine ownership
-        const profileResult = await firestoreService.getUserProfile();
+        const profileResult = await FirestoreService.getUserProfile();
         if (!profileResult.success) {
             setErrors({ submit: 'Failed to get user profile. Please try again.' });
             return;
@@ -190,7 +190,7 @@ const CreateSuiteModal = ({
                 await syncOrganizationData();
                 
                 // Check again after sync
-                const retryProfileResult = await firestoreService.getUserProfile();
+                const retryProfileResult = await FirestoreService.getUserProfile();
                 if (retryProfileResult.success && retryProfileResult.data.organizationId) {
                     suiteOwnerId = retryProfileResult.data.organizationId;
                     console.log('Found organizationId after retry sync:', suiteOwnerId);
@@ -232,7 +232,7 @@ const CreateSuiteModal = ({
         console.log('=== END DEBUG ===');
 
         await executeOperation(
-            () => firestoreService.createTestSuite(suiteData),
+            () => FirestoreService.createTestSuite(suiteData),
             (result) => {
                 console.log('Suite creation successful:', result);
                 toast.success('Test suite created successfully', { duration: 5000 });

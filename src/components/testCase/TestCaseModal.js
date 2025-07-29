@@ -1,13 +1,8 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react';
-import { useApp } from '@/contexts/AppProvider';
-import { useSuite } from '@/contexts/SuiteContext';
-import testCaseService from '@/services/testCaseService';
+import { useState, useEffect, useCallback } from 'react';
 
-export default function TestCaseModal({ testCase, onClose, onSave }) {
-    const { addNotification, user: appUser } = useApp();
-    const { userProfile, activeSuite, isLoading: suiteLoading } = useSuite();
+export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, currentUser }) {
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -21,33 +16,42 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
         executionType: 'manual',
         estimatedTime: '',
         environment: '',
-        testData: ''
+        testData: '',
+        linkedBugIds: [],
     });
     const [tagInput, setTagInput] = useState('');
     const [loading, setLoading] = useState(false);
-
-    const user = appUser;
-
-    useEffect(() => {
-        console.log('TestCaseModal: Context values', {
-            appUser: appUser ? { uid: appUser.uid, email: appUser.email } : null,
-            userProfile,
-            activeSuite: activeSuite ? { id: activeSuite.id, name: activeSuite.name } : null,
-            suiteLoading
-        });
-    }, [appUser, userProfile, activeSuite, suiteLoading]);
+    const [errors, setErrors] = useState({});
 
     useEffect(() => {
         if (testCase) {
             setFormData({
                 ...testCase,
-                testSteps: testCase.testSteps || [{ action: '', expectedResult: '' }]
+                testSteps: testCase.testSteps && testCase.testSteps.length > 0
+                    ? testCase.testSteps
+                    : [{ action: '', expectedResult: '' }],
+                tags: testCase.tags || [],
+                linkedBugIds: testCase.linkedBugIds || [],
             });
         }
     }, [testCase]);
 
-    // Reset form to initial state
-    const resetForm = () => {
+    const validateForm = useCallback(() => {
+        const newErrors = {};
+        if (!formData.title.trim()) {
+            newErrors.title = 'Title is required';
+        }
+        const validTestSteps = formData.testSteps.filter(
+            (step) => step.action.trim() || step.expectedResult.trim()
+        );
+        if (validTestSteps.length === 0) {
+            newErrors.testSteps = 'At least one test step with action or expected result is required';
+        }
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    }, [formData.title, formData.testSteps]);
+
+    const resetForm = useCallback(() => {
         setFormData({
             title: '',
             description: '',
@@ -61,95 +65,86 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
             executionType: 'manual',
             estimatedTime: '',
             environment: '',
-            testData: ''
+            testData: '',
+            linkedBugIds: [],
         });
         setTagInput('');
-    };
+        setErrors({});
+    }, []);
 
-    const handleInputChange = (field, value) => {
-        setFormData(prev => ({
+
+
+    const handleInputChange = useCallback((field, value) => {
+        setFormData((prev) => ({
             ...prev,
-            [field]: value
+            [field]: value,
         }));
-    };
+        if (errors[field]) {
+            setErrors((prev) => ({ ...prev, [field]: null }));
+        }
+    }, [errors]);
 
-    const handleAddTag = () => {
+    const handleAddTag = useCallback(() => {
         if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
-            setFormData(prev => ({
+            setFormData((prev) => ({
                 ...prev,
-                tags: [...prev.tags, tagInput.trim()]
+                tags: [...prev.tags, tagInput.trim()],
             }));
             setTagInput('');
         }
-    };
+    }, [tagInput, formData.tags]);
 
-    const handleRemoveTag = (tagToRemove) => {
-        setFormData(prev => ({
+    const handleRemoveTag = useCallback((tagToRemove) => {
+        setFormData((prev) => ({
             ...prev,
-            tags: prev.tags.filter(tag => tag !== tagToRemove)
+            tags: prev.tags.filter((tag) => tag !== tagToRemove),
         }));
-    };
+    }, []);
 
-    const handleAddTestStep = () => {
-        setFormData(prev => ({
+    const handleAddTestStep = useCallback(() => {
+        setFormData((prev) => ({
             ...prev,
-            testSteps: [...prev.testSteps, { action: '', expectedResult: '' }]
+            testSteps: [...prev.testSteps, { action: '', expectedResult: '' }],
         }));
-    };
+        if (errors.testSteps) {
+            setErrors((prev) => ({ ...prev, testSteps: null }));
+        }
+    }, [errors]);
 
-    const handleUpdateTestStep = (index, field, value) => {
-        setFormData(prev => ({
+    const handleUpdateTestStep = useCallback((index, field, value) => {
+        setFormData((prev) => ({
             ...prev,
             testSteps: prev.testSteps.map((step, i) =>
                 i === index ? { ...step, [field]: value } : step
-            )
+            ),
         }));
-    };
+        if (errors.testSteps) {
+            setErrors((prev) => ({ ...prev, testSteps: null }));
+        }
+    }, [errors]);
 
-    const handleRemoveTestStep = (index) => {
+    const handleRemoveTestStep = useCallback((index) => {
         if (formData.testSteps.length > 1) {
-            setFormData(prev => ({
+            setFormData((prev) => ({
                 ...prev,
-                testSteps: prev.testSteps.filter((_, i) => i !== index)
+                testSteps: prev.testSteps.filter((_, i) => i !== index),
             }));
         }
-    };
+    }, [formData.testSteps.length]);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
 
-        if (!user) {
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: 'User not authenticated'
-            });
-            return;
-        }
-
-        if (!activeSuite?.id) {
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: 'No test suite selected'
-            });
+        if (!validateForm()) {
             return;
         }
 
         setLoading(true);
 
         try {
-            if (!formData.title.trim()) {
-                throw new Error('Test case title is required');
-            }
-
-            const validTestSteps = formData.testSteps.filter(step =>
-                step.action.trim() || step.expectedResult.trim()
+            const validTestSteps = formData.testSteps.filter(
+                (step) => step.action.trim() || step.expectedResult.trim()
             );
-
-            if (validTestSteps.length === 0) {
-                throw new Error('At least one test step with action or expected result is required');
-            }
 
             const dataToSave = {
                 ...formData,
@@ -159,114 +154,50 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                 preconditions: formData.preconditions.trim(),
                 environment: formData.environment.trim(),
                 testData: formData.testData.trim(),
-                testSteps: validTestSteps.map(step => ({
+                testSteps: validTestSteps.map((step) => ({
                     action: step.action.trim(),
-                    expectedResult: step.expectedResult.trim()
+                    expectedResult: step.expectedResult.trim(),
                 })),
-                estimatedTime: formData.estimatedTime ? parseInt(formData.estimatedTime) : null
+                estimatedTime: formData.estimatedTime ? parseInt(formData.estimatedTime, 10) : null,
+                suiteId: activeSuite.id,
+                created_by: currentUser?.email || 'anonymous',
+                linkedBugIds: formData.linkedBugIds || [],
+                created_at: testCase ? testCase.created_at : new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+
             };
 
-            let result;
-            if (testCase) {
-                // For updates, close modal after saving
-                result = await testCaseService.updateTestCase(activeSuite.id, testCase.id, dataToSave);
-                if (result.success) {
-                    await onSave(result.data);
-                    addNotification({
-                        type: 'success',
-                        title: 'Success',
-                        message: 'Test case updated successfully'
-                    });
-                } else {
-                    throw new Error(result.error.message || 'Failed to update test case');
-                }
-            } else {
-                // For new test cases, keep modal open and reset form
-                result = await testCaseService.createTestCase(activeSuite.id, dataToSave, user, userProfile);
-                if (result.success) {
-                    // Call onSave to update the parent component's state
-                    await onSave(result.data);
-                    
-                    // Reset form for creating another test case
-                    resetForm();
-                    
-                    addNotification({
-                        type: 'success',
-                        title: 'Success',
-                        message: 'Test case created successfully. You can create another one.'
-                    });
-                } else {
-                    throw new Error(result.error.message || 'Failed to create test case');
-                }
+            await onSave(dataToSave);
+            if (!testCase) {
+                resetForm();
             }
+            onClose();
         } catch (error) {
             console.error('TestCaseModal error:', {
                 suiteId: activeSuite?.id,
                 testCaseId: testCase?.id,
                 errorMessage: error.message,
-                user: user ? { uid: user.uid, email: user.email } : null
+                user: currentUser ? { uid: currentUser.uid, email: currentUser.email } : null,
             });
-            addNotification({
-                type: 'error',
-                title: 'Error',
-                message: error.message || 'Failed to save test case'
-            });
+            setErrors({ submit: error.message || 'Failed to save test case' });
         } finally {
             setLoading(false);
         }
-    };
+    }, [formData, testCase, onSave, validateForm, resetForm, onClose, activeSuite, currentUser]);
 
-    const handleKeyPress = (e) => {
+    console.log('Debug Info:', {
+        activeSuite: activeSuite,
+        currentUser: currentUser,
+        formData: formData
+    });
+
+
+    const handleKeyPress = useCallback((e) => {
         if (e.key === 'Enter' && e.target.name === 'tagInput') {
             e.preventDefault();
             handleAddTag();
         }
-    };
-
-    if (suiteLoading) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Loading...</h2>
-                    <p className="text-gray-600 mb-4">Please wait while we load your session.</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (!user) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Authentication Required</h2>
-                    <p className="text-gray-600 mb-4">Please log in to create or edit test cases.</p>
-                    <button
-                        onClick={onClose}
-                        className="w-full px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
-                    >
-                        Close
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    if (!activeSuite?.id) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">No Suite Selected</h2>
-                    <p className="text-gray-600 mb-4">Please select a test suite to create or edit test cases.</p>
-                    <button
-                        onClick={onClose}
-                        className="w-full px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
-                    >
-                        Close
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    }, [handleAddTag]);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -280,18 +211,25 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                             onClick={onClose}
                             className="text-gray-400 hover:text-gray-600 text-2xl p-1"
                             type="button"
+                            aria-label="Close"
                         >
                             ×
                         </button>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
-                        Suite: {activeSuite?.name || activeSuite.id}
+                        Suite: {activeSuite?.name || activeSuite?.id}
                     </p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
                     <form onSubmit={handleSubmit} className="p-4 sm:p-6">
                         <div className="space-y-6">
+                            {errors.submit && (
+                                <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">
+                                    {errors.submit}
+                                </div>
+                            )}
+
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -299,12 +237,14 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                     </label>
                                     <input
                                         type="text"
-                                        required
                                         value={formData.title}
                                         onChange={(e) => handleInputChange('title', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className={`w-full px-3 py-2 border ${errors.title ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base`}
                                         placeholder="Enter test case title"
                                     />
+                                    {errors.title && (
+                                        <p className="text-red-500 text-xs mt-1">{errors.title}</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -398,6 +338,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                                 type="button"
                                                 onClick={() => handleRemoveTag(tag)}
                                                 className="ml-1 text-teal-600 hover:text-teal-800"
+                                                aria-label={`Remove tag ${tag}`}
                                             >
                                                 ×
                                             </button>
@@ -478,7 +419,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                         value={formData.testData}
                                         onChange={(e) => handleInputChange('testData', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
-                                        placeholder="Required test data or data set reference"
+                                        placeholder="Required test data or dataset reference"
                                     />
                                 </div>
                             </div>
@@ -490,7 +431,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                 <textarea
                                     value={formData.preconditions}
                                     onChange={(e) => handleInputChange('preconditions', e.target.value)}
-                                    rows={3}
+                                    rows={4}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
                                     placeholder="What needs to be set up or configured before executing this test"
                                 />
@@ -499,7 +440,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                             <div>
                                 <div className="flex items-center justify-between mb-4">
                                     <label className="block text-sm font-medium text-gray-700">
-                                        Test Steps
+                                        Test Steps *
                                     </label>
                                     <button
                                         type="button"
@@ -509,6 +450,9 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                         Add Step
                                     </button>
                                 </div>
+                                {errors.testSteps && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.testSteps}</p>
+                                )}
                                 <div className="space-y-4">
                                     {formData.testSteps.map((step, index) => (
                                         <div key={index} className="border border-gray-200 rounded-lg p-3 sm:p-4">
@@ -530,7 +474,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                                         Action
                                                     </label>
                                                     <textarea
-                                                        value={step.action}
+                                                        value={step.action || ''}
                                                         onChange={(e) => handleUpdateTestStep(index, 'action', e.target.value)}
                                                         rows={2}
                                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
@@ -542,7 +486,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                                                         Expected Result
                                                     </label>
                                                     <textarea
-                                                        value={step.expectedResult}
+                                                        value={step.expectedResult || ''}
                                                         onChange={(e) => handleUpdateTestStep(index, 'expectedResult', e.target.value)}
                                                         rows={2}
                                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
@@ -570,7 +514,7 @@ export default function TestCaseModal({ testCase, onClose, onSave }) {
                         <button
                             type="submit"
                             onClick={handleSubmit}
-                            disabled={loading || !user || !activeSuite?.id}
+                            disabled={loading}
                             className="w-full sm:w-auto px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 text-sm"
                         >
                             {loading ? 'Saving...' : (testCase ? 'Update' : 'Create')} Test Case

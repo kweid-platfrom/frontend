@@ -5,7 +5,6 @@ import {
     Video,
     Brain,
     Zap,
-    // Users,
     TrendingUp,
     TrendingDown,
     Activity,
@@ -18,8 +17,9 @@ import {
     Tags
 } from 'lucide-react';
 
-const QAIDMetricsOverview = ({ metrics }) => {
-    if (!metrics) {
+const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
+    // Show loading state
+    if (loading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {[...Array(8)].map((_, i) => (
@@ -133,12 +133,6 @@ const QAIDMetricsOverview = ({ metrics }) => {
         cypressScriptsGenerated: Math.round((testCases.automatedTestCases || 0) * 0.8) // Estimate
     };
 
-    // Extract team metrics (these might need to come from a different source)
-    // const team = {
-    //     activeTeamMembers: 5, // Default - should come from team management
-    //     testCasesCreatedPerMember: Math.round((testCases.totalTestCases || 0) / 5)
-    // };
-
     // Extract recording metrics
     const recordings = {
         totalRecordings: testCases.testCasesWithRecordings || 0,
@@ -169,11 +163,12 @@ const QAIDMetricsOverview = ({ metrics }) => {
         if (metrics.trends && metrics.trends[metricName] !== undefined) {
             return metrics.trends[metricName];
         }
-        // Fallback to mock trend calculation
-        return Math.round(Math.random() * 20 - 10); // -10 to +10 range
+        // Return null if no trend data available
+        return null;
     };
 
     const getTrendType = (trend) => {
+        if (trend === null || trend === undefined) return 'neutral';
         if (trend > 5) return 'positive';
         if (trend < -5) return 'negative';
         return 'neutral';

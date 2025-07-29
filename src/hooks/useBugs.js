@@ -1,4 +1,3 @@
-// hooks/useBugs.js
 'use client';
 
 import { useApp } from '../context/AppProvider';
@@ -7,14 +6,16 @@ export const useBugs = () => {
     const { state, actions } = useApp();
 
     return {
-        // Only computed/convenience values - not direct forwarding
-        selectedBugs: state.ui.selectedItems.bugs,
-        canCreateBugs: state.subscription.planLimits.canCreateTestCases,
-        
-        // Convenience methods that add value
+        selectedBugs: state.ui.selectedItems?.bugs || [],
+        canCreateBugs: state.subscription?.planLimits?.canCreateBugs !== false,
+        bugs: state.bugs.bugs || [],
+        bugsLoading: state.bugs.loading,
+        bugsError: state.bugs.error,
+        totalBugs: state.bugs.bugs?.length || 0,
         selectBugs: (bugs) => actions.ui.updateSelection('bugs', bugs),
         clearBugSelection: () => actions.ui.updateSelection('bugs', []),
-        
-        // Components would access state.bugs.bugs and actions.bugs.* directly via useApp()
+        createBug: async (suiteId, bugData, sprintId = null) => {
+            return actions.bugs.createBug(suiteId, bugData, sprintId);
+        },
     };
 };

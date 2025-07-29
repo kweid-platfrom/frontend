@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import firestoreService from '../../services/firestoreService';
+import { FirestoreService } from '../../services/firestoreService';
 import { toast } from 'sonner';
 
 const initialState = {
@@ -57,7 +57,7 @@ export const useRecordings = () => {
         loadRecordings: async (suiteId) => {
             dispatch({ type: 'RECORDINGS_LOADING' });
             try {
-                const result = await firestoreService.getRecordingsBySuite(suiteId);
+                const result = await FirestoreService.getRecordingsBySuite(suiteId);
                 if (result.success) {
                     dispatch({ type: 'RECORDINGS_LOADED', payload: result.data });
                 } else {
@@ -77,7 +77,7 @@ export const useRecordings = () => {
                     return { success: false, error: 'Recording creation restricted' };
                 }
 
-                const result = await firestoreService.createRecording({
+                const result = await FirestoreService.createRecording({
                     ...recordingData,
                     suiteId: suitesState.activeSuite.id,
                     created_at: new Date().toISOString(),
@@ -98,7 +98,7 @@ export const useRecordings = () => {
         },
         updateRecording: async (recordingId, updateData) => {
             try {
-                const result = await firestoreService.updateRecording(recordingId, updateData);
+                const result = await FirestoreService.updateRecording(recordingId, updateData);
                 if (result.success) {
                     dispatch({ type: 'RECORDING_UPDATED', payload: result.data });
                     return result;
@@ -113,7 +113,7 @@ export const useRecordings = () => {
         },
         deleteRecording: async (recordingId) => {
             try {
-                const result = await firestoreService.deleteRecording(recordingId);
+                const result = await FirestoreService.deleteRecording(recordingId);
                 if (result.success) {
                     dispatch({ type: 'RECORDING_DELETED', payload: recordingId });
                     toast.success('Recording deleted successfully', { duration: 5000 });

@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import firestoreService from '../../services/firestoreService';
+import { FirestoreService } from '../../services/firestoreService';
 import { toast } from 'sonner';
 
 const initialState = {
@@ -34,7 +34,7 @@ export const useAutomation = () => {
         loadAutomations: async (suiteId) => {
             dispatch({ type: 'AUTOMATIONS_LOADING' });
             try {
-                const result = await firestoreService.getAutomationsBySuite(suiteId);
+                const result = await FirestoreService.getAutomationsBySuite(suiteId);
                 if (result.success) {
                     dispatch({ type: 'AUTOMATIONS_LOADED', payload: result.data });
                 } else {

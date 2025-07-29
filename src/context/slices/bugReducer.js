@@ -1,6 +1,7 @@
 import { useReducer } from 'react';
-import firestoreService from '../../services/firestoreService';
+import firestoreService from '../../services';
 import { toast } from 'sonner';
+import { Timestamp } from 'firebase/firestore';
 
 const initialState = {
     bugs: [],
@@ -39,7 +40,7 @@ const bugReducer = (state, action) => {
     }
 };
 
-export const useBugs = () => {
+export const useBugReducer = () => {
     const [state, dispatch] = useReducer(bugReducer, initialState);
 
     const actions = {
@@ -52,7 +53,7 @@ export const useBugs = () => {
         loadBugs: async (suiteId) => {
             dispatch({ type: 'BUGS_LOADING' });
             try {
-                const result = await firestoreService.getBugsBySuite(suiteId);
+                const result = await firestoreService.assets.getBugs(suiteId);
                 if (result.success) {
                     dispatch({ type: 'BUGS_LOADED', payload: result.data });
                 } else {
@@ -64,62 +65,100 @@ export const useBugs = () => {
                 toast.error(error.message, { duration: 5000 });
             }
         },
-        createBug: async (bugData, subscriptionState, suitesState, uiActions) => {
+        createBug: async (bugData, sprintId = null) => {
+            dispatch({ type: 'BUGS_LOADING' });
             try {
-                if (!subscriptionState.planLimits.canCreateTestCases) {
-                    toast.error('Bug creation is locked. Please upgrade your plan.', { duration: 5000 });
-                    uiActions.openModal('upgradePrompt');
-                    return { success: false, error: 'Bug creation restricted' };
+                const suiteId = bugData.suiteId || bugData.suite_id;
+                if (!suiteId) {
+                    throw new Error('Suite ID is required');
                 }
 
-                const result = await firestoreService.createBug({
+                const formattedBugData = {
                     ...bugData,
-                    suiteId: suitesState.activeSuite.id,
-                    created_at: new Date().toISOString(),
-                    linkedTestCaseIds: bugData.linkedTestCaseIds || [],
-                    recordingId: bugData.recordingId || null,
-                });
+                    created_at: bugData.created_at || Timestamp.fromDate(new Date()),
+                    updated_at: bugData.updated_at || Timestamp.fromDate(new Date()),
+                    lastActivity: bugData.lastActivity || Timestamp.fromDate(new Date()),
+                    status: bugData.status || 'New',
+                    tags: bugData.tags || [],
+                    comments: bugData.comments || [],
+                    searchTerms: bugData.searchTerms || [],
+                    resolutionHistory: bugData.resolutionHistory || [],
+                    attachments: bugData.attachments || [],
+                    commentCount: bugData.commentCount || 0,
+                    viewCount: bugData.viewCount || 0,
+                    version: bugData.version || 1,
+                    // FIX: Keep suite_id field - required by Firestore rules
+                    suite_id: suiteId,
+                    // Remove suiteId to avoid duplication
+                    suiteId: undefined,
+                };
+
+                console.log('Creating bug with data:', { suiteId, formattedBugData, sprintId });
+
+                const result = await firestoreService.createBug(suiteId, formattedBugData, sprintId);
 
                 if (result.success) {
-                    dispatch({ type: 'BUG_CREATED', payload: result.data });
+                    dispatch({ type: 'BUG_CREATED', payload: { ...result.data, suiteId } });
+                    console.log('Bug created successfully:', result.data);
                     toast.success('Bug created successfully', { duration: 5000 });
                     return result;
                 } else {
+                    dispatch({ type: 'BUGS_ERROR', payload: result.error.message });
+                    console.error('Bug creation failed:', result.error);
                     toast.error(result.error.message, { duration: 5000 });
-                    return result;
+                    throw new Error(result.error.message);
                 }
             } catch (error) {
+                console.error('Error in createBug:', error);
+                dispatch({ type: 'BUGS_ERROR', payload: error.message });
                 toast.error(error.message, { duration: 5000 });
-                return { success: false, error: error.message };
+                throw error;
             }
         },
         updateBug: async (bugId, updateData) => {
+            dispatch({ type: 'BUGS_LOADING' });
             try {
-                const result = await firestoreService.updateBug(bugId, updateData);
+                const formattedUpdateData = {
+                    ...updateData,
+                    updated_at: updateData.updated_at || Timestamp.fromDate(new Date()),
+                    lastActivity: updateData.lastActivity || Timestamp.fromDate(new Date()),
+                    // FIX: Don't remove suite_id - it's required for permissions
+                    // suite_id: undefined, // REMOVE THIS LINE
+                    suiteId: undefined, // Keep this to avoid duplication
+                };
+
+                const result = await firestoreService.assets.updateDocument('bugs', bugId, formattedUpdateData);
                 if (result.success) {
-                    dispatch({ type: 'BUG_UPDATED', payload: result.data });
+                    dispatch({ type: 'BUG_UPDATED', payload: { id: bugId, ...result.data } });
+                    toast.success('Bug updated successfully', { duration: 5000 });
                     return result;
                 } else {
+                    dispatch({ type: 'BUGS_ERROR', payload: result.error.message });
                     toast.error(result.error.message, { duration: 5000 });
                     return result;
                 }
             } catch (error) {
+                dispatch({ type: 'BUGS_ERROR', payload: error.message });
                 toast.error(error.message, { duration: 5000 });
                 return { success: false, error: error.message };
             }
         },
+
         deleteBug: async (bugId) => {
+            dispatch({ type: 'BUGS_LOADING' });
             try {
-                const result = await firestoreService.deleteBug(bugId);
+                const result = await firestoreService.assets.deleteDocument('bugs', bugId);
                 if (result.success) {
                     dispatch({ type: 'BUG_DELETED', payload: bugId });
                     toast.success('Bug deleted successfully', { duration: 5000 });
                     return result;
                 } else {
+                    dispatch({ type: 'BUGS_ERROR', payload: result.error.message });
                     toast.error(result.error.message, { duration: 5000 });
                     return result;
                 }
             } catch (error) {
+                dispatch({ type: 'BUGS_ERROR', payload: error.message });
                 toast.error(error.message, { duration: 5000 });
                 return { success: false, error: error.message };
             }

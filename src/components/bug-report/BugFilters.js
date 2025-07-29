@@ -32,6 +32,18 @@ const BugFilters = ({ filters, setFilters, teamMembers, sprints, isExpanded, set
         { value: 'month', label: 'Month' },
     ];
 
+    // Validate teamMembers and sprints
+    const validateOptions = (options, type) => {
+        if (!Array.isArray(options)) {
+            console.error(`${type} is not an array:`, options);
+            return [];
+        }
+        return options.filter(opt => opt && typeof opt === 'object' && 'name' in opt && typeof opt.name === 'string');
+    };
+
+    const safeTeamMembers = validateOptions(teamMembers, 'teamMembers');
+    const safeSprints = validateOptions(sprints, 'sprints');
+
     useEffect(() => {
         const handler = setTimeout(() => {
             setFilters((prev) => ({ ...prev, searchTerm }));
@@ -191,7 +203,7 @@ const BugFilters = ({ filters, setFilters, teamMembers, sprints, isExpanded, set
                         value={filters.assignedTo}
                         options={[
                             { value: 'unassigned', label: 'Unassigned' },
-                            ...teamMembers.map((member) => ({
+                            ...safeTeamMembers.map((member) => ({
                                 value: member.name,
                                 label: member.name,
                             })),
@@ -201,7 +213,7 @@ const BugFilters = ({ filters, setFilters, teamMembers, sprints, isExpanded, set
                     <FilterSelect
                         label="Sprint"
                         value={filters.sprint}
-                        options={sprints.map((sprint) => ({
+                        options={safeSprints.map((sprint) => ({
                             value: sprint.id,
                             label: sprint.name,
                         }))}

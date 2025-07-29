@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { serverTimestamp } from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 import { useApp } from "../../context/AppProvider";
 import BugReportForm from "../create-bug/BugReportForm";
 import BugReportSuccess from "../create-bug/BugReportSuccess";
@@ -14,15 +14,14 @@ import {
     validateBugForm,
     DEFAULT_BUG_FORM_DATA
 } from "../../utils/bugUtils";
-import firestoreService from "../../services/firestoreService";
 
-const BugReportButton = ({ className = "" }) => {
+const BugReportButton = ({ className = "", onCreateBug }) => {
     const {
-        user: currentUser,
-        userProfile,
+        state,
+        actions,
+        currentUser,
         activeSuite,
-        suites,
-        addNotification
+        isAuthenticated
     } = useApp();
 
     const [showBugForm, setShowBugForm] = useState(false);
@@ -37,21 +36,38 @@ const BugReportButton = ({ className = "" }) => {
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Get data from context - memoized to prevent re-renders
+    const suites = useMemo(() => state.suites.testSuites || [], [state.suites.testSuites]);
+    const userProfile = useMemo(() => state.auth.profile, [state.auth.profile]);
+
+    // Permission checks
+    const canCreateBugs = useMemo(() => {
+        return state.subscription?.planLimits?.canCreateBugs !== false;
+    }, [state.subscription?.planLimits?.canCreateBugs]);
+
+    const hasActiveSubscription = useMemo(() => {
+        return state.subscription?.isTrialActive || state.subscription?.isSubscriptionActive;
+    }, [state.subscription?.isTrialActive, state.subscription?.isSubscriptionActive]);
+
     const userDisplayName = useCallback(() => {
-        return userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'Unknown User';
+        return userProfile?.displayName ||
+            userProfile?.name ||
+            currentUser?.displayName ||
+            currentUser?.email ||
+            'Unknown User';
     }, [userProfile, currentUser]);
 
     const getSelectedSuiteInfo = useCallback(() => {
         if (!formData.selectedSuiteId || !suites) return null;
-        const selectedSuite = suites.find(suite => suite.suite_id === formData.selectedSuiteId);
+        const selectedSuite = suites.find(suite => suite.id === formData.selectedSuiteId);
         if (!selectedSuite) return null;
-        
+
         return {
-            name: selectedSuite.metadata?.name || selectedSuite.name || formData.selectedSuiteId,
-            isOrganization: selectedSuite.accountType === 'organization',
-            organizationName: selectedSuite.organizationName
+            name: selectedSuite.name || formData.selectedSuiteId,
+            isOrganization: state.auth.accountType === 'organization',
+            organizationName: selectedSuite.organizationName || state.auth.currentUser?.organizationName
         };
-    }, [formData.selectedSuiteId, suites]);
+    }, [formData.selectedSuiteId, suites, state.auth.accountType, state.auth.currentUser]);
 
     useEffect(() => {
         setMounted(true);
@@ -72,7 +88,7 @@ const BugReportButton = ({ className = "" }) => {
         if (mounted && showBugForm && activeSuite && !formData.selectedSuiteId) {
             setFormData(prev => ({
                 ...prev,
-                selectedSuiteId: activeSuite.suite_id
+                selectedSuiteId: activeSuite.id
             }));
         }
     }, [mounted, showBugForm, activeSuite, formData.selectedSuiteId]);
@@ -81,27 +97,20 @@ const BugReportButton = ({ className = "" }) => {
         const fetchTeamMembers = async () => {
             if (!mounted || !showBugForm || !currentUser || !formData.selectedSuiteId || !suites) return;
 
-            const selectedSuite = suites.find(suite => suite.suite_id === formData.selectedSuiteId);
+            const selectedSuite = suites.find(suite => suite.id === formData.selectedSuiteId);
             if (!selectedSuite) return;
 
-            const isOrganizationSuite = selectedSuite.accountType === 'organization';
-            const organizationId = selectedSuite.organizationId;
+            const isOrganizationSuite = state.auth.accountType === 'organization';
 
             try {
-                if (isOrganizationSuite && organizationId) {
-                    const membersPath = `organizations/${organizationId}/members`;
-                    const result = await firestoreService.queryDocuments(membersPath);
-                    if (result.success) {
-                        setTeamMembers(result.data.map(doc => ({
-                            id: doc.id,
-                            name: doc.profile?.name || doc.email || doc.id,
-                            email: doc.email || doc.id
-                        })));
-                    } else {
-                        throw new Error(result.error.message);
-                    }
+                if (isOrganizationSuite && state.team.members) {
+                    setTeamMembers(state.team.members.map(member => ({
+                        id: member.id,
+                        name: member.name || member.email || member.id,
+                        email: member.email || member.id
+                    })));
                 } else {
-                    setTeamMembers([]); // No team members for individual suites
+                    setTeamMembers([]);
                 }
 
                 setFormData(prev => ({
@@ -111,8 +120,8 @@ const BugReportButton = ({ className = "" }) => {
                     deviceInfo: getDeviceInfo()
                 }));
             } catch (error) {
-                console.error("Error fetching team members:", error);
-                addNotification({
+                console.error("Error setting up team members:", error);
+                actions.ui.showNotification({
                     type: 'error',
                     title: 'Team Members Error',
                     message: 'Failed to load team members'
@@ -121,7 +130,7 @@ const BugReportButton = ({ className = "" }) => {
         };
 
         fetchTeamMembers();
-    }, [mounted, showBugForm, currentUser, formData.selectedSuiteId, suites, addNotification]);
+    }, [mounted, showBugForm, currentUser, formData.selectedSuiteId, suites, state.auth.accountType, state.team.members, actions.ui]);
 
     const updateFormData = useCallback((field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -153,122 +162,27 @@ const BugReportButton = ({ className = "" }) => {
         setShowBugForm(false);
     }, []);
 
-    const saveBugToFirestore = async (bugData) => {
-        try {
-            if (!currentUser?.uid) {
-                throw new Error('User not authenticated. Please log in again.');
-            }
-
-            if (!formData.selectedSuiteId) {
-                throw new Error('No test suite selected. Please select a test suite first.');
-            }
-
-            const selectedSuite = suites?.find(suite => suite.suite_id === formData.selectedSuiteId);
-            if (!selectedSuite) {
-                throw new Error('Selected test suite not found. Please refresh and try again.');
-            }
-
-            const isOrganizationSuite = selectedSuite.accountType === 'organization';
-            const organizationId = selectedSuite.organizationId;
-
-            if (isOrganizationSuite && !organizationId) {
-                throw new Error('Invalid organization suite configuration.');
-            }
-
-            // Determine the correct bugs collection path based on account type
-            const bugsCollectionPath = isOrganizationSuite
-                ? `organizations/${organizationId}/testSuites/${formData.selectedSuiteId}/bugs`
-                : `individualAccounts/${currentUser.uid}/testSuites/${formData.selectedSuiteId}/bugs`;
-
-            const bugId = `bug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const firestoreData = {
-                id: bugId,
-                suite_id: formData.selectedSuiteId,
-                created_by: currentUser.uid,
-                reportedBy: userDisplayName(),
-                reportedByEmail: currentUser.email || "",
-                title: bugData.title,
-                description: bugData.description,
-                actualBehavior: bugData.actualBehavior,
-                stepsToReproduce: bugData.stepsToReproduce,
-                expectedBehavior: bugData.expectedBehavior,
-                workaround: bugData.workaround,
-                status: bugData.status,
-                priority: bugData.priority,
-                severity: bugData.severity,
-                category: bugData.category,
-                tags: bugData.tags,
-                assignedTo: bugData.assignedTo,
-                source: bugData.source,
-                environment: bugData.environment,
-                browserInfo: bugData.browserInfo,
-                deviceInfo: bugData.deviceInfo,
-                userAgent: bugData.userAgent,
-                frequency: bugData.frequency,
-                hasConsoleLogs: bugData.hasConsoleLogs,
-                hasNetworkLogs: bugData.hasNetworkLogs,
-                hasAttachments: bugData.hasAttachments,
-                attachments: bugData.attachments,
-                resolution: bugData.resolution,
-                resolvedAt: bugData.resolvedAt,
-                resolvedBy: bugData.resolvedBy,
-                resolvedByName: bugData.resolvedByName,
-                comments: bugData.comments,
-                created_at: serverTimestamp(),
-                updated_at: serverTimestamp(),
-                updated_by: currentUser.uid,
-                updatedByName: userDisplayName(),
-                version: 1,
-                searchTerms: [
-                    bugData.title?.toLowerCase(),
-                    bugData.description?.toLowerCase(),
-                    bugData.category?.toLowerCase(),
-                    bugData.severity?.toLowerCase(),
-                    bugData.status?.toLowerCase(),
-                    bugData.source?.toLowerCase(),
-                    bugData.environment?.toLowerCase()
-                ].filter(Boolean),
-                resolutionHistory: [],
-                commentCount: 0,
-                viewCount: 0,
-                lastActivity: serverTimestamp(),
-                lastActivityBy: currentUser.uid
-            };
-
-            console.log('Saving bug to:', bugsCollectionPath, 'Data:', firestoreData);
-            const result = await firestoreService.createDocument(bugsCollectionPath, firestoreData);
-            if (result.success) {
-                addNotification({
-                    type: 'success',
-                    title: 'Bug Created',
-                    message: 'Bug report created successfully'
-                });
-                return { success: true, data: firestoreData };
-            } else {
-                throw new Error(result.error.message);
-            }
-        } catch (error) {
-            console.error('Error saving bug to Firestore:', error);
-            let errorMessage = 'Failed to save bug report';
-            if (error.code === 'permission-denied') {
-                errorMessage = 'Permission denied. You may not have access to this test suite or organization.';
-            } else if (error.code === 'unauthenticated') {
-                errorMessage = 'Authentication required. Please log in and try again.';
-            } else if (error.code === 'not-found') {
-                errorMessage = 'Test suite or organization not found. Please select a valid test suite.';
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-            addNotification({
-                type: 'error',
-                title: 'Bug Creation Error',
-                message: errorMessage
-            });
-            throw new Error(errorMessage);
-        }
-    };
-
     const handleSubmit = async () => {
+        if (!canCreateBugs) {
+            setError("Bug creation is not available with your current plan. Please upgrade.");
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'Bug creation requires a higher subscription plan'
+            });
+            return;
+        }
+
+        if (!hasActiveSubscription) {
+            setError("An active subscription is required to create bugs.");
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Subscription Required',
+                message: 'Please activate your subscription to create bugs'
+            });
+            return;
+        }
+
         if (!validateForm()) return;
 
         setIsSubmitting(true);
@@ -277,6 +191,12 @@ const BugReportButton = ({ className = "" }) => {
         try {
             const hasAttachments = attachments.length > 0;
             const priority = getPriorityFromSeverity(formData.severity);
+            const currentTimestamp = Timestamp.fromDate(new Date());
+
+            // FIX: Ensure we have the current user
+            if (!currentUser?.uid) {
+                throw new Error('User authentication required');
+            }
 
             const bugData = {
                 title: formData.title.trim(),
@@ -286,6 +206,7 @@ const BugReportButton = ({ className = "" }) => {
                 expectedBehavior: formData.expectedBehavior.trim() || "",
                 workaround: formData.workaround.trim() || "",
                 assignedTo: formData.assignedTo || null,
+                assigned_to: formData.assignedTo || null,
                 status: "New",
                 priority: priority,
                 severity: formData.severity,
@@ -293,10 +214,10 @@ const BugReportButton = ({ className = "" }) => {
                 tags: [formData.category.toLowerCase().replace(/\s+/g, '_')],
                 source: formData.source || "Manual",
                 environment: formData.environment || "Production",
-                browserInfo: formData.browserInfo || {},
-                deviceInfo: formData.deviceInfo || {},
-                userAgent: formData.userAgent || navigator.userAgent,
                 frequency: formData.frequency || "Once",
+                browserInfo: formData.browserInfo || getBrowserInfo(),
+                deviceInfo: formData.deviceInfo || getDeviceInfo(),
+                userAgent: formData.userAgent || navigator.userAgent,
                 hasConsoleLogs: formData.hasConsoleLogs || false,
                 hasNetworkLogs: formData.hasNetworkLogs || false,
                 hasAttachments,
@@ -310,10 +231,49 @@ const BugReportButton = ({ className = "" }) => {
                 resolvedAt: null,
                 resolvedBy: null,
                 resolvedByName: null,
-                comments: []
+                comments: [],
+                resolutionHistory: [],
+                commentCount: 0,
+                viewCount: 0,
+                // FIX: Only include suiteId (will be removed in reducer)
+                suiteId: formData.selectedSuiteId,
+                // FIX: Ensure correct user fields
+                created_by: currentUser.uid,
+                created_at: currentTimestamp,
+                updated_at: currentTimestamp,
+                lastActivity: currentTimestamp,
+                lastActivityBy: currentUser.uid,
+                reportedBy: userDisplayName(),
+                reportedByEmail: currentUser.email || "",
+                updated_by: currentUser.uid,
+                updatedByName: userDisplayName(),
+                version: 1,
+                searchTerms: [
+                    formData.title?.toLowerCase(),
+                    formData.description?.toLowerCase(),
+                    formData.category?.toLowerCase(),
+                    formData.severity?.toLowerCase(),
+                    "new",
+                    formData.source?.toLowerCase(),
+                    formData.environment?.toLowerCase()
+                ].filter(Boolean)
             };
 
-            await saveBugToFirestore(bugData);
+            console.log('Submitting bug with user UID:', currentUser.uid);
+            console.log('Bug data keys:', Object.keys(bugData));
+
+            await actions.bugs.createBug(bugData);
+
+            if (onCreateBug) {
+                onCreateBug();
+            }
+
+            actions.ui.showNotification({
+                type: 'success',
+                title: 'Bug Created',
+                message: 'Bug report created successfully'
+            });
+
             setSuccess(true);
             setFormData({
                 ...DEFAULT_BUG_FORM_DATA,
@@ -325,17 +285,62 @@ const BugReportButton = ({ className = "" }) => {
             setTimeout(() => {
                 closeForm();
             }, 3000);
+
         } catch (error) {
             console.error("Error submitting bug report:", error);
-            setError(error.message || 'Failed to submit bug report');
+            const errorMessage = error.message || 'Failed to submit bug report';
+            setError(errorMessage);
+
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Bug Creation Failed',
+                message: errorMessage
+            });
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleButtonClick = useCallback(() => {
+        console.log('handleButtonClick - Auth state:', { isAuthenticated, currentUser: { uid: currentUser?.uid, email: currentUser?.email } });
+        if (!isAuthenticated) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Authentication Required',
+                message: 'Please log in to report bugs'
+            });
+            return;
+        }
+
+        if (!activeSuite) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Test Suite Required',
+                message: 'Please select a test suite to report bugs'
+            });
+            return;
+        }
+
+        if (!canCreateBugs) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'Bug creation requires a higher subscription plan'
+            });
+            return;
+        }
+
+        if (!hasActiveSubscription) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Subscription Required',
+                message: 'Please activate your subscription to create bugs'
+            });
+            return;
+        }
+
         setShowBugForm(true);
-    }, []);
+    }, [isAuthenticated, activeSuite, canCreateBugs, hasActiveSubscription, actions.ui, currentUser?.email, currentUser?.uid]);
 
     if (!mounted) {
         return null;
@@ -346,9 +351,9 @@ const BugReportButton = ({ className = "" }) => {
     return (
         <>
             <button
-                className={`group px-3 py-2 text-sm bg-teal-50 text-teal-700 border border-blue-200 hover:bg-teal-100 hover:border-teal-300 hover:shadow-md rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${className}`}
+                className={`group px-3 py-2 text-sm bg-teal-50 text-teal-700 border border-blue-200 hover:bg-teal-100 hover:border-teal-300 hover:shadow-md rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
                 onClick={handleButtonClick}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !canCreateBugs || !hasActiveSubscription}
             >
                 <BugAntIcon className="h-4 w-4 transition-transform group-hover:scale-110" />
                 <span className="hidden sm:inline font-medium">Report Bug</span>
@@ -389,8 +394,8 @@ const BugReportButton = ({ className = "" }) => {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-hidden" 
-                             style={{ height: 'calc(100% - 80px)' }}>
+                        <div className="flex-1 overflow-hidden"
+                            style={{ height: 'calc(100% - 80px)' }}>
                             {success ? (
                                 <div className="h-full flex items-center justify-center p-6">
                                     <BugReportSuccess onClose={closeForm} />

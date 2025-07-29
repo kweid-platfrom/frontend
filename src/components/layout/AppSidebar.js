@@ -14,7 +14,8 @@ import {
     Users,
     Database,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    FileText
 } from 'lucide-react';
 import {
     HomeIcon,
@@ -97,6 +98,12 @@ const AppSidebar = ({
             module: 'testdata'
         },
         {
+            name: 'Documents',
+            icon: FileText,
+            path: '/documents',
+            module: 'documents'
+        },
+        {
             name: 'Automation',
             icon: Zap,
             path: '/automation',
@@ -155,10 +162,10 @@ const AppSidebar = ({
                 lg:translate-x-0 lg:static lg:inset-0
                 ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                 ${isCollapsed ? 'lg:w-16' : 'lg:w-64'}
-                w-64 flex flex-col min-w-[64px]
+                w-64 flex flex-col min-w-[64px] max-h-screen overflow-hidden
             `}>
                 {/* Sidebar Header */}
-                <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white">
+                <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white flex-shrink-0">
                     <div className="flex items-center min-w-0 flex-1">
                         <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
                             <div className="w-8 h-8 bg-gradient-to-br from-teal-200 to-teal-700 rounded-lg flex items-center justify-center shadow-lg">
@@ -201,7 +208,7 @@ const AppSidebar = ({
                 {activeSuite && (
                     <div className={`
                         bg-gray-50 border-b border-gray-200/50
-                        transition-all duration-300 ease-in-out
+                        transition-all duration-300 ease-in-out flex-shrink-0
                         ${isCollapsed ? 'h-0 overflow-hidden opacity-0' : 'min-h-[60px] px-4 opacity-100'}
                         flex items-center
                     `}>
@@ -216,8 +223,8 @@ const AppSidebar = ({
                     </div>
                 )}
                 
-                {/* Navigation */}
-                <nav className="flex-1 py-4 space-y-1 px-4 overflow-y-auto">
+                {/* Navigation - This should be scrollable and flexible */}
+                <nav className="flex-1 py-4 space-y-1 px-4 overflow-y-auto min-h-0">
                     {navigationItems.map((item) => {
                         const Icon = item.icon;
                         // Check both activeModule prop and current path for active state
@@ -277,7 +284,7 @@ const AppSidebar = ({
                     border-t border-gray-200/50 bg-gradient-to-r from-gray-50/50 to-white
                     ${isCollapsed ? 'px-2' : 'px-4'}
                     transition-all duration-300 ease-in-out
-                    py-3
+                    py-3 flex-shrink-0
                 `}>
                     <div className={`
                         overflow-hidden transition-all duration-300 ease-in-out
@@ -311,7 +318,7 @@ const AppSidebar = ({
                     border-t border-gray-200/50
                     ${isCollapsed ? 'px-2' : 'px-4'}
                     transition-all duration-300 ease-in-out
-                    py-2
+                    py-2 flex-shrink-0
                 `}>
                     <div className="space-y-1">
                         <div className="relative group">

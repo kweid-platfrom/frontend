@@ -1,14 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useMemo } from 'react';
-import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp } from 'lucide-react';
-import { BugAntIcon } from '@heroicons/react/24/outline';
-import { useBugTrackingMetrics } from '../../hooks/old-hooks/useBugTrackingMetrics';
-import { useApp } from '../../contexts/AppProvider';
+import { AlertTriangle, CheckCircle, Clock, Video, Network, FileText, TrendingDown, TrendingUp, Bug } from 'lucide-react';
 
-const BugTrackingMetrics = ({ filters = {} }) => {
-    const { activeSuite, isAuthenticated } = useApp();
-    const { metrics, loading, error } = useBugTrackingMetrics(filters);
-
+const BugTrackingMetrics = ({ loading = false, error = null, metrics = {} }) => {
     // Define default metrics
     const defaultMetrics = {
         totalBugs: 0,
@@ -30,13 +24,16 @@ const BugTrackingMetrics = ({ filters = {} }) => {
         weeklyReportsGenerated: 0,
         monthlyReportsGenerated: 0,
         avgBugsPerReport: 0,
+        activeBugs: 0,
     };
 
-    // Use metrics from the hook, merging with defaults for missing fields
+    // Use metrics from props, merging with defaults for missing fields
     const finalMetrics = useMemo(() => ({
         ...defaultMetrics,
         ...metrics,
-    }), [defaultMetrics, metrics]);
+        // Calculate activeBugs if not provided
+        activeBugs: metrics.activeBugs || (metrics.totalBugs - (metrics.resolvedBugs || 0))
+    }), [metrics]);
 
     // Show loading state
     if (loading) {
@@ -78,20 +75,6 @@ const BugTrackingMetrics = ({ filters = {} }) => {
         );
     }
 
-    // Show access denied if user not authenticated
-    if (!isAuthenticated) {
-        return (
-            <div className="space-y-6">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                    <div className="flex items-center">
-                        <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
-                        <p className="text-red-800 font-medium">Authentication required. Please log in.</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     const {
         totalBugs,
         bugsFromScreenRecording,
@@ -112,6 +95,7 @@ const BugTrackingMetrics = ({ filters = {} }) => {
         weeklyReportsGenerated,
         monthlyReportsGenerated,
         avgBugsPerReport,
+        activeBugs,
     } = finalMetrics;
 
     // Color classes for Tailwind
@@ -203,11 +187,6 @@ const BugTrackingMetrics = ({ filters = {} }) => {
                 <h2 className="text-xl font-bold text-gray-900">Bug Tracking & Resolution</h2>
                 <div className="text-sm text-gray-500">
                     Total: {totalBugs.toLocaleString()} bugs tracked
-                    {activeSuite && (
-                        <span className="ml-2 text-xs text-blue-600">
-                            {activeSuite.type || 'test'} suite
-                        </span>
-                    )}
                 </div>
             </div>
 
@@ -217,8 +196,15 @@ const BugTrackingMetrics = ({ filters = {} }) => {
                     title="Total Bugs"
                     value={totalBugs}
                     subtitle="All bugs reported"
-                    icon={BugAntIcon}
+                    icon={Bug}
                     color="red"
+                />
+                <MetricCard
+                    title="Active Bugs"
+                    value={activeBugs}
+                    subtitle={`${totalBugs - resolvedBugs} unresolved`}
+                    icon={AlertTriangle}
+                    color="orange"
                 />
                 <MetricCard
                     title="Resolved Bugs"
@@ -233,9 +219,13 @@ const BugTrackingMetrics = ({ filters = {} }) => {
                     value={`${Math.round(avgResolutionTime)}h`}
                     subtitle="Hours to resolve"
                     icon={Clock}
-                    color="orange"
+                    color="blue"
                     trend={-8}
                 />
+            </div>
+
+            {/* Bug Discovery Source */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <MetricCard
                     title="From Screen Recording"
                     value={bugsFromScreenRecording}
@@ -243,6 +233,13 @@ const BugTrackingMetrics = ({ filters = {} }) => {
                     icon={Video}
                     color="purple"
                     trend={22}
+                />
+                <MetricCard
+                    title="From Manual Testing"
+                    value={bugsFromManualTesting}
+                    subtitle={`${totalBugs > 0 ? Math.round((bugsFromManualTesting / totalBugs) * 100) : 0}% of total`}
+                    icon={FileText}
+                    color="orange"
                 />
             </div>
 

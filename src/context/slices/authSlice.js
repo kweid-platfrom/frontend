@@ -3,7 +3,8 @@
 import { useReducer, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import firestoreService from '../../services/firestoreService';
+// Updated import to use the service aggregator instance
+import firestoreService from '../../services';
 import { toast } from 'sonner';
 
 const initialState = {

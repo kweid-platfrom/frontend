@@ -7,7 +7,7 @@ import {
     GoogleAuthProvider
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import firestoreService from '../services/firestoreService';
+import {FirestoreService} from '../services/firestoreService';
 import { isCustomDomain, extractDomainName } from '../utils/domainValidation';
 
 export const useRegistration = () => {
@@ -91,7 +91,7 @@ export const useRegistration = () => {
                 ttl: authProvider === 'google' ? 24 : 48 // hours
             };
 
-            const result = await firestoreService.createDocument(
+            const result = await FirestoreService.createDocument(
                 'pendingRegistrations',
                 pendingData,
                 userId
@@ -290,7 +290,7 @@ export const useRegistration = () => {
             }
 
             // Get pending registration data
-            const pendingResult = await firestoreService.getDocument('pendingRegistrations', userId);
+            const pendingResult = await FirestoreService.getDocument('pendingRegistrations', userId);
             if (!pendingResult.success) {
                 throw new Error('No pending registration found');
             }
@@ -350,7 +350,7 @@ export const useRegistration = () => {
             }
 
             // Get pending registration data
-            const pendingResult = await firestoreService.getDocument('pendingRegistrations', userId);
+            const pendingResult = await FirestoreService.getDocument('pendingRegistrations', userId);
             if (!pendingResult.success) {
                 throw new Error('No pending registration found');
             }
@@ -395,7 +395,7 @@ export const useRegistration = () => {
             console.log('Organization industry:', userData.organization_industry);
 
             // Create user profile
-            const userResult = await firestoreService.createOrUpdateUserProfile(userData);
+            const userResult = await FirestoreService.createOrUpdateUserProfile(userData);
             if (!userResult.success) {
                 throw new Error(`Failed to create user profile: ${userResult.error.message}`);
             }
@@ -417,7 +417,7 @@ export const useRegistration = () => {
                     settings: finalOrganizationData.settings || {}
                 };
                 
-                orgResult = await firestoreService.createOrganization(enhancedOrgData);
+                orgResult = await FirestoreService.createOrganization(enhancedOrgData);
 
                 if (!orgResult.success) {
                     throw new Error(`Failed to create organization: ${orgResult.error.message}`);
@@ -449,7 +449,7 @@ export const useRegistration = () => {
                     }
                 };
 
-                accountResult = await firestoreService.createDocument(
+                accountResult = await FirestoreService.createDocument(
                     'individualAccounts',
                     individualData,
                     userId
@@ -480,14 +480,14 @@ export const useRegistration = () => {
                 }
             };
 
-            const subscriptionResult = await firestoreService.createDocument(
+            const subscriptionResult = await FirestoreService.createDocument(
                 'subscriptions',
                 subscriptionData,
                 userId
             );
 
             // Clean up pending registration
-            await firestoreService.deleteDocument('pendingRegistrations', userId);
+            await FirestoreService.deleteDocument('pendingRegistrations', userId);
 
             setPendingVerification(false);
             setRegistrationData(null);

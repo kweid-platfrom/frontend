@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import firestoreService from '../../services/firestoreService';
+import { FirestoreService } from '../../services/firestoreService';
 import { handleFirebaseOperation } from '../../utils/firebaseErrorHandler';
 
 const initialState = {
@@ -98,9 +98,9 @@ export const useSuites = () => {
 
                 console.log('🏢 Suite data to create:', suiteToCreate);
 
-                // Create the suite using firestoreService
+                // Create the suite using FirestoreService
                 const result = await handleFirebaseOperation(
-                    () => firestoreService.createTestSuite(suiteToCreate),
+                    () => FirestoreService.createTestSuite(suiteToCreate),
                     'Suite created successfully',
                     (errorMessage) => {
                         console.error('Suite creation failed:', errorMessage);

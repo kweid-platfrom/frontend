@@ -32,11 +32,11 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
     }, [state.auth.currentUser, state.auth.loading, isRegistering]);
 
     const isSystemInitializing = useMemo(() => {
-        return state.auth.loading || 
-               isRegistering() || 
-               (state.auth.isAuthenticated && !state.auth.currentUser) || 
-               isCreatingFirstSuite ||
-               state.suites.loading;
+        return state.auth.loading ||
+            isRegistering() ||
+            (state.auth.isAuthenticated && !state.auth.currentUser) ||
+            isCreatingFirstSuite ||
+            state.suites.loading;
     }, [state.auth.loading, isRegistering, state.auth.isAuthenticated, state.auth.currentUser, isCreatingFirstSuite, state.suites.loading]);
 
     const canAccessSuites = useMemo(() => {
@@ -79,19 +79,19 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
             try {
                 setIsCreatingFirstSuite(true);
                 console.log('Creating first test suite:', suiteData.name);
-                
+
                 // Use the new context actions to create suite
                 const newSuite = await actions.suites.createSuite(suiteData);
                 if (!newSuite) throw new Error('Failed to create test suite');
-                
+
                 console.log('First suite created successfully:', newSuite);
                 setFirstSuiteCreated(true);
                 setShowFirstSuiteModal(false);
-                
+
                 if (!state.suites.activeSuite) {
                     await actions.suites.setActiveSuite(newSuite.id);
                 }
-                
+
                 // Show success notification using new context
                 actions.ui.showNotification('success', `Test suite "${suiteData.name}" created successfully!`);
                 console.log('Dashboard should now be accessible');
@@ -142,7 +142,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                 <Head>
                     <title>{pageTitle} - Assura</title>
                 </Head>
-                <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="flex items-center justify-center h-screen bg-gray-50">
                     <div className="text-center">
                         <Loader2
                             className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4"
@@ -167,7 +167,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                 <Head>
                     <title>{pageTitle} - Assura</title>
                 </Head>
-                <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="flex items-center justify-center h-screen bg-gray-50">
                     <div className="text-center max-w-md">
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
                             <AlertCircle
@@ -192,7 +192,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                 <Head>
                     <title>{pageTitle} - Assura</title>
                 </Head>
-                <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="flex items-center justify-center h-screen bg-gray-50">
                     <div className="text-center max-w-md">
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-8">
                             <AlertTriangle
@@ -222,8 +222,8 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                 <Head>
                     <title>Create Your First Test Suite - Assura</title>
                 </Head>
-                <div className="fixed inset-0 z-50 min-h-screen bg-gray-50 flex items-center justify-center">
-                    <div className="max-w-2xl w-full mx-4">
+                <div className="fixed inset-0 z-50 h-screen bg-gray-50 flex items-center justify-center overflow-y-auto">
+                    <div className="max-w-2xl w-full mx-4 my-8">
                         <div className="bg-white rounded-lg shadow-xl p-8 text-center mb-8">
                             <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Plus className="w-8 h-8 text-teal-600" />
@@ -283,9 +283,9 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
         return (
             <>
                 <Head>
-                    <title>Error - QA Platform</title>
+                    <title>Error - Assura</title>
                 </Head>
-                <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="flex items-center justify-center h-screen bg-gray-50">
                     <div className="text-center max-w-md">
                         <div className="bg-red-50 border border-red-200 rounded-lg p-8">
                             <AlertTriangle
@@ -309,36 +309,36 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
     }
 
     // Check if dashboard is empty (has suites but no content)
-    const isDashboardEmpty = Array.isArray(state.suites.suites) && 
-                             state.suites.suites.length > 0 && 
-                             (!children || (Array.isArray(children) && children.length === 0));
+    const isDashboardEmpty = Array.isArray(state.suites.suites) &&
+        state.suites.suites.length > 0 &&
+        (!children || (Array.isArray(children) && children.length === 0));
 
     // Main layout render
     return (
         <>
             <Head>
-                <title>{pageTitle} - QA Platform</title>
+                <title>{pageTitle} - Assura</title>
             </Head>
-            <div className="flex min-h-screen bg-gray-50">
+            <div className="flex h-screen bg-gray-50 overflow-hidden">
                 {/* Sidebar */}
                 <AppSidebar />
-                
-                <div className="flex-1 flex flex-col">
+
+                <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                     {/* Header */}
                     <AppHeader />
-                    
+
                     {/* Notification banner */}
                     <NotificationBanner />
-                    
+
                     {/* Conditional upgrade banner */}
                     {needsUpgrade && (
                         <FeatureAccessBanner
                             message="Upgrade to Pro to unlock all features!"
                         />
                     )}
-                    
+
                     {/* Main content area */}
-                    <main className="flex-1">
+                    <main className="flex-1 overflow-y-auto">
                         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
                             {/* Page header with toolbar */}
                             {(toolbar || (requiresTestSuite && Array.isArray(state.suites.suites) && state.suites.suites.length > 0)) && (
@@ -367,7 +367,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                                     )}
                                 </div>
                             )}
-                            
+
                             {/* Content area */}
                             <div className="w-full">
                                 {requiresTestSuite && isDashboardEmpty ? (

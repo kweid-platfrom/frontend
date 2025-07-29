@@ -1,23 +1,14 @@
 import React from 'react';
 import { CheckCircle, Clock, Zap, Bot, Tags, TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
-import { useTestMetrics } from '../../hooks/old-hooks/useTestCaseMetrics';
 
-const TestCaseMetrics = ({ suiteId, sprintId = null, options = {} }) => {
-    const {
-        metrics,
-        loading,
-        error,
-        lastUpdated,
-        refresh,
-        isRealtime
-    } = useTestMetrics(suiteId, sprintId, {
-        autoRefresh: true,
-        refreshInterval: 30000,
-        enableRealtime: true,
-        includeExecutions: false,
-        ...options
-    });
-
+const TestCaseMetrics = ({
+    metrics = {},
+    loading = false,
+    error = null,
+    lastUpdated = null,
+    refresh = () => {},
+    isRealtime = false
+}) => {
     // Handle loading state
     if (loading) {
         return (
@@ -94,31 +85,51 @@ const TestCaseMetrics = ({ suiteId, sprintId = null, options = {} }) => {
         recentlyUpdatedTestCases = 0,
         testCaseUpdateFrequency = 0,
         trends = {}
-    } = metrics || {};
+    } = metrics;
 
-    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend = null }) => (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-lg bg-${color}-50`}>
-                    <Icon className={`w-6 h-6 text-${color}-600`} />
-                </div>
-                {trend && (
-                    <div className={`flex items-center text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        <TrendingUp className={`w-4 h-4 mr-1 ${trend < 0 ? 'rotate-180' : ''}`} />
-                        {Math.abs(trend)}%
+    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend = null }) => {
+        const colorClasses = {
+            blue: 'bg-blue-50 text-blue-600',
+            green: 'bg-green-50 text-green-600',
+            orange: 'bg-orange-50 text-orange-600',
+            purple: 'bg-purple-50 text-purple-600',
+            red: 'bg-red-50 text-red-600',
+            yellow: 'bg-yellow-50 text-yellow-600'
+        };
+
+        return (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                    <div className={`p-3 rounded-lg ${colorClasses[color] || colorClasses.blue}`}>
+                        <Icon className="w-6 h-6" />
                     </div>
-                )}
+                    {trend && (
+                        <div className={`flex items-center text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <TrendingUp className={`w-4 h-4 mr-1 ${trend < 0 ? 'rotate-180' : ''}`} />
+                            {Math.abs(trend)}%
+                        </div>
+                    )}
+                </div>
+                <div className="space-y-1">
+                    <p className="text-2xl font-bold text-gray-900">{value?.toLocaleString()}</p>
+                    <p className="text-sm font-medium text-gray-600">{title}</p>
+                    {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+                </div>
             </div>
-            <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900">{value?.toLocaleString()}</p>
-                <p className="text-sm font-medium text-gray-600">{title}</p>
-                {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-            </div>
-        </div>
-    );
+        );
+    };
 
     const ProgressBar = ({ label, value, total, color = "blue" }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+        const colorClasses = {
+            blue: 'bg-blue-500',
+            green: 'bg-green-500',
+            orange: 'bg-orange-500',
+            purple: 'bg-purple-500',
+            red: 'bg-red-500',
+            yellow: 'bg-yellow-500'
+        };
+
         return (
             <div className="space-y-2">
                 <div className="flex justify-between text-sm">
@@ -127,7 +138,7 @@ const TestCaseMetrics = ({ suiteId, sprintId = null, options = {} }) => {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                        className={`bg-${color}-500 h-2 rounded-full transition-all duration-300`}
+                        className={`${colorClasses[color] || colorClasses.blue} h-2 rounded-full transition-all duration-300`}
                         style={{ width: `${percentage}%` }}
                     ></div>
                 </div>

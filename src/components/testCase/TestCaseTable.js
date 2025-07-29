@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { useApp } from '@/contexts/AppProvider';
+import { useApp } from '@/context/AppProvider';
 import {
     Edit3,
     Copy,
@@ -13,19 +13,24 @@ import {
     Square,
     ChevronUp,
     ChevronDown,
+    Bot,
+    User,
 } from 'lucide-react';
 
 const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
 
-    const validOptions = Array.isArray(options) ? options.filter((opt) => opt?.value && opt?.label) : [];
+    const validOptions = useMemo(() => 
+        Array.isArray(options) ? options.filter((opt) => opt?.value && opt?.label) : [], 
+        [options]
+    );
 
-    const handleToggle = (optionValue) => {
+    const handleToggle = useCallback((optionValue) => {
         const newValue = value.includes(optionValue)
             ? value.filter((v) => v !== optionValue)
             : [...value, optionValue];
         onChange(newValue);
-    };
+    }, [value, onChange]);
 
     return (
         <div className="relative w-full">
@@ -53,12 +58,11 @@ const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => 
                                 className="flex items-center px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
                                 onClick={() => handleToggle(option.value)}
                             >
-                                <input
-                                    type="checkbox"
-                                    checked={value.includes(option.value)}
-                                    onChange={() => {}}
-                                    className="mr-2"
-                                />
+{value.includes(option.value) ? (
+                                    <CheckSquare className="mr-2 w-4 h-4 text-teal-600" />
+                                ) : (
+                                    <Square className="mr-2 w-4 h-4 text-gray-400" />
+                                )}
                                 <span className="truncate">{option.label}</span>
                             </div>
                         ))
@@ -82,60 +86,63 @@ const TestCaseTable = ({
     onBulkAction,
     onView,
     onRun,
+    selectedTestCases,
+    onSelectTestCases,
     onLinkBug,
 }) => {
-    const { addNotification } = useApp();
-    const [selectedIds, setSelectedIds] = useState([]);
+    const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
 
-    const handleSelectAll = (checked) => {
+    const handleSelectAll = useCallback((checked) => {
         if (checked) {
-            setSelectedIds(testCases.map((tc) => tc.id));
+            onSelectTestCases(testCases.map((tc) => tc.id));
         } else {
-            setSelectedIds([]);
+            onSelectTestCases([]);
         }
-    };
+    }, [testCases, onSelectTestCases]);
 
-    const handleSelectItem = (id, checked) => {
+    const handleSelectItem = useCallback((id, checked) => {
         if (checked) {
-            setSelectedIds((prev) => [...prev, id]);
+            onSelectTestCases([...selectedTestCases, id]);
         } else {
-            setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id));
+            onSelectTestCases(selectedTestCases.filter((selectedId) => selectedId !== id));
         }
-    };
+    }, [selectedTestCases, onSelectTestCases]);
 
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-    };
+    const handleSort = useCallback((key) => {
+        setSortConfig((prev) => ({
+            key,
+            direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+        }));
+    }, []);
 
-    const sortedTestCases = [...testCases].sort((a, b) => {
-        if (sortConfig.key) {
-            const aValue = a[sortConfig.key];
-            const bValue = b[sortConfig.key];
-            if (sortConfig.key === 'updated_at') {
-                const aDate = aValue instanceof Date ? aValue : new Date(aValue);
-                const bDate = bValue instanceof Date ? bValue : new Date(bValue);
-                if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
-                if (isNaN(aDate.getTime())) return 1;
-                if (isNaN(bDate.getTime())) return -1;
-                return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
+    const sortedTestCases = useMemo(() => {
+        return [...testCases].sort((a, b) => {
+            if (sortConfig.key) {
+                const aValue = a[sortConfig.key];
+                const bValue = b[sortConfig.key];
+                if (sortConfig.key === 'updated_at') {
+                    const aDate = aValue instanceof Date ? aValue : new Date(aValue);
+                    const bDate = bValue instanceof Date ? bValue : new Date(bValue);
+                    if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
+                    if (isNaN(aDate.getTime())) return 1;
+                    if (isNaN(bDate.getTime())) return -1;
+                    return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
+                }
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'asc' ? 1 : -1;
+                }
             }
-            if (aValue < bValue) {
-                return sortConfig.direction === 'asc' ? -1 : 1;
-            }
-            if (aValue > bValue) {
-                return sortConfig.direction === 'asc' ? 1 : -1;
-            }
-        }
-        return 0;
-    });
+            return 0;
+        });
+    }, [testCases, sortConfig]);
 
-    const handleDelete = (testCaseId, testCaseTitle) => {
-        addNotification({
+    const handleDelete = useCallback((testCaseId, testCaseTitle) => {
+        showNotification({
+            id: `delete-test-case-${testCaseId}`,
             type: 'custom',
             title: 'Delete Test Case',
             message: (
@@ -155,7 +162,7 @@ const TestCaseTable = ({
                             Delete
                         </button>
                         <button
-                            onClick={() => {}}
+                            onClick={() => showNotification(null)}
                             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                         >
                             Cancel
@@ -163,19 +170,22 @@ const TestCaseTable = ({
                     </div>
                 </div>
             ),
-            persistent: true,
+            duration: 0,
         });
-    };
+    }, [onDelete, showNotification]);
 
-    const handleDuplicate = (testCase) => {
+    const handleDuplicate = useCallback((testCase) => {
         if (onDuplicate) onDuplicate(testCase);
-    };
+    }, [onDuplicate]);
 
-    const handleBulkActionClick = (action) => {
-        if (onBulkAction) onBulkAction(action, selectedIds);
-    };
+    const handleBulkActionClick = useCallback((action) => {
+        if (onBulkAction) {
+            const mappedAction = action === 'activate' ? 'active' : action === 'archive' ? 'archived' : action;
+            onBulkAction(mappedAction, selectedTestCases);
+        }
+    }, [onBulkAction, selectedTestCases]);
 
-    const getStatusBadge = (status) => {
+    const getStatusBadge = useCallback((status) => {
         const statusConfig = {
             active: 'bg-green-100 text-green-800 border-green-200',
             draft: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -183,18 +193,35 @@ const TestCaseTable = ({
             deprecated: 'bg-red-100 text-red-800 border-red-200',
         };
         return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
-    };
+    }, []);
 
-    const getPriorityBadge = (priority) => {
+    const getPriorityBadge = useCallback((priority) => {
         const priorityConfig = {
             high: 'bg-red-100 text-red-800 border-red-200',
             medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
             low: 'bg-blue-100 text-blue-800 border-blue-200',
         };
         return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
-    };
+    }, []);
 
-    const getSortIcon = (columnKey) => {
+    const getAutomationBadge = useCallback((isAutomated) => {
+        if (isAutomated) {
+            return (
+                <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                    <Bot className="w-3 h-3" />
+                    <span>Automated</span>
+                </div>
+            );
+        }
+        return (
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+                <User className="w-3 h-3" />
+                <span>Manual</span>
+            </div>
+        );
+    }, []);
+
+    const getSortIcon = useCallback((columnKey) => {
         if (sortConfig.key !== columnKey) {
             return <ChevronUp className="w-3 h-3 text-gray-400" />;
         }
@@ -203,26 +230,31 @@ const TestCaseTable = ({
         ) : (
             <ChevronDown className="w-3 h-3 text-gray-600" />
         );
-    };
+    }, [sortConfig]);
 
-    const isValidDate = (date) => {
+    const isValidDate = useCallback((date) => {
         return date instanceof Date && !isNaN(date.getTime());
-    };
+    }, []);
 
-    const bugOptions = Array.isArray(bugs)
-        ? bugs.map((bug) => ({
-              value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
-              label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
-          }))
-        : [];
+    const bugOptions = useMemo(() => 
+        Array.isArray(bugs)
+            ? bugs.map((bug) => ({
+                  value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
+                  label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
+              }))
+            : [],
+        [bugs]
+    );
+
+    const isAllSelected = selectedTestCases.length === testCases.length && testCases.length > 0;
 
     return (
         <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
-            {selectedIds.length > 0 && (
+            {selectedTestCases.length > 0 && (
                 <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
                     <div className="flex items-center justify-between">
                         <span className="text-sm text-teal-700 font-medium">
-                            {selectedIds.length} test case{selectedIds.length > 1 ? 's' : ''} selected
+                            {selectedTestCases.length} test case{selectedTestCases.length > 1 ? 's' : ''} selected
                         </span>
                         <div className="flex gap-2">
                             <button
@@ -254,7 +286,7 @@ const TestCaseTable = ({
                         <tr>
                             <th className="px-6 py-3 text-left border-r border-gray-200">
                                 <div className="flex items-center">
-                                    {selectedIds.length === testCases.length && testCases.length > 0 ? (
+                                    {isAllSelected ? (
                                         <CheckSquare
                                             className="w-4 h-4 text-teal-600 cursor-pointer"
                                             onClick={() => handleSelectAll(false)}
@@ -296,6 +328,15 @@ const TestCaseTable = ({
                             </th>
                             <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                onClick={() => handleSort('automation_status')}
+                            >
+                                <div className="flex items-center gap-1">
+                                    Automation
+                                    {getSortIcon('automation_status')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
                                 onClick={() => handleSort('assignee')}
                             >
                                 <div className="flex items-center gap-1">
@@ -323,13 +364,13 @@ const TestCaseTable = ({
                     <tbody className="bg-white divide-y divide-gray-200">
                         {loading ? (
                             <tr>
-                                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
                                     Loading test cases...
                                 </td>
                             </tr>
                         ) : sortedTestCases.length === 0 ? (
                             <tr>
-                                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
                                     No test cases found
                                 </td>
                             </tr>
@@ -342,12 +383,17 @@ const TestCaseTable = ({
                                     <tr key={testCase.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
                                             <div className="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedIds.includes(testCase.id)}
-                                                    onChange={(e) => handleSelectItem(testCase.id, e.target.checked)}
-                                                    className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-                                                />
+                                                {selectedTestCases.includes(testCase.id) ? (
+                                                    <CheckSquare
+                                                        className="w-4 h-4 text-teal-600 cursor-pointer"
+                                                        onClick={() => handleSelectItem(testCase.id, false)}
+                                                    />
+                                                ) : (
+                                                    <Square
+                                                        className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                        onClick={() => handleSelectItem(testCase.id, true)}
+                                                    />
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
@@ -374,6 +420,9 @@ const TestCaseTable = ({
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                            {getAutomationBadge(testCase.is_automated || testCase.automation_status === 'automated')}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
                                             <div className="text-sm text-gray-900 truncate" title={testCase.assignee}>
                                                 {testCase.assignee || 'Unassigned'}
                                             </div>
@@ -389,7 +438,7 @@ const TestCaseTable = ({
                                             <MultiSelectDropdown
                                                 options={bugOptions}
                                                 value={linkedBugs}
-                                                onChange={(newBugs) => onLinkBug && onLinkBug(testCase.id, newBugs)}
+                                                onChange={(newBugs) => onLinkBug(testCase.id, newBugs)}
                                                 placeholder="Link Bugs..."
                                             />
                                         </td>
@@ -443,4 +492,4 @@ const TestCaseTable = ({
     );
 };
 
-export default TestCaseTable;
+export default TestCaseTable;   

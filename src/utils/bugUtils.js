@@ -1,5 +1,3 @@
-// utils/bugUtils.js
-
 /**
  * Status color mappings
  */
@@ -41,7 +39,6 @@ export const getPriorityColor = (priority) => {
     return priorityColors[priority] || 'bg-gray-100 text-gray-800';
 };
 
-
 /**
  * Frequency color mappings
  */
@@ -78,17 +75,15 @@ export const getSourceColor = (source) => {
 
 /**
  * Auto-determine priority based on severity
- * Updated to map severity directly to priority
  */
 export const getPriorityFromSeverity = (severity) => {
     switch (severity?.toLowerCase()) {
         case 'critical':
             return 'Critical';
-        case 'high':
+        case 'major':
             return 'High';
-        case 'medium':
-            return 'Medium';
-        case 'low':
+        case 'minor':
+        case 'trivial':
             return 'Low';
         default:
             return 'Medium';
@@ -145,36 +140,35 @@ export const formatDateTime = (date) => {
  */
 export const getBrowserInfo = () => {
     const ua = navigator.userAgent;
-    let browser = "Unknown";
-    let version = "Unknown";
+    let browser = 'Unknown';
+    let version = 'Unknown';
 
-    if (ua.includes("Chrome")) {
-        browser = "Chrome";
-        version = ua.match(/Chrome\/(\d+)/)?.[1] || "Unknown";
-    } else if (ua.includes("Firefox")) {
-        browser = "Firefox";
-        version = ua.match(/Firefox\/(\d+)/)?.[1] || "Unknown";
-    } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
-        browser = "Safari";
-        version = ua.match(/Version\/(\d+)/)?.[1] || "Unknown";
-    } else if (ua.includes("Edge")) {
-        browser = "Edge";
-        version = ua.match(/Edge\/(\d+)/)?.[1] || "Unknown";
+    if (ua.includes('Chrome') && !ua.includes('Edge')) {
+        browser = 'Chrome';
+        version = ua.match(/Chrome\/([\d.]+)/)?.[1] || 'Unknown';
+    } else if (ua.includes('Firefox')) {
+        browser = 'Firefox';
+        version = ua.match(/Firefox\/([\d.]+)/)?.[1] || 'Unknown';
+    } else if (ua.includes('Safari') && !ua.includes('Chrome')) {
+        browser = 'Safari';
+        version = ua.match(/Version\/([\d.]+)/)?.[1] || 'Unknown';
+    } else if (ua.includes('Edge')) {
+        browser = 'Edge';
+        version = ua.match(/Edge\/([\d.]+)/)?.[1] || 'Unknown';
     }
 
-    return `${browser} ${version}`;
+    return { browser, version };
 };
 
 /**
  * Get device information
  */
 export const getDeviceInfo = () => {
-    const platform = navigator.platform || "Unknown";
-    const screenResolution = `${screen.width}x${screen.height}`;
-    const colorDepth = screen.colorDepth;
-    const language = navigator.language || "Unknown";
-    
-    return `${platform}, ${screenResolution}, ${colorDepth}-bit, ${language}`;
+    const ua = navigator.userAgent;
+    return {
+        platform: navigator.platform || 'Unknown',
+        device: ua.includes('Mobile') ? 'Mobile' : 'Desktop',
+    };
 };
 
 /**
@@ -221,13 +215,17 @@ export const validateBugForm = (formData) => {
     if (!formData.title?.trim()) {
         errors.push('Title is required');
     }
-    
+    if (formData.title?.length > 100) {
+        errors.push('Title must be less than 100 characters');
+    }
     if (!formData.description?.trim()) {
         errors.push('Description is required');
     }
-    
     if (!formData.actualBehavior?.trim()) {
-        errors.push('Actual behavior description is required');
+        errors.push('Actual behavior is required');
+    }
+    if (!['Critical', 'High', 'Medium', 'Low'].includes(formData.severity)) {
+        errors.push('Invalid severity');
     }
     
     return {
@@ -262,17 +260,17 @@ export const getShortBugId = (bugId) => {
 export const VALID_BUG_STATUSES = ['New', 'Open', 'In Progress', 'Blocked', 'Resolved', 'Closed'];
 
 /**
- * Valid bug severities (updated order from most to least severe)
+ * Valid bug severities
  */
 export const VALID_BUG_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 
 /**
- * Valid bug priorities (updated to match severity levels)
+ * Valid bug priorities
  */
 export const VALID_BUG_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
 
 /**
- * Valid environments - Updated to use capitalized versions for consistency
+ * Valid environments
  */
 export const VALID_ENVIRONMENTS = ['Development', 'Staging', 'Production', 'Testing', 'Unknown'];
 
@@ -285,22 +283,23 @@ export const VALID_FREQUENCIES = ['Always', 'Often', 'Sometimes', 'Rarely', 'Onc
  * Default form data for bug creation
  */
 export const DEFAULT_BUG_FORM_DATA = {
-    title: "",
-    category: "UI Issue",
-    description: "",
-    stepsToReproduce: "",
-    severity: "Low",
-    assignedTo: "",
-    source: "Web App",
-    hasVideoEvidence: false,
+    title: '',
+    description: '',
+    actualBehavior: '',
+    stepsToReproduce: '',
+    expectedBehavior: '',
+    workaround: '',
+    severity: 'Low',
+    category: 'UI Issue',
+    source: 'Manual',
+    environment: 'Production',
+    frequency: 'Once',
+    userAgent: '',
+    browserInfo: null,
+    deviceInfo: null,
     hasConsoleLogs: false,
     hasNetworkLogs: false,
-    environment: "Development",
-    browserInfo: "",
-    deviceInfo: "",
-    userAgent: "",
-    expectedBehavior: "",
-    actualBehavior: "",
-    workaround: "",
-    frequency: "Always"
+    hasVideoEvidence: false,
+    assignedTo: null,
+    selectedSuiteId: null,
 };
