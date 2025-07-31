@@ -1,133 +1,137 @@
-import { useReducer } from 'react';
-import { FirestoreService } from '../../services/firestoreService';
-import { toast } from 'sonner';
-
-const initialState = {
-    recordings: [],
-    loading: false,
-    error: null,
-    id: 'REC-001',
-    suiteId: 'suite-123',
-    title: 'Login Flow Recording',
-    created_at: '2025-07-23T00:00:00Z',
-    url: 'https://example.com/recording',
-};
-
-const recordingReducer = (state, action) => {
-    switch (action.type) {
-        case 'RECORDINGS_LOADING':
-            return { ...state, loading: true, error: null };
-        case 'RECORDINGS_LOADED':
-            return { ...state, recordings: action.payload, loading: false, error: null };
-        case 'RECORDING_CREATED':
-            return { ...state, recordings: [action.payload, ...state.recordings], loading: false, error: null };
-        case 'RECORDING_UPDATED':
-            return {
-                ...state,
-                recordings: state.recordings.map((rec) =>
-                    rec.id === action.payload.id ? action.payload : rec
-                ),
-                loading: false,
-                error: null,
-            };
-        case 'RECORDING_DELETED':
-            return {
-                ...state,
-                recordings: state.recordings.filter((rec) => rec.id !== action.payload),
-                loading: false,
-                error: null,
-            };
-        case 'RECORDINGS_ERROR':
-            return { ...state, loading: false, error: action.payload };
-        default:
-            return state;
-    }
-};
+import FirestoreService from '../../services';
 
 export const useRecordings = () => {
-    const [state, dispatch] = useReducer(recordingReducer, initialState);
-
-    const actions = {
-        loadRecordingsSuccess: (recordings) => {
-            dispatch({ type: 'RECORDINGS_LOADED', payload: recordings });
-        },
-        loadRecordingsError: (error) => {
-            dispatch({ type: 'RECORDINGS_ERROR', payload: error });
-        },
-        loadRecordings: async (suiteId) => {
-            dispatch({ type: 'RECORDINGS_LOADING' });
-            try {
-                const result = await FirestoreService.getRecordingsBySuite(suiteId);
-                if (result.success) {
-                    dispatch({ type: 'RECORDINGS_LOADED', payload: result.data });
-                } else {
-                    dispatch({ type: 'RECORDINGS_ERROR', payload: result.error.message });
-                    toast.error(result.error.message, { duration: 5000 });
-                }
-            } catch (error) {
-                dispatch({ type: 'RECORDINGS_ERROR', payload: error.message });
-                toast.error(error.message, { duration: 5000 });
-            }
-        },
-        createRecording: async (recordingData, subscriptionState, suitesState, uiActions) => {
-            try {
-                if (!subscriptionState.planLimits.canUseRecordings) {
-                    toast.error('Recording creation is locked. Please upgrade your plan.', { duration: 5000 });
-                    uiActions.openModal('upgradePrompt');
-                    return { success: false, error: 'Recording creation restricted' };
-                }
-
-                const result = await FirestoreService.createRecording({
-                    ...recordingData,
-                    suiteId: suitesState.activeSuite.id,
-                    created_at: new Date().toISOString(),
-                });
-
-                if (result.success) {
-                    dispatch({ type: 'RECORDING_CREATED', payload: result.data });
-                    toast.success('Recording created successfully', { duration: 5000 });
-                    return result;
-                } else {
-                    toast.error(result.error.message, { duration: 5000 });
-                    return result;
-                }
-            } catch (error) {
-                toast.error(error.message, { duration: 5000 });
-                return { success: false, error: error.message };
-            }
-        },
-        updateRecording: async (recordingId, updateData) => {
-            try {
-                const result = await FirestoreService.updateRecording(recordingId, updateData);
-                if (result.success) {
-                    dispatch({ type: 'RECORDING_UPDATED', payload: result.data });
-                    return result;
-                } else {
-                    toast.error(result.error.message, { duration: 5000 });
-                    return result;
-                }
-            } catch (error) {
-                toast.error(error.message, { duration: 5000 });
-                return { success: false, error: error.message };
-            }
-        },
-        deleteRecording: async (recordingId) => {
-            try {
-                const result = await FirestoreService.deleteRecording(recordingId);
-                if (result.success) {
-                    dispatch({ type: 'RECORDING_DELETED', payload: recordingId });
-                    toast.success('Recording deleted successfully', { duration: 5000 });
-                    return result;
-                } else {
-                    toast.error(result.error.message, { duration: 5000 });
-                    return result;
-                }
-            } catch (error) {
-                toast.error(error.message, { duration: 5000 });
-                return { success: false, error: error.message };
-            }
-        },
+    const initialState = {
+        recordings: [],
+        loading: false,
+        error: null,
     };
 
-    return { state, actions };
+    const loadRecordingsStart = () => ({
+        recordings: [],
+        loading: true,
+        error: null,
+    });
+
+    const loadRecordingsSuccess = (recordings) => ({
+        recordings,
+        loading: false,
+        error: null,
+    });
+
+    const loadRecordingsFailure = (error) => ({
+        recordings: [],
+        loading: false,
+        error,
+    });
+
+    const addRecording = (recording) => (state) => ({
+        recordings: [recording, ...state.recordings],
+        loading: false,
+        error: null,
+    });
+
+    const loadRecordings = (appState, appActions) => async () => {
+        const suiteId = appState.suites.activeSuite?.id;
+        if (!suiteId) {
+            appActions.ui.showNotification('error', 'No active suite selected', 5000);
+            return { success: false, error: { message: 'No active suite' } };
+        }
+
+        try {
+            appActions.recordings.loadRecordingsStart();
+            const result = await FirestoreService.recordings.queryRecordings(suiteId);
+            if (result.success) {
+                appActions.recordings.loadRecordingsSuccess(result.data);
+                return result;
+            }
+            throw new Error(result.error.message);
+        } catch (error) {
+            appActions.recordings.loadRecordingsFailure(error.message);
+            appActions.ui.showNotification('error', 'Failed to load recordings', 5000);
+            return { success: false, error };
+        }
+    };
+
+    const createRecording = (appState, appActions) => async (recordingData) => {
+        const suiteId = appState.suites.activeSuite?.id;
+        if (!suiteId) {
+            appActions.ui.showNotification('error', 'No active suite selected', 5000);
+            return { success: false, error: { message: 'No active suite' } };
+        }
+
+        try {
+            const result = await FirestoreService.recordings.createRecording({
+                ...recordingData,
+                suiteId,
+            });
+            if (result.success) {
+                appActions.recordings.addRecording(result.data);
+                appActions.ui.showNotification('success', 'Recording saved', 3000);
+                return result;
+            }
+            throw new Error(result.error.message);
+        } catch (error) {
+            appActions.ui.showNotification('error', 'Failed to save recording', 5000);
+            return { success: false, error };
+        }
+    };
+
+    const updateRecording = (appState, appActions) => async (recordingId, updateData) => {
+        const suiteId = appState.suites.activeSuite?.id;
+        if (!suiteId) {
+            appActions.ui.showNotification('error', 'No active suite selected', 5000);
+            return { success: false, error: { message: 'No active suite' } };
+        }
+
+        try {
+            const result = await FirestoreService.recordings.updateRecording(suiteId, recordingId, updateData);
+            if (result.success) {
+                appActions.recordings.updateRecording(recordingId, updateData);
+                appActions.ui.showNotification('success', 'Recording updated', 3000);
+                return result;
+            }
+            throw new Error(result.error.message);
+        } catch (error) {
+            appActions.ui.showNotification('error', 'Failed to update recording', 5000);
+            return { success: false, error };
+        }
+    };
+
+    const deleteRecording = (appState, appActions) => async (recordingId) => {
+        const suiteId = appState.suites.activeSuite?.id;
+        if (!suiteId) {
+            appActions.ui.showNotification('error', 'No active suite selected', 5000);
+            return { success: false, error: { message: 'No active suite' } };
+        }
+
+        try {
+            const result = await FirestoreService.recordings.deleteRecording(suiteId, recordingId);
+            if (result.success) {
+                appActions.recordings.deleteRecording(recordingId);
+                appActions.ui.showNotification('success', 'Recording deleted', 3000);
+                return result;
+            }
+            throw new Error(result.error.message);
+        } catch (error) {
+            appActions.ui.showNotification('error', 'Failed to delete recording', 5000);
+            return { success: false, error };
+        }
+    };
+
+    return {
+        state: initialState,
+        actions: {
+            loadRecordingsStart,
+            loadRecordingsSuccess,
+            loadRecordingsFailure,
+            addRecording,
+            updateRecording,
+            deleteRecording,
+            loadRecordings,
+            createRecording,
+            updateRecording,
+            deleteRecording,
+        },
+    };
 };

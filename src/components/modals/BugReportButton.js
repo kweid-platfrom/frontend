@@ -361,7 +361,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
 
             {showBugForm && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl animate-in fade-in-0 zoom-in-95 duration-200"
+                    <div className="relative bg-white rounded shadow-2xl w-full max-w-2xl animate-in fade-in-0 zoom-in-95 duration-200"
                         style={{ maxHeight: '90vh', overflowY: 'auto' }}>
                         <div className="flex-shrink-0 border-b px-4 sm:px-6 py-4 bg-white rounded-t-xl">
                             <div className="flex items-center justify-between">
@@ -386,7 +386,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                                 </div>
                                 <button
                                     onClick={closeForm}
-                                    className="text-gray-400 hover:text-gray-600 text-2xl p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                                    className="text-gray-400 hover:text-gray-600 text-2xl p-1 hover:bg-gray-100 rounded transition-colors"
                                     type="button"
                                     disabled={isSubmitting}
                                 >

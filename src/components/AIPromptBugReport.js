@@ -117,7 +117,7 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
     return (
         <div className="space-y-6">
             <div className="text-center">
-                <SparklesIcon className="mx-auto h-12 w-12 text-purple-500 mb-4" />
+                <SparklesIcon className="mx-auto h-12 w-12 text-teal-500 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">AI Bug Report Generator</h3>
                 <p className="text-sm text-gray-500">
                     Describe the issue or paste console errors, and AI will generate a detailed bug report
@@ -135,7 +135,7 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         onChange={(e) => setPrompt(e.target.value)}
                         placeholder="Describe the issue you're experiencing... (e.g., 'The submit button doesn't work when I click it', 'Page crashes when loading user profile')"
                         rows={4}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-vertical"
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
                         disabled={isProcessing || isGenerating}
                     />
                 </div>
@@ -161,13 +161,13 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         onChange={(e) => setConsoleError(e.target.value)}
                         placeholder="Paste console errors here... (e.g., 'ReferenceError: validateSuiteAccess is not defined')"
                         rows={6}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-vertical font-mono text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical font-mono text-sm"
                         disabled={isProcessing || isGenerating}
                     />
                 </div>
 
                 {(prompt.trim() || consoleError.trim()) && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
                         <div className="flex">
                             <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                             <div className="text-sm text-yellow-700">
@@ -188,15 +188,15 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         type="button"
                         onClick={handleGenerate}
                         disabled={isDisabled}
-                        className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded transition-colors ${
                             isDisabled
                                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-purple-600 text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2'
+                                : 'bg-teal-600 text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2'
                         }`}
                     >
                         {isGenerating ? (
                             <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2"></div>
                                 Generating...
                             </>
                         ) : (

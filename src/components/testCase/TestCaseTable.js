@@ -16,64 +16,7 @@ import {
     Bot,
     User,
 } from 'lucide-react';
-
-const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => {
-    const [isOpen, setIsOpen] = useState(false);
-
-    const validOptions = useMemo(() => 
-        Array.isArray(options) ? options.filter((opt) => opt?.value && opt?.label) : [], 
-        [options]
-    );
-
-    const handleToggle = useCallback((optionValue) => {
-        const newValue = value.includes(optionValue)
-            ? value.filter((v) => v !== optionValue)
-            : [...value, optionValue];
-        onChange(newValue);
-    }, [value, onChange]);
-
-    return (
-        <div className="relative w-full">
-            <div
-                className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white flex items-center justify-between"
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                <span className="truncate">
-                    {value.length > 0 && validOptions.length > 0
-                        ? value.map((v) => validOptions.find((o) => o.value === v)?.label).filter(Boolean).join(', ')
-                        : placeholder}
-                </span>
-                {isOpen ? (
-                    <ChevronUp className="w-4 h-4 text-gray-400" />
-                ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                )}
-            </div>
-            {isOpen && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
-                    {validOptions.length > 0 ? (
-                        validOptions.map((option) => (
-                            <div
-                                key={option.value}
-                                className="flex items-center px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
-                                onClick={() => handleToggle(option.value)}
-                            >
-{value.includes(option.value) ? (
-                                    <CheckSquare className="mr-2 w-4 h-4 text-teal-600" />
-                                ) : (
-                                    <Square className="mr-2 w-4 h-4 text-gray-400" />
-                                )}
-                                <span className="truncate">{option.label}</span>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="px-3 py-2 text-xs text-gray-500">No bugs available</div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
+import MultiSelectDropdown from '../MultiSelectDropdown';
 
 const TestCaseTable = ({
     testCases = [],
@@ -236,12 +179,12 @@ const TestCaseTable = ({
         return date instanceof Date && !isNaN(date.getTime());
     }, []);
 
-    const bugOptions = useMemo(() => 
+    const bugOptions = useMemo(() =>
         Array.isArray(bugs)
             ? bugs.map((bug) => ({
-                  value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
-                  label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
-              }))
+                value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
+                label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
+            }))
             : [],
         [bugs]
     );
@@ -249,7 +192,7 @@ const TestCaseTable = ({
     const isAllSelected = selectedTestCases.length === testCases.length && testCases.length > 0;
 
     return (
-        <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
+        <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
             {selectedTestCases.length > 0 && (
                 <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
                     <div className="flex items-center justify-between">
@@ -280,11 +223,11 @@ const TestCaseTable = ({
                 </div>
             )}
 
-            <div className="overflow-x-auto">
+            <div className="relative">
                 <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-gray-50 sticky top-0 z-20">
                         <tr>
-                            <th className="px-6 py-3 text-left border-r border-gray-200">
+                            <th className="px-6 py-3 text-left border-r border-gray-200 w-12">
                                 <div className="flex items-center">
                                     {isAllSelected ? (
                                         <CheckSquare
@@ -300,7 +243,7 @@ const TestCaseTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-48"
                                 onClick={() => handleSort('title')}
                             >
                                 <div className="flex items-center gap-1">
@@ -309,7 +252,7 @@ const TestCaseTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -318,7 +261,7 @@ const TestCaseTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('priority')}
                             >
                                 <div className="flex items-center gap-1">
@@ -327,7 +270,7 @@ const TestCaseTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('automation_status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -336,7 +279,7 @@ const TestCaseTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('assignee')}
                             >
                                 <div className="flex items-center gap-1">
@@ -345,7 +288,7 @@ const TestCaseTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('updated_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -353,10 +296,10 @@ const TestCaseTable = ({
                                     {getSortIcon('updated_at')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-48">
                                 Linked Bugs
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                                 Actions
                             </th>
                         </tr>
@@ -381,7 +324,7 @@ const TestCaseTable = ({
 
                                 return (
                                     <tr key={testCase.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-12">
                                             <div className="flex items-center">
                                                 {selectedTestCases.includes(testCase.id) ? (
                                                     <CheckSquare
@@ -396,12 +339,12 @@ const TestCaseTable = ({
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <div className="text-sm text-gray-900 truncate max-w-xs" title={testCase.title}>
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-48">
+                                            <div className="text-sm text-gray-900 truncate max-w-[180px]" title={testCase.title}>
                                                 {testCase.title || 'Untitled Test Case'}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             <span
                                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
                                                     testCase.status
@@ -410,7 +353,7 @@ const TestCaseTable = ({
                                                 {testCase.status || 'Draft'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             <span
                                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityBadge(
                                                     testCase.priority
@@ -419,30 +362,33 @@ const TestCaseTable = ({
                                                 {testCase.priority || 'Low'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             {getAutomationBadge(testCase.is_automated || testCase.automation_status === 'automated')}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <div className="text-sm text-gray-900 truncate" title={testCase.assignee}>
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-900 truncate max-w-[120px]" title={testCase.assignee}>
                                                 {testCase.assignee || 'Unassigned'}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             <div className="text-sm text-gray-500">
                                                 {isValidDate(updatedAt)
                                                     ? formatDistanceToNow(updatedAt, { addSuffix: true })
                                                     : 'Invalid Date'}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200">
-                                            <MultiSelectDropdown
-                                                options={bugOptions}
-                                                value={linkedBugs}
-                                                onChange={(newBugs) => onLinkBug(testCase.id, newBugs)}
-                                                placeholder="Link Bugs..."
-                                            />
+                                        <td className="px-6 py-4 whitespace-nowrap border-r border-gray-200 w-48 relative">
+                                            <div className="w-48">
+                                                <MultiSelectDropdown
+                                                    options={bugOptions}
+                                                    value={linkedBugs}
+                                                    onChange={(newBugs) => onLinkBug(testCase.id, newBugs)}
+                                                    placeholder="Link Bugs..."
+                                                    type="bugs"
+                                                />
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium w-32">
                                             <div className="flex items-center space-x-2">
                                                 <button
                                                     onClick={() => onView && onView(testCase)}
@@ -492,4 +438,4 @@ const TestCaseTable = ({
     );
 };
 
-export default TestCaseTable;   
+export default TestCaseTable;

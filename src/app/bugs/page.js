@@ -1,490 +1,470 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { useApp } from '@/context/AppProvider';
-import { useBugs } from '../../hooks/useBugs';
-
+import React, { useState, useEffect, useCallback } from 'react';
 import BugTable from '@/components/bug-report/BugTable';
+import BugList from '@/components/bug-report/BugList';
 import BugReportButton from '@/components/modals/BugReportButton';
+import BugFilterBar from '@/components/bug-report/BugFilterBar';
 import BugDetailsModal from '@/components/modals/BugDetailsModal';
-import BugFilters from '@/components/bug-report/BugFilters';
-import { FileText, Download } from 'lucide-react';
-import { BugAntIcon } from '@heroicons/react/24/outline';
-import { toast } from 'sonner';
-import { Timestamp } from 'firebase/firestore';
+import { useBugs } from '@/hooks/useBugs';
+import { useUI } from '@/hooks/useUI';
 
-const BugTracker = () => {
-    const { state, actions, isAuthenticated, currentUser: user, activeSuite, isLoading: appLoading } = useApp();
-    const { selectedBugs, canCreateBugs, selectBugs, clearBugSelection } = useBugs();
-    const router = useRouter();
+const Bugs = () => {
+    const bugsHook = useBugs();
+    const uiHook = useUI();
 
-    // Local state
+    useEffect(() => {
+        console.log('🔍 Bugs Hook Debug:', {
+            hasUpdateBug: !!bugsHook.updateBug,
+            updateBugType: typeof bugsHook.updateBug,
+            hasCreateBug: !!bugsHook.createBug,
+            hasDeleteBug: !!bugsHook.deleteBug,
+            bugsCount: bugsHook.bugs?.length || 0,
+            loading: bugsHook.loading,
+            bugsLocked: bugsHook.bugsLocked,
+            activeSuiteId: bugsHook.activeSuite?.id,
+        });
+    }, [bugsHook.updateBug, bugsHook.createBug, bugsHook.deleteBug, bugsHook.bugs?.length, bugsHook.loading, bugsHook.bugsLocked, bugsHook.activeSuite]);
+
     const [filteredBugs, setFilteredBugs] = useState([]);
-    const [groupBy, setGroupBy] = useState('none');
-    const [subGroupBy, setSubGroupBy] = useState('none');
-    const [viewMode, setViewMode] = useState('table');
     const [selectedBug, setSelectedBug] = useState(null);
+    const [, setIsModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-    const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
+    const [viewMode, setViewMode] = useState('table');
+    const [, setIsTraceabilityOpen] = useState(false);
+    const [, setIsImportModalOpen] = useState(false);
     const [filters, setFilters] = useState({
-        searchTerm: '',
+        search: '',
         status: 'all',
         severity: 'all',
-        category: 'all',
-        assignedTo: 'all',
-        sprint: 'all',
-        dueDate: 'all',
+        priority: 'all',
+        assignee: 'all',
+        tags: [],
+        reporter: 'all',
+        lastUpdated: 'all',
     });
-    const [fetchError, setFetchError] = useState(null);
 
-    // Get data from state with useMemo to prevent re-renders
-    const bugs = useMemo(() => state.bugs.bugs || [], [state.bugs.bugs]);
-    const testCases = useMemo(() => state.testCases.testCases || [], [state.testCases.testCases]);
-    const isLoadingEntities = useMemo(() => 
-        state.bugs.loading || state.testCases.loading || state.sprints.loading,
-        [state.bugs.loading, state.testCases.loading, state.sprints.loading]
-    );
-    
-    // User capabilities - memoized to prevent re-renders, using canCreateBugs from hook
-    const userCapabilities = useMemo(() => ({
-        canViewBugs: state.subscription?.planLimits?.canViewBugs !== false,
-        canCreateBugs: canCreateBugs,
-        canUpdateBugs: state.subscription?.planLimits?.canUpdateBugs !== false,
-        canDeleteBugs: state.subscription?.planLimits?.canDeleteBugs !== false,
-    }), [state.subscription?.planLimits, canCreateBugs]);
+    const applyFilters = useCallback((currentBugs, currentFilters) => {
+        if (!Array.isArray(currentBugs)) return [];
 
-    const addNotification = useCallback((notification) => {
-        toast[notification.type](notification.title, {
-            description: notification.message,
-            duration: notification.persistent ? 0 : 5000,
-        });
+        let filtered = [...currentBugs];
+
+        if (currentFilters.search) {
+            const searchTerm = currentFilters.search.toLowerCase();
+            filtered = filtered.filter((bug) => {
+                const searchableFields = [
+                    bug.title?.toLowerCase() || '',
+                    bug.description?.toLowerCase() || '',
+                    bug.steps_to_reproduce?.toLowerCase() || '',
+                    ...(bug.tags || []).map((tag) => tag.toLowerCase()),
+                ];
+                return searchableFields.some((field) => field.includes(searchTerm));
+            });
+        }
+
+        if (currentFilters.status !== 'all') {
+            filtered = filtered.filter((bug) => bug.status === currentFilters.status);
+        }
+
+        if (currentFilters.severity !== 'all') {
+            filtered = filtered.filter((bug) => bug.severity === currentFilters.severity);
+        }
+
+        if (currentFilters.priority !== 'all') {
+            filtered = filtered.filter((bug) => bug.priority === currentFilters.priority);
+        }
+
+        if (currentFilters.assignee !== 'all') {
+            filtered = filtered.filter((bug) =>
+                bug.assignee === currentFilters.assignee ||
+                (!bug.assignee && currentFilters.assignee === '')
+            );
+        }
+
+        if (currentFilters.reporter !== 'all') {
+            filtered = filtered.filter((bug) =>
+                bug.reporter === currentFilters.reporter ||
+                (!bug.reporter && currentFilters.reporter === '')
+            );
+        }
+
+        if (currentFilters.tags?.length > 0) {
+            filtered = filtered.filter((bug) =>
+                bug.tags && currentFilters.tags.every((tag) => bug.tags.includes(tag))
+            );
+        }
+
+        if (currentFilters.lastUpdated !== 'all') {
+            const now = new Date();
+            filtered = filtered.filter((bug) => {
+                const updatedAt = bug.updated_at instanceof Date ? bug.updated_at : new Date(bug.updated_at);
+                if (isNaN(updatedAt.getTime())) return false;
+
+                switch (currentFilters.lastUpdated) {
+                    case 'today':
+                        return updatedAt.toDateString() === now.toDateString();
+                    case 'week':
+                        return updatedAt >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    case 'month':
+                        return updatedAt >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    case 'quarter':
+                        return updatedAt >= new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        return filtered;
     }, []);
+
+    useEffect(() => {
+        const newFilteredBugs = applyFilters(bugsHook.bugs, filters);
+        setFilteredBugs(newFilteredBugs);
+    }, [bugsHook.bugs, filters, applyFilters]);
 
     const handleError = useCallback((error, context) => {
         console.error(`Error in ${context}:`, error);
-        addNotification({
+        uiHook.addNotification?.({
             type: 'error',
             title: 'Error',
             message: `Failed to ${context}: ${error.message}`,
             persistent: true,
         });
-        setFetchError(error.message);
-    }, [addNotification]);
+    }, [uiHook.addNotification]);
 
-    // Create bug to test cases mapping from relationships
-    const bugToTestCases = useCallback(() => {
-        const bugMap = {};
-        // This would need to be implemented based on your relationship structure
-        // For now, return empty mapping
-        return bugMap;
-    }, []);
-
-    const applyFilters = useCallback(() => {
-        if (!bugs || !Array.isArray(bugs)) {
-            console.warn('No bugs data available to filter');
-            setFilteredBugs([]);
-            return;
-        }
-
-        let filtered = [...bugs];
-
-        if (filters.searchTerm) {
-            filtered = filtered.filter(
-                (bug) =>
-                    (bug.title?.toLowerCase()?.includes(filters.searchTerm.toLowerCase()) || false) ||
-                    (bug.description?.toLowerCase()?.includes(filters.searchTerm.toLowerCase()) || false)
-            );
-        }
-
-        if (filters.status !== 'all') {
-            filtered = filtered.filter((bug) => bug.status === filters.status);
-        }
-
-        if (filters.severity !== 'all') {
-            filtered = filtered.filter((bug) => bug.severity === filters.severity);
-        }
-
-        if (filters.category !== 'all') {
-            filtered = filtered.filter((bug) => bug.category === filters.category);
-        }
-
-        if (filters.assignedTo !== 'all') {
-            filtered = filtered.filter((bug) => bug.assigned_to === filters.assignedTo);
-        }
-
-        if (filters.sprint !== 'all') {
-            filtered = filtered.filter((bug) => bug.sprint === filters.sprint);
-        }
-
-        if (filters.dueDate !== 'all') {
-            filtered = filtered.filter((bug) => {
-                if (!bug.due_date) return filters.dueDate === 'no-due-date';
-                const due = new Date(bug.due_date instanceof Timestamp ? bug.due_date.toDate() : bug.due_date);
-                const today = new Date();
-                if (filters.dueDate === 'overdue') return due < today;
-                if (filters.dueDate === 'today') {
-                    return (
-                        due.getDate() === today.getDate() &&
-                        due.getMonth() === today.getMonth() &&
-                        due.getFullYear() === today.getFullYear()
-                    );
-                }
-                if (filters.dueDate === 'this-week') {
-                    const weekStart = new Date(today.setDate(today.getDate() - today.getDay()));
-                    const weekEnd = new Date(today.setDate(today.getDate() + 6));
-                    return due >= weekStart && due <= weekEnd;
-                }
-                return true;
-            });
-        }
-
-        console.log('Filtered bugs:', filtered);
-        setFilteredBugs(filtered);
-    }, [bugs, filters]);
-
-    useEffect(() => {
-        console.log('Bugs data:', bugs);
-        console.log('Active suite:', activeSuite);
-        console.log('User:', user);
-        console.log('Is authenticated:', isAuthenticated);
-        console.log('User capabilities:', userCapabilities);
-        applyFilters();
-    }, [bugs, filters, activeSuite, user, isAuthenticated, userCapabilities, applyFilters]);
-
-    const toggleBugSelection = useCallback(
-        (id, checked) => {
-            if (!userCapabilities.canViewBugs) {
-                toast.error("You don't have permission to select bugs");
-                return;
-            }
-            const newSelection = checked
-                ? [...new Set([...selectedBugs, id])]
-                : selectedBugs.filter((selectedId) => selectedId !== id);
-            selectBugs(newSelection);
-            toast.info(`${newSelection.length} bug${newSelection.length > 1 ? 's' : ''} selected`);
-        },
-        [userCapabilities, selectedBugs, selectBugs]
-    );
-
-    const handleBulkAction = useCallback(
-        async (action, ids) => {
-            if (!userCapabilities.canUpdateBugs && action !== 'delete') {
-                toast.error("You don't have permission to update bugs");
-                return;
-            }
-            if (!userCapabilities.canDeleteBugs && action === 'delete') {
-                toast.error("You don't have permission to delete bugs");
-                return;
-            }
-            if (!ids || ids.length === 0) {
-                toast.error("No bugs selected");
-                return;
-            }
-            
-            try {
-                if (action === 'delete') {
-                    if (!window.confirm(`Are you sure you want to delete ${ids.length} bug${ids.length > 1 ? 's' : ''}?`)) {
-                        return;
-                    }
-                    // Use actions from context
-                    await Promise.all(ids.map(id => actions.bugs.deleteBug(id)));
-                } else {
-                    // Use actions from context for bulk update
-                    const updateData = {
-                        status: action === 'open' ? 'Open' : 'Closed',
-                        updated_at: Timestamp.fromDate(new Date()),
-                    };
-                    await Promise.all(ids.map(id => actions.bugs.updateBug(id, updateData)));
-                }
-                
-                clearBugSelection();
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: `${ids.length} bug${ids.length > 1 ? 's' : ''} ${action}d successfully`,
-                });
-            } catch (error) {
-                handleError(error, `bulk ${action}`);
-            }
-        },
-        [userCapabilities, actions.bugs, clearBugSelection, addNotification, handleError]
-    );
-
-    const handleCreateBug = useCallback(() => {
-        // This callback is called after successful bug creation
-        // Note: Don't show notification here as BugReportButton handles its own notifications
-        // This is for any additional logic like metrics tracking
-        console.log('Bug creation completed successfully');
-    }, []);
-
-    const handleEditBug = useCallback((bug) => {
-        setSelectedBug(bug);
-        setIsDetailsModalOpen(true);
-    }, []);
-
-    const handleViewBug = useCallback((bug) => {
-        setSelectedBug(bug);
-        setIsDetailsModalOpen(true);
-    }, []);
-
-    const handleSaveBug = useCallback(
-        async (bugData) => {
-            try {
-                if (selectedBug) {
-                    const updateData = {
-                        ...bugData,
-                        updated_at: Timestamp.fromDate(new Date()),
-                    };
-                    await actions.bugs.updateBug(selectedBug.id, updateData);
-                    addNotification({
-                        type: 'success',
-                        title: 'Success',
-                        message: 'Bug updated successfully',
-                    });
-                }
-                setIsDetailsModalOpen(false);
-            } catch (error) {
-                handleError(error, 'save bug');
-            }
-        },
-        [selectedBug, actions.bugs, addNotification, handleError]
-    );
-
-    const handleLinkTestCase = useCallback(
-        async (bugId, newTestCaseIds) => {
-            try {
-                // Use the context actions for linking - this matches the AppProvider method
-                await actions.linkTestCasesToBug(bugId, newTestCaseIds);
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: `Linked ${newTestCaseIds.length} test case${newTestCaseIds.length > 1 ? 's' : ''} to bug`,
-                });
-            } catch (error) {
-                handleError(error, 'link test cases');
-            }
-        },
-        [actions, addNotification, handleError]
-    );
-
-    const handleUnlinkTestCase = useCallback(
-        async (bugId, testCaseId) => {
-            try {
-                // Use the context actions for unlinking
-                await actions.unlinkTestCaseFromBug(bugId, testCaseId);
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Test case unlinked from bug successfully',
-                });
-            } catch (error) {
-                handleError(error, 'unlink test case');
-            }
-        },
-        [actions, addNotification, handleError]
-    );
-
-    const handleExportBugs = useCallback(async () => {
+    const handleUpdateBug = useCallback(async (bugId, updates) => {
         try {
-            // Implement export logic (e.g., CSV export)
-            addNotification({
-                type: 'success',
-                title: 'Bugs Exported',
-                message: 'Bugs exported successfully',
+            console.log('🔄 Updating bug:', { bugId, updates, suiteId: bugsHook.activeSuite?.id });
+            
+            if (!bugsHook.updateBug) {
+                throw new Error('Update function not available');
+            }
+
+            if (bugsHook.bugsLocked) {
+                throw new Error('Bugs are locked. Upgrade to access.');
+            }
+
+            const result = await bugsHook.updateBug(bugId, {
+                ...updates,
+                suite_id: bugsHook.activeSuite?.id,
+                updated_at: new Date(),
             });
+
+            if (result.success) {
+                console.log('✅ Bug updated successfully:', result);
+                uiHook.addNotification?.({
+                    type: 'success',
+                    title: 'Success',
+                    message: 'Bug updated successfully',
+                });
+            } else {
+                throw new Error(result.error.message);
+            }
+
+            return result;
         } catch (error) {
-            handleError(error, 'export bugs');
+            console.error('❌ Error updating bug:', error);
+            handleError(error, 'update bug');
+            throw error;
         }
-    }, [addNotification, handleError]);
+    }, [bugsHook.updateBug, bugsHook.bugsLocked, bugsHook.activeSuite, uiHook.addNotification, handleError]);
 
-    const handleGenerateReport = useCallback(() => {
-        addNotification({
-            type: 'info',
-            title: 'Report Generation',
-            message: 'Report generation is not yet implemented',
-        });
-    }, [addNotification]);
+    const handleSaveBug = useCallback(async (bugData) => {
+        try {
+            console.log('💾 Saving bug:', { title: bugData.title, isEdit: !!selectedBug });
 
-    const handleDuplicateBug = useCallback(
-        async (bug) => {
-            try {
-                const timestamp = Timestamp.fromDate(new Date());
-                const duplicatedBug = {
-                    ...bug,
-                    title: `${bug.title} (Copy)`,
+            if (bugsHook.bugsLocked) {
+                throw new Error('Bugs are locked. Upgrade to access.');
+            }
+
+            const timestamp = new Date();
+
+            if (selectedBug) {
+                await handleUpdateBug(selectedBug.id, {
+                    ...bugData,
+                    suite_id: bugsHook.activeSuite?.id,
+                    updated_at: timestamp,
+                });
+            } else {
+                const result = await bugsHook.createBug({
+                    ...bugData,
+                    suite_id: bugsHook.activeSuite?.id,
                     created_at: timestamp,
                     updated_at: timestamp,
-                    suite_id: activeSuite.id,
-                    created_by: user?.email || 'anonymous',
-                };
-                delete duplicatedBug.id; // Remove the original ID
-                
-                await actions.bugs.createBug(duplicatedBug);
-                addNotification({
+                });
+                console.log('✅ Bug created:', result);
+                uiHook.addNotification?.({
                     type: 'success',
                     title: 'Success',
-                    message: 'Bug duplicated successfully',
+                    message: 'Bug created successfully',
                 });
-            } catch (error) {
-                handleError(error, 'duplicate bug');
             }
-        },
-        [activeSuite, user, actions.bugs, addNotification, handleError]
-    );
 
-    const handleDeleteBug = useCallback(
-        async (id) => {
-            try {
-                await actions.bugs.deleteBug(id);
-                addNotification({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Bug deleted successfully',
-                });
-            } catch (error) {
-                handleError(error, 'delete bug');
+            setIsModalOpen(false);
+            setSelectedBug(null);
+        } catch (error) {
+            console.error('❌ Error saving bug:', error);
+            handleError(error, 'save bug');
+        }
+    }, [bugsHook.bugsLocked, bugsHook.createBug, bugsHook.activeSuite, selectedBug, handleUpdateBug, uiHook.addNotification, handleError]);
+
+    const handleLinkTestCase = useCallback(async (bugId, newTestCaseIds) => {
+        try {
+            if (bugsHook.bugsLocked) {
+                throw new Error('Bugs are locked. Upgrade to access.');
             }
-        },
-        [actions.bugs, addNotification, handleError]
-    );
 
-    // Prepare team members for filters - memoized with validation
-    const teamMembers = useMemo(() => {
-        const members = Array.from(new Set(bugs
-            .filter(bug => bug && typeof bug === 'object' && bug.assigned_to && typeof bug.assigned_to === 'string')
-            .map(bug => bug.assigned_to)))
-            .map(email => ({ name: email }));
-        console.log('teamMembers:', members); // Debug
-        return members;
-    }, [bugs]);
+            const existingTestCases = bugsHook.relationships?.bugToTestCases?.[bugId] || [];
+            const toAdd = newTestCaseIds.filter((id) => !existingTestCases.includes(id));
+            const toRemove = existingTestCases.filter((id) => !newTestCaseIds.includes(id));
 
-    // Prepare sprint options for filters - memoized with validation
-    const sprintOptions = useMemo(() => {
-        const sprints = Array.from(new Set(bugs
-            .filter(bug => bug && typeof bug === 'object' && bug.sprint && typeof bug.sprint === 'string')
-            .map(bug => bug.sprint)))
-            .map(sprint => ({ id: sprint, name: sprint }));
-        console.log('sprintOptions:', sprints); // Debug
-        return sprints;
-    }, [bugs]);
+            await Promise.all([
+                ...toAdd.map((testCaseId) => bugsHook.linkTestCaseToBug?.(bugId, testCaseId)),
+                ...toRemove.map((testCaseId) => bugsHook.unlinkTestCaseFromBug?.(bugId, testCaseId)),
+            ]);
 
-    if (appLoading || isLoadingEntities) {
+            uiHook.addNotification?.({
+                type: 'success',
+                title: 'Success',
+                message: `Linked ${newTestCaseIds.length} test case${newTestCaseIds.length > 1 ? 's' : ''} to bug`,
+            });
+        } catch (error) {
+            handleError(error, 'link test cases');
+        }
+    }, [
+        bugsHook.bugsLocked,
+        bugsHook.linkTestCaseToBug,
+        bugsHook.unlinkTestCaseFromBug,
+        bugsHook.relationships,
+        uiHook.addNotification,
+        handleError
+    ]);
+
+    const handleViewBug = useCallback((bug) => {
+        if (bugsHook.bugsLocked) {
+            uiHook.addNotification?.({
+                type: 'error',
+                title: 'Error',
+                message: 'Bugs are locked. Upgrade to access.',
+            });
+            return;
+        }
+        setSelectedBug(bug);
+        setIsDetailsModalOpen(true);
+    }, [bugsHook.bugsLocked, uiHook.addNotification]);
+
+    const handleEditBug = useCallback((bug) => {
+        if (bugsHook.bugsLocked) {
+            uiHook.addNotification?.({
+                type: 'error',
+                title: 'Error',
+                message: 'Bugs are locked. Upgrade to access.',
+            });
+            return;
+        }
+        setSelectedBug(bug);
+        setIsModalOpen(true);
+    }, [bugsHook.bugsLocked, uiHook.addNotification]);
+
+    const handleDeleteBug = useCallback(async (id) => {
+        try {
+            if (bugsHook.bugsLocked) {
+                throw new Error('Bugs are locked. Upgrade to access.');
+            }
+
+            await bugsHook.deleteBug(id, bugsHook.activeSuite?.id);
+            uiHook.addNotification?.({
+                type: 'success',
+                title: 'Success',
+                message: 'Bug deleted successfully',
+            });
+        } catch (error) {
+            handleError(error, 'delete bug');
+        }
+    }, [bugsHook.bugsLocked, bugsHook.deleteBug, bugsHook.activeSuite, uiHook.addNotification, handleError]);
+
+    const handleDuplicateBug = useCallback(async (bug) => {
+        try {
+            if (bugsHook.bugsLocked) {
+                throw new Error('Bugs are locked. Upgrade to access.');
+            }
+
+            const timestamp = new Date();
+            await bugsHook.createBug({
+                ...bug,
+                suite_id: bugsHook.activeSuite?.id,
+                title: `${bug.title} (Copy)`,
+                created_at: timestamp,
+                updated_at: timestamp,
+            });
+
+            uiHook.addNotification?.({
+                type: 'success',
+                title: 'Success',
+                message: 'Bug duplicated successfully',
+            });
+        } catch (error) {
+            handleError(error, 'duplicate bug');
+        }
+    }, [bugsHook.bugsLocked, bugsHook.createBug, bugsHook.activeSuite, uiHook.addNotification, handleError]);
+
+    const handleBulkAction = useCallback(async (action, selectedIds) => {
+        try {
+            if (bugsHook.bugsLocked) {
+                throw new Error('Bugs are locked. Upgrade to access.');
+            }
+
+            if (action === 'delete') {
+                await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id, bugsHook.activeSuite?.id)));
+            } else {
+                const timestamp = new Date();
+                await Promise.all(
+                    selectedIds.map((id) =>
+                        handleUpdateBug(id, {
+                            status: action,
+                            suite_id: bugsHook.activeSuite?.id,
+                            updated_at: timestamp,
+                        })
+                    )
+                );
+            }
+
+            uiHook.addNotification?.({
+                type: 'success',
+                title: 'Success',
+                message: `${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} ${action}d`,
+            });
+        } catch (error) {
+            handleError(error, 'bulk action');
+        }
+    }, [
+        bugsHook.bugsLocked,
+        bugsHook.deleteBug,
+        bugsHook.activeSuite,
+        handleUpdateBug,
+        uiHook.addNotification,
+        handleError
+    ]);
+
+    const handleCloseModal = useCallback(() => {
+        console.log('🔒 Closing bug modal');
+        setIsModalOpen(false);
+        setIsDetailsModalOpen(false);
+        setSelectedBug(null);
+    }, []);
+
+    if (bugsHook.loading) {
         return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-teal-500"></div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading bugs...</p>
+                </div>
             </div>
         );
     }
 
-    if (!isAuthenticated || !user || !activeSuite) {
-        addNotification({
-            type: 'error',
-            title: 'Access Denied',
-            message: 'Please log in and select a test suite to access the bug tracker.',
-        });
-        router.push('/login');
-        return null;
-    }
-
-    if (!userCapabilities.canViewBugs) {
-        addNotification({
-            type: 'error',
-            title: 'Subscription Required',
-            message: 'Your subscription does not allow access to the bug tracker. Please upgrade your plan.',
-        });
-        router.push('/pricing');
-        return null;
+    if (bugsHook.bugsLocked) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900">Bugs</h1>
+                    </div>
+                    <div className="bg-white shadow rounded-lg p-6">
+                        <p className="text-gray-600">Bugs are locked. Upgrade to access.</p>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
-        <div className="space-y-6">
-            {fetchError && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                    <strong className="font-bold">Error: </strong>
-                    <span className="block sm:inline">{fetchError}</span>
+        <div className="min-h-screen bg-gray-50">
+            <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div className="flex items-center">
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bugs</h1>
+                        <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                            {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
+                        </span>
+                    </div>
+                    <div className="flex items-center space-x-2 overflow-x-auto">
+                        <button
+                            onClick={() => setIsTraceabilityOpen(true)}
+                            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                        >
+                            Traceability
+                        </button>
+                        <button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                        >
+                            Import
+                        </button>
+                        <BugReportButton
+                            bug={null}
+                            onSave={handleSaveBug}
+                            onClose={handleCloseModal}
+                            activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
+                            currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                        />
+                    </div>
                 </div>
-            )}
-            
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center">
-                    <BugAntIcon className="h-6 w-6 mr-2" />
-                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bug Tracker</h1>
-                    <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
-                        {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
-                    </span>
-                </div>
-                
-                <div className="flex items-center space-x-2 overflow-x-auto">
-                    <button
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
-                        onClick={handleExportBugs}
-                        disabled={!userCapabilities.canUpdateBugs}
-                    >
-                        <Download className="w-4 h-4 mr-2" />
-                        <span className="hidden sm:inline">Export</span>
-                    </button>
-                    
-                    <button
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
-                        onClick={handleGenerateReport}
-                        disabled={!userCapabilities.canUpdateBugs}
-                    >
-                        <FileText className="w-4 h-4 mr-2" />
-                        <span className="hidden sm:inline">Generate Report</span>
-                    </button>
-                    
-                    <BugReportButton onCreateBug={handleCreateBug} />
-                </div>
-            </div>
 
-            <div className="bg-white rounded-lg shadow-sm border p-4">
-                <BugFilters
+                <BugFilterBar
                     filters={filters}
-                    setFilters={setFilters}
-                    teamMembers={teamMembers}
-                    sprints={sprintOptions}
-                    isExpanded={isFiltersExpanded}
-                    setIsExpanded={setIsFiltersExpanded}
-                    groupBy={groupBy}
-                    setGroupBy={setGroupBy}
-                    subGroupBy={subGroupBy}
-                    setSubGroupBy={setSubGroupBy}
+                    onFiltersChange={setFilters}
+                    bugs={bugsHook.bugs}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
                 />
-            </div>
 
-            {filteredBugs.length === 0 ? (
-                <div className="text-center py-8">
-                    <p className="text-gray-500">No bugs found. Try adjusting the filters or create a new bug.</p>
+                <div className="transition-opacity duration-300">
+                    {viewMode === 'table' ? (
+                        <BugTable
+                            bugs={filteredBugs}
+                            testCases={bugsHook.testCases}
+                            relationships={bugsHook.relationships}
+                            selectedBugs={bugsHook.selectedBugs}
+                            onSelectBugs={bugsHook.selectBugs}
+                            onEdit={handleEditBug}
+                            onDuplicate={handleDuplicateBug}
+                            onBulkAction={handleBulkAction}
+                            onView={handleViewBug}
+                            onLinkTestCase={handleLinkTestCase}
+                            onUpdateBug={handleUpdateBug}
+                        />
+                    ) : (
+                        <BugList
+                            bugs={filteredBugs}
+                            testCases={bugsHook.testCases}
+                            relationships={bugsHook.relationships}
+                            selectedBugs={bugsHook.selectedBugs}
+                            onSelectBugs={bugsHook.selectBugs}
+                            onEdit={handleEditBug}
+                            onDelete={handleDeleteBug}
+                            onDuplicate={handleDuplicateBug}
+                            onBulkAction={handleBulkAction}
+                            onView={handleViewBug}
+                            onLinkTestCase={handleLinkTestCase}
+                        />
+                    )}
                 </div>
-            ) : (
-                <BugTable
-                    bugs={filteredBugs}
-                    testCases={testCases}
-                    relationships={bugToTestCases()}
-                    selectedBugs={selectedBugs}
-                    onToggleSelection={toggleBugSelection}
-                    onBulkAction={handleBulkAction}
-                    onView={handleViewBug}
-                    onEdit={handleEditBug}
-                    onDuplicate={handleDuplicateBug}
-                    onDelete={handleDeleteBug}
-                    onLinkTestCase={handleLinkTestCase}
-                    onUnlinkTestCase={handleUnlinkTestCase}
-                />
-            )}
 
-            {isDetailsModalOpen && (
-                <BugDetailsModal
-                    bug={selectedBug}
-                    onClose={() => setIsDetailsModalOpen(false)}
-                    onSave={handleSaveBug}
-                />
-            )}
+                {isDetailsModalOpen && selectedBug && (
+                    <BugDetailsModal
+                        bug={selectedBug}
+                        teamMembers={bugsHook.teamMembers || []}
+                        onUpdateBug={handleUpdateBug}
+                        onClose={handleCloseModal}
+                    />
+                )}
+            </div>
         </div>
     );
 };
 
-export default BugTracker;
+export default Bugs;

@@ -11,12 +11,11 @@ import {
     MagnifyingGlassIcon,
     PlayIcon,
     PlusIcon,
-    UserIcon,
     ChevronDownIcon,
-    BuildingOffice2Icon,
-    ArrowRightOnRectangleIcon,
+    
+    
 } from '@heroicons/react/24/outline';
-import { X, Building2, Calendar, Bell } from 'lucide-react';
+import { X, Bell, Building2, Calendar, } from 'lucide-react';
 
 // Import components
 import BugReportButton from '../modals/BugReportButton';
@@ -25,6 +24,7 @@ import ScreenRecorderButton from '../buttons/ScreenRecorderButton';
 import ReportDropdown from '../ReportDropdown';
 import TestCaseDropdown from '../TestCaseDropdown';
 import CreateSuiteModal from '../modals/createSuiteModal';
+import UserMenuDropdown from '../UserMenuDropdown';
 import { safeArray, safeLength, safeMap } from '../../utils/safeArrayUtils';
 
 const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
@@ -62,31 +62,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     // Check if user is organization admin
     const isOrganizationAdmin = accountType === 'organization' && userRole === 'admin';
-
-    // Get user display name with fallback logic
-    const getUserDisplayName = () => {
-        if (currentUser?.displayName) return currentUser.displayName;
-        if (currentUser?.email) {
-            const emailName = currentUser.email.split('@')[0];
-            return emailName
-                .replace(/[._]/g, ' ')
-                .split(' ')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                .join(' ');
-        }
-        return 'User';
-    };
-
-    // Get user initials for avatar fallback
-    const getUserInitials = () => {
-        const displayName = getUserDisplayName();
-        return displayName
-            .split(' ')
-            .map(name => name.charAt(0))
-            .slice(0, 2)
-            .join('')
-            .toUpperCase();
-    };
 
     // Toggle dropdown helper
     const toggleDropdown = (type) => {
@@ -167,17 +142,12 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     const handleSignOut = async () => {
         try {
-            // First attempt context-based sign-out
             if (actions.auth && typeof actions.auth.signOut === 'function') {
                 await actions.auth.signOut();
             }
-            // Fallback to direct Firebase sign-out
             await signOut(auth);
-            // Clear any local state
             actions.clearState();
-            // Show success notification
             actions.ui.showNotification('success', 'Successfully signed out', 2000);
-            // Redirect to login page
             router.push('/login');
         } catch (error) {
             console.error('Error signing out:', error);
@@ -240,7 +210,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                     <div className="flex justify-between items-center h-14">
                         {/* Left Section */}
                         <div className="flex items-center flex-1">
-                            {/* Mobile menu button */}
                             <button
                                 onClick={onMenuClick}
                                 className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
@@ -248,7 +217,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 <Bars3Icon className="h-6 w-6" />
                             </button>
 
-                            {/* Suite Selector */}
                             {isAuthenticated && (
                                 <div className="relative ml-2 lg:ml-4">
                                     <button
@@ -265,7 +233,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 </div>
                             )}
 
-                            {/* Create Sprint - Top Layer */}
                             <button
                                 onClick={handleCreateSprint}
                                 className="hidden sm:flex items-center space-x-2 ml-4 text-gray-700 px-3 py-2 text-sm rounded-md hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
@@ -278,12 +245,10 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
                         {/* Right Section - Top Layer */}
                         <div className="flex items-center space-x-2">
-                            {/* Add Team Member Button - Only for Organization Admins */}
                             {isOrganizationAdmin && (
                                 <TeamInviteButton currentUser={currentUser} actions={actions} />
                             )}
 
-                            {/* Notifications */}
                             <div className="relative">
                                 <button
                                     ref={notificationsButtonRef}
@@ -299,7 +264,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 </button>
                             </div>
 
-                            {/* User Menu */}
                             {isAuthenticated && (
                                 <div className="relative" ref={userMenuRef}>
                                     <button
@@ -314,49 +278,29 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                             <img
                                                 className="h-8 w-8 rounded-full object-cover"
                                                 src={currentUser.photoURL}
-                                                alt={getUserDisplayName()}
+                                                alt={currentUser.displayName || 'User'}
                                             />
                                         ) : (
                                             <div className="h-8 w-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-sm font-medium">
-                                                {getUserInitials()}
+                                                {(currentUser?.displayName || currentUser?.email || 'U')
+                                                    .split(' ')
+                                                    .map(name => name.charAt(0))
+                                                    .slice(0, 2)
+                                                    .join('')
+                                                    .toUpperCase()}
                                             </div>
                                         )}
                                     </button>
-
                                     {showUserMenu && (
-                                        <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
-                                            <div className="p-2">
-                                                <div className="px-3 py-2 text-sm border-b border-gray-200 mb-2">
-                                                    <p className="font-medium text-gray-900">{getUserDisplayName()}</p>
-                                                    <p className="text-xs text-gray-500 truncate">{currentUser?.email}</p>
-                                                    {accountType === 'organization' && (
-                                                        <div className="flex items-center mt-1">
-                                                            <BuildingOffice2Icon className="h-3 w-3 text-gray-400 mr-1" />
-                                                            <span className="text-xs text-gray-400">
-                                                                Organization {userRole && `(${userRole})`}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        setShowUserMenu(false);
-                                                        setActivePage?.('settings');
-                                                    }}
-                                                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
-                                                >
-                                                    <UserIcon className="h-4 w-4 mr-2 text-gray-500" />
-                                                    Profile
-                                                </button>
-                                                <button
-                                                    onClick={handleSignOut}
-                                                    className="w-full flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
-                                                >
-                                                    <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
-                                                    Sign Out
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <UserMenuDropdown
+                                            currentUser={currentUser}
+                                            accountType={accountType}
+                                            userRole={userRole}
+                                            setActivePage={setActivePage}
+                                            handleSignOut={handleSignOut}
+                                            setShowUserMenu={setShowUserMenu}
+                                            actions={actions}
+                                        />
                                     )}
                                 </div>
                             )}
@@ -367,7 +311,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 {/* Bottom Layer */}
                 <div className="px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-12">
-                        {/* Left Section - Search */}
                         <div className="flex items-center flex-1">
                             <div className="relative flex-1 max-w-md">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -381,36 +324,27 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                             </div>
                         </div>
 
-                        {/* Right Section - Action Buttons */}
                         <div className="flex items-center">
-                            {/* Mobile Action Menu */}
                             <div className="sm:hidden">
                                 <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md">
                                     <Bars3Icon className="h-5 w-5" />
                                 </button>
                             </div>
 
-                            {/* Desktop Action Buttons */}
                             <div className="hidden sm:flex items-center space-x-1 lg:space-x-2">
-                                {/* Run Tests */}
                                 <button className="text-gray-700 px-2 lg:px-3 py-2 text-sm rounded-md flex items-center space-x-1 lg:space-x-2 hover:bg-green-100 hover:text-green-700 transition-colors">
                                     <PlayIcon className="h-4 w-4" />
                                     <span className="hidden lg:inline">Run Tests</span>
                                 </button>
 
-                                {/* Report Bug */}
                                 <BugReportButton className="text-gray-700 hover:bg-orange-100 hover:text-orange-700 cursor-pointer px-2 lg:px-3 py-2 rounded-md transition-colors" />
 
-                                {/* Screen Recorder */}
                                 <ScreenRecorderButton setShowBugForm={setShowBugForm} actions={actions} />
 
-                                {/* Generate Report Dropdown */}
                                 <ReportDropdown />
 
-                                {/* Add Test Case Dropdown */}
                                 <TestCaseDropdown />
 
-                                {/* Create Sprint - Mobile */}
                                 <button
                                     onClick={handleCreateSprint}
                                     className="sm:hidden flex items-center space-x-1 text-gray-700 px-2 py-2 text-sm rounded-md hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
@@ -437,7 +371,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                         }}
                     >
                         <div className="p-2">
-                            {/* Create New Suite Button */}
                             <button
                                 onClick={handleCreateSuite}
                                 className="w-full flex items-center px-3 py-2 text-sm text-teal-700 hover:bg-teal-50 rounded-md border-b border-gray-100 mb-2"
@@ -446,7 +379,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 Create New Suite
                             </button>
 
-                            {/* Suite List */}
                             <div className="max-h-64 overflow-y-auto">
                                 {safeLength(safeSuites) === 0 ? (
                                     <div className="px-3 py-4 text-center text-gray-500 text-sm">
@@ -574,7 +506,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 )}
             </header>
 
-            {/* Create Suite Modal */}
             <CreateSuiteModal
                 isOpen={showCreateSuiteModal}
                 onSuiteCreated={handleSuiteCreated}

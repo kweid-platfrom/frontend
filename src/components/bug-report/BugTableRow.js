@@ -15,6 +15,7 @@ import {
     Monitor,
     Globe,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import {
     getDeviceInfoDisplay,
@@ -46,6 +47,24 @@ const BugRow = ({
     handleFrequencyChange,
     relationships,
 }) => {
+    // Local state to track loading states for each dropdown
+    const [loadingStates, setLoadingStates] = useState({
+        status: false,
+        severity: false,
+        assignment: false,
+        environment: false,
+        frequency: false,
+    });
+
+    // Local state to track the current values to prevent flickering
+    const [currentValues, setCurrentValues] = useState({
+        status: bug.status || 'New',
+        severity: bug.severity || 'Low',
+        assignment: bug.assigned_to || '',
+        environment: bug.environment || 'Production',
+        frequency: bug.frequency || 'Sometimes',
+    });
+
     const createdAt = bug.created_at instanceof Date ? bug.created_at : new Date(bug.created_at);
     const dueDate = bug.due_date ? (bug.due_date instanceof Date ? bug.due_date : new Date(bug.due_date)) : null;
     const linkedTestCaseIds =
@@ -54,8 +73,71 @@ const BugRow = ({
         [];
     const totalAttachments = bug?.attachments?.length || 0;
     const evidenceCount = getEvidenceCount(bug);
-    const assignedUser = bug.assigned_to || '';
     const reporterName = getReporterFirstName(bug.created_by || bug.reportedByEmail) || 'Unknown';
+
+    // Generic handler factory with improved error handling and optimistic updates
+    const createChangeHandler = (field, handler) => async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const newValue = e.target.value;
+        const originalValue = currentValues[field];
+
+        // Don't proceed if value hasn't changed
+        if (newValue === originalValue) {
+            return;
+        }
+
+        // Optimistic update - immediately update the UI
+        setCurrentValues(prev => ({ ...prev, [field]: newValue }));
+
+        // Set loading state
+        setLoadingStates(prev => ({ ...prev, [field]: true }));
+
+        try {
+            await handler(bug.id, newValue);
+            // Success - the optimistic update is kept
+            console.log(`✅ ${field} updated successfully:`, newValue);
+        } catch (error) {
+            console.error(`❌ ${field} change failed:`, error);
+            // Revert optimistic update on error
+            setCurrentValues(prev => ({ ...prev, [field]: originalValue }));
+
+            // Show user-friendly error message specific to the field
+            const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+            toast.error(`Failed to update ${fieldName.toLowerCase()}: ${error.message}`);
+        } finally {
+            // Clear loading state
+            setLoadingStates(prev => ({ ...prev, [field]: false }));
+        }
+    };
+    // Update current values when bug prop changes (from parent re-render)
+    useEffect(() => {
+        setCurrentValues({
+            status: bug.status || 'New',
+            severity: bug.severity || 'Low',
+            assignment: bug.assigned_to || '',
+            environment: bug.environment || 'Production',
+            frequency: bug.frequency || 'Sometimes',
+        });
+    }, [bug.status, bug.severity, bug.assigned_to, bug.environment, bug.frequency]);
+
+    // Enhanced event handlers
+    const handleStatusChangeWithPrevention = createChangeHandler('status', handleStatusChange);
+    const handleSeverityChangeWithPrevention = createChangeHandler('severity', handleSeverityChange);
+    const handleAssignmentChangeWithPrevention = createChangeHandler('assignment', handleAssignmentChange);
+    const handleEnvironmentChangeWithPrevention = createChangeHandler('environment', handleEnvironmentChange);
+    const handleFrequencyChangeWithPrevention = createChangeHandler('frequency', handleFrequencyChange);
+
+    const handleTestCaseLinkChange = async (newTestCases) => {
+        try {
+            if (onLinkTestCase) {
+                await onLinkTestCase(bug.id, newTestCases);
+            }
+        } catch (error) {
+            console.error('Test case linking failed:', error);
+        }
+    };
 
     return (
         <tr
@@ -69,12 +151,18 @@ const BugRow = ({
                     {isSelected ? (
                         <CheckSquare
                             className="w-4 h-4 text-teal-600 cursor-pointer"
-                            onClick={() => handleSelectItem(bug.id, false)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectItem(bug.id, false);
+                            }}
                         />
                     ) : (
                         <Square
                             className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
-                            onClick={() => handleSelectItem(bug.id, true)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectItem(bug.id, true);
+                            }}
                         />
                     )}
                 </div>
@@ -126,10 +214,13 @@ const BugRow = ({
             <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 min-w-[96px] align-middle">
                 <div className="flex items-center justify-center">
                     <select
-                        value={bug.status || 'New'}
-                        onChange={(e) => handleStatusChange(bug.id, e.target.value)}
-                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getStatusColor(bug.status)}`}
-                        onClick={(e) => e.stopPropagation()}
+                        value={currentValues.status}
+                        onChange={handleStatusChangeWithPrevention}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onFocus={(e) => e.stopPropagation()}
+                        disabled={loadingStates.status}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full transition-opacity ${loadingStates.status ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${getStatusColor(currentValues.status)}`}
                     >
                         {['New', 'In Progress', 'Blocked', 'Resolved', 'Closed'].map((status) => (
                             <option key={status} value={status}>
@@ -142,10 +233,13 @@ const BugRow = ({
             <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200 w-32 min-w-[128px] align-middle">
                 <div className="flex items-center">
                     <select
-                        value={assignedUser}
-                        onChange={(e) => handleAssignmentChange(bug.id, e.target.value)}
-                        className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white"
-                        onClick={(e) => e.stopPropagation()}
+                        value={currentValues.assignment}
+                        onChange={handleAssignmentChangeWithPrevention}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onFocus={(e) => e.stopPropagation()}
+                        disabled={loadingStates.assignment}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white transition-opacity ${loadingStates.assignment ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                     >
                         <option value="">Unassigned</option>
                         {teamMembers.map((member) => (
@@ -159,19 +253,22 @@ const BugRow = ({
             <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200 w-20 min-w-[80px] align-middle">
                 <div className="flex items-center">
                     <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(getPriorityFromSeverity(bug.severity))}`}
+                        className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(getPriorityFromSeverity(currentValues.severity))}`}
                     >
-                        {getPriorityFromSeverity(bug.severity) || 'Low'}
+                        {getPriorityFromSeverity(currentValues.severity) || 'Low'}
                     </span>
                 </div>
             </td>
             <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 min-w-[96px] align-middle">
                 <div className="flex items-center">
                     <select
-                        value={bug.severity || 'Low'}
-                        onChange={(e) => handleSeverityChange(bug.id, e.target.value)}
-                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full ${getStatusColor(bug.severity)}`}
-                        onClick={(e) => e.stopPropagation()}
+                        value={currentValues.severity}
+                        onChange={handleSeverityChangeWithPrevention}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onFocus={(e) => e.stopPropagation()}
+                        disabled={loadingStates.severity}
+                        className={`text-xs px-2 py-1 rounded border focus:ring-2 focus:ring-teal-500 cursor-pointer w-full transition-opacity ${loadingStates.severity ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${getStatusColor(currentValues.severity)}`}
                     >
                         {['Low', 'Medium', 'High', 'Critical'].map((severity) => (
                             <option key={severity} value={severity}>
@@ -228,10 +325,13 @@ const BugRow = ({
             <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200 w-28 min-w-[112px] align-middle">
                 <div className="flex items-center">
                     <select
-                        value={bug.environment || 'Production'}
-                        onChange={(e) => handleEnvironmentChange(bug.id, e.target.value)}
-                        className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white"
-                        onClick={(e) => e.stopPropagation()}
+                        value={currentValues.environment}
+                        onChange={handleEnvironmentChangeWithPrevention}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onFocus={(e) => e.stopPropagation()}
+                        disabled={loadingStates.environment}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white transition-opacity ${loadingStates.environment ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                     >
                         {environments.map((env) => (
                             <option key={env} value={env}>
@@ -276,10 +376,13 @@ const BugRow = ({
             <td className="px-4 py-3 whitespace-nowrap border-r border-gray-200 w-24 min-w-[96px] align-middle">
                 <div className="flex items-center">
                     <select
-                        value={bug.frequency || 'Sometimes'}
-                        onChange={(e) => handleFrequencyChange(bug.id, e.target.value)}
-                        className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white"
-                        onClick={(e) => e.stopPropagation()}
+                        value={currentValues.frequency}
+                        onChange={handleFrequencyChangeWithPrevention}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onFocus={(e) => e.stopPropagation()}
+                        disabled={loadingStates.frequency}
+                        className={`text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 w-full cursor-pointer bg-white transition-opacity ${loadingStates.frequency ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                     >
                         {['Always', 'Often', 'Sometimes', 'Rarely', 'Once'].map((freq) => (
                             <option key={freq} value={freq}>
@@ -293,7 +396,7 @@ const BugRow = ({
                 <MultiSelectDropdown
                     options={testCaseOptions}
                     value={linkedTestCaseIds}
-                    onChange={(newTestCases) => onLinkTestCase && onLinkTestCase(bug.id, newTestCases)}
+                    onChange={handleTestCaseLinkChange}
                     placeholder="Link Test Cases..."
                 />
             </td>

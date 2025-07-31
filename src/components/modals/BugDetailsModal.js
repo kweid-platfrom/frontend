@@ -57,18 +57,28 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
     };
 
     const handleFieldSave = async (field) => {
-        if (!onUpdateBug) return;
+        if (!onUpdateBug || typeof onUpdateBug !== 'function') {
+            console.error('onUpdateBug is not a function');
+            return;
+        }
+        
         try {
             let updateData = { [field]: tempValues[field] };
+            
             if (field === 'dueDate' && tempValues[field]) {
                 updateData[field] = new Date(tempValues[field]);
             }
+            
             if (field === 'tags') {
                 updateData[field] = tempValues[field].split(',').map(item => item.trim()).filter(item => item);
             }
+            
             const updatedBug = { ...editedBug, ...updateData };
             setEditedBug(updatedBug);
-            await onUpdateBug(updatedBug);
+            
+            // Call onUpdateBug with the bug ID and updates object
+            await onUpdateBug(editedBug.id, updateData);
+            
             setEditingField(null);
             setTempValues({});
         } catch (error) {
@@ -83,7 +93,8 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
 
     const handleAddComment = async (commentText, attachments = []) => {
         if (!commentText.trim() && attachments.length === 0) return;
-        if (!onUpdateBug) return;
+        if (!onUpdateBug || typeof onUpdateBug !== 'function') return;
+        
         try {
             const newComment = {
                 text: commentText,
@@ -94,10 +105,28 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
             };
             const updatedComments = [...comments, newComment];
             setComments(updatedComments);
-            await onUpdateBug({ ...editedBug, comments: updatedComments });
+            await onUpdateBug(editedBug.id, { comments: updatedComments });
         } catch (error) {
             console.error('Error adding comment:', error);
         }
+    };
+
+    // Utility function to safely format device info
+    const formatDeviceInfo = (bug) => {
+        const browserInfo = bug.browserInfo || 'Unknown';
+        let deviceInfo = 'Unknown';
+        
+        if (bug.deviceInfo) {
+            if (typeof bug.deviceInfo === 'string') {
+                deviceInfo = bug.deviceInfo.split(',')[0] || 'Unknown';
+            } else if (typeof bug.deviceInfo === 'object') {
+                deviceInfo = bug.deviceInfo.name || bug.deviceInfo.type || 'Unknown';
+            } else {
+                deviceInfo = String(bug.deviceInfo);
+            }
+        }
+        
+        return `${browserInfo}, ${deviceInfo}`;
     };
 
     const statusOptions = VALID_BUG_STATUSES.map(status => ({ value: status, label: status }));
@@ -130,7 +159,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         onSave: handleFieldSave,
         onCancel: handleFieldCancel,
         setTempValues,
-        disabled: !onUpdateBug,
+        disabled: !onUpdateBug || typeof onUpdateBug !== 'function',
         showEditIcon: !isSelect, // Only show edit icon for non-select fields
     });
 
@@ -418,11 +447,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         <h4 className="text-sm font-medium text-gray-700 mb-1">Device/Browser</h4>
                                         <EditableField
                                             field="deviceInfo"
-                                            value={
-                                                editedBug.browserInfo || editedBug.deviceInfo
-                                                    ? `${editedBug.browserInfo || 'Unknown'}, ${editedBug.deviceInfo?.split(',')[0] || 'Unknown'}`
-                                                    : 'Unknown'
-                                            }
+                                            value={formatDeviceInfo(editedBug)}
                                             type="text"
                                             icon={Smartphone}
                                             className="text-sm rounded w-full"

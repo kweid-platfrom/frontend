@@ -1,204 +1,326 @@
-// components/TestCases/AIGenerationModal.js
 'use client'
+import React, { useState, useCallback } from 'react';
+import {
+    Wand2,
+    X,
+    Settings,
+    Save,
+    Loader2
+} from 'lucide-react';
+import { useApp } from '../../context/AppProvider'; // Import real useApp hook
 
-import { useState } from 'react';
-import { X, Wand2, FileText, Settings, Zap } from 'lucide-react';
-
-export default function AIGenerationModal({ onClose, onGenerationComplete }) {
-    const [step, setStep] = useState(1); // 1: Configuration, 2: Generating, 3: Review
-    const [config, setConfig] = useState({
-        feature: '',
-        testType: 'functional',
-        priority: 'medium',
-        count: 10,
-        includeNegative: true,
-        includeEdgeCases: true,
-        includeApiTests: false,
-        includeUiTests: true,
-        framework: 'generic',
-        additionalContext: ''
-    });
-    const [generatedTestCases, setGeneratedTestCases] = useState([]);
-    const [generating, setGenerating] = useState(false);
-    const [selectedTestCases, setSelectedTestCases] = useState(new Set());
-
-    const testTypes = [
-        { value: 'functional', label: 'Functional Testing' },
-        { value: 'integration', label: 'Integration Testing' },
-        { value: 'unit', label: 'Unit Testing' },
-        { value: 'e2e', label: 'End-to-End Testing' },
-        { value: 'performance', label: 'Performance Testing' },
-        { value: 'security', label: 'Security Testing' },
-        { value: 'accessibility', label: 'Accessibility Testing' }
-    ];
-
-    const frameworks = [
-        { value: 'generic', label: 'Generic Test Cases' },
-        { value: 'selenium', label: 'Selenium WebDriver' },
-        { value: 'cypress', label: 'Cypress' },
-        { value: 'playwright', label: 'Playwright' },
-        { value: 'jest', label: 'Jest' },
-        { value: 'postman', label: 'Postman/API Testing' }
-    ];
-
-    const handleGenerate = async () => {
-        setGenerating(true);
-        setStep(2);
-
-        try {
-            // Simulate AI generation
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            // Generate mock test cases based on config
-            const mockTestCases = generateMockTestCases(config);
-            setGeneratedTestCases(mockTestCases);
-            setSelectedTestCases(new Set(mockTestCases.map(tc => tc.id)));
-            setStep(3);
-        } catch (error) {
-            console.error('Generation failed:', error);
-            alert('Failed to generate test cases. Please try again.');
-            setStep(1);
-        } finally {
-            setGenerating(false);
-        }
+// TestCaseCard component (unchanged)
+const TestCaseCard = ({ testCase, onToggleSelect, isSelected, onEdit }) => {
+    const priorityColors = {
+        Critical: 'text-red-600 bg-red-50 border-red-200',
+        High: 'text-orange-600 bg-orange-50 border-orange-200',
+        Medium: 'text-yellow-600 bg-yellow-50 border-yellow-200',
+        Low: 'text-green-600 bg-green-50 border-green-200'
     };
 
-    const generateMockTestCases = (config) => {
-        const feature = config.feature || 'Feature';
-        
-        // Basic positive test cases
-        const positiveTests = [
-            {
-                title: `${feature} - Valid Input Acceptance`,
-                description: `Verify that ${feature} accepts valid input data and processes it correctly`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'User is logged in and has necessary permissions',
-                steps: [
-                    'Navigate to the feature page',
-                    'Enter valid input data',
-                    'Click submit/save button',
-                    'Verify success message appears'
-                ],
-                expectedResult: 'Feature accepts valid input and displays success confirmation'
-            },
-            {
-                title: `${feature} - Data Persistence`,
-                description: `Verify that data entered in ${feature} is properly saved and retrievable`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'Database is accessible and user has write permissions',
-                steps: [
-                    'Enter data in the feature form',
-                    'Save the data',
-                    'Navigate away from the page',
-                    'Return to the feature page',
-                    'Verify data is still present'
-                ],
-                expectedResult: 'Data is properly saved and can be retrieved'
-            }
-        ];
+    const typeColors = {
+        Functional: 'text-blue-600 bg-blue-50',
+        Integration: 'text-purple-600 bg-purple-50',
+        Negative: 'text-red-600 bg-red-50',
+        'Edge Case': 'text-orange-600 bg-orange-50',
+        Performance: 'text-green-600 bg-green-50',
+        Security: 'text-indigo-600 bg-indigo-50'
+    };
 
-        // Negative test cases
-        const negativeTests = config.includeNegative ? [
-            {
-                title: `${feature} - Invalid Input Handling`,
-                description: `Verify that ${feature} properly handles invalid input data`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'User is on the feature page',
-                steps: [
-                    'Enter invalid data (empty, special characters, etc.)',
-                    'Attempt to submit',
-                    'Verify error message appears',
-                    'Verify data is not saved'
-                ],
-                expectedResult: 'System displays appropriate error message and prevents invalid data submission'
-            },
-            {
-                title: `${feature} - Unauthorized Access`,
-                description: `Verify that ${feature} prevents unauthorized access`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'User is not logged in or lacks permissions',
-                steps: [
-                    'Attempt to access the feature directly',
-                    'Verify access is denied',
-                    'Check for appropriate error message'
-                ],
-                expectedResult: 'Access is denied and appropriate error message is displayed'
-            }
-        ] : [];
+    return (
+        <div className={`border rounded-lg p-4 transition-all ${isSelected ? 'border-teal-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
+            <div className="flex items-start gap-3">
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(testCase.id)}
+                    className="mt-1 h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                />
 
-        // Edge case tests
-        const edgeCaseTests = config.includeEdgeCases ? [
-            {
-                title: `${feature} - Boundary Value Testing`,
-                description: `Verify that ${feature} handles boundary values correctly`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'Feature is accessible',
-                steps: [
-                    'Test with minimum allowed values',
-                    'Test with maximum allowed values',
-                    'Test with values just outside boundaries',
-                    'Verify appropriate handling in each case'
-                ],
-                expectedResult: 'Boundary values are handled correctly with appropriate validation'
-            }
-        ] : [];
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-medium text-gray-900 text-sm">{testCase.title}</h4>
+                        <div className="flex gap-1 ml-2">
+                            <span className={`px-2 py-1 text-xs rounded-full border ${priorityColors[testCase.priority] || 'text-gray-600 bg-gray-50 border-gray-200'}`}>
+                                {testCase.priority}
+                            </span>
+                            <span className={`px-2 py-1 text-xs rounded-full ${typeColors[testCase.type] || 'text-gray-600 bg-gray-50'}`}>
+                                {testCase.type}
+                            </span>
+                        </div>
+                    </div>
 
-        // API tests
-        const apiTests = config.includeApiTests ? [
-            {
-                title: `${feature} API - Successful Response`,
-                description: `Verify that ${feature} API returns correct response for valid requests`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'API is running and accessible',
-                steps: [
-                    'Send valid API request',
-                    'Verify response status code is 200',
-                    'Verify response contains expected data',
-                    'Verify response time is acceptable'
-                ],
-                expectedResult: 'API returns successful response with correct data'
-            }
-        ] : [];
+                    <p className="text-gray-600 text-sm mb-3">{testCase.description}</p>
 
-        // UI tests
-        const uiTests = config.includeUiTests ? [
-            {
-                title: `${feature} UI - Element Visibility`,
-                description: `Verify that all UI elements in ${feature} are properly displayed`,
-                priority: config.priority,
-                status: 'draft',
-                preconditions: 'Browser is open and feature is loaded',
-                steps: [
-                    'Load the feature page',
-                    'Verify all buttons are visible',
-                    'Verify all input fields are present',
-                    'Verify page layout is correct'
-                ],
-                expectedResult: 'All UI elements are properly displayed and accessible'
-            }
-        ] : [];
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div>
+                            <span className="font-medium text-gray-700">Category:</span>
+                            <span className="ml-1 text-gray-600">{testCase.category}</span>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Estimated Time:</span>
+                            <span className="ml-1 text-gray-600">{testCase.estimatedTime}</span>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Automation:</span>
+                            <span className="ml-1 text-gray-600">{testCase.automationPotential}</span>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Risk Level:</span>
+                            <span className="ml-1 text-gray-600">{testCase.riskLevel}</span>
+                        </div>
+                    </div>
 
-        // Combine all test types
-        const allTests = [...positiveTests, ...negativeTests, ...edgeCaseTests, ...apiTests, ...uiTests];
-        
-        // Return requested number of tests
-        return allTests.slice(0, config.count).map((test, index) => ({
-            ...test,
-            id: `generated-${index + 1}`,
-            tags: [config.testType, 'generated', 'ai'],
-            assignee: '',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+                    {testCase.tags && testCase.tags.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                            {testCase.tags.map((tag, index) => (
+                                <span key={index} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="mt-3 flex gap-2">
+                        <button
+                            onClick={() => onEdit(testCase)}
+                            className="text-teal-600 hover:text-teal-800 text-xs font-medium"
+                        >
+                            View Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// TestCaseDetailModal component (unchanged)
+const TestCaseDetailModal = ({ testCase, onClose, onSave }) => {
+    const [editedTestCase, setEditedTestCase] = useState(testCase);
+
+    const handleFieldChange = (field, value) => {
+        setEditedTestCase(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleStepsChange = (index, value) => {
+        const newSteps = [...editedTestCase.steps];
+        newSteps[index] = value;
+        setEditedTestCase(prev => ({ ...prev, steps: newSteps }));
+    };
+
+    const addStep = () => {
+        setEditedTestCase(prev => ({
+            ...prev,
+            steps: [...prev.steps, '']
         }));
     };
 
-    const handleTestCaseSelection = (testCaseId) => {
+    const removeStep = (index) => {
+        setEditedTestCase(prev => ({
+            ...prev,
+            steps: prev.steps.filter((_, i) => i !== index)
+        }));
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b">
+                    <h3 className="text-lg font-semibold">Test Case Details</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                            <input
+                                type="text"
+                                value={editedTestCase.title}
+                                onChange={(e) => handleFieldChange('title', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                            <select
+                                value={editedTestCase.priority}
+                                onChange={(e) => handleFieldChange('priority', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="Critical">Critical</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea
+                            value={editedTestCase.description}
+                            onChange={(e) => handleFieldChange('description', e.target.value)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm h-20 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Preconditions</label>
+                        <textarea
+                            value={editedTestCase.preconditions}
+                            onChange={(e) => handleFieldChange('preconditions', e.target.value)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm h-16 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-gray-700">Test Steps</label>
+                            <button
+                                onClick={addStep}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            >
+                                Add Step
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {editedTestCase.steps.map((step, index) => (
+                                <div key={index} className="flex gap-2">
+                                    <span className="text-sm text-gray-500 mt-2 min-w-[20px]">{index + 1}.</span>
+                                    <input
+                                        type="text"
+                                        value={step}
+                                        onChange={(e) => handleStepsChange(index, e.target.value)}
+                                        className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder={`Step ${index + 1}`}
+                                    />
+                                    <button
+                                        onClick={() => removeStep(index)}
+                                        className="text-red-600 hover:text-red-800 px-2"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Expected Result</label>
+                        <textarea
+                            value={editedTestCase.expectedResult}
+                            onChange={(e) => handleFieldChange('expectedResult', e.target.value)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm h-16 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Test Data</label>
+                        <textarea
+                            value={editedTestCase.testData}
+                            onChange={(e) => handleFieldChange('testData', e.target.value)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm h-16 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-2 p-4 border-t">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => onSave(editedTestCase)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// AIGenerationModal component
+export default function AIGenerationModal({ onClose, onGenerationComplete }) {
+    const { actions, state } = useApp(); // Use real AppProvider context
+    const [step, setStep] = useState('input'); // 'input', 'generating', 'review', 'saving'
+    const [prompt, setPrompt] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generatedTestCases, setGeneratedTestCases] = useState([]);
+    const [selectedTestCases, setSelectedTestCases] = useState(new Set());
+    const [generationSummary, setGenerationSummary] = useState(null);
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [selectedTestCase, setSelectedTestCase] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [savedCount, setSavedCount] = useState(0);
+
+    const [templateConfig, setTemplateConfig] = useState({
+        format: 'Given-When-Then',
+        priorities: 'Critical, High, Medium, Low',
+        types: 'Functional, Integration, Edge Case, Negative, Performance',
+        includeTestData: true,
+        framework: 'Generic',
+        coverage: 'Standard',
+        temperature: 0.6,
+        maxTokens: 3000
+    });
+    const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+
+    const handleGenerate = useCallback(async () => {
+        if (!prompt.trim()) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Validation Error',
+                message: 'Prompt is required for test case generation'
+            });
+            return;
+        }
+
+        setIsGenerating(true);
+        setStep('generating');
+
+        try {
+            const result = await actions.ai.generateTestCasesWithAI(
+                prompt,
+                'AI Generated Test Cases',
+                templateConfig
+            );
+
+            if (result.success && result.data?.testCases?.length > 0) {
+                setGeneratedTestCases(result.data.testCases);
+                setGenerationSummary(result.data.summary || null);
+                setSelectedTestCases(new Set(result.data.testCases.map(tc => tc.id)));
+                setStep('review');
+
+                actions.ui.showNotification({
+                    type: 'success',
+                    title: 'Success',
+                    message: `Generated ${result.data.testCases.length} test cases`
+                });
+            } else {
+                throw new Error(result.error || 'Failed to generate test cases');
+            }
+        } catch (error) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Generation Error',
+                message: error.message
+            });
+            setStep('input');
+        } finally {
+            setIsGenerating(false);
+        }
+    }, [prompt, templateConfig, actions]);
+
+    const handleToggleSelect = useCallback((testCaseId) => {
         setSelectedTestCases(prev => {
             const newSet = new Set(prev);
             if (newSet.has(testCaseId)) {
@@ -208,329 +330,385 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
             }
             return newSet;
         });
-    };
+    }, []);
 
-    const handleSelectAll = () => {
+    const handleSelectAll = useCallback(() => {
         if (selectedTestCases.size === generatedTestCases.length) {
             setSelectedTestCases(new Set());
         } else {
             setSelectedTestCases(new Set(generatedTestCases.map(tc => tc.id)));
         }
-    };
+    }, [selectedTestCases.size, generatedTestCases]);
 
-    const handleSaveSelected = () => {
-        const selectedTests = generatedTestCases.filter(tc => selectedTestCases.has(tc.id));
-        onGenerationComplete(selectedTests);
-    };
+    const handleSaveSelected = useCallback(async () => {
+        const testCasesToSave = generatedTestCases.filter(tc => selectedTestCases.has(tc.id));
+
+        if (testCasesToSave.length === 0) {
+            actions.ui.showNotification({
+                type: 'warning',
+                title: 'No Selection',
+                message: 'Please select at least one test case to save'
+            });
+            return;
+        }
+
+        setIsSaving(true);
+        setStep('saving');
+        setSavedCount(0);
+
+        try {
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const testCase of testCasesToSave) {
+                try {
+                    const result = await actions.testCases.createTestCase({
+                        ...testCase,
+                        suiteId: state.suites.activeSuite?.id,
+                        source: 'ai_generated',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    });
+
+                    if (result.success) {
+                        successCount++;
+                        setSavedCount(successCount);
+                    } else {
+                        failCount++;
+                    }
+                } catch (error) {
+                    console.error('Error saving test case:', error);
+                    failCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                actions.ui.showNotification({
+                    type: 'success',
+                    title: 'Test Cases Saved',
+                    message: `Successfully saved ${successCount} test case${successCount === 1 ? '' : 's'}${failCount > 0 ? `, ${failCount} failed` : ''}`
+                });
+
+                if (onGenerationComplete) {
+                    onGenerationComplete(testCasesToSave);
+                }
+
+                onClose();
+            } else {
+                throw new Error('Failed to save any test cases');
+            }
+        } catch (error) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'Save Error',
+                message: error.message || 'Failed to save test cases'
+            });
+            setStep('review');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [generatedTestCases, selectedTestCases, actions, state.suites.activeSuite?.id, onGenerationComplete, onClose]);
+
+    const handleEditTestCase = useCallback((testCase) => {
+        setSelectedTestCase(testCase);
+        setShowDetailModal(true);
+    }, []);
+
+    const handleSaveTestCase = useCallback((editedTestCase) => {
+        setGeneratedTestCases(prev =>
+            prev.map(tc => tc.id === editedTestCase.id ? editedTestCase : tc)
+        );
+        setShowDetailModal(false);
+        setSelectedTestCase(null);
+    }, []);
+
+    const handleConfigChange = useCallback((field, value) => {
+        setTemplateConfig(prev => ({ ...prev, [field]: value }));
+    }, []);
+
+    const renderInputStep = () => (
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Requirements / User Story *
+                </label>
+                <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Enter requirements, user story, or feature description for test case generation..."
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 h-40 resize-y focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    disabled={isGenerating}
+                />
+            </div>
+
+            <button
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-800"
+                disabled={isGenerating}
+            >
+                <Settings size={16} />
+                {showAdvancedSettings ? 'Hide Advanced Settings' : 'Show Advanced Settings'}
+            </button>
+
+            {showAdvancedSettings && (
+                <div className="border border-gray-200 rounded-md p-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Format</label>
+                            <select
+                                value={templateConfig.format}
+                                onChange={(e) => handleConfigChange('format', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                                <option value="Given-When-Then">Given-When-Then</option>
+                                <option value="BDD">BDD</option>
+                                <option value="Standard">Standard</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Framework</label>
+                            <select
+                                value={templateConfig.framework}
+                                onChange={(e) => handleConfigChange('framework', e.target.value)}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                                <option value="Generic">Generic</option>
+                                <option value="Cypress">Cypress</option>
+                                <option value="Selenium">Selenium</option>
+                                <option value="Playwright">Playwright</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Test Types</label>
+                        <input
+                            type="text"
+                            value={templateConfig.types}
+                            onChange={(e) => handleConfigChange('types', e.target.value)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={templateConfig.includeTestData}
+                            onChange={(e) => handleConfigChange('includeTestData', e.target.checked)}
+                            className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                        />
+                        <label className="text-sm text-gray-700">Include Test Data</label>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    const renderGeneratingStep = () => (
+        <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-pulse">
+                <Wand2 className="h-12 w-12 text-purple-600 mb-4" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Generating Test Cases...</h3>
+            <p className="text-gray-600 text-center">
+                AI is analyzing your requirements and creating comprehensive test cases.
+                <br />
+                This may take a few moments.
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                <span className="text-sm text-gray-500">Please wait...</span>
+            </div>
+        </div>
+    );
+
+    const renderReviewStep = () => (
+        <div className="space-y-4">
+            {generationSummary && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-medium text-gray-900 mb-2">Generation Summary</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <span className="text-gray-600">Total Tests:</span>
+                            <span className="ml-2 font-medium">{generationSummary.totalTests}</span>
+                        </div>
+                        <div>
+                            <span className="text-gray-600">Functional:</span>
+                            <span className="ml-2 font-medium">{generationSummary.breakdown?.functional || 0}</span>
+                        </div>
+                        <div>
+                            <span className="text-gray-600">Integration:</span>
+                            <span className="ml-2 font-medium">{generationSummary.breakdown?.integration || 0}</span>
+                        </div>
+                        <div>
+                            <span className="text-gray-600">Edge Cases:</span>
+                            <span className="ml-2 font-medium">{generationSummary.breakdown?.edgeCase || 0}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <h4 className="font-medium text-gray-900">Generated Test Cases ({generatedTestCases.length})</h4>
+                    <span className="text-sm text-gray-500">
+                        {selectedTestCases.size} selected
+                    </span>
+                </div>
+                <button
+                    onClick={handleSelectAll}
+                    className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                >
+                    {selectedTestCases.size === generatedTestCases.length ? 'Deselect All' : 'Select All'}
+                </button>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto space-y-3">
+                {generatedTestCases.map((testCase) => (
+                    <TestCaseCard
+                        key={testCase.id}
+                        testCase={testCase}
+                        isSelected={selectedTestCases.has(testCase.id)}
+                        onToggleSelect={handleToggleSelect}
+                        onEdit={handleEditTestCase}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+
+    const renderSavingStep = () => (
+        <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-pulse">
+                <Save className="h-12 w-12 text-green-600 mb-4" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Saving Test Cases...</h3>
+            <p className="text-gray-600 text-center mb-4">
+                Saving {selectedTestCases.size} test case{selectedTestCases.size === 1 ? '' : 's'} to your test suite.
+            </p>
+            <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                <span className="text-sm text-gray-500">
+                    Saved {savedCount} of {selectedTestCases.size} test cases
+                </span>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b">
-                    <div className="flex items-center gap-3">
-                        <Wand2 className="h-6 w-6 text-purple-600" />
-                        <h2 className="text-xl font-semibold">AI Test Case Generation</h2>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                        <X size={24} />
-                    </button>
-                </div>
-
-                {/* Steps Indicator */}
-                <div className="px-6 py-4 bg-gray-50 border-b">
-                    <div className="flex items-center justify-between max-w-md mx-auto">
-                        <div className={`flex items-center gap-2 ${step >= 1 ? 'text-purple-600' : 'text-gray-400'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
-                                <Settings size={16} />
-                            </div>
-                            <span className="text-sm font-medium">Configure</span>
+        <>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                        <div className="flex items-center gap-2">
+                            <Wand2 className="h-5 w-5 text-purple-600" />
+                            <h2 className="text-lg font-semibold">AI Test Case Generation</h2>
+                            {step === 'review' && (
+                                <span className="text-sm text-gray-500">
+                                    - Review and Save
+                                </span>
+                            )}
                         </div>
-                        <div className={`flex items-center gap-2 ${step >= 2 ? 'text-purple-600' : 'text-gray-400'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
-                                <Zap size={16} />
-                            </div>
-                            <span className="text-sm font-medium">Generate</span>
-                        </div>
-                        <div className={`flex items-center gap-2 ${step >= 3 ? 'text-purple-600' : 'text-gray-400'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
-                                <FileText size={16} />
-                            </div>
-                            <span className="text-sm font-medium">Review</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
-                    {/* Step 1: Configuration */}
-                    {step === 1 && (
-                        <div className="space-y-6">
-                            <div>
-                                <h3 className="text-lg font-medium mb-4">Configure Test Generation</h3>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Feature/Component Name *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={config.feature}
-                                            onChange={(e) => setConfig(prev => ({ ...prev, feature: e.target.value }))}
-                                            placeholder="e.g., User Registration, Shopping Cart"
-                                            className="w-full border border-gray-300 rounded-md px-3 py-2"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Test Type
-                                        </label>
-                                        <select
-                                            value={config.testType}
-                                            onChange={(e) => setConfig(prev => ({ ...prev, testType: e.target.value }))}
-                                            className="w-full border border-gray-300 rounded-md px-3 py-2"
-                                        >
-                                            {testTypes.map(type => (
-                                                <option key={type.value} value={type.value}>
-                                                    {type.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Priority Level
-                                        </label>
-                                        <select
-                                            value={config.priority}
-                                            onChange={(e) => setConfig(prev => ({ ...prev, priority: e.target.value }))}
-                                            className="w-full border border-gray-300 rounded-md px-3 py-2"
-                                        >
-                                            <option value="low">Low</option>
-                                            <option value="medium">Medium</option>
-                                            <option value="high">High</option>
-                                            <option value="critical">Critical</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Number of Test Cases
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="50"
-                                            value={config.count}
-                                            onChange={(e) => setConfig(prev => ({ ...prev, count: parseInt(e.target.value) }))}
-                                            className="w-full border border-gray-300 rounded-md px-3 py-2"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Test Framework
-                                        </label>
-                                        <select
-                                            value={config.framework}
-                                            onChange={(e) => setConfig(prev => ({ ...prev, framework: e.target.value }))}
-                                            className="w-full border border-gray-300 rounded-md px-3 py-2"
-                                        >
-                                            {frameworks.map(framework => (
-                                                <option key={framework.value} value={framework.value}>
-                                                    {framework.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {/* Test Options */}
-                                <div className="mt-6">
-                                    <h4 className="text-md font-medium mb-3">Test Coverage Options</h4>
-                                    <div className="space-y-3">
-                                        <label className="flex items-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={config.includeNegative}
-                                                onChange={(e) => setConfig(prev => ({ ...prev, includeNegative: e.target.checked }))}
-                                                className="mr-3"
-                                            />
-                                            <span className="text-sm">Include negative test cases</span>
-                                        </label>
-                                        <label className="flex items-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={config.includeEdgeCases}
-                                                onChange={(e) => setConfig(prev => ({ ...prev, includeEdgeCases: e.target.checked }))}
-                                                className="mr-3"
-                                            />
-                                            <span className="text-sm">Include edge cases and boundary testing</span>
-                                        </label>
-                                        <label className="flex items-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={config.includeApiTests}
-                                                onChange={(e) => setConfig(prev => ({ ...prev, includeApiTests: e.target.checked }))}
-                                                className="mr-3"
-                                            />
-                                            <span className="text-sm">Include API testing scenarios</span>
-                                        </label>
-                                        <label className="flex items-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={config.includeUiTests}
-                                                onChange={(e) => setConfig(prev => ({ ...prev, includeUiTests: e.target.checked }))}
-                                                className="mr-3"
-                                            />
-                                            <span className="text-sm">Include UI testing scenarios</span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                {/* Additional Context */}
-                                <div className="mt-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Additional Context (Optional)
-                                    </label>
-                                    <textarea
-                                        value={config.additionalContext}
-                                        onChange={(e) => setConfig(prev => ({ ...prev, additionalContext: e.target.value }))}
-                                        placeholder="Provide any additional context, requirements, or specific scenarios you want to include..."
-                                        rows={4}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 2: Generating */}
-                    {step === 2 && (
-                        <div className="text-center py-12">
-                            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                            <h3 className="text-xl font-semibold mb-2">Generating Test Cases</h3>
-                            <p className="text-gray-600">
-                                AI is analyzing your requirements and generating {config.count} test cases...
-                            </p>
-                            <div className="mt-6 max-w-md mx-auto">
-                                <div className="bg-gray-200 rounded-full h-2">
-                                    <div className="bg-purple-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 3: Review */}
-                    {step === 3 && (
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-lg font-medium">Generated Test Cases</h3>
-                                    <p className="text-sm text-gray-600">
-                                        Review and select the test cases you want to add to your project
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={handleSelectAll}
-                                        className="text-sm text-purple-600 hover:text-purple-700"
-                                    >
-                                        {selectedTestCases.size === generatedTestCases.length ? 'Deselect All' : 'Select All'}
-                                    </button>
-                                    <div className="text-sm text-gray-600">
-                                        {selectedTestCases.size} of {generatedTestCases.length} selected
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 max-h-96 overflow-y-auto">
-                                {generatedTestCases.map((testCase) => (
-                                    <div
-                                        key={testCase.id}
-                                        className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                                            selectedTestCases.has(testCase.id)
-                                                ? 'border-purple-500 bg-purple-50'
-                                                : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                        onClick={() => handleTestCaseSelection(testCase.id)}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedTestCases.has(testCase.id)}
-                                                onChange={() => handleTestCaseSelection(testCase.id)}
-                                                className="mt-1"
-                                            />
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <h4 className="font-medium">{testCase.title}</h4>
-                                                    <span className={`px-2 py-1 rounded-full text-xs ${
-                                                        testCase.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                                        testCase.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-green-100 text-green-800'
-                                                    }`}>
-                                                        {testCase.priority}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm text-gray-600 mb-2">{testCase.description}</p>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {testCase.tags.map(tag => (
-                                                        <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                                                            {tag}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="flex justify-between items-center p-6 border-t bg-gray-50">
-                    <div>
-                        {step === 3 && (
-                            <button
-                                onClick={() => setStep(1)}
-                                className="text-gray-600 hover:text-gray-800 transition-colors"
-                            >
-                                ← Back to Configuration
-                            </button>
-                        )}
-                    </div>
-                    <div className="flex gap-3">
                         <button
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                            disabled={generating}
+                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            disabled={isGenerating || isSaving}
                         >
-                            Cancel
+                            <X size={20} />
                         </button>
-                        {step === 1 && (
-                            <button
-                                onClick={handleGenerate}
-                                disabled={!config.feature.trim() || generating}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Generate Test Cases
-                            </button>
-                        )}
-                        {step === 3 && (
-                            <button
-                                onClick={handleSaveSelected}
-                                disabled={selectedTestCases.size === 0}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Add Selected ({selectedTestCases.size})
-                            </button>
-                        )}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6">
+                        {step === 'input' && renderInputStep()}
+                        {step === 'generating' && renderGeneratingStep()}
+                        {step === 'review' && renderReviewStep()}
+                        {step === 'saving' && renderSavingStep()}
+                    </div>
+
+                    <div className="flex justify-between items-center p-4 border-t bg-gray-50">
+                        <div>
+                            {step === 'generating' && (
+                                <div className="text-sm text-gray-600">
+                                    Generating test cases with AI...
+                                </div>
+                            )}
+                            {step === 'review' && (
+                                <div className="text-sm text-gray-600">
+                                    {selectedTestCases.size} of {generatedTestCases.length} test cases selected
+                                </div>
+                            )}
+                            {step === 'saving' && (
+                                <div className="text-sm text-gray-600">
+                                    Saving to {state.suites.activeSuite?.name || 'Active Suite'}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2">
+                            {step === 'input' && (
+                                <>
+                                    <button
+                                        onClick={onClose}
+                                        className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                        disabled={isGenerating}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleGenerate}
+                                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={isGenerating || !prompt.trim()}
+                                    >
+                                        <Wand2 size={16} />
+                                        Generate Test Cases
+                                    </button>
+                                </>
+                            )}
+
+                            {step === 'review' && (
+                                <>
+                                    <button
+                                        onClick={() => setStep('input')}
+                                        className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                    >
+                                        Back to Edit
+                                    </button>
+                                    <button
+                                        onClick={handleSaveSelected}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={selectedTestCases.size === 0}
+                                    >
+                                        <Save size={16} />
+                                        Save Selected ({selectedTestCases.size})
+                                    </button>
+                                </>
+                            )}
+
+                            {(step === 'generating' || step === 'saving') && (
+                                <button
+                                    disabled
+                                    className="px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <Loader2 size={16} className="animate-spin" />
+                                    {step === 'generating' ? 'Generating...' : 'Saving...'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+
+            {showDetailModal && selectedTestCase && (
+                <TestCaseDetailModal
+                    testCase={selectedTestCase}
+                    onClose={() => {
+                        setShowDetailModal(false);
+                        setSelectedTestCase(null);
+                    }}
+                    onSave={handleSaveTestCase}
+                />
+            )}
+        </>
     );
 }

@@ -92,7 +92,7 @@ const BugReportForm = ({
                                             value={formData.title}
                                             onChange={(e) => updateFormData('title', e.target.value)}
                                             placeholder="Brief description of the bug"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                             disabled={isSubmitting}
                                             required
                                         />
@@ -109,7 +109,7 @@ const BugReportForm = ({
                                             onChange={(e) => updateFormData('description', e.target.value)}
                                             placeholder="Detailed description of the bug"
                                             rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
                                             disabled={isSubmitting}
                                             required
                                         />
@@ -127,7 +127,7 @@ const BugReportForm = ({
                                                 onChange={(e) => updateFormData('actualBehavior', e.target.value)}
                                                 placeholder="What actually happens"
                                                 rows={3}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
                                                 disabled={isSubmitting}
                                                 required
                                             />
@@ -143,7 +143,7 @@ const BugReportForm = ({
                                                 onChange={(e) => updateFormData('expectedBehavior', e.target.value)}
                                                 placeholder="What should happen instead"
                                                 rows={3}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
                                                 disabled={isSubmitting}
                                             />
                                         </div>
@@ -160,7 +160,7 @@ const BugReportForm = ({
                                             onChange={(e) => updateFormData('stepsToReproduce', e.target.value)}
                                             placeholder="1. Navigate to...&#10;2. Click on...&#10;3. Observe..."
                                             rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
                                             disabled={isSubmitting}
                                         />
                                     </div>
@@ -175,11 +175,11 @@ const BugReportForm = ({
                                                 id="severity"
                                                 value={formData.severity}
                                                 onChange={(e) => updateFormData('severity', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                                 disabled={isSubmitting}
                                                 required
                                             >
-                                                <option value="">Select severity</option>
+                                                <option value="">Severity</option>
                                                 <option value="Critical">Critical</option>
                                                 <option value="High">High</option>
                                                 <option value="Medium">Medium</option>
@@ -195,11 +195,11 @@ const BugReportForm = ({
                                                 id="category"
                                                 value={formData.category}
                                                 onChange={(e) => updateFormData('category', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                                 disabled={isSubmitting}
                                                 required
                                             >
-                                                <option value="">Select category</option>
+                                                <option value="">Category</option>
                                                 <option value="UI/UX">UI/UX</option>
                                                 <option value="Functional">Functional</option>
                                                 <option value="Performance">Performance</option>
@@ -217,7 +217,7 @@ const BugReportForm = ({
                                                 id="environment"
                                                 value={formData.environment}
                                                 onChange={(e) => updateFormData('environment', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                                 disabled={isSubmitting}
                                             >
                                                 <option value="Production">Production</option>
@@ -235,7 +235,7 @@ const BugReportForm = ({
                                                 id="frequency"
                                                 value={formData.frequency}
                                                 onChange={(e) => updateFormData('frequency', e.target.value)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                                 disabled={isSubmitting}
                                             >
                                                 <option value="Once">Once</option>
@@ -258,7 +258,7 @@ const BugReportForm = ({
                                                 onChange={(e) => updateFormData('workaround', e.target.value)}
                                                 placeholder="Any temporary solutions or workarounds"
                                                 rows={3}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
                                                 disabled={isSubmitting}
                                             />
                                         </div>
@@ -274,7 +274,7 @@ const BugReportForm = ({
                                                         id="assignedTo"
                                                         value={formData.assignedTo || ''}
                                                         onChange={(e) => updateFormData('assignedTo', e.target.value)}
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                                                         disabled={isSubmitting}
                                                     >
                                                         <option value="">Unassigned</option>
@@ -347,7 +347,7 @@ const BugReportForm = ({
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
                                     disabled={isSubmitting}
                                 >
                                     Cancel
@@ -355,7 +355,7 @@ const BugReportForm = ({
                                 <button
                                     type="submit"
                                     onClick={handleSubmit}
-                                    className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                                    className={`px-4 py-2 text-sm font-medium text-white rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
                                         isSubmitting
                                             ? 'bg-gray-400 cursor-not-allowed'
                                             : 'bg-teal-600 hover:bg-teal-700'
@@ -364,7 +364,7 @@ const BugReportForm = ({
                                 >
                                     {isSubmitting ? (
                                         <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                                            <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
                                             Submitting...
                                         </>
                                     ) : (

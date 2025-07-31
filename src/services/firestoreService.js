@@ -204,7 +204,7 @@ export class FirestoreService {
         const validDocId = this.validateDocId(docId);
         if (!validDocId) {
             errorCallback?.({ success: false, error: { message: 'Invalid or missing document ID' } });
-            return () => {};
+            return () => { };
         }
 
         const docRef = this.createDocRef(collectionPath, validDocId);
@@ -284,6 +284,84 @@ export class FirestoreService {
         });
         this.unsubscribes.clear();
     }
+
+    recordings = {
+        createRecording: async (recordingData) => {
+            try {
+                const suiteId = this.validateDocId(recordingData.suiteId);
+                if (!suiteId) {
+                    return { success: false, error: { message: 'Invalid suite ID' } };
+                }
+                const collectionPath = `suites/${suiteId}/recordings`;
+                const result = await this.createDocument(collectionPath, recordingData);
+                return result;
+            } catch (error) {
+                return this.handleFirestoreError(error, 'create recording');
+            }
+        },
+
+        linkRecordingToBug: async (recordingId, bugId) => {
+            try {
+                const suiteId = this.validateDocId(this.getCurrentSuiteId());
+                if (!suiteId || !recordingId || !bugId) {
+                    return { success: false, error: { message: 'Invalid IDs provided' } };
+                }
+
+                const batch = writeBatch(this.db);
+                const recordingRef = this.createDocRef(`suites/${suiteId}/recordings`, recordingId);
+                const bugRef = this.createDocRef(`suites/${suiteId}/bugs`, bugId);
+
+                batch.update(recordingRef, { bugId, updated_at: serverTimestamp() });
+                batch.update(bugRef, {
+                    recordingIds: arrayUnion(recordingId),
+                    updated_at: serverTimestamp()
+                });
+
+                await batch.commit();
+                return { success: true };
+            } catch (error) {
+                return this.handleFirestoreError(error, 'link recording to bug');
+            }
+        },
+
+        subscribeToRecordings: (suiteId, callback, errorCallback) => {
+            const collectionPath = `suites/${suiteId}/recordings`;
+            return this.subscribeToCollection(
+                collectionPath,
+                [orderBy('created_at', 'desc')],
+                callback,
+                errorCallback
+            );
+        },
+    };
+
+    reports = {
+        getReports: async (orgId) => {
+            const collectionPath = `organizations/${orgId}/reports`;
+            return await this.queryDocuments(collectionPath, [], 'created_at', 100);
+        },
+        saveReport: async (reportData) => {
+            const collectionPath = `organizations/${reportData.organizationId}/reports`;
+            return await this.createDocument(collectionPath, reportData);
+        },
+        deleteReport: async (reportId) => {
+            const orgId = this.getCurrentUser()?.organizationId;
+            const collectionPath = `organizations/${orgId}/reports`;
+            return await this.deleteDocument(collectionPath, reportId);
+        },
+        toggleSchedule: async ({ organizationId, enabled }) => {
+            return await this.updateDocument(`organizations/${organizationId}/settings`, 'reportSchedule', { enabled });
+        },
+        subscribeToTriggers: (orgId, callback) => {
+            const collectionPath = `organizations/${orgId}/triggers`;
+            return this.subscribeToCollection(collectionPath, [], callback);
+        },
+        generatePDF: async (report) => {
+            // Placeholder for PDF generation logic
+            return { success: true, data: { url: `/pdf/${report.id}` } };
+        },
+    };
+
 
     cleanup() {
         this.unsubscribeAll();

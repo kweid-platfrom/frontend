@@ -87,9 +87,7 @@ export const useBugReducer = () => {
                     commentCount: bugData.commentCount || 0,
                     viewCount: bugData.viewCount || 0,
                     version: bugData.version || 1,
-                    // FIX: Keep suite_id field - required by Firestore rules
                     suite_id: suiteId,
-                    // Remove suiteId to avoid duplication
                     suiteId: undefined,
                 };
 
@@ -118,36 +116,46 @@ export const useBugReducer = () => {
         updateBug: async (bugId, updateData) => {
             dispatch({ type: 'BUGS_LOADING' });
             try {
+                const suiteId = updateData.suite_id || updateData.suiteId;
+                if (!suiteId) {
+                    throw new Error('Suite ID is required for update');
+                }
+
                 const formattedUpdateData = {
                     ...updateData,
                     updated_at: updateData.updated_at || Timestamp.fromDate(new Date()),
                     lastActivity: updateData.lastActivity || Timestamp.fromDate(new Date()),
-                    // FIX: Don't remove suite_id - it's required for permissions
-                    // suite_id: undefined, // REMOVE THIS LINE
-                    suiteId: undefined, // Keep this to avoid duplication
+                    suite_id: suiteId,
+                    suiteId: undefined,
                 };
 
-                const result = await firestoreService.assets.updateDocument('bugs', bugId, formattedUpdateData);
+                console.log('Updating bug with data:', { suiteId, bugId, formattedUpdateData });
+
+                const result = await firestoreService.updateDocument(`suites/${suiteId}/bugs`, bugId, formattedUpdateData);
                 if (result.success) {
                     dispatch({ type: 'BUG_UPDATED', payload: { id: bugId, ...result.data } });
                     toast.success('Bug updated successfully', { duration: 5000 });
                     return result;
                 } else {
                     dispatch({ type: 'BUGS_ERROR', payload: result.error.message });
+                    console.error('Bug update failed:', result.error);
                     toast.error(result.error.message, { duration: 5000 });
                     return result;
                 }
             } catch (error) {
+                console.error('Error in updateBug:', error);
                 dispatch({ type: 'BUGS_ERROR', payload: error.message });
                 toast.error(error.message, { duration: 5000 });
                 return { success: false, error: error.message };
             }
         },
-
-        deleteBug: async (bugId) => {
+        deleteBug: async (bugId, suiteId) => {
             dispatch({ type: 'BUGS_LOADING' });
             try {
-                const result = await firestoreService.assets.deleteDocument('bugs', bugId);
+                if (!suiteId) {
+                    throw new Error('Suite ID is required for delete');
+                }
+                const result = await firestoreService.deleteDocument(`suites/${suiteId}/bugs`, bugId);
                 if (result.success) {
                     dispatch({ type: 'BUG_DELETED', payload: bugId });
                     toast.success('Bug deleted successfully', { duration: 5000 });
@@ -158,6 +166,7 @@ export const useBugReducer = () => {
                     return result;
                 }
             } catch (error) {
+                console.error('Error in deleteBug:', error);
                 dispatch({ type: 'BUGS_ERROR', payload: error.message });
                 toast.error(error.message, { duration: 5000 });
                 return { success: false, error: error.message };
