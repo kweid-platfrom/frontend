@@ -2,11 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Custom Properties for Theme System */
+:root {
+  /* Light theme colors */
+  --color-primary: 59 130 246; /* blue-500 */
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 244 244 245; /* zinc-100 */
+  --color-secondary-foreground: 39 39 42; /* zinc-800 */
+  --color-muted: 244 244 245; /* zinc-100 */
+  --color-muted-foreground: 113 113 122; /* zinc-500 */
+  --color-accent: 244 244 245; /* zinc-100 */
+  --color-accent-foreground: 39 39 42; /* zinc-800 */
+  --color-destructive: 239 68 68; /* red-500 */
+  --color-destructive-foreground: 255 255 255;
+  --color-border: 228 228 231; /* zinc-200 */
+  --color-input: 228 228 231; /* zinc-200 */
+  --color-ring: 59 130 246; /* blue-500 */
+  --color-background: 255 255 255;
+  --color-foreground: 39 39 42; /* zinc-800 */
+  --color-card: 255 255 255;
+  --color-card-foreground: 39 39 42; /* zinc-800 */
+  --color-popover: 255 255 255;
+  --color-popover-foreground: 39 39 42; /* zinc-800 */
+  
+  /* App specific colors */
+  --color-sidebar: 249 250 251; /* gray-50 */
+  --color-sidebar-foreground: 17 24 39; /* gray-900 */
+  --color-nav: 255 255 255;
+  --color-nav-foreground: 17 24 39; /* gray-900 */
+  --color-content: 255 255 255;
+  --color-content-foreground: 17 24 39; /* gray-900 */
+  
+  /* Status colors */
+  --color-success: 34 197 94; /* green-500 */
+  --color-warning: 245 158 11; /* amber-500 */
+  --color-error: 239 68 68; /* red-500 */
+  --color-info: 59 130 246; /* blue-500 */
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* Dark theme colors */
+.dark {
+  --color-primary: 59 130 246; /* blue-500 */
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 39 39 42; /* zinc-800 */
+  --color-secondary-foreground: 244 244 245; /* zinc-100 */
+  --color-muted: 39 39 42; /* zinc-800 */
+  --color-muted-foreground: 161 161 170; /* zinc-400 */
+  --color-accent: 39 39 42; /* zinc-800 */
+  --color-accent-foreground: 244 244 245; /* zinc-100 */
+  --color-destructive: 220 38 38; /* red-600 */
+  --color-destructive-foreground: 255 255 255;
+  --color-border: 39 39 42; /* zinc-800 */
+  --color-input: 39 39 42; /* zinc-800 */
+  --color-ring: 59 130 246; /* blue-500 */
+  --color-background: 9 9 11; /* zinc-950 */
+  --color-foreground: 244 244 245; /* zinc-100 */
+  --color-card: 24 24 27; /* zinc-900 */
+  --color-card-foreground: 244 244 245; /* zinc-100 */
+  --color-popover: 24 24 27; /* zinc-900 */
+  --color-popover-foreground: 244 244 245; /* zinc-100 */
+  
+  /* App specific colors */
+  --color-sidebar: 17 24 39; /* gray-900 */
+  --color-sidebar-foreground: 249 250 251; /* gray-50 */
+  --color-nav: 31 41 55; /* gray-800 */
+  --color-nav-foreground: 249 250 251; /* gray-50 */
+  --color-content: 24 24 27; /* zinc-900 */
+  --color-content-foreground: 244 244 245; /* zinc-100 */
+  
+  /* Status colors */
+  --color-success: 34 197 94; /* green-500 */
+  --color-warning: 245 158 11; /* amber-500 */
+  --color-error: 239 68 68; /* red-500 */
+  --color-info: 59 130 246; /* blue-500 */
+  
+  /* Shadows in dark mode */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.2);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.2);
+}
+
 @layer base {
+  /* Updated body styles to use theme variables */
   body {
-    @apply bg-white;
+    background-color: rgb(var(--color-background));
+    color: rgb(var(--color-foreground));
   }
 
+  /* Prevent theme flashing */
+  .theme-loading * {
+    transition: none !important;
+  }
+
+  /* Smooth transitions for theme changes */
+  * {
+    transition: background-color 0.2s ease-in-out, 
+                color 0.2s ease-in-out, 
+                border-color 0.2s ease-in-out,
+                box-shadow 0.2s ease-in-out;
+  }
 }
 
 @layer components {
@@ -14,6 +117,73 @@
     @apply bg-brand-400 text-white rounded px-4 py-2 hover:bg-brand-500 transition-colors duration-200;
   }
 
+  /* Utility classes using CSS variables */
+  .bg-background { background-color: rgb(var(--color-background)); }
+  .bg-foreground { background-color: rgb(var(--color-foreground)); }
+  .bg-card { background-color: rgb(var(--color-card)); }
+  .bg-card-foreground { background-color: rgb(var(--color-card-foreground)); }
+  .bg-popover { background-color: rgb(var(--color-popover)); }
+  .bg-popover-foreground { background-color: rgb(var(--color-popover-foreground)); }
+  .bg-primary { background-color: rgb(var(--color-primary)); }
+  .bg-primary-foreground { background-color: rgb(var(--color-primary-foreground)); }
+  .bg-secondary { background-color: rgb(var(--color-secondary)); }
+  .bg-secondary-foreground { background-color: rgb(var(--color-secondary-foreground)); }
+  .bg-muted { background-color: rgb(var(--color-muted)); }
+  .bg-muted-foreground { background-color: rgb(var(--color-muted-foreground)); }
+  .bg-accent { background-color: rgb(var(--color-accent)); }
+  .bg-accent-foreground { background-color: rgb(var(--color-accent-foreground)); }
+  .bg-destructive { background-color: rgb(var(--color-destructive)); }
+  .bg-destructive-foreground { background-color: rgb(var(--color-destructive-foreground)); }
+  .bg-border { background-color: rgb(var(--color-border)); }
+  .bg-input { background-color: rgb(var(--color-input)); }
+  .bg-sidebar { background-color: rgb(var(--color-sidebar)); }
+  .bg-nav { background-color: rgb(var(--color-nav)); }
+  .bg-content { background-color: rgb(var(--color-content)); }
+
+  .text-background { color: rgb(var(--color-background)); }
+  .text-foreground { color: rgb(var(--color-foreground)); }
+  .text-card { color: rgb(var(--color-card)); }
+  .text-card-foreground { color: rgb(var(--color-card-foreground)); }
+  .text-popover { color: rgb(var(--color-popover)); }
+  .text-popover-foreground { color: rgb(var(--color-popover-foreground)); }
+  .text-primary { color: rgb(var(--color-primary)); }
+  .text-primary-foreground { color: rgb(var(--color-primary-foreground)); }
+  .text-secondary { color: rgb(var(--color-secondary)); }
+  .text-secondary-foreground { color: rgb(var(--color-secondary-foreground)); }
+  .text-muted { color: rgb(var(--color-muted)); }
+  .text-muted-foreground { color: rgb(var(--color-muted-foreground)); }
+  .text-accent { color: rgb(var(--color-accent)); }
+  .text-accent-foreground { color: rgb(var(--color-accent-foreground)); }
+  .text-destructive { color: rgb(var(--color-destructive)); }
+  .text-destructive-foreground { color: rgb(var(--color-destructive-foreground)); }
+  .text-border { color: rgb(var(--color-border)); }
+  .text-input { color: rgb(var(--color-input)); }
+  .text-ring { color: rgb(var(--color-ring)); }
+  .text-sidebar-foreground { color: rgb(var(--color-sidebar-foreground)); }
+  .text-nav-foreground { color: rgb(var(--color-nav-foreground)); }
+  .text-content-foreground { color: rgb(var(--color-content-foreground)); }
+
+  .text-success { color: rgb(var(--color-success)); }
+  .text-warning { color: rgb(var(--color-warning)); }
+  .text-error { color: rgb(var(--color-error)); }
+  .text-info { color: rgb(var(--color-info)); }
+
+  .border-border { border-color: rgb(var(--color-border)); }
+  .border-input { border-color: rgb(var(--color-input)); }
+  .border-ring { border-color: rgb(var(--color-ring)); }
+  .border-primary { border-color: rgb(var(--color-primary)); }
+  .border-secondary { border-color: rgb(var(--color-secondary)); }
+  .border-destructive { border-color: rgb(var(--color-destructive)); }
+
+  .ring-ring { --tw-ring-color: rgb(var(--color-ring)); }
+  .ring-offset-background { --tw-ring-offset-color: rgb(var(--color-background)); }
+
+  /* Shadow utilities */
+  .shadow-theme-sm { box-shadow: var(--shadow-sm); }
+  .shadow-theme { box-shadow: var(--shadow); }
+  .shadow-theme-md { box-shadow: var(--shadow-md); }
+  .shadow-theme-lg { box-shadow: var(--shadow-lg); }
+  .shadow-theme-xl { box-shadow: var(--shadow-xl); }
 }
 
 /* Scrollbar styles */

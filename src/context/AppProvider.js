@@ -13,7 +13,7 @@ import { useTeam } from './slices/teamSlice';
 import { useAutomation } from './slices/automationSlice';
 import { useUI } from './slices/uiSlice';
 import { useAI } from './slices/aiSlice';
-import { toast } from 'sonner';
+import { useTheme } from './slices/themeSlice';
 import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
 import { useReports } from './slices/reportSlice';
@@ -34,6 +34,7 @@ export const AppProvider = ({ children }) => {
     const ui = useUI();
     const ai = useAI();
     const reports = useReports();
+    const theme = useTheme();
 
     const [suitesLoaded, setSuitesLoaded] = useState(false);
     const [suiteSubscriptionActive, setSuiteSubscriptionActive] = useState(false);
@@ -57,6 +58,7 @@ export const AppProvider = ({ children }) => {
         ui: ui.state,
         ai: ai.state,
         reports: reports.state,
+        theme: theme.state,
     }), [
         auth.state,
         suites.state,
@@ -70,6 +72,7 @@ export const AppProvider = ({ children }) => {
         ui.state,
         ai.state,
         reports.state,
+        theme.state,
     ]);
 
     // Helper function to get current app actions
@@ -86,6 +89,7 @@ export const AppProvider = ({ children }) => {
         ui: ui.actions,
         ai: ai.actions,
         reports: reports.actions,
+        theme: theme.actions,
     }), [
         auth.actions,
         suites.actions,
@@ -98,7 +102,8 @@ export const AppProvider = ({ children }) => {
         automation.actions,
         ui.actions,
         ai.actions,
-        reports.actions
+        reports.actions,
+        theme.actions,
     ]);
 
     // Create properly wrapped test case functions that directly call the slice functions
@@ -127,6 +132,56 @@ export const AppProvider = ({ children }) => {
         return await deleteFunction(testCaseId);
     }, [testCases.actions.deleteTestCase, getCurrentAppState]);
 
+    // Theme management functions
+    const setTheme = useCallback((newTheme) => {
+        try {
+            theme.actions.setTheme(newTheme);
+            
+            // Show notification for theme change (optional)
+            if (ui.actions.showNotification) {
+                const themeNames = {
+                    light: 'Light',
+                    dark: 'Dark',
+                    system: 'System'
+                };
+                
+                ui.actions.showNotification({
+                    id: 'theme-changed',
+                    type: 'success',
+                    message: `Theme changed to ${themeNames[newTheme] || newTheme}`,
+                    duration: 2000,
+                });
+            }
+        } catch (error) {
+            console.error('Failed to set theme:', error);
+            if (ui.actions.showNotification) {
+                ui.actions.showNotification({
+                    id: 'theme-change-error',
+                    type: 'error',
+                    message: 'Failed to change theme',
+                    description: error.message,
+                    duration: 3000,
+                });
+            }
+        }
+    }, [theme.actions, ui.actions]);
+
+    const toggleTheme = useCallback(() => {
+        try {
+            theme.actions.toggleTheme();
+        } catch (error) {
+            console.error('Failed to toggle theme:', error);
+            if (ui.actions.showNotification) {
+                ui.actions.showNotification({
+                    id: 'theme-toggle-error',
+                    type: 'error',
+                    message: 'Failed to toggle theme',
+                    description: error.message,
+                    duration: 3000,
+                });
+            }
+        }
+    }, [theme.actions, ui.actions]);
 
     // Initialize AI service when authentication is ready
     const initializeAI = useCallback(async () => {
@@ -209,8 +264,12 @@ export const AppProvider = ({ children }) => {
 
         if (!currentState.ai.isInitialized || !currentState.ai.serviceInstance) {
             const error = 'AI service not available. Please check your configuration.';
-            toast.error(error, {
-                description: 'Try refreshing the page or check your environment variables'
+            ui.actions.showNotification?.({
+                id: 'ai-service-unavailable',
+                type: 'error',
+                message: error,
+                description: 'Try refreshing the page or check your environment variables',
+                duration: 5000,
             });
             return { success: false, error };
         }
@@ -254,8 +313,12 @@ export const AppProvider = ({ children }) => {
                     model: result.model
                 };
             } else if (result.success && (!result.data?.testCases || result.data.testCases.length === 0)) {
-                toast.warning('No test cases generated', {
-                    description: 'Try providing more detailed requirements or adjusting the prompt'
+                ui.actions.showNotification?.({
+                    id: 'no-test-cases-generated',
+                    type: 'warning',
+                    message: 'No test cases generated',
+                    description: 'Try providing more detailed requirements or adjusting the prompt',
+                    duration: 5000,
                 });
                 return result;
             }
@@ -263,15 +326,20 @@ export const AppProvider = ({ children }) => {
             return result;
         } catch (error) {
             console.error('❌ AI test case generation failed:', error);
-            toast.error('AI generation failed', {
-                description: error.message || 'Unknown error occurred'
+            ui.actions.showNotification?.({
+                id: 'ai-generation-failed',
+                type: 'error',
+                message: 'AI generation failed',
+                description: error.message || 'Unknown error occurred',
+                duration: 5000,
             });
             return { success: false, error: error.message };
         }
     }, [
         ai.state.isInitialized,
         ai.actions,
-        getCurrentAppState
+        getCurrentAppState,
+        ui.actions
     ]);
 
     // Get AI generation statistics for dashboard/analytics
@@ -300,24 +368,39 @@ export const AppProvider = ({ children }) => {
             // The AI action should handle the state update automatically
             await ai.actions.updateSettings(newSettings);
 
-            toast.success('AI settings updated', {
-                description: `Provider: ${newSettings.provider || ai.state.settings.provider}`
+            ui.actions.showNotification?.({
+                id: 'ai-settings-updated',
+                type: 'success',
+                message: 'AI settings updated',
+                description: `Provider: ${newSettings.provider || ai.state.settings.provider}`,
+                duration: 3000,
             });
 
             return { success: true };
         } catch (error) {
             console.error('Failed to update AI settings:', error);
-            toast.error('Failed to update AI settings', { description: error.message });
+            ui.actions.showNotification?.({
+                id: 'ai-settings-update-failed',
+                type: 'error',
+                message: 'Failed to update AI settings',
+                description: error.message,
+                duration: 5000,
+            });
             return { success: false, error: error.message };
         }
-    }, [ai.actions, ai.state.settings.provider]);
+    }, [ai.actions, ai.state.settings.provider, ui.actions]);
 
     // Helper functions for linking operations (unchanged)
     const linkTestCasesToBug = async (bugId, testCaseIds) => {
         return handleFirebaseOperation(
             () => FirestoreService.batchLinkTestCasesToBug(bugId, testCaseIds),
             'Test cases linked to bug',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `link-testcases-bug-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 bugs.actions.updateBug(bugId, result.data.bug);
@@ -333,7 +416,12 @@ export const AppProvider = ({ children }) => {
         return handleFirebaseOperation(
             () => FirestoreService.batchUnlinkTestCaseFromBug(bugId, testCaseId),
             'Test case unlinked from bug',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `unlink-testcase-bug-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 bugs.actions.updateBug(bugId, result.data.bug);
@@ -347,7 +435,12 @@ export const AppProvider = ({ children }) => {
         return handleFirebaseOperation(
             () => FirestoreService.batchLinkBugsToTestCase(testCaseId, bugIds),
             'Bugs linked to test case',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `link-bugs-testcase-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
@@ -363,7 +456,12 @@ export const AppProvider = ({ children }) => {
         return handleFirebaseOperation(
             () => FirestoreService.batchUnlinkBugFromTestCase(testCaseId, bugId),
             'Bug unlinked from test case',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `unlink-bug-testcase-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
@@ -377,7 +475,12 @@ export const AppProvider = ({ children }) => {
         return handleFirebaseOperation(
             () => FirestoreService.addTestCasesToSprint(sprintId, testCaseIds),
             'Test cases added to sprint',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `add-testcases-sprint-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 sprints.actions.updateSprint(sprintId, result.data);
@@ -390,7 +493,12 @@ export const AppProvider = ({ children }) => {
         return handleFirebaseOperation(
             () => FirestoreService.addBugsToSprint(sprintId, bugIds),
             'Bugs added to sprint',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `add-bugs-sprint-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 sprints.actions.updateSprint(sprintId, result.data);
@@ -434,12 +542,22 @@ export const AppProvider = ({ children }) => {
                     await FirestoreService.recordings.linkRecordingToBug(recordingId, bugResult.data.id);
                     recordings.actions.updateRecording(recordingId, { bugId: bugResult.data.id });
                 }
-                ui.actions.showNotification('info', 'Bug created for network error', 3000);
+                ui.actions.showNotification?.({
+                    id: 'bug-created-network-error',
+                    type: 'info',
+                    message: 'Bug created for network error',
+                    duration: 3000,
+                });
             }
 
             return result;
         } catch (error) {
-            ui.actions.showNotification('error', 'Failed to save recording', 5000);
+            ui.actions.showNotification?.({
+                id: 'save-recording-failed',
+                type: 'error',
+                message: 'Failed to save recording',
+                duration: 5000,
+            });
             throw error;
         }
     };
@@ -448,7 +566,12 @@ export const AppProvider = ({ children }) => {
         return handleFirebaseOperation(
             () => FirestoreService.recordings.linkRecordingToBug(recordingId, bugId),
             'Recording linked to bug',
-            (errorMessage) => toast.error(errorMessage, { duration: 5000 })
+            (errorMessage) => ui.actions.showNotification?.({
+                id: `link-recording-bug-error-${Date.now()}`,
+                type: 'error',
+                message: errorMessage,
+                duration: 5000,
+            })
         ).then((result) => {
             if (result.success) {
                 recordings.actions.updateRecording(recordingId, { bugId });
@@ -549,7 +672,12 @@ export const AppProvider = ({ children }) => {
             throw new Error(profileResult.error.message);
         } catch (error) {
             console.error('Error refreshing user profile:', error);
-            toast.error(getFirebaseErrorMessage(error), { duration: 5000 });
+            ui.actions.showNotification?.({
+                id: 'refresh-profile-error',
+                type: 'error',
+                message: getFirebaseErrorMessage(error),
+                duration: 5000,
+            });
             throw error;
         }
     };
@@ -585,12 +713,18 @@ export const AppProvider = ({ children }) => {
             automation.actions.clearAutomation?.();
             ui.actions.clearUI?.();
             ai.actions.clearAIState();
+            // Note: We don't clear theme state on logout as it's user preference
             setSuitesLoaded(false);
             setSuiteSubscriptionActive(false);
             setAiInitialized(false);
         } catch (error) {
             console.error('Error clearing state:', error);
-            toast.error(getFirebaseErrorMessage(error), { duration: 5000 });
+            ui.actions.showNotification?.({
+                id: 'clear-state-error',
+                type: 'error',
+                message: getFirebaseErrorMessage(error),
+                duration: 5000,
+            });
         }
     };
 
@@ -681,7 +815,12 @@ export const AppProvider = ({ children }) => {
                         'Suites loaded successfully',
                         (errorMessage) => {
                             if (suites.state.testSuites.length === 0 && errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
-                                toast.error(errorMessage, { duration: 5000 });
+                                ui.actions.showNotification?.({
+                                    id: 'suite-subscription-error',
+                                    type: 'error',
+                                    message: errorMessage,
+                                    duration: 5000,
+                                });
                             } else {
                                 console.debug('Ignoring error as suites are already loaded or permission denied:', errorMessage);
                             }
@@ -711,7 +850,12 @@ export const AppProvider = ({ children }) => {
                         suites.actions.loadSuitesSuccess([]);
                         setSuitesLoaded(true);
                         setSuiteSubscriptionActive(false);
-                        toast.error(getFirebaseErrorMessage(error), { duration: 5000 });
+                        ui.actions.showNotification?.({
+                            id: 'suite-subscription-unexpected-error',
+                            type: 'error',
+                            message: getFirebaseErrorMessage(error),
+                            duration: 5000,
+                        });
                     });
                 };
 
@@ -722,7 +866,7 @@ export const AppProvider = ({ children }) => {
                     suites.actions.loadSuitesSuccess([]);
                     setSuitesLoaded(true);
                     setSuiteSubscriptionActive(false);
-                    ui.actions.showNotification({
+                    ui.actions.showNotification?.({
                         id: 'subscription-inactive',
                         type: 'warning',
                         message: 'Your subscription is not active. Upgrade to access test suites!',
@@ -819,7 +963,12 @@ export const AppProvider = ({ children }) => {
                 `${type} loaded successfully`,
                 (errorMessage) => {
                     if (errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
-                        toast.error(`Failed to load ${type.toLowerCase()}: ${errorMessage}`, { duration: 5000 });
+                        ui.actions.showNotification?.({
+                            id: `${type.toLowerCase()}-subscription-error`,
+                            type: 'error',
+                            message: `Failed to load ${type.toLowerCase()}: ${errorMessage}`,
+                            duration: 5000,
+                        });
                     }
                 }
             ).then((result) => {
@@ -863,7 +1012,7 @@ export const AppProvider = ({ children }) => {
                 const daysRemaining = Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
                 if (daysRemaining <= 7) {
                     console.log(`Trial expiring in ${daysRemaining} days`);
-                    ui.actions.showNotification({
+                    ui.actions.showNotification?.({
                         id: `trial-warning-${daysRemaining}`,
                         type: 'warning',
                         message: `Your trial expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}. Upgrade to continue using all features!`,
@@ -900,6 +1049,7 @@ export const AppProvider = ({ children }) => {
             ui: ui.state,
             ai: ai.state,
             reports: reports.state,
+            theme: theme.state,
         },
         actions: {
             auth: {
@@ -933,6 +1083,11 @@ export const AppProvider = ({ children }) => {
                 getAIAnalytics,
                 updateAISettings,
             },
+            theme: {
+                ...theme.actions,
+                setTheme,
+                toggleTheme,
+            },
             linkTestCasesToBug,
             unlinkTestCaseFromBug,
             linkBugsToTestCase,
@@ -950,6 +1105,14 @@ export const AppProvider = ({ children }) => {
         planLimits: subscription.state.planLimits,
         aiAvailable: ai.state.isInitialized && !ai.state.error,
         aiGenerating: ai.state.isGenerating,
+        // Theme-related convenience properties
+        isDarkMode: theme.state.isDark,
+        isLightMode: theme.state.isLight,
+        isSystemTheme: theme.state.isSystem,
+        currentTheme: theme.state.actualTheme,
+        selectedTheme: theme.state.selectedTheme,
+        systemTheme: theme.state.systemTheme,
+        themeLoading: theme.state.isLoading,
         isLoading:
             auth.state.loading ||
             suites.state.loading ||
@@ -962,6 +1125,7 @@ export const AppProvider = ({ children }) => {
             automation.state.loading ||
             ui.state.loading ||
             ai.state.loading ||
+            theme.state.isLoading ||
             !suitesLoaded,
     }), [
         auth.state,
@@ -975,6 +1139,8 @@ export const AppProvider = ({ children }) => {
         automation.state,
         ui.state,
         ai.state,
+        reports.state,
+        theme.state,
         auth.actions,
         suites.actions,
         testCases.actions,
@@ -986,6 +1152,7 @@ export const AppProvider = ({ children }) => {
         automation.actions,
         ui.actions,
         ai.actions,
+        theme.actions,
         wrappedCreateTestCase,
         wrappedUpdateTestCase,
         wrappedDeleteTestCase,
@@ -994,6 +1161,8 @@ export const AppProvider = ({ children }) => {
         generateTestCasesWithAI,
         getAIAnalytics,
         updateAISettings,
+        setTheme,
+        toggleTheme,
         linkTestCasesToBug,
         unlinkTestCaseFromBug,
         linkBugsToTestCase,

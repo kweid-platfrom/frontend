@@ -1,22 +1,18 @@
-
 'use client';
 import { useState } from 'react';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import ThemeToggle from '@/components/common/ThemeToggle'; // Import the ThemeToggle component
 import {
     UserIcon,
     ArrowRightOnRectangleIcon,
     BuildingOffice2Icon,
-    SunIcon,
-    MoonIcon,
-    ComputerDesktopIcon,
     PlusIcon,
     LifebuoyIcon,
     ArrowUpIcon,
 } from '@heroicons/react/24/outline';
 
 const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, handleSignOut, setShowUserMenu, actions }) => {
-    const [theme, setTheme] = useState('system');
     const [accounts, setAccounts] = useState([{ id: currentUser?.uid, email: currentUser?.email }]);
 
     const getUserDisplayName = () => {
@@ -30,16 +26,6 @@ const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, h
                 .join(' ');
         }
         return 'User';
-    };
-
-    const handleThemeChange = (newTheme) => {
-        setTheme(newTheme);
-        if (newTheme === 'system') {
-            document.documentElement.classList.remove('dark', 'light');
-        } else {
-            document.documentElement.classList.remove('dark', 'light');
-            document.documentElement.classList.add(newTheme);
-        }
     };
 
     const handleAddAccount = async () => {
@@ -77,16 +63,16 @@ const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, h
     const needsUpgrade = accountType !== 'premium';
 
     return (
-        <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+        <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-lg shadow-theme-lg z-20">
             <div className="p-3">
                 {/* User Info */}
-                <div className="px-3 py-2 text-sm border-b border-gray-200 mb-3">
-                    <p className="font-medium text-gray-900">{getUserDisplayName()}</p>
-                    <p className="text-xs text-gray-500 truncate">{currentUser?.email}</p>
+                <div className="px-3 py-2 text-sm border-b border-border mb-3">
+                    <p className="font-medium text-card-foreground">{getUserDisplayName()}</p>
+                    <p className="text-xs text-muted-foreground truncate">{currentUser?.email}</p>
                     {accountType === 'organization' && (
                         <div className="flex items-center mt-1">
-                            <BuildingOffice2Icon className="h-3 w-3 text-gray-400 mr-1" />
-                            <span className="text-xs text-gray-400">
+                            <BuildingOffice2Icon className="h-3 w-3 text-muted-foreground mr-1" />
+                            <span className="text-xs text-muted-foreground">
                                 Organization {userRole && `(${userRole})`}
                             </span>
                         </div>
@@ -94,14 +80,14 @@ const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, h
                 </div>
 
                 {/* Accounts Section */}
-                <div className="border-b border-gray-200 mb-3">
-                    <p className="px-3 py-1 text-xs font-medium text-gray-600">Accounts</p>
+                <div className="border-b border-border mb-3">
+                    <p className="px-3 py-1 text-xs font-medium text-muted-foreground">Accounts</p>
                     {accounts.map((account) => (
                         <button
                             key={account.id}
                             onClick={() => handleSwitchAccount(account.id)}
-                            className={`w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors ${
-                                account.id === currentUser?.uid ? 'bg-gray-50' : ''
+                            className={`w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors ${
+                                account.id === currentUser?.uid ? 'bg-muted' : ''
                             }`}
                         >
                             <div className="h-6 w-6 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs mr-2">
@@ -112,36 +98,16 @@ const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, h
                     ))}
                     <button
                         onClick={handleAddAccount}
-                        className="w-full flex items-center px-3 py-2 text-sm text-teal-700 hover:bg-teal-50 rounded-md transition-colors"
+                        className="w-full flex items-center px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-md transition-colors"
                     >
                         <PlusIcon className="h-4 w-4 mr-2" />
                         Add Account
                     </button>
                 </div>
 
-                {/* Theme Switcher */}
-                <div className="border-b border-gray-200 mb-3">
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <p className="text-xs font-medium text-gray-600">Theme:</p>
-                        <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-md">
-                            {[
-                                { value: 'light', icon: <SunIcon className="h-4 w-4" /> },
-                                { value: 'dark', icon: <MoonIcon className="h-4 w-4" /> },
-                                { value: 'system', icon: <ComputerDesktopIcon className="h-4 w-4" /> },
-                            ].map(({ value, icon }) => (
-                                <button
-                                    key={value}
-                                    onClick={() => handleThemeChange(value)}
-                                    className={`p-1.5 rounded-md transition-colors ${
-                                        theme === value ? 'bg-teal-500 text-white' : 'text-gray-600 hover:bg-gray-200'
-                                    }`}
-                                    title={value.charAt(0).toUpperCase() + value.slice(1)}
-                                >
-                                    {icon}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                {/* Theme Switcher - Using the reusable ThemeToggle component */}
+                <div className="border-b border-border mb-3">
+                    <ThemeToggle variant="menu" />
                 </div>
 
                 {/* Profile, Support, Upgrade, Sign Out */}
@@ -150,22 +116,22 @@ const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, h
                         setShowUserMenu(false);
                         setActivePage?.('settings');
                     }}
-                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                    className="w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors"
                 >
-                    <UserIcon className="h-4 w-4 mr-2 text-gray-500" />
+                    <UserIcon className="h-4 w-4 mr-2 text-muted-foreground" />
                     Profile
                 </button>
                 <button
                     onClick={handleSupport}
-                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                    className="w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors"
                 >
-                    <LifebuoyIcon className="h-4 w-4 mr-2 text-gray-500" />
+                    <LifebuoyIcon className="h-4 w-4 mr-2 text-muted-foreground" />
                     Support
                 </button>
                 {needsUpgrade && (
                     <button
                         onClick={handleUpgrade}
-                        className="w-full flex items-center px-3 py-2 text-sm text-teal-700 hover:bg-teal-50 rounded-md transition-colors"
+                        className="w-full flex items-center px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-md transition-colors"
                     >
                         <ArrowUpIcon className="h-4 w-4 mr-2" />
                         Upgrade
@@ -173,9 +139,9 @@ const UserMenuDropdown = ({ currentUser, accountType, userRole, setActivePage, h
                 )}
                 <button
                     onClick={handleSignOut}
-                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                    className="w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors"
                 >
-                    <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2 text-gray-500" />
+                    <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2 text-muted-foreground" />
                     Sign Out
                 </button>
             </div>

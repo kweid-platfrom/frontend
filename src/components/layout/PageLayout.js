@@ -8,7 +8,7 @@ import { Loader2, AlertTriangle, AlertCircle, Plus } from 'lucide-react';
 import AppSidebar from './AppSidebar';
 import AppHeader from './AppHeader';
 import FeatureAccessBanner from '../common/FeatureAccessBanner';
-import NotificationBanner from '../notifications/NotificationBanner';
+import NotificationCenter from '../notifications/NotificationCenter';
 
 const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false }) => {
     const pathname = usePathname();
@@ -328,7 +328,7 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
                     <AppHeader />
 
                     {/* Notification banner */}
-                    <NotificationBanner />
+                    <NotificationCenter />
 
                     {/* Conditional upgrade banner */}
                     {needsUpgrade && (
