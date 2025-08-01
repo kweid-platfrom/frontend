@@ -92,9 +92,8 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
 
     if (variant === 'menu') {
         return (
-            <div className={`flex items-center justify-between px-3 py-2 ${className}`}>
-                <p className="text-xs font-medium text-muted-foreground">Theme:</p>
-                <div className="flex items-center space-x-1 bg-muted p-1 rounded-md">
+            <div className={`flex items-center justify-between px-4 py-3 ${className}`}>
+                <div className="flex items-center space-x-3 bg-muted p-1.5 rounded-md">
                     {[
                         { value: 'light', icon: getThemeIcon('light') },
                         { value: 'dark', icon: getThemeIcon('dark') },
@@ -103,9 +102,9 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
                         <button
                             key={value}
                             onClick={() => themeActions.setTheme(value)}
-                            className={`p-1.5 rounded-md transition-colors ${
+                            className={`p-2 rounded-md transition-colors ${
                                 theme.selectedTheme === value 
-                                    ? 'bg-primary text-primary-foreground' 
+                                    ? 'bg-teal-700 text-primary-foreground' 
                                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                             }`}
                             title={value.charAt(0).toUpperCase() + value.slice(1)}
@@ -122,7 +121,7 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
     return (
         <button
             onClick={themeActions.toggleTheme}
-            className={`inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 ${className}`}
+            className={`inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background hover:bg-teal-600 hover:text-teal-700 h-15 px-4 py-2 ${className}`}
             title={`Current theme: ${getThemeLabel(theme.selectedTheme)}. Click to cycle themes.`}
         >
             {getThemeIcon(theme.selectedTheme)}

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../context/AppProvider';
 import AIGenerationForm from '../../../components/AIGenerationForm';
+import aiIntegrationService from '../../../services/AIIntegrationService';
 
 const AIGenerationPage = () => {
     const { actions, state } = useApp();
@@ -24,7 +25,7 @@ const AIGenerationPage = () => {
     const [generatedTestCases, setGeneratedTestCases] = useState([]);
     const [selectedTestCases, setSelectedTestCases] = useState(new Set());
     const [generationSummary, setGenerationSummary] = useState(null);
-    const [isSaving, setIsSaving] = useState(false); // Fixed this line
+    const [isSaving, setIsSaving] = useState(false);
     const [savedCount, setSavedCount] = useState(0);
     const [showTips, setShowTips] = useState(false);
 
@@ -60,7 +61,7 @@ const AIGenerationPage = () => {
         setStep('generating');
 
         try {
-            const result = await actions.ai.generateTestCasesWithAI(
+            const result = await aiIntegrationService.generateTestCases(
                 prompt,
                 'AI Generated Test Cases',
                 templateConfig
@@ -192,7 +193,7 @@ const AIGenerationPage = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [generatedTestCases, state.suites.activeSuite.id, selectedTestCases, actions.ui, actions.testCases]);
+    }, [generatedTestCases, state.suites.activeSuite?.id, selectedTestCases, actions]);
 
     const handleExportDocument = useCallback(() => {
         const docContent = `# AI Generated Test Cases

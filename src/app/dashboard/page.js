@@ -1,9 +1,11 @@
+// Fix 1: Update Dashboard.jsx to use AI through useApp instead of separate AIProvider
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useUI } from '../../hooks/useUI';
 import { useApp } from '../../context/AppProvider';
+// Remove this import: import { useAI } from '../../context/AIProvider';
 import { useMetricsProcessor } from '../../hooks/useMetricsProcessor';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 
@@ -18,8 +20,6 @@ import { FilterControls } from '../../components/dashboard/FilterControls';
 import { ErrorDisplay } from '../../components/dashboard/ErrorDisplay';
 import { DashboardContent } from '../../components/dashboard/DashboardContent';
 
-import aiService from '../../services/aiService';
-
 const Dashboard = () => {
     const { metrics, loading, error, refresh, dataStatus } = useDashboard();
     const { toggleSidebar, sidebarOpen } = useUI();
@@ -28,8 +28,16 @@ const Dashboard = () => {
         activeSuite,
         isTrialActive,
         currentUser,
-        actions
+        actions,
+        // AI-related properties from useApp
+        aiAvailable,
+        aiGenerating,
     } = useApp();
+
+    // Get AI state and actions from the app context
+    const aiService = state.ai?.serviceInstance || null;
+    const aiInitialized = state.ai?.isInitialized || false;
+    const aiError = state.ai?.error || null;
 
     // Custom hooks
     const enhancedMetrics = useMetricsProcessor(metrics);
@@ -160,6 +168,17 @@ const Dashboard = () => {
         setActiveTab(tab);
     }, []);
 
+    // Log AI status for debugging
+    useEffect(() => {
+        console.log('Dashboard AI Status:', {
+            aiAvailable,
+            aiInitialized,
+            aiGenerating,
+            aiError,
+            hasServiceInstance: !!aiService
+        });
+    }, [aiAvailable, aiInitialized, aiGenerating, aiError, aiService]);
+
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
@@ -223,7 +242,16 @@ const Dashboard = () => {
                             filters={filters}
                             activeSuite={activeSuite}
                             onRefresh={handleRefresh}
+                            // Pass AI-related props from the app context
                             aiService={aiService}
+                            aiInitialized={aiInitialized}
+                            aiAvailable={aiAvailable}
+                            aiGenerating={aiGenerating}
+                            aiError={aiError}
+                            // Pass AI actions from the app context
+                            generateTestCasesWithAI={actions.ai?.generateTestCasesWithAI}
+                            getAIAnalytics={actions.ai?.getAIAnalytics}
+                            updateAISettings={actions.ai?.updateAISettings}
                         />
 
                     </div>

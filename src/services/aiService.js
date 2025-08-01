@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// services/aiService.js - Enhanced AI Service with Gemini AI support
+// services/aiService.js - Enhanced AI Service with complete metrics support
 import { FirestoreService } from './firestoreService';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -13,7 +13,6 @@ class AIService {
                 apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
             },
             gemini: {
-                // Updated default model to a stable, available one
                 model: process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash',
                 apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY,
             },
@@ -250,7 +249,6 @@ class AIService {
         return {
             text: response.text(),
             usage: {
-                // Gemini doesn't provide detailed token usage in the same way
                 total_tokens: 0
             }
         };
@@ -342,7 +340,7 @@ class AIService {
             case 'ollama':
                 return {
                     content: data.response,
-                    usage: { total_tokens: 0 } // Ollama doesn't provide token usage
+                    usage: { total_tokens: 0 }
                 };
             default:
                 throw new Error(`Unsupported provider: ${this.currentProvider}`);
@@ -593,17 +591,18 @@ Analyze the information thoroughly and provide actionable insights for the QA te
         }
     }
 
-    // Enhanced helper methods
+    // Calculate cost helper
     calculateCost(tokens, provider = 'gemini') {
         const costPerToken = {
-            openai: 0.0000015, // Updated pricing
-            gemini: 0.000001,  // Gemini Pro pricing (approximate)
+            openai: 0.0000015,
+            gemini: 0.000001,
             localai: 0.0,
             ollama: 0.0
         };
         return tokens * (costPerToken[provider] || 0);
     }
 
+    // Log AI usage
     async logAIUsage(usageData) {
         try {
             await this.firestoreService.createDocument('ai_usage_logs', {
@@ -615,62 +614,273 @@ Analyze the information thoroughly and provide actionable insights for the QA te
         }
     }
 
-    // Enhanced AI metrics with detailed tracking
+    // Enhanced AI metrics with detailed tracking - MAIN METHOD FOR COMPONENT
     async getAIMetrics(dateRange = 30) {
         try {
             const endDate = new Date();
             const startDate = new Date(endDate.getTime() - (dateRange * 24 * 60 * 60 * 1000));
 
-            // Get AI usage logs with error handling
-            const [usageResult, generationsResult] = await Promise.all([
-                this.firestoreService.queryDocuments('ai_usage_logs').catch(e => ({ success: false, error: e.message })),
-                this.firestoreService.queryDocuments('ai_generations').catch(e => ({ success: false, error: e.message }))
+            console.log(`📊 Fetching AI metrics for last ${dateRange} days...`);
+
+            // Get AI usage logs and generations with proper error handling
+            const [usageResult, generationsResult, bugAnalysisResult] = await Promise.all([
+                this.firestoreService.queryDocuments('ai_usage_logs', {
+                    where: [['timestamp', '>=', startDate.toISOString()]],
+                    orderBy: [['timestamp', 'desc']]
+                }).catch(e => {
+                    console.warn('Failed to fetch usage logs:', e.message);
+                    return { success: false, data: [], error: e.message };
+                }),
+                this.firestoreService.queryDocuments('ai_generations', {
+                    where: [['timestamp', '>=', startDate.toISOString()]],
+                    orderBy: [['timestamp', 'desc']]
+                }).catch(e => {
+                    console.warn('Failed to fetch generations:', e.message);
+                    return { success: false, data: [], error: e.message };
+                }),
+                this.firestoreService.queryDocuments('ai_bug_analysis', {
+                    where: [['timestamp', '>=', startDate.toISOString()]],
+                    orderBy: [['timestamp', 'desc']]
+                }).catch(e => {
+                    console.warn('Failed to fetch bug analysis:', e.message);
+                    return { success: false, data: [], error: e.message };
+                })
             ]);
 
             const usageLogs = usageResult.success ? usageResult.data : [];
             const generations = generationsResult.success ? generationsResult.data : [];
+            const bugAnalyses = bugAnalysisResult.success ? bugAnalysisResult.data : [];
+
+            console.log(`📈 Processing ${usageLogs.length} usage logs, ${generations.length} generations, ${bugAnalyses.length} bug analyses`);
 
             // Calculate comprehensive metrics
-            const metrics = {
-                // Core metrics
-                totalAIGenerations: generations.length,
-                successfulGenerations: usageLogs.filter(log => log.successful).length,
-                failedGenerations: usageLogs.filter(log => !log.successful).length,
-                aiSuccessRate: usageLogs.length > 0 ? (usageLogs.filter(log => log.successful).length / usageLogs.length) * 100 : 0,
+            const metrics = this.calculateDetailedMetrics(usageLogs, generations, bugAnalyses, dateRange);
 
-                // Generation breakdown
-                generationsFromUserStories: generations.filter(g => g.type === 'user_story').length,
-                generationsFromDocuments: generations.filter(g => g.type === 'document').length,
-                generationsFromRequirements: generations.filter(g => g.type === 'requirements').length,
-                generationsFromBugs: generations.filter(g => g.type === 'bug_analysis').length,
-
-                // Performance metrics
-                avgGenerationTimeSeconds: this.calculateAverageResponseTime(usageLogs),
-                avgTestCasesPerGeneration: this.calculateAvgTestCasesPerGeneration(generations),
-
-                // Cost metrics by provider
-                openAITokensUsed: this.getTokensByProvider(usageLogs, 'openai'),
-                geminiCallsCount: this.getCallsByProvider(usageLogs, 'gemini'),
-                ollamaCallsCount: this.getCallsByProvider(usageLogs, 'ollama'),
-                localAITokensUsed: this.getTokensByProvider(usageLogs, 'localai'),
-                totalAPICallsCount: usageLogs.length,
-                aiCostPerTestCase: this.calculateCostPerTestCase(usageLogs, generations),
-
-                // Provider distribution
-                providerUsage: this.getProviderUsageStats(usageLogs),
-
-                // Time savings estimation
-                estimatedTimeSavedHours: this.calculateTimeSaved(generations),
-                productivityIncrease: this.calculateProductivityIncrease(generations, usageLogs)
-            };
+            console.log('✅ AI metrics calculated successfully');
 
             return {
                 success: true,
                 data: metrics,
-                lastUpdated: new Date().toISOString()
+                lastUpdated: new Date().toISOString(),
+                dataPoints: {
+                    usageLogs: usageLogs.length,
+                    generations: generations.length,
+                    bugAnalyses: bugAnalyses.length
+                }
             };
         } catch (error) {
-            console.error('Error fetching AI metrics:', error);
+            console.error('❌ Error fetching AI metrics:', error);
+            return {
+                success: false,
+                error: error.message,
+                data: this.getDefaultMetrics() // Return default metrics on error
+            };
+        }
+    }
+
+    // Calculate detailed metrics from data
+    calculateDetailedMetrics(usageLogs, generations, bugAnalyses, dateRange) {
+        const successful = usageLogs.filter(log => log.successful);
+        const failed = usageLogs.filter(log => !log.successful);
+
+        // Core metrics
+        const totalAIGenerations = generations.length;
+        const successfulGenerations = successful.length;
+        const failedGenerations = failed.length;
+        const aiSuccessRate = usageLogs.length > 0 ? (successfulGenerations / usageLogs.length) * 100 : 0;
+
+        // Generation type breakdown
+        const generationsFromUserStories = generations.filter(g => g.type === 'user_story' || g.inputType === 'user_story').length;
+        const generationsFromDocuments = generations.filter(g => g.type === 'document' || g.inputType === 'document').length;
+        const generationsFromRequirements = generations.filter(g => g.type === 'requirements' || g.inputType === 'requirements').length;
+        const generationsFromBugs = bugAnalyses.length;
+
+        // Test case analysis
+        const allTestCases = generations.reduce((acc, gen) => {
+            const testCases = gen.result?.testCases || [];
+            return acc.concat(testCases);
+        }, []);
+
+        const testTypeBreakdown = this.analyzeTestTypes(allTestCases);
+
+        // Performance metrics
+        const avgGenerationTimeSeconds = this.calculateAverageResponseTime(usageLogs);
+        const totalTestCases = allTestCases.length;
+        const avgTestCasesPerGeneration = totalAIGenerations > 0 ? totalTestCases / totalAIGenerations : 0;
+
+        // Cost and provider metrics
+        const providerUsage = this.getProviderUsageStats(usageLogs);
+        const openAITokensUsed = this.getTokensByProvider(usageLogs, 'openai');
+        const geminiCallsCount = this.getCallsByProvider(usageLogs, 'gemini');
+        const ollamaCallsCount = this.getCallsByProvider(usageLogs, 'ollama');
+        const localAITokensUsed = this.getTokensByProvider(usageLogs, 'localai');
+        const totalAPICallsCount = usageLogs.length;
+        const aiCostPerTestCase = this.calculateCostPerTestCase(usageLogs, generations);
+
+        // Quality metrics
+        const criticalTests = allTestCases.filter(tc => tc.priority === 'Critical').length;
+        const highPriorityTests = allTestCases.filter(tc => tc.priority === 'High').length;
+        const automationCandidates = allTestCases.filter(tc => tc.automationPotential === 'High').length;
+
+        // Time and productivity calculations
+        const estimatedTimeSavedHours = this.calculateTimeSaved(generations);
+        const productivityIncrease = this.calculateProductivityIncrease(generations, usageLogs);
+
+        // Quality assessment
+        const averageQualityScore = this.calculateQualityScore(allTestCases);
+        const testCasesRequiringRevision = Math.floor(totalTestCases * 0.1); // Estimate 10% need revision
+
+        // Bug analysis metrics
+        const bugSuggestionsGenerated = bugAnalyses.length;
+        const testCasesFromAISuggestions = bugAnalyses.reduce((acc, bug) => {
+            return acc + (bug.result?.suggestedTestCases?.length || 0);
+        }, 0);
+        const averageSuggestionAccuracy = this.calculateSuggestionAccuracy(bugAnalyses);
+
+        return {
+            // Core metrics
+            totalAIGenerations,
+            successfulGenerations,
+            failedGenerations,
+            aiSuccessRate,
+
+            // Generation breakdown
+            generationsFromUserStories,
+            generationsFromDocuments,
+            generationsFromRequirements,
+            generationsFromBugs,
+
+            // Test type breakdown
+            functionalTestsGenerated: testTypeBreakdown.functional,
+            integrationTestsGenerated: testTypeBreakdown.integration,
+            edgeTestsGenerated: testTypeBreakdown.edgeCase,
+            negativeTestsGenerated: testTypeBreakdown.negative,
+            performanceTestsGenerated: testTypeBreakdown.performance,
+            securityTestsGenerated: testTypeBreakdown.security,
+
+            // Performance metrics
+            avgGenerationTimeSeconds,
+            avgTestCasesPerGeneration,
+
+            // Cost metrics by provider
+            openAITokensUsed,
+            geminiCallsCount,
+            ollamaCallsCount,
+            localAITokensUsed,
+            totalAPICallsCount,
+            aiCostPerTestCase,
+
+            // Provider distribution
+            providerUsage,
+
+            // Quality metrics
+            averageQualityScore,
+            testCasesRequiringRevision,
+            criticalTests,
+            highPriorityTests,
+            automationCandidates,
+
+            // Time savings estimation
+            estimatedTimeSavedHours,
+            productivityIncrease,
+
+            // Bug analysis
+            bugSuggestionsGenerated,
+            testCasesFromAISuggestions,
+            averageSuggestionAccuracy,
+
+            // Additional computed metrics
+            customPromptUsage: generations.filter(g => g.templateConfig && Object.keys(g.templateConfig).length > 0).length,
+            defaultPromptUsage: generations.filter(g => !g.templateConfig || Object.keys(g.templateConfig).length === 0).length,
+
+            // Meta information
+            lastUpdated: new Date().toISOString(),
+            dateRange,
+            dataPoints: {
+                usageLogs: usageLogs.length,
+                generations: generations.length,
+                bugAnalyses: bugAnalyses.length
+            }
+        };
+    }
+
+    // Export AI report method for the component
+    async exportAIReport(format = 'json', dateRange = 30) {
+        try {
+            console.log(`📤 Exporting AI report in ${format} format for ${dateRange} days`);
+            
+            const metricsResult = await this.getAIMetrics(dateRange);
+            if (!metricsResult.success) {
+                throw new Error(metricsResult.error || 'Failed to fetch metrics for export');
+            }
+
+            const metrics = metricsResult.data;
+            const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+            if (format === 'json') {
+                const reportData = {
+                    exportInfo: {
+                        generatedAt: new Date().toISOString(),
+                        dateRange: `${dateRange} days`,
+                        format: 'json',
+                        version: '1.0'
+                    },
+                    metrics,
+                    summary: {
+                        totalGenerations: metrics.totalAIGenerations,
+                        successRate: `${metrics.aiSuccessRate.toFixed(2)}%`,
+                        timeSaved: `${metrics.estimatedTimeSavedHours} hours`,
+                        costEfficiency: `${metrics.aiCostPerTestCase.toFixed(4)} per test case`
+                    }
+                };
+
+                return {
+                    success: true,
+                    data: JSON.stringify(reportData, null, 2),
+                    contentType: 'application/json',
+                    filename: `ai-metrics-report-${timestamp}.json`
+                };
+            } else if (format === 'csv') {
+                const csvHeaders = [
+                    'Metric', 'Value', 'Description'
+                ];
+
+                const csvRows = [
+                    ['Total AI Generations', metrics.totalAIGenerations, 'Total number of AI-powered generations'],
+                    ['Success Rate', `${metrics.aiSuccessRate.toFixed(2)}%`, 'Percentage of successful AI calls'],
+                    ['Average Generation Time', `${metrics.avgGenerationTimeSeconds}s`, 'Average time per generation'],
+                    ['Test Cases Per Generation', metrics.avgTestCasesPerGeneration.toFixed(1), 'Average test cases generated per call'],
+                    ['Time Saved', `${metrics.estimatedTimeSavedHours}h`, 'Estimated manual work time saved'],
+                    ['Productivity Increase', `${metrics.productivityIncrease.toFixed(1)}%`, 'Estimated productivity improvement'],
+                    ['Cost Per Test Case', `${metrics.aiCostPerTestCase.toFixed(4)}`, 'Average cost per generated test case'],
+                    ['OpenAI Tokens Used', metrics.openAITokensUsed, 'Total tokens consumed by OpenAI'],
+                    ['Gemini API Calls', metrics.geminiCallsCount, 'Total API calls to Gemini'],
+                    ['Functional Tests Generated', metrics.functionalTestsGenerated, 'Number of functional test cases'],
+                    ['Integration Tests Generated', metrics.integrationTestsGenerated, 'Number of integration test cases'],
+                    ['Edge Case Tests Generated', metrics.edgeTestsGenerated, 'Number of edge case test cases'],
+                    ['Critical Priority Tests', metrics.criticalTests, 'Number of critical priority test cases'],
+                    ['High Priority Tests', metrics.highPriorityTests, 'Number of high priority test cases'],
+                    ['Automation Candidates', metrics.automationCandidates, 'Number of high automation potential test cases'],
+                    ['Bug Suggestions Generated', metrics.bugSuggestionsGenerated, 'Number of AI bug analysis reports'],
+                    ['Quality Score', `${metrics.averageQualityScore}%`, 'Average quality score of generated content']
+                ];
+
+                const csvContent = [
+                    csvHeaders.join(','),
+                    ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+                ].join('\n');
+
+                return {
+                    success: true,
+                    data: csvContent,
+                    contentType: 'text/csv',
+                    filename: `ai-metrics-report-${timestamp}.csv`
+                };
+            } else {
+                throw new Error(`Unsupported export format: ${format}`);
+            }
+        } catch (error) {
+            console.error('❌ Export failed:', error);
             return {
                 success: false,
                 error: error.message
@@ -679,18 +889,21 @@ Analyze the information thoroughly and provide actionable insights for the QA te
     }
 
     // Helper methods for metrics calculations
+    analyzeTestTypes(testCases) {
+        return {
+            functional: testCases.filter(tc => tc.type === 'Functional').length,
+            integration: testCases.filter(tc => tc.type === 'Integration').length,
+            edgeCase: testCases.filter(tc => tc.type === 'Edge Case').length,
+            negative: testCases.filter(tc => tc.type === 'Negative').length,
+            performance: testCases.filter(tc => tc.type === 'Performance').length,
+            security: testCases.filter(tc => tc.type === 'Security').length
+        };
+    }
+
     calculateAverageResponseTime(logs) {
         if (logs.length === 0) return 0;
         const totalTime = logs.reduce((sum, log) => sum + (log.responseTime || 0), 0);
-        return Math.round(totalTime / logs.length / 1000);
-    }
-
-    calculateAvgTestCasesPerGeneration(generations) {
-        if (generations.length === 0) return 0;
-        const totalTestCases = generations.reduce((sum, gen) => {
-            return sum + (gen.result?.testCases?.length || 0);
-        }, 0);
-        return Math.round((totalTestCases / generations.length) * 10) / 10;
+        return Math.round(totalTime / logs.length / 1000); // Convert to seconds
     }
 
     calculateCostPerTestCase(logs, generations) {
@@ -743,8 +956,115 @@ Analyze the information thoroughly and provide actionable insights for the QA te
         const successfulGenerations = logs.filter(log => log.successful).length;
         if (successfulGenerations === 0) return 0;
 
-        // Rough calculation: each successful generation increases productivity by 15%
-        return Math.min(successfulGenerations * 0.15, 100); // Cap at 100%
+        // Calculation based on time saved vs total working time
+        const timeSavedHours = this.calculateTimeSaved(generations);
+        const workingHoursInPeriod = 40; // Assume 40 hours per week baseline
+        return Math.min((timeSavedHours / workingHoursInPeriod) * 100, 100); // Cap at 100%
+    }
+
+    calculateQualityScore(testCases) {
+        if (testCases.length === 0) return 0;
+
+        let qualityScore = 0;
+        testCases.forEach(tc => {
+            let score = 70; // Base score
+
+            // Add points for completeness
+            if (tc.steps && tc.steps.length >= 3) score += 10;
+            if (tc.expectedResult && tc.expectedResult.length > 10) score += 5;
+            if (tc.preconditions && tc.preconditions.length > 0) score += 5;
+            if (tc.testData && tc.testData.length > 0) score += 5;
+            if (tc.tags && tc.tags.length > 0) score += 3;
+            if (tc.riskLevel) score += 2;
+
+            qualityScore += Math.min(score, 100);
+        });
+
+        return Math.round(qualityScore / testCases.length);
+    }
+
+    calculateSuggestionAccuracy(bugAnalyses) {
+        if (bugAnalyses.length === 0) return 0;
+
+        // Simple heuristic: assume higher quality based on completeness
+        let totalScore = 0;
+        bugAnalyses.forEach(analysis => {
+            let score = 75; // Base score
+
+            const result = analysis.result || {};
+            if (result.stepsToReproduce && result.stepsToReproduce.length >= 3) score += 10;
+            if (result.suggestedTestCases && result.suggestedTestCases.length > 0) score += 10;
+            if (result.riskAssessment && result.riskAssessment.length > 20) score += 5;
+
+            totalScore += Math.min(score, 100);
+        });
+
+        return Math.round(totalScore / bugAnalyses.length);
+    }
+
+    // Default metrics for error cases
+    getDefaultMetrics() {
+        return {
+            totalAIGenerations: 0,
+            successfulGenerations: 0,
+            failedGenerations: 0,
+            aiSuccessRate: 0,
+            generationsFromUserStories: 0,
+            generationsFromDocuments: 0,
+            generationsFromRequirements: 0,
+            generationsFromBugs: 0,
+            functionalTestsGenerated: 0,
+            integrationTestsGenerated: 0,
+            edgeTestsGenerated: 0,
+            negativeTestsGenerated: 0,
+            performanceTestsGenerated: 0,
+            securityTestsGenerated: 0,
+            avgGenerationTimeSeconds: 0,
+            avgTestCasesPerGeneration: 0,
+            openAITokensUsed: 0,
+            geminiCallsCount: 0,
+            ollamaCallsCount: 0,
+            localAITokensUsed: 0,
+            totalAPICallsCount: 0,
+            aiCostPerTestCase: 0,
+            providerUsage: {},
+            averageQualityScore: 0,
+            testCasesRequiringRevision: 0,
+            estimatedTimeSavedHours: 0,
+            productivityIncrease: 0,
+            bugSuggestionsGenerated: 0,
+            testCasesFromAISuggestions: 0,
+            averageSuggestionAccuracy: 0,
+            customPromptUsage: 0,
+            defaultPromptUsage: 0,
+            lastUpdated: new Date().toISOString()
+        };
+    }
+
+    // Test AI health (alias for testConnection for compatibility)
+    async testHealth() {
+        return await this.testConnection();
+    }
+
+    // Get service status
+    getServiceStatus() {
+        return {
+            initialized: this.isHealthy,
+            healthy: this.isHealthy,
+            provider: this.currentProvider,
+            model: this.providers[this.currentProvider]?.model,
+            lastHealthCheck: this.lastHealthCheck,
+            error: this.isHealthy ? null : 'Service not healthy'
+        };
+    }
+
+    // Get supported providers
+    getSupportedProviders() {
+        return Object.keys(this.providers).map(provider => ({
+            name: provider,
+            model: this.providers[provider].model,
+            configured: !!this.providers[provider].apiKey || provider === 'ollama'
+        }));
     }
 }
 
