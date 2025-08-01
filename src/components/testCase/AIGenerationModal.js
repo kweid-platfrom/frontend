@@ -20,7 +20,7 @@ const TestCaseCard = ({ testCase, onToggleSelect, isSelected, onEdit }) => {
 
     const typeColors = {
         Functional: 'text-blue-600 bg-blue-50',
-        Integration: 'text-purple-600 bg-purple-50',
+        Integration: 'text-teal-600 bg-teal-50',
         Negative: 'text-red-600 bg-red-50',
         'Edge Case': 'text-orange-600 bg-orange-50',
         Performance: 'text-green-600 bg-green-50',
@@ -288,6 +288,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
         setStep('generating');
 
         try {
+            // Fix: Call the action directly without expecting a curried function
             const result = await actions.ai.generateTestCasesWithAI(
                 prompt,
                 'AI Generated Test Cases',
@@ -295,20 +296,48 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
             );
 
             if (result.success && result.data?.testCases?.length > 0) {
-                setGeneratedTestCases(result.data.testCases);
-                setGenerationSummary(result.data.summary || null);
-                setSelectedTestCases(new Set(result.data.testCases.map(tc => tc.id)));
+                // Add unique IDs to test cases if they don't have them
+                const testCasesWithIds = result.data.testCases.map((tc, index) => ({
+                    ...tc,
+                    id: tc.id || `generated_${Date.now()}_${index}`,
+                    // Ensure all required fields are present
+                    title: tc.title || `Test Case ${index + 1}`,
+                    description: tc.description || '',
+                    priority: tc.priority || 'Medium',
+                    type: tc.type || 'Functional',
+                    category: tc.category || 'General',
+                    estimatedTime: tc.estimatedTime || '5-10 min',
+                    automationPotential: tc.automationPotential || 'Medium',
+                    riskLevel: tc.riskLevel || 'Medium',
+                    steps: Array.isArray(tc.steps) ? tc.steps : [],
+                    expectedResult: tc.expectedResult || '',
+                    preconditions: tc.preconditions || '',
+                    testData: tc.testData || '',
+                    tags: Array.isArray(tc.tags) ? tc.tags : []
+                }));
+
+                setGeneratedTestCases(testCasesWithIds);
+                setGenerationSummary(result.data.summary || {
+                    totalTests: testCasesWithIds.length,
+                    breakdown: testCasesWithIds.reduce((acc, tc) => {
+                        const type = tc.type?.toLowerCase() || 'functional';
+                        acc[type] = (acc[type] || 0) + 1;
+                        return acc;
+                    }, {})
+                });
+                setSelectedTestCases(new Set(testCasesWithIds.map(tc => tc.id)));
                 setStep('review');
 
                 actions.ui.showNotification({
                     type: 'success',
                     title: 'Success',
-                    message: `Generated ${result.data.testCases.length} test cases`
+                    message: `Generated ${testCasesWithIds.length} test cases`
                 });
             } else {
                 throw new Error(result.error || 'Failed to generate test cases');
             }
         } catch (error) {
+            console.error('Generation error:', error);
             actions.ui.showNotification({
                 type: 'error',
                 title: 'Generation Error',
@@ -352,6 +381,15 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
             return;
         }
 
+        if (!state.suites.activeSuite?.id) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'No Active Suite',
+                message: 'Please select or create a test suite first'
+            });
+            return;
+        }
+
         setIsSaving(true);
         setStep('saving');
         setSavedCount(0);
@@ -359,29 +397,62 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
         try {
             let successCount = 0;
             let failCount = 0;
+            const savedTestCases = [];
 
-            for (const testCase of testCasesToSave) {
+            for (const [index, testCase] of testCasesToSave.entries()) {
                 try {
-                    const result = await actions.testCases.createTestCase({
-                        ...testCase,
-                        suiteId: state.suites.activeSuite?.id,
+                    // Clean up the test case data before saving
+                    const cleanTestCase = {
+                        // Remove temporary fields
+                        ...Object.fromEntries(
+                            Object.entries(testCase).filter(([key]) => !key.startsWith('_'))
+                        ),
+                        // Remove the temporary ID and let Firestore generate a new one
+                        id: undefined,
+                        // Add required fields for saving
+                        suiteId: state.suites.activeSuite.id,
                         source: 'ai_generated',
+                        generationId: testCase._generationId || `gen_${Date.now()}`,
+                        aiProvider: testCase._provider || 'unknown',
+                        aiModel: testCase._model || 'unknown',
                         created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    });
+                        updated_at: new Date().toISOString(),
+                        // Ensure all required fields have defaults
+                        title: testCase.title || `Test Case ${index + 1}`,
+                        description: testCase.description || '',
+                        priority: testCase.priority || 'Medium',
+                        type: testCase.type || 'Functional',
+                        category: testCase.category || 'General',
+                        estimatedTime: testCase.estimatedTime || '5-10 min',
+                        automationPotential: testCase.automationPotential || 'Medium',
+                        riskLevel: testCase.riskLevel || 'Medium',
+                        steps: Array.isArray(testCase.steps) ? testCase.steps : [],
+                        expectedResult: testCase.expectedResult || '',
+                        preconditions: testCase.preconditions || '',
+                        testData: testCase.testData || '',
+                        tags: Array.isArray(testCase.tags) ? testCase.tags : []
+                    };
+
+                    console.log(`💾 Saving test case ${index + 1}/${testCasesToSave.length}:`, cleanTestCase.title);
+
+                    const result = await actions.testCases.createTestCase(cleanTestCase);
 
                     if (result.success) {
                         successCount++;
                         setSavedCount(successCount);
+                        savedTestCases.push(result.data);
+                        console.log(`✅ Saved: ${cleanTestCase.title}`);
                     } else {
                         failCount++;
+                        console.error(`❌ Failed to save: ${cleanTestCase.title}`, result.error);
                     }
                 } catch (error) {
-                    console.error('Error saving test case:', error);
+                    console.error(`❌ Error saving test case ${index + 1}:`, error);
                     failCount++;
                 }
             }
 
+            // Show results
             if (successCount > 0) {
                 actions.ui.showNotification({
                     type: 'success',
@@ -390,14 +461,16 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                 });
 
                 if (onGenerationComplete) {
-                    onGenerationComplete(testCasesToSave);
+                    onGenerationComplete(savedTestCases);
                 }
 
+                // Close modal after successful save
                 onClose();
             } else {
                 throw new Error('Failed to save any test cases');
             }
         } catch (error) {
+            console.error('❌ Save operation failed:', error);
             actions.ui.showNotification({
                 type: 'error',
                 title: 'Save Error',
@@ -407,7 +480,14 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
         } finally {
             setIsSaving(false);
         }
-    }, [generatedTestCases, selectedTestCases, actions, state.suites.activeSuite?.id, onGenerationComplete, onClose]);
+    }, [
+        generatedTestCases,
+        selectedTestCases,
+        actions,
+        state.suites.activeSuite?.id,
+        onGenerationComplete,
+        onClose
+    ]);
 
     const handleEditTestCase = useCallback((testCase) => {
         setSelectedTestCase(testCase);
@@ -436,14 +516,14 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Enter requirements, user story, or feature description for test case generation..."
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 h-40 resize-y focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 h-40 resize-y focus:outline-none focus:ring-2 focus:ring-teal-500"
                     disabled={isGenerating}
                 />
             </div>
 
             <button
                 onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-800"
+                className="flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800"
                 disabled={isGenerating}
             >
                 <Settings size={16} />
@@ -458,7 +538,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                             <select
                                 value={templateConfig.format}
                                 onChange={(e) => handleConfigChange('format', e.target.value)}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                             >
                                 <option value="Given-When-Then">Given-When-Then</option>
                                 <option value="BDD">BDD</option>
@@ -471,7 +551,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                             <select
                                 value={templateConfig.framework}
                                 onChange={(e) => handleConfigChange('framework', e.target.value)}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                             >
                                 <option value="Generic">Generic</option>
                                 <option value="Cypress">Cypress</option>
@@ -487,7 +567,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                             type="text"
                             value={templateConfig.types}
                             onChange={(e) => handleConfigChange('types', e.target.value)}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                         />
                     </div>
 
@@ -496,7 +576,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                             type="checkbox"
                             checked={templateConfig.includeTestData}
                             onChange={(e) => handleConfigChange('includeTestData', e.target.checked)}
-                            className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                            className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
                         />
                         <label className="text-sm text-gray-700">Include Test Data</label>
                     </div>
@@ -508,7 +588,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
     const renderGeneratingStep = () => (
         <div className="flex flex-col items-center justify-center py-12">
             <div className="animate-pulse">
-                <Wand2 className="h-12 w-12 text-purple-600 mb-4" />
+                <Wand2 className="h-12 w-12 text-teal-600 mb-4" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Generating Test Cases...</h3>
             <p className="text-gray-600 text-center">
@@ -517,7 +597,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                 This may take a few moments.
             </p>
             <div className="mt-4 flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
                 <span className="text-sm text-gray-500">Please wait...</span>
             </div>
         </div>
@@ -558,7 +638,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                 </div>
                 <button
                     onClick={handleSelectAll}
-                    className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                    className="text-sm text-teal-600 hover:text-teal-800 font-medium"
                 >
                     {selectedTestCases.size === generatedTestCases.length ? 'Deselect All' : 'Select All'}
                 </button>
@@ -599,10 +679,10 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
     return (
         <>
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                     <div className="flex items-center justify-between p-4 border-b bg-gray-50">
                         <div className="flex items-center gap-2">
-                            <Wand2 className="h-5 w-5 text-purple-600" />
+                            <Wand2 className="h-5 w-5 text-teal-600" />
                             <h2 className="text-lg font-semibold">AI Test Case Generation</h2>
                             {step === 'review' && (
                                 <span className="text-sm text-gray-500">
@@ -657,7 +737,7 @@ export default function AIGenerationModal({ onClose, onGenerationComplete }) {
                                     </button>
                                     <button
                                         onClick={handleGenerate}
-                                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                         disabled={isGenerating || !prompt.trim()}
                                     >
                                         <Wand2 size={16} />

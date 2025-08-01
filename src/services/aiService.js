@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// services/aiService.js - Enhanced AI Service with error fixes and open source AI support
+// services/aiService.js - Enhanced AI Service with Gemini AI support
 import { FirestoreService } from './firestoreService';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 class AIService {
     constructor() {
@@ -11,10 +12,15 @@ class AIService {
                 model: process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-3.5-turbo',
                 apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
             },
+            gemini: {
+                // Updated default model to a stable, available one
+                model: process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash',
+                apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY,
+            },
             ollama: {
                 endpoint: process.env.NEXT_PUBLIC_OLLAMA_ENDPOINT || 'http://localhost:11434/api',
                 model: process.env.NEXT_PUBLIC_OLLAMA_MODEL || 'llama2',
-                apiKey: null, // Ollama doesn't require API key
+                apiKey: null,
             },
             localai: {
                 endpoint: process.env.NEXT_PUBLIC_LOCALAI_ENDPOINT || 'http://localhost:8080/v1',
@@ -22,20 +28,26 @@ class AIService {
                 apiKey: process.env.NEXT_PUBLIC_LOCALAI_API_KEY || 'local-key',
             },
         };
-        this.currentProvider = process.env.NEXT_PUBLIC_AI_PROVIDER || 'openai';
+
+        this.currentProvider = process.env.NEXT_PUBLIC_AI_PROVIDER || 'gemini';
         this.maxRetries = 3;
         this.retryDelay = 1000;
         this.isHealthy = false;
         this.lastHealthCheck = null;
+
+        // Initialize Gemini client if provider is gemini
+        if (this.currentProvider === 'gemini' && this.providers.gemini.apiKey) {
+            this.genAI = new GoogleGenerativeAI(this.providers.gemini.apiKey);
+        }
     }
 
     // Test connection to AI provider - REQUIRED METHOD
     async testConnection() {
         console.log(`🔍 Testing connection to ${this.currentProvider} provider...`);
-        
+
         try {
             this.validateConfiguration();
-            
+
             const testPrompt = "Hello! Please respond with 'Connection successful' if you can read this.";
             const result = await this.callAI(testPrompt, {
                 type: 'connection_test',
@@ -47,7 +59,7 @@ class AIService {
             if (result.success) {
                 this.isHealthy = true;
                 this.lastHealthCheck = new Date().toISOString();
-                
+
                 console.log(`✅ ${this.currentProvider} connection successful`);
                 return {
                     success: true,
@@ -63,9 +75,9 @@ class AIService {
         } catch (error) {
             this.isHealthy = false;
             this.lastHealthCheck = new Date().toISOString();
-            
+
             console.error(`❌ ${this.currentProvider} connection failed:`, error.message);
-            
+
             return {
                 success: false,
                 provider: this.currentProvider,
@@ -101,6 +113,12 @@ class AIService {
             this.currentProvider = provider;
             this.isHealthy = false; // Reset health status when switching
             this.lastHealthCheck = null;
+
+            // Initialize Gemini client if switching to gemini
+            if (provider === 'gemini' && this.providers.gemini.apiKey) {
+                this.genAI = new GoogleGenerativeAI(this.providers.gemini.apiKey);
+            }
+
             console.log(`Switched to AI provider: ${provider}`);
             return true;
         }
@@ -120,6 +138,14 @@ class AIService {
             throw new Error('OpenAI API key not configured. Please set NEXT_PUBLIC_OPENAI_API_KEY environment variable.');
         }
 
+        if (this.currentProvider === 'gemini' && !provider.apiKey) {
+            throw new Error('Gemini API key not configured. Please set NEXT_PUBLIC_GEMINI_API_KEY environment variable.');
+        }
+
+        if (this.currentProvider === 'gemini' && !this.genAI) {
+            this.genAI = new GoogleGenerativeAI(provider.apiKey);
+        }
+
         if (this.currentProvider === 'localai' && !provider.apiKey) {
             console.warn('LocalAI API key not configured. Using default key.');
         }
@@ -133,13 +159,22 @@ class AIService {
 
         const startTime = Date.now();
         const provider = this.providers[this.currentProvider];
-        const requestData = this.buildRequestData(prompt, options, provider);
 
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                const response = await this.makeAPICall(requestData, provider);
+                let response;
+                let parsedResponse;
+
+                if (this.currentProvider === 'gemini') {
+                    response = await this.makeGeminiCall(prompt, options, provider);
+                    parsedResponse = this.parseGeminiResponse(response);
+                } else {
+                    const requestData = this.buildRequestData(prompt, options, provider);
+                    response = await this.makeAPICall(requestData, provider);
+                    parsedResponse = this.parseResponse(response, provider);
+                }
+
                 const responseTime = Date.now() - startTime;
-                const parsedResponse = this.parseResponse(response, provider);
 
                 // Log successful AI usage (only if not a connection test)
                 if (options.type !== 'connection_test') {
@@ -195,7 +230,41 @@ class AIService {
         }
     }
 
-    // Build request data based on provider
+    // Make Gemini API call
+    async makeGeminiCall(prompt, options, provider) {
+        const model = this.genAI.getGenerativeModel({
+            model: provider.model,
+            generationConfig: {
+                temperature: options.temperature || 0.7,
+                maxOutputTokens: options.maxTokens || 2000,
+            }
+        });
+
+        const promptText = Array.isArray(prompt) ?
+            prompt.map(p => p.content).join('\n') :
+            prompt;
+
+        const result = await model.generateContent(promptText);
+        const response = await result.response;
+
+        return {
+            text: response.text(),
+            usage: {
+                // Gemini doesn't provide detailed token usage in the same way
+                total_tokens: 0
+            }
+        };
+    }
+
+    // Parse Gemini response
+    parseGeminiResponse(response) {
+        return {
+            content: response.text,
+            usage: response.usage || { total_tokens: 0 }
+        };
+    }
+
+    // Build request data based on provider (for non-Gemini providers)
     buildRequestData(prompt, options, provider) {
         const baseData = {
             temperature: options.temperature || 0.7,
@@ -225,7 +294,7 @@ class AIService {
         }
     }
 
-    // Make API call based on provider
+    // Make API call based on provider (for non-Gemini providers)
     async makeAPICall(requestData, provider) {
         const headers = {
             'Content-Type': 'application/json'
@@ -261,7 +330,7 @@ class AIService {
         return await response.json();
     }
 
-    // Parse response based on provider
+    // Parse response based on provider (for non-Gemini providers)
     parseResponse(data, provider) {
         switch (this.currentProvider) {
             case 'openai':
@@ -525,9 +594,10 @@ Analyze the information thoroughly and provide actionable insights for the QA te
     }
 
     // Enhanced helper methods
-    calculateCost(tokens, provider = 'openai') {
+    calculateCost(tokens, provider = 'gemini') {
         const costPerToken = {
             openai: 0.0000015, // Updated pricing
+            gemini: 0.000001,  // Gemini Pro pricing (approximate)
             localai: 0.0,
             ollama: 0.0
         };
@@ -580,6 +650,7 @@ Analyze the information thoroughly and provide actionable insights for the QA te
 
                 // Cost metrics by provider
                 openAITokensUsed: this.getTokensByProvider(usageLogs, 'openai'),
+                geminiCallsCount: this.getCallsByProvider(usageLogs, 'gemini'),
                 ollamaCallsCount: this.getCallsByProvider(usageLogs, 'ollama'),
                 localAITokensUsed: this.getTokensByProvider(usageLogs, 'localai'),
                 totalAPICallsCount: usageLogs.length,

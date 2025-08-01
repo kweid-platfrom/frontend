@@ -1,130 +1,172 @@
 import React, { useState, useCallback } from 'react';
-import { SparklesIcon, ClipboardDocumentIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { SparklesIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, XCircleIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { useAIBugService } from '../hooks/useAIBugService';
 
 const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
     const [prompt, setPrompt] = useState('');
     const [consoleError, setConsoleError] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
+    
+    // Use the AI Bug Service hook
+    const {
+        isInitialized,
+        isGenerating,
+        isHealthy,
+        error,
+        provider,
+        model,
+        canGenerate,
+        generateBugReport,
+        initialize,
+        clearError
+    } = useAIBugService();
 
+    // Helper function to ensure evidence is properly formatted
+    const formatEvidenceForForm = useCallback((evidence) => {
+        if (!evidence || typeof evidence !== 'object') {
+            return evidence;
+        }
+
+        // Convert object evidence to a string format that can be safely rendered
+        try {
+            // If it's an object with browser/device info, format it nicely
+            if (evidence.browser || evidence.device || evidence.os) {
+                const parts = [];
+                if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
+                if (evidence.browserVersion || evidence.version) {
+                    parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
+                }
+                if (evidence.device) parts.push(`Device: ${evidence.device}`);
+                if (evidence.os) parts.push(`OS: ${evidence.os}`);
+                if (evidence.url) parts.push(`URL: ${evidence.url}`);
+                
+                return parts.join(' | ');
+            }
+            
+            // For other objects, stringify safely
+            return JSON.stringify(evidence, null, 2);
+        } catch (error) {
+            console.error('Error formatting evidence:', error);
+            return 'Evidence data available';
+        }
+    }, []);
+
+    // Generate bug report using the hook
     const handleGenerate = useCallback(async () => {
-        if (!prompt.trim() && !consoleError.trim()) return;
+        if (!prompt.trim() && !consoleError.trim()) {
+            return;
+        }
 
-        setIsGenerating(true);
+        clearError();
         
         try {
-            // Simulate AI processing - replace with actual AI service call
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            const combinedInput = `${prompt}\n\nConsole Error:\n${consoleError}`.trim();
-            
-            // Mock AI response - replace with actual AI service
-            const generatedForm = {
-                title: extractTitle(combinedInput),
-                description: prompt.trim() || "Issue description generated from console error",
-                actualBehavior: extractActualBehavior(combinedInput),
-                stepsToReproduce: extractStepsToReproduce(combinedInput),
-                expectedBehavior: extractExpectedBehavior(combinedInput),
-                severity: determineSeverity(combinedInput),
-                category: determineCategory(combinedInput),
-                workaround: "",
-                hasConsoleLogs: !!consoleError.trim(),
-                hasNetworkLogs: false
+            // Additional context for better AI analysis
+            const additionalContext = {
+                userAgent: navigator.userAgent,
+                timestamp: new Date().toISOString(),
+                url: window.location.href,
+                hasPrompt: !!prompt.trim(),
+                hasConsoleError: !!consoleError.trim()
             };
 
-            onFormGeneration(generatedForm);
+            const result = await generateBugReport(prompt, consoleError, additionalContext);
+
+            if (result.success) {
+                console.log('✅ Bug report generated successfully');
+                
+                // CRITICAL FIX: Ensure evidence field is properly formatted
+                const processedData = {
+                    ...result.data,
+                    // Convert evidence object to string if it exists
+                    evidence: result.data.evidence ? formatEvidenceForForm(result.data.evidence) : undefined
+                };
+                
+                // Pass the processed form data to parent component
+                onFormGeneration(processedData);
+                
+                // Clear the form after successful generation
+                setPrompt('');
+                setConsoleError('');
+            }
             
-            // Clear the form after successful generation
-            setPrompt('');
-            setConsoleError('');
-            
-        } catch (error) {
-            console.error('Error generating bug report:', error);
-            // Handle error appropriately
-        } finally {
-            setIsGenerating(false);
+        } catch (err) {
+            console.error('❌ Bug report generation failed:', err);
         }
-    }, [prompt, consoleError, onFormGeneration]);
+    }, [prompt, consoleError, generateBugReport, onFormGeneration, clearError, formatEvidenceForForm]);
 
-    const extractTitle = (input) => {
-        const lines = input.split('\n');
-        const errorLine = lines.find(line => 
-            line.includes('Error:') || 
-            line.includes('TypeError:') || 
-            line.includes('ReferenceError:') ||
-            line.includes('Cannot read property') ||
-            line.includes('is not defined')
-        );
-        
-        if (errorLine) {
-            return errorLine.split(':')[0] + ': ' + errorLine.split(':')[1]?.trim().substring(0, 50) + '...';
-        }
-        
-        return input.split('\n')[0].substring(0, 60) + '...';
-    };
-
-    const extractActualBehavior = (input) => {
-        if (input.includes('Error:') || input.includes('TypeError:') || input.includes('ReferenceError:')) {
-            return "Application throws an error and functionality is broken.";
-        }
-        return "The application is not behaving as expected.";
-    };
-
-    const extractStepsToReproduce = () => {
-        return `1. Navigate to the affected area\n2. Perform the action that triggers the issue\n3. Observe the error or unexpected behavior`;
-    };
-
-    const extractExpectedBehavior = () => {
-        return "The application should function normally without errors.";
-    };
-
-    const determineSeverity = (input) => {
-        if (input.toLowerCase().includes('critical') || input.toLowerCase().includes('crash')) {
-            return 'Critical';
-        }
-        if (input.toLowerCase().includes('error') || input.toLowerCase().includes('exception')) {
-            return 'High';
-        }
-        if (input.toLowerCase().includes('warning')) {
-            return 'Medium';
-        }
-        return 'Low';
-    };
-
-    const determineCategory = (input) => {
-        if (input.toLowerCase().includes('ui') || input.toLowerCase().includes('interface')) {
-            return 'UI/UX';
-        }
-        if (input.toLowerCase().includes('api') || input.toLowerCase().includes('network')) {
-            return 'Backend';
-        }
-        if (input.toLowerCase().includes('performance') || input.toLowerCase().includes('slow')) {
-            return 'Performance';
-        }
-        return 'Functional';
-    };
-
+    // Handle clipboard paste for console errors
     const handlePasteConsoleError = useCallback(async () => {
         try {
             const text = await navigator.clipboard.readText();
             setConsoleError(text);
+            clearError();
         } catch (error) {
             console.error('Failed to read clipboard:', error);
         }
-    }, []);
+    }, [clearError]);
 
-    const isDisabled = isProcessing || isGenerating || (!prompt.trim() && !consoleError.trim());
+    const isDisabled = isProcessing || isGenerating || !canGenerate || (!prompt.trim() && !consoleError.trim());
+    const hasInput = prompt.trim() || consoleError.trim();
 
     return (
         <div className="space-y-6">
+            {/* Header */}
             <div className="text-center">
                 <SparklesIcon className="mx-auto h-12 w-12 text-teal-500 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">AI Bug Report Generator</h3>
                 <p className="text-sm text-gray-500">
                     Describe the issue or paste console errors, and AI will generate a detailed bug report
                 </p>
+                
+                {/* Service Status Indicator */}
+                <div className="mt-3 flex items-center justify-center space-x-2">
+                    {!isInitialized ? (
+                        <>
+                            <div className="animate-spin rounded h-4 w-4 border-b-2 border-teal-500"></div>
+                            <span className="text-xs text-gray-500">Initializing AI service...</span>
+                        </>
+                    ) : isHealthy ? (
+                        <>
+                            <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                            <span className="text-xs text-green-600">
+                                AI Ready ({provider} - {model})
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <XCircleIcon className="h-4 w-4 text-red-500" />
+                            <span className="text-xs text-red-600">AI Service Issues</span>
+                            <button
+                                onClick={initialize}
+                                className="text-xs text-teal-600 hover:text-teal-700 underline ml-2"
+                            >
+                                Retry
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
+            {/* Error Display */}
+            {error && (
+                <div className="bg-red-50 border border-red-200 rounded p-3">
+                    <div className="flex items-start">
+                        <XCircleIcon className="h-5 w-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-red-700 flex-1">
+                            <p className="font-medium">Error</p>
+                            <p>{error}</p>
+                        </div>
+                        <button
+                            onClick={clearError}
+                            className="text-red-400 hover:text-red-600 ml-2"
+                        >
+                            <XCircleIcon className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-4">
+                {/* Issue Description Input */}
                 <div>
                     <label htmlFor="issue-description" className="block text-sm font-medium text-gray-700 mb-2">
                         Issue Description
@@ -136,10 +178,11 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         placeholder="Describe the issue you're experiencing... (e.g., 'The submit button doesn't work when I click it', 'Page crashes when loading user profile')"
                         rows={4}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
-                        disabled={isProcessing || isGenerating}
+                        disabled={isProcessing || isGenerating || !isInitialized}
                     />
                 </div>
 
+                {/* Console Error Input */}
                 <div>
                     <div className="flex items-center justify-between mb-2">
                         <label htmlFor="console-error" className="block text-sm font-medium text-gray-700">
@@ -148,8 +191,8 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         <button
                             type="button"
                             onClick={handlePasteConsoleError}
-                            className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                            disabled={isProcessing || isGenerating}
+                            className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={isProcessing || isGenerating || !isInitialized}
                         >
                             <ClipboardDocumentIcon className="h-3 w-3 mr-1" />
                             Paste from Clipboard
@@ -162,27 +205,44 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         placeholder="Paste console errors here... (e.g., 'ReferenceError: validateSuiteAccess is not defined')"
                         rows={6}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical font-mono text-sm"
-                        disabled={isProcessing || isGenerating}
+                        disabled={isProcessing || isGenerating || !isInitialized}
                     />
                 </div>
 
-                {(prompt.trim() || consoleError.trim()) && (
+                {/* AI Analysis Preview */}
+                {hasInput && isHealthy && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
                         <div className="flex">
                             <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                             <div className="text-sm text-yellow-700">
                                 <p className="font-medium">AI will analyze your input and generate:</p>
                                 <ul className="mt-1 list-disc list-inside space-y-1">
-                                    <li>Bug title and description</li>
-                                    <li>Steps to reproduce</li>
-                                    <li>Expected vs actual behavior</li>
-                                    <li>Severity and category classification</li>
+                                    <li>Intelligent bug title and comprehensive description</li>
+                                    <li>Detailed steps to reproduce based on context</li>
+                                    <li>Expected vs actual behavior analysis</li>
+                                    <li>Smart severity and category classification</li>
+                                    <li>Environment detection and impact assessment</li>
+                                    <li>Suggested test cases to prevent regression</li>
                                 </ul>
                             </div>
                         </div>
                     </div>
                 )}
 
+                {/* Service Unavailable Warning */}
+                {isInitialized && !isHealthy && (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <div className="flex">
+                            <XCircleIcon className="h-5 w-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-red-700">
+                                <p className="font-medium">AI Service Issues</p>
+                                <p>The AI service is experiencing issues. Please try again or contact support.</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Generate Button */}
                 <div className="flex justify-end">
                     <button
                         type="button"
@@ -197,7 +257,12 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         {isGenerating ? (
                             <>
                                 <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Generating...
+                                Generating AI Report...
+                            </>
+                        ) : !isInitialized ? (
+                            <>
+                                <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Initializing...
                             </>
                         ) : (
                             <>
@@ -207,6 +272,13 @@ const AIPromptBugReport = ({ onFormGeneration, isProcessing }) => {
                         )}
                     </button>
                 </div>
+
+                {/* Additional Info */}
+                {isInitialized && isHealthy && (
+                    <div className="text-xs text-gray-500 text-center">
+                        Powered by {provider} ({model})
+                    </div>
+                )}
             </div>
         </div>
     );

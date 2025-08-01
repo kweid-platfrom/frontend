@@ -174,12 +174,52 @@ const BugTable = ({
         return date instanceof Date && !isNaN(date.getTime());
     }, []);
 
-    const testCaseOptions = useMemo(() => 
+    const formatEvidence = useCallback((evidence) => {
+        if (!evidence) return 'None';
+
+        if (typeof evidence === 'string') {
+            return evidence.length > 50 ? evidence.slice(0, 50) + '...' : evidence;
+        }
+
+        if (Array.isArray(evidence)) {
+            return evidence.length ? `${evidence.length} item(s)` : 'None';
+        }
+
+        if (typeof evidence === 'object') {
+            try {
+                const parts = [];
+                if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
+                if (evidence.browserVersion || evidence.version) parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
+                if (evidence.os) parts.push(`OS: ${evidence.os}`);
+                if (evidence.device) parts.push(`Device: ${evidence.device}`);
+                if (evidence.url) parts.push(`URL: ${new URL(evidence.url).hostname}`);
+
+                return parts.length ? parts.join(' | ') : 'Evidence data';
+            } catch {
+                return 'Evidence data';
+            }
+        }
+
+        return String(evidence);
+    }, []);
+
+    // Helper function to format reporter name
+    const formatReporter = useCallback((bug) => {
+        // Try different possible reporter field names
+        return bug.reportedBy ||
+            bug.reportedByName ||
+            bug.reporter ||
+            bug.created_by_name ||
+            bug.updatedByName ||
+            'Unknown';
+    }, []);
+
+    const testCaseOptions = useMemo(() =>
         Array.isArray(testCases)
             ? testCases.map((testCase) => ({
-                  value: testCase.id || `tc_${Math.random().toString(36).slice(2)}`,
-                  label: testCase.title || `Test Case ${testCase.id?.slice(-6) || 'Unknown'}`,
-              }))
+                value: testCase.id || `tc_${Math.random().toString(36).slice(2)}`,
+                label: testCase.title || `Test Case ${testCase.id?.slice(-6) || 'Unknown'}`,
+            }))
             : [],
         [testCases]
     );
@@ -381,7 +421,7 @@ const BugTable = ({
                     <tbody className="bg-white divide-y divide-gray-200">
                         {sortedBugs.length === 0 ? (
                             <tr>
-                                <td colSpan="14" className="px-6 py-12 text-center text-sm text-gray-500">
+                                <td colSpan="15" className="px-6 py-12 text-center text-sm text-gray-500">
                                     <div className="flex flex-col items-center">
                                         <Bug className="w-12 h-12 text-gray-300 mb-4" />
                                         <p>No bugs found</p>
@@ -393,7 +433,7 @@ const BugTable = ({
                             sortedBugs.map((bug) => {
                                 const linkedTestCases = relationships?.bugToTestCases?.[bug.id] || [];
                                 const isSelected = selectedBugs.includes(bug.id);
-                                
+
                                 return (
                                     <tr key={bug.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-teal-50' : ''}`}>
                                         <td className="px-6 py-4 border-r border-gray-200 w-12 sticky left-0 bg-white z-30">
@@ -447,9 +487,9 @@ const BugTable = ({
                                                 <InlineEditCell
                                                     value={bug.severity}
                                                     options={severityOptions}
-                                                    onChange={(value) => handleUpdateBug(bug.id, { 
-                                                        severity: value, 
-                                                        priority: getDerivedPriority(value) 
+                                                    onChange={(value) => handleUpdateBug(bug.id, {
+                                                        severity: value,
+                                                        priority: getDerivedPriority(value)
                                                     })}
                                                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSeverityBadge(bug.severity)}`}
                                                     noSearch
@@ -503,10 +543,14 @@ const BugTable = ({
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-600 truncate max-w-[120px]">{bug.reporter || 'Unknown'}</div>
+                                            <div className="text-xs text-gray-600 truncate max-w-[120px]">
+                                                {formatReporter(bug)}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-600 truncate max-w-[120px]">{bug.evidence || 'None'}</div>
+                                            <div className="text-xs text-gray-600 truncate max-w-[120px]">
+                                                {String(formatEvidence(bug.evidence))}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-48 relative">
                                             <div className="w-48">

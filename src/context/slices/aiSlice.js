@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // slices/aiSlice.js - Fixed AI slice with proper service integration
 import React from 'react'; // Add this import
 import { AITestCaseService } from '../../services/AITestCaseService';
@@ -27,11 +26,11 @@ const aiActions = {
     // Initialize AI service
     initializeAI: () => async () => {
         console.log('🔄 Initializing AI service...');
-        
+
         try {
             const aiService = new AITestCaseService();
             const result = await aiService.initialize();
-            
+
             if (result.success) {
                 console.log('✅ AI service initialized successfully');
                 return {
@@ -56,7 +55,7 @@ const aiActions = {
     // Update AI settings
     updateSettings: (currentAIState) => (newSettings) => {
         console.log('🔧 Updating AI settings:', newSettings);
-        
+
         // This is a synchronous state update
         return {
             ...currentAIState,
@@ -82,7 +81,7 @@ const aiActions = {
         }
 
         console.log('🚀 Starting AI test case generation...');
-        
+
         try {
             // Merge settings with template config
             const mergedConfig = {
@@ -98,7 +97,7 @@ const aiActions = {
 
             if (result.success) {
                 console.log(`✅ Generated ${result.data?.testCases?.length || 0} test cases`);
-                
+
                 // Update generation history
                 const generationRecord = {
                     id: result.generationId || `gen_${Date.now()}`,
@@ -153,11 +152,11 @@ const aiActions = {
         try {
             console.log(`🔄 Switching to provider: ${provider}`);
             const result = await currentAIState.serviceInstance.switchProvider(provider);
-            
+
             if (result.success) {
                 console.log(`✅ Successfully switched to ${provider}`);
             }
-            
+
             return result;
         } catch (error) {
             console.error(`❌ Provider switch failed:`, error);
@@ -226,11 +225,11 @@ const aiActions = {
         try {
             console.log('🐛 Generating AI bug report...');
             const result = await currentAIState.serviceInstance.generateBugReport(bugDescription, additionalContext);
-            
+
             if (result.success) {
                 console.log('✅ Bug report generated successfully');
             }
-            
+
             return result;
         } catch (error) {
             console.error('❌ Bug report generation failed:', error);
@@ -264,7 +263,7 @@ const aiActions = {
     // Update generation history
     updateGenerationHistory: (currentAIState) => (generationRecord) => {
         const updatedHistory = [generationRecord, ...currentAIState.generationHistory].slice(0, 50); // Keep last 50
-        
+
         return {
             ...currentAIState,
             generationHistory: updatedHistory,
@@ -325,46 +324,120 @@ const aiActions = {
     }
 };
 
-// Hook for using AI slice
+// Hook for using AI slice - Fixed version
 export const useAI = () => {
     const [state, setState] = React.useState(initialAIState);
 
     // Create actions that have access to current state
     const actions = React.useMemo(() => {
-        const boundActions = {};
-        
-        Object.keys(aiActions).forEach(actionName => {
-            const action = aiActions[actionName];
-            
-            // Some actions need current state, others don't
-            if (typeof action === 'function') {
-                try {
-                    // Try calling with state first
-                    const result = action(state);
-                    if (typeof result === 'function') {
-                        // This action needs state
-                        boundActions[actionName] = async (...args) => {
-                            const actionResult = await result(...args);
-                            // If action returns new state, update it
-                            if (actionResult && typeof actionResult === 'object' && actionResult.hasOwnProperty('isInitialized')) {
-                                setState(actionResult);
-                            }
-                            return actionResult;
-                        };
-                    } else {
-                        // This action doesn't need state
-                        boundActions[actionName] = action;
-                    }
-                } catch (error) {
-                    // Fallback: action doesn't need state
-                    boundActions[actionName] = action;
-                }
-            } else {
-                boundActions[actionName] = action;
+        return {
+            // Initialize AI service - Returns the async function
+            initializeAI: async () => {
+                const initFunction = aiActions.initializeAI();
+                return await initFunction();
+            },
+
+            // Update AI settings - Fixed to properly update state
+            updateSettings: async (newSettings) => {
+                const updateFunction = aiActions.updateSettings(state);
+                const newState = updateFunction(newSettings);
+                setState(newState);
+                return newState;
+            },
+
+            // Generate test cases with AI
+            generateTestCases: async (documentContent, documentTitle, templateConfig = {}) => {
+                const generateFunction = aiActions.generateTestCases(state);
+                return await generateFunction(documentContent, documentTitle, templateConfig);
+            },
+
+            // Get generation statistics
+            getGenerationStats: () => {
+                const statsFunction = aiActions.getGenerationStats(state);
+                return statsFunction();
+            },
+
+            // Switch AI provider
+            switchProvider: async (provider) => {
+                const switchFunction = aiActions.switchProvider(state);
+                return await switchFunction(provider);
+            },
+
+            // Test AI service health
+            testHealth: async () => {
+                const healthFunction = aiActions.testHealth(state);
+                return await healthFunction();
+            },
+
+            // Get AI metrics
+            getMetrics: async (dateRange = 30) => {
+                const metricsFunction = aiActions.getMetrics(state);
+                return await metricsFunction(dateRange);
+            },
+
+            // Generate bug report
+            generateBugReport: async (bugDescription, additionalContext = {}) => {
+                const bugReportFunction = aiActions.generateBugReport(state);
+                return await bugReportFunction(bugDescription, additionalContext);
+            },
+
+            // Get service status
+            getServiceStatus: () => {
+                const statusFunction = aiActions.getServiceStatus(state);
+                return statusFunction();
+            },
+
+            // Clear AI state (for logout/reset)
+            clearAIState: () => {
+                const newState = aiActions.clearAIState()();
+                setState(newState);
+                return newState;
+            },
+
+            // Update generation history
+            updateGenerationHistory: (generationRecord) => {
+                const updateFunction = aiActions.updateGenerationHistory(state);
+                const newState = updateFunction(generationRecord);
+                setState(newState);
+                return newState;
+            },
+
+            // Set loading state
+            setLoading: (loading) => {
+                const updateFunction = aiActions.setLoading(state);
+                const newState = updateFunction(loading);
+                setState(newState);
+                return newState;
+            },
+
+            // Set generating state
+            setGenerating: (isGenerating) => {
+                const updateFunction = aiActions.setGenerating(state);
+                const newState = updateFunction(isGenerating);
+                setState(newState);
+                return newState;
+            },
+
+            // Set error state
+            setError: (error) => {
+                const updateFunction = aiActions.setError(state);
+                const newState = updateFunction(error);
+                setState(newState);
+                return newState;
+            },
+
+            // Get supported providers
+            getSupportedProviders: () => {
+                const providersFunction = aiActions.getSupportedProviders(state);
+                return providersFunction();
+            },
+
+            // Validate configuration
+            validateConfiguration: () => {
+                const validateFunction = aiActions.validateConfiguration(state);
+                return validateFunction();
             }
-        });
-        
-        return boundActions;
+        };
     }, [state]);
 
     return {

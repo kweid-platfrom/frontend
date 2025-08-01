@@ -7,12 +7,14 @@ import TestCaseList from '@/components/testCase/TestCaseList';
 import TestCaseModal from '@/components/testCase/TestCaseModal';
 import FilterBar from '@/components/testCase/FilterBar';
 import ImportModal from '@/components/testCase/ImportModal';
-import AIGenerationModal from '@/components/testCase/AIGenerationModal';
 import TraceabilityMatrix from '@/components/testCase/TraceabilityMatrix';
 import { useTestCases } from '@/hooks/useTestCases';
 import { useUI } from '@/hooks/useUI';
+import { useRouter } from 'next/navigation'; // Add this import
 
 const TestCases = () => {
+    const router = useRouter(); // Add router hook
+    
     // Get data from hooks - make sure these are stable
     const testCasesHook = useTestCases();
     const uiHook = useUI();
@@ -67,7 +69,6 @@ const TestCases = () => {
     const [selectedTestCase, setSelectedTestCase] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
     const [viewMode, setViewMode] = useState('table');
     const [filters, setFilters] = useState({
@@ -301,6 +302,40 @@ const TestCases = () => {
         uiHook.addNotification
     ]);
 
+    // NEW: Handle AI Generation navigation
+    const handleAIGenerate = useCallback(() => {
+        console.log('🚀 AI Generate clicked - navigating to generation page');
+        
+        // Check restrictions similar to create test case
+        if (testCasesHook.testCasesLocked) {
+            console.warn('❌ Test cases locked due to subscription');
+            uiHook.addNotification?.({
+                type: 'error',
+                title: 'Upgrade Required',
+                message: 'Test cases are locked. Upgrade to access.',
+            });
+            return;
+        }
+        
+        if (testCasesHook.canCreateTestCases === false) {
+            console.warn('❌ Cannot create test cases due to plan limits');
+            uiHook.addNotification?.({
+                type: 'error',
+                title: 'Upgrade Required',
+                message: 'Upgrade to create test cases.',
+            });
+            return;
+        }
+        
+        console.log('✅ Navigating to AI generation page');
+        router.push('/testcases/generate');
+    }, [
+        testCasesHook.testCasesLocked, 
+        testCasesHook.canCreateTestCases, 
+        uiHook.addNotification,
+        router
+    ]);
+
     const handleEditTestCase = useCallback((testCase) => {
         if (testCasesHook.testCasesLocked) {
             uiHook.addNotification?.({
@@ -429,35 +464,6 @@ const TestCases = () => {
         }
     }, [testCasesHook.testCasesLocked, testCasesHook.createTestCase, uiHook.addNotification, handleError]);
 
-    const handleAIGenerationComplete = useCallback(async (generatedTestCases) => {
-        setIsAIModalOpen(false);
-        
-        try {
-            if (testCasesHook.testCasesLocked) {
-                throw new Error('Test cases are locked. Upgrade to access.');
-            }
-            
-            const timestamp = new Date();
-            await Promise.all(
-                generatedTestCases.map((tc) =>
-                    testCasesHook.createTestCase({
-                        ...tc,
-                        created_at: timestamp,
-                        updated_at: timestamp,
-                    })
-                )
-            );
-            
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: `${generatedTestCases.length} test cases generated and saved`,
-            });
-        } catch (error) {
-            handleError(error, 'save generated test cases');
-        }
-    }, [testCasesHook.testCasesLocked, testCasesHook.createTestCase, uiHook.addNotification, handleError]);
-
     const handleCloseModal = useCallback(() => {
         console.log('🔒 Closing modal');
         setIsModalOpen(false);
@@ -571,7 +577,7 @@ const TestCases = () => {
                             Import
                         </button>
                         <button
-                            onClick={() => setIsAIModalOpen(true)}
+                            onClick={handleAIGenerate}
                             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
                         >
                             AI Generate
@@ -613,13 +619,6 @@ const TestCases = () => {
                     <ImportModal 
                         onClose={() => setIsImportModalOpen(false)} 
                         onImportComplete={handleImportComplete} 
-                    />
-                )}
-
-                {isAIModalOpen && (
-                    <AIGenerationModal 
-                        onClose={() => setIsAIModalOpen(false)} 
-                        onGenerationComplete={handleAIGenerationComplete} 
                     />
                 )}
 

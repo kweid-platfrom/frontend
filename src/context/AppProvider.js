@@ -127,6 +127,7 @@ export const AppProvider = ({ children }) => {
         return await deleteFunction(testCaseId);
     }, [testCases.actions.deleteTestCase, getCurrentAppState]);
 
+
     // Initialize AI service when authentication is ready
     const initializeAI = useCallback(async () => {
         // Only initialize once and when user is authenticated
@@ -137,20 +138,16 @@ export const AppProvider = ({ children }) => {
         console.log('Initializing AI service...');
 
         try {
-            // Get the current app state for the AI action
-            const currentState = getCurrentAppState();
-
             // Call the AI initialization action
-            const initFunction = ai.actions.initializeAI();
-            const result = await initFunction();
+            const result = await ai.actions.initializeAI();
 
             if (result.success) {
                 setAiInitialized(true);
                 console.log('✅ AI service initialized successfully');
 
                 // Update the AI state with the initialized service
-                const updateFunction = ai.actions.updateSettings(currentState.ai);
-                updateFunction({
+                // The updateSettings action is curried and updates the state automatically
+                await ai.actions.updateSettings({
                     isInitialized: true,
                     serviceInstance: result.data.aiService,
                     error: null
@@ -171,9 +168,8 @@ export const AppProvider = ({ children }) => {
             setAiInitialized(false);
 
             // Update AI state with error
-            const currentState = getCurrentAppState();
-            const updateFunction = ai.actions.updateSettings(currentState.ai);
-            updateFunction({
+            // The updateSettings action is curried and updates the state automatically
+            await ai.actions.updateSettings({
                 isInitialized: false,
                 error: error.message,
                 serviceInstance: null
@@ -204,10 +200,8 @@ export const AppProvider = ({ children }) => {
         aiInitialized,
         ai.state.isInitialized,
         ai.actions,
-        ui.actions,
-        getCurrentAppState
+        ui.actions
     ]);
-
 
     // AI-powered test case generation wrapper
     const generateTestCasesWithAI = useCallback(async (documentContent, documentTitle, templateConfig = {}) => {
@@ -224,61 +218,40 @@ export const AppProvider = ({ children }) => {
         try {
             console.log('🚀 Starting AI test case generation...', { documentTitle });
 
-            // Call the AI generation action
-            const generateFunction = ai.actions.generateTestCases(currentState.ai);
-            const result = await generateFunction(documentContent, documentTitle, templateConfig);
+            // Call the AI generation action directly
+            const result = await ai.actions.generateTestCases(documentContent, documentTitle, templateConfig);
 
             if (result.success && result.data?.testCases?.length > 0) {
                 console.log(`✅ Generated ${result.data.testCases.length} test cases`);
 
-                // Auto-save to active suite if available
-                if (suites.state.activeSuite?.id) {
-                    console.log('💾 Auto-saving generated test cases to active suite...');
-
-                    const testCasesToSave = result.data.testCases.map(testCase => ({
-                        ...testCase,
-                        suiteId: suites.state.activeSuite.id,
-                        source: 'ai_generated',
-                        generationId: result.generationId,
-                        aiProvider: result.provider,
-                        aiModel: result.model,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                    }));
-
-                    // Batch create test cases with progress tracking
-                    const savePromises = testCasesToSave.map(async (testCaseData, index) => {
-                        try {
-                            const saveResult = await wrappedCreateTestCase(testCaseData);
-                            console.log(`Saved test case ${index + 1}/${testCasesToSave.length}`);
-                            return saveResult;
-                        } catch (error) {
-                            console.error(`Error saving test case ${index + 1}:`, error);
-                            return { success: false, error: error.message };
-                        }
-                    });
-
-                    const saveResults = await Promise.allSettled(savePromises);
-                    const successfulSaves = saveResults.filter(r => r.status === 'fulfilled' && r.value.success).length;
-                    const failedSaves = saveResults.length - successfulSaves;
-
-                    if (successfulSaves > 0) {
-                        toast.success(`Saved ${successfulSaves} AI-generated test cases`, {
-                            description: failedSaves > 0 ? `${failedSaves} failed to save` : 'All test cases saved successfully'
-                        });
-                    }
-
-                    if (failedSaves > 0) {
-                        toast.warning(`${failedSaves} test cases failed to save`, {
-                            description: 'You can still copy them manually from the generation results'
-                        });
-                    }
-                }
-
+                // IMPORTANT: Only return the generated test cases - DO NOT SAVE THEM HERE
+                // The modal will handle saving when user clicks "Save Selected"
                 return {
-                    ...result,
-                    autoSaved: suites.state.activeSuite?.id ? true : false,
-                    savedCount: suites.state.activeSuite?.id ? result.data.testCases.length : 0
+                    success: true,
+                    data: {
+                        testCases: result.data.testCases.map((testCase, index) => ({
+                            ...testCase,
+                            // Ensure unique temporary ID for the review phase
+                            id: testCase.id || `temp_${Date.now()}_${index}`,
+                            // Add generation metadata but don't save yet
+                            _isGenerated: true,
+                            _generationTimestamp: new Date().toISOString(),
+                            _generationId: result.generationId || `gen_${Date.now()}`,
+                            _provider: result.provider,
+                            _model: result.model
+                        })),
+                        summary: result.data.summary || {
+                            totalTests: result.data.testCases.length,
+                            breakdown: result.data.testCases.reduce((acc, tc) => {
+                                const type = tc.type?.toLowerCase() || 'functional';
+                                acc[type] = (acc[type] || 0) + 1;
+                                return acc;
+                            }, {})
+                        }
+                    },
+                    generationId: result.generationId,
+                    provider: result.provider,
+                    model: result.model
                 };
             } else if (result.success && (!result.data?.testCases || result.data.testCases.length === 0)) {
                 toast.warning('No test cases generated', {
@@ -298,8 +271,6 @@ export const AppProvider = ({ children }) => {
     }, [
         ai.state.isInitialized,
         ai.actions,
-        suites.state.activeSuite?.id,
-        wrappedCreateTestCase,
         getCurrentAppState
     ]);
 
@@ -326,7 +297,8 @@ export const AppProvider = ({ children }) => {
     // Update AI settings
     const updateAISettings = useCallback(async (newSettings) => {
         try {
-            ai.actions.updateSettings(newSettings);
+            // The AI action should handle the state update automatically
+            await ai.actions.updateSettings(newSettings);
 
             toast.success('AI settings updated', {
                 description: `Provider: ${newSettings.provider || ai.state.settings.provider}`

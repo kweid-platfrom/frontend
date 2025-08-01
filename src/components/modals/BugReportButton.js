@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { Timestamp } from "firebase/firestore";
 import { useApp } from "../../context/AppProvider";
 import BugReportForm from "../create-bug/BugReportForm";
-import BugReportSuccess from "../create-bug/BugReportSuccess";
 import { BugAntIcon } from "@heroicons/react/24/outline";
 import {
     getBrowserInfo,
@@ -25,7 +24,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     } = useApp();
 
     const [showBugForm, setShowBugForm] = useState(false);
-    const [success, setSuccess] = useState(false);
     const [teamMembers, setTeamMembers] = useState([]);
     const [mounted, setMounted] = useState(false);
     const [formData, setFormData] = useState({
@@ -158,11 +156,26 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         });
         setAttachments([]);
         setError("");
-        setSuccess(false);
         setShowBugForm(false);
+        setIsSubmitting(false);
     }, []);
 
-    const handleSubmit = async () => {
+    // Helper function to safely convert values to lowercase strings
+    const safeToLowerCase = (value) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') return value.toLowerCase();
+        if (typeof value === 'object' && value.toString) return value.toString().toLowerCase();
+        return String(value).toLowerCase();
+    };
+
+    // FIXED: Prevent page reload and handle form submission properly
+    const handleSubmit = async (event) => {
+        // Prevent default form submission and page reload
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
         if (!canCreateBugs) {
             setError("Bug creation is not available with your current plan. Please upgrade.");
             actions.ui.showNotification({
@@ -249,42 +262,43 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 updatedByName: userDisplayName(),
                 version: 1,
                 searchTerms: [
-                    formData.title?.toLowerCase(),
-                    formData.description?.toLowerCase(),
-                    formData.category?.toLowerCase(),
-                    formData.severity?.toLowerCase(),
+                    safeToLowerCase(formData.title),
+                    safeToLowerCase(formData.description),
+                    safeToLowerCase(formData.category),
+                    safeToLowerCase(formData.severity),
                     "new",
-                    formData.source?.toLowerCase(),
-                    formData.environment?.toLowerCase()
+                    safeToLowerCase(formData.source),
+                    safeToLowerCase(formData.environment)
                 ].filter(Boolean)
             };
 
             console.log('Submitting bug with user UID:', currentUser.uid);
             console.log('Bug data keys:', Object.keys(bugData));
 
-            await actions.bugs.createBug(bugData);
+            // FIXED: Use await to ensure proper async handling
+            const result = await actions.bugs.createBug(bugData);
+            
+            // Wait a brief moment to ensure the bug is created before updating UI
+            await new Promise(resolve => setTimeout(resolve, 100));
 
-            if (onCreateBug) {
-                onCreateBug();
+            // Call the optional callback
+            if (onCreateBug && typeof onCreateBug === 'function') {
+                try {
+                    await onCreateBug(result);
+                } catch (callbackError) {
+                    console.warn('Callback error:', callbackError);
+                }
             }
 
+            // Show success notification using the central toast system
             actions.ui.showNotification({
                 type: 'success',
-                title: 'Bug Created',
-                message: 'Bug report created successfully'
+                title: 'Bug Created Successfully',
+                message: `Bug "${formData.title.trim()}" has been created and assigned.`
             });
 
-            setSuccess(true);
-            setFormData({
-                ...DEFAULT_BUG_FORM_DATA,
-                selectedSuiteId: null
-            });
-            setAttachments([]);
-            setError("");
-
-            setTimeout(() => {
-                closeForm();
-            }, 3000);
+            // Close the modal after successful creation
+            closeForm();
 
         } catch (error) {
             console.error("Error submitting bug report:", error);
@@ -301,7 +315,13 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         }
     };
 
-    const handleButtonClick = useCallback(() => {
+    const handleButtonClick = useCallback((event) => {
+        // Prevent any default behavior that might cause navigation
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
         console.log('handleButtonClick - Auth state:', { isAuthenticated, currentUser: { uid: currentUser?.uid, email: currentUser?.email } });
         if (!isAuthenticated) {
             actions.ui.showNotification({
@@ -351,6 +371,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     return (
         <>
             <button
+                type="button"
                 className={`group px-3 py-2 text-sm bg-teal-50 text-teal-700 border border-blue-200 hover:bg-teal-100 hover:border-teal-300 hover:shadow-md rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
                 onClick={handleButtonClick}
                 disabled={isSubmitting || !canCreateBugs || !hasActiveSubscription}
@@ -396,30 +417,22 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                         </div>
                         <div className="flex-1 overflow-hidden"
                             style={{ height: 'calc(100% - 80px)' }}>
-                            {success ? (
-                                <div className="h-full flex items-center justify-center p-6">
-                                    <BugReportSuccess onClose={closeForm} />
-                                </div>
-                            ) : (
-                                <div className="h-full">
-                                    <BugReportForm
-                                        formData={formData}
-                                        updateFormData={updateFormData}
-                                        attachments={attachments}
-                                        setAttachments={setAttachments}
-                                        teamMembers={teamMembers}
-                                        error={error}
-                                        setError={setError}
-                                        isSubmitting={isSubmitting}
-                                        onSubmit={handleSubmit}
-                                        onClose={closeForm}
-                                        suites={suites}
-                                        activeSuite={activeSuite}
-                                        userProfile={userProfile}
-                                        showSuiteSelector={true}
-                                    />
-                                </div>
-                            )}
+                            <BugReportForm
+                                formData={formData}
+                                updateFormData={updateFormData}
+                                attachments={attachments}
+                                setAttachments={setAttachments}
+                                teamMembers={teamMembers}
+                                error={error}
+                                setError={setError}
+                                isSubmitting={isSubmitting}
+                                onSubmit={handleSubmit}
+                                onClose={closeForm}
+                                suites={suites}
+                                activeSuite={activeSuite}
+                                userProfile={userProfile}
+                                showSuiteSelector={true}
+                            />
                         </div>
                     </div>
                 </div>,
