@@ -1,7 +1,7 @@
 // app/profile/page.js
 'use client'
 import UserProfile from '../../components/UserProfile';
-import { useProject } from '../../context/ProjectContext';
+import { useProject } from '../../context/SuiteContext';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 

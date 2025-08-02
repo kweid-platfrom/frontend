@@ -1,18 +1,18 @@
-// utils/firebaseErrorHandler.js
-
 export const getFirebaseErrorMessage = (error) => {
-    // Debug logging to see what we're getting (only in development)
+    // Debug logging for development
     if (process.env.NODE_ENV === 'development') {
-        console.log('Error object:', error);
-        console.log('Error type:', typeof error);
-        console.log('Error code:', error?.code);
-        console.log('Error message:', error?.message);
+        console.log('Firebase error details:', {
+            error,
+            type: typeof error,
+            code: error?.code,
+            message: error?.message
+        });
     }
     
-    // Handle different error formats
     let errorCode = '';
     let errorMessage = '';
     
+    // Normalize error input
     if (typeof error === 'string') {
         errorCode = error;
         errorMessage = error;
@@ -21,109 +21,85 @@ export const getFirebaseErrorMessage = (error) => {
         errorMessage = error.message || error.code;
     } else if (error?.message) {
         errorMessage = error.message;
-        // Try to extract auth code from message
         const authMatch = errorMessage.match(/auth\/[\w-]+/);
         errorCode = authMatch ? authMatch[0] : errorMessage;
     } else {
         errorMessage = 'Unknown error occurred';
+        errorCode = 'unknown';
     }
     
-    switch (errorCode) {
-        // Authentication Errors
-        case 'auth/user-not-found':
-        case 'auth/wrong-password':
-        case 'auth/invalid-credential':
-        case 'auth/invalid-login-credentials':
-            return 'Incorrect email or password. Please try again.';
-            
-        case 'auth/user-disabled':
-            return 'This account has been disabled. Please contact support.';
-            
-        case 'auth/email-already-in-use':
-            return 'This email is already registered. Try signing in instead.';
-            
-        case 'auth/weak-password':
-            return 'Password is too weak. Please choose a stronger password (at least 6 characters).';
-            
-        case 'auth/invalid-email':
-            return 'Please enter a valid email address.';
-            
-        case 'auth/missing-password':
-        case 'auth/missing-email':
-            return 'Please fill in all required fields.';
-            
-        // Rate Limiting
-        case 'auth/too-many-requests':
-            return 'Too many failed attempts. Please try again later.';
-            
-        // Network Issues
-        case 'auth/network-request-failed':
-            return 'Network error. Please check your connection and try again.';
-            
-        // Google Sign-in Errors
-        case 'auth/popup-closed-by-user':
-        case 'auth/cancelled-popup-request':
-            return 'Sign-in was cancelled. Please try again.';
-            
-        case 'auth/popup-blocked':
-            return 'Popup was blocked. Please allow popups and try again.';
-            
-        case 'auth/operation-not-allowed':
-            return 'This sign-in method is not enabled. Please contact support.';
-            
-        // Password Reset Errors
-        case 'auth/expired-action-code':
-            return 'This password reset link has expired. Please request a new one.';
-            
-        case 'auth/invalid-action-code':
-            return 'Invalid password reset link. Please request a new one.';
-            
-        // Profile Update Errors
-        case 'auth/requires-recent-login':
-            return 'Please sign in again to complete this action.';
-            
-        // Generic Firestore Errors
-        case 'permission-denied':
-            return 'You don\'t have permission to perform this action.';
-            
-        case 'unavailable':
-            return 'Service temporarily unavailable. Please try again later.';
-            
-        case 'deadline-exceeded':
-            return 'Request timed out. Please try again.';
-            
-        default:
-            // Check if the message contains known patterns
-            const lowerMessage = errorMessage.toLowerCase();
-            
-            if (lowerMessage.includes('password') || lowerMessage.includes('credential')) {
-                return 'Incorrect email or password. Please try again.';
-            }
-            if (lowerMessage.includes('network') || lowerMessage.includes('connection')) {
-                return 'Network error. Please check your connection and try again.';
-            }
-            if (lowerMessage.includes('user') && lowerMessage.includes('not found')) {
-                return 'No account found with this email. Please check your email or sign up.';
-            }
-            if (lowerMessage.includes('email') && lowerMessage.includes('already')) {
-                return 'This email is already registered. Try signing in instead.';
-            }
-            if (lowerMessage.includes('permission')) {
-                return 'You don\'t have permission to perform this action.';
-            }
-            
-            // For debugging - show the actual error in development
-            if (process.env.NODE_ENV === 'development') {
-                return `Debug: ${errorMessage}`;
-            }
-            
-            // Default fallback
-            return 'Something went wrong. Please try again.';
+    // Firestore-specific error messages
+    const firestoreErrorMessages = {
+        'permission-denied': 'You don\'t have permission to perform this action. Please check your account settings.',
+        'not-found': 'The requested resource was not found.',
+        'already-exists': 'This resource already exists.',
+        'resource-exhausted': 'You\'ve reached your account\'s limit. Please upgrade your plan or try again later.',
+        'unavailable': 'Service temporarily unavailable. Please try again later.',
+        'deadline-exceeded': 'Request timed out. Please try again.',
+        'failed-precondition': 'Operation failed due to invalid state. Please try again.',
+        'aborted': 'Operation was aborted. Please try again.',
+        'out-of-range': 'Data provided is out of acceptable range.',
+        'invalid-argument': 'Invalid data provided. Please check your input.'
+    };
+    
+    // Authentication error messages
+    const authErrorMessages = {
+        'auth/user-not-found': 'No account found with this email. Please check your email or sign up.',
+        'auth/wrong-password': 'Incorrect email or password. Please try again.',
+        'auth/invalid-credential': 'Incorrect email or password. Please try again.',
+        'auth/invalid-login-credentials': 'Incorrect email or password. Please try again.',
+        'auth/user-disabled': 'This account has been disabled. Please contact support.',
+        'auth/email-already-in-use': 'This email is already registered. Try signing in instead.',
+        'auth/weak-password': 'Password is too weak. Please choose a stronger password (at least 6 characters).',
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/missing-password': 'Please provide a password.',
+        'auth/missing-email': 'Please provide an email address.',
+        'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
+        'auth/network-request-failed': 'Network error. Please check your connection and try again.',
+        'auth/popup-closed-by-user': 'Sign-in was cancelled. Please try again.',
+        'auth/cancelled-popup-request': 'Sign-in was cancelled. Please try again.',
+        'auth/popup-blocked': 'Popup was blocked. Please allow popups and try again.',
+        'auth/operation-not-allowed': 'This sign-in method is not enabled. Please contact support.',
+        'auth/expired-action-code': 'This password reset link has expired. Please request a new one.',
+        'auth/invalid-action-code': 'Invalid password reset link. Please request a new one.',
+        'auth/requires-recent-login': 'Please sign in again to complete this action.'
+    };
+    
+    // Combine error messages
+    const errorMessages = { ...authErrorMessages, ...firestoreErrorMessages };
+    
+    if (errorMessages[errorCode]) {
+        return errorMessages[errorCode];
     }
+    
+    // Fallback for unhandled errors
+    const lowerMessage = errorMessage.toLowerCase();
+    if (lowerMessage.includes('password') || lowerMessage.includes('credential')) {
+        return 'Incorrect email or password. Please try again.';
+    }
+    if (lowerMessage.includes('network') || lowerMessage.includes('connection')) {
+        return 'Network error. Please check your connection and try again.';
+    }
+    if (lowerMessage.includes('user') && lowerMessage.includes('not found')) {
+        return 'No account found with this email. Please check your email or sign up.';
+    }
+    if (lowerMessage.includes('email') && lowerMessage.includes('already')) {
+        return 'This email is already registered. Try signing in instead.';
+    }
+    if (lowerMessage.includes('permission')) {
+        return 'You don\'t have permission to perform this action. Please check your account settings.';
+    }
+    
+    // Return raw error message in development for debugging
+    if (process.env.NODE_ENV === 'development') {
+        return `Debug: ${errorMessage} (Code: ${errorCode})`;
+    }
+    
+    return 'Something went wrong. Please try again.';
 };
 
-// Helper function for handling async operations with error handling
-export const handleFirebaseOperation = async (operation, successMessage, errorToast = null) => {
+// Helper function for async operations
+export const handleFirebaseOperation = async (operation, successMessage = 'Operation successful', errorToast = null) => {
     try {
         const result = await operation();
         
@@ -135,7 +111,7 @@ export const handleFirebaseOperation = async (operation, successMessage, errorTo
             return { success: false, error: errorMessage };
         }
         
-        return { success: true, data: result };
+        return { success: true, data: result, message: successMessage };
     } catch (error) {
         const errorMessage = getFirebaseErrorMessage(error);
         if (errorToast) {
@@ -145,7 +121,7 @@ export const handleFirebaseOperation = async (operation, successMessage, errorTo
     }
 };
 
-// React Hook for Firebase operations (optional)
+// React Hook for Firebase operations
 import { useState } from 'react';
 
 export const useFirebaseOperation = () => {

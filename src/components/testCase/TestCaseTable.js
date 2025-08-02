@@ -1,598 +1,707 @@
-// components/TestCases/TestCaseTable.js
-'use client'
+/* eslint-disable @typescript-eslint/no-unused-vars */
+'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { toast } from 'sonner';
-import { 
-    Edit3, 
-    Copy, 
-    Trash2, 
-    Play, 
-    Eye, 
+import { useApp } from '@/context/AppProvider';
+import {
     CheckSquare,
     Square,
     ChevronUp,
-    ChevronDown
+    ChevronDown,
+    Bot,
+    User,
+    MessageSquare,
+    CheckCircle,
+    XCircle,
+    Shield,
+    Clock,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
 } from 'lucide-react';
-import { db } from '../../config/firebase';
-import {
-    collection,
-    query,
-    getDocs,
-    doc,
-    deleteDoc,
-    updateDoc,
-    addDoc,
-    orderBy,
-    serverTimestamp
-} from 'firebase/firestore';
-import { useProject } from '../../context/ProjectContext';
-import { useAuth } from '../../context/AuthProvider';
+import MultiSelectDropdown from '../MultiSelectDropdown';
+import BulkActionBar from '../testCase/BulkActionBar';
+import TestCaseSideModal from '../testCase/TestCaseSideModal';
 
-export default function TestCaseTable({ 
-    onEdit, 
-    onDelete, 
-    onDuplicate, 
+const TestCaseTable = ({
+    testCases = [],
+    bugs = [],
+    relationships = { testCaseToBugs: {} },
+    loading,
+    onEdit,
     onBulkAction,
-    onView,
-    onRun,
-    refreshTrigger = 0
-}) {
-    const [testCases, setTestCases] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedIds, setSelectedIds] = useState([]);
-    const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
-    const [error, setError] = useState(null);
+    selectedTestCases,
+    onSelectTestCases,
+    onLinkBug,
+    onUpdateExecutionStatus,
+}) => {
+    const { actions: { ui: { showNotification } } } = useApp();
+    const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
+    const [sideModalOpen, setSideModalOpen] = useState(false);
+    const [selectedTestCase, setSelectedTestCase] = useState(null);
     
-    const { activeProject } = useProject();
-    const { currentUser, hasPermission } = useAuth();
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
-    // Fetch test cases from Firestore subcollection
-    const fetchTestCases = useCallback(async () => {
-        if (!activeProject?.id) {
-            setTestCases([]);
-            setLoading(false);
-            return;
-        }
-
-        try {
-            setLoading(true);
-            setError(null);
-
-            // Query the subcollection: projects/{projectId}/testCases
-            const testCasesRef = collection(db, 'projects', activeProject.id, 'testCases');
-            const q = query(
-                testCasesRef,
-                orderBy('createdAt', 'desc')
-            );
-
-            const querySnapshot = await getDocs(q);
-            const testCaseList = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate(),
-                updatedAt: doc.data().updatedAt?.toDate()
-            }));
-
-            setTestCases(testCaseList);
-            
-            if (testCaseList.length === 0) {
-                toast.info('No test cases found for this project');
-            } else {
-                toast.success(`Loaded ${testCaseList.length} test case${testCaseList.length > 1 ? 's' : ''}`);
-            }
-        } catch (error) {
-            console.error('Error fetching test cases:', error);
-            const errorMessage = error.code === 'permission-denied' 
-                ? 'You do not have permission to view test cases for this project'
-                : 'Failed to load test cases. Please try again.';
-            
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    }, [activeProject?.id]);
-
-    // Fetch test cases on component mount and when activeProject changes
-    useEffect(() => {
-        fetchTestCases();
-    }, [fetchTestCases, refreshTrigger]);
-
-    // Handle select all checkbox
-    const handleSelectAll = (checked) => {
+    const handleSelectAll = useCallback((checked) => {
         if (checked) {
-            setSelectedIds(testCases.map(tc => tc.id));
-            toast.info(`Selected all ${testCases.length} test cases`);
+            onSelectTestCases(testCases.map((tc) => tc.id));
         } else {
-            setSelectedIds([]);
-            toast.info('Cleared selection');
+            onSelectTestCases([]);
         }
-    };
+    }, [testCases, onSelectTestCases]);
 
-    // Handle individual item selection
-    const handleSelectItem = (id, checked) => {
+    const handleSelectItem = useCallback((id, checked) => {
         if (checked) {
-            setSelectedIds(prev => {
-                const newSelection = [...prev, id];
-                if (newSelection.length === 1) {
-                    toast.info('1 test case selected');
-                }
-                return newSelection;
-            });
+            onSelectTestCases([...selectedTestCases, id]);
         } else {
-            setSelectedIds(prev => {
-                const newSelection = prev.filter(selectedId => selectedId !== id);
-                return newSelection;
-            });
+            onSelectTestCases(selectedTestCases.filter((selectedId) => selectedId !== id));
         }
-    };
+    }, [selectedTestCases, onSelectTestCases]);
 
-    // Handle sorting
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-        toast.info(`Sorted by ${key} (${direction}ending)`);
-    };
+    const handleSort = useCallback((key) => {
+        setSortConfig((prev) => ({
+            key,
+            direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+        }));
+        setCurrentPage(1); // Reset to first page when sorting
+    }, []);
 
-    // Sort test cases
-    const sortedTestCases = [...testCases].sort((a, b) => {
-        if (sortConfig.key) {
-            const aValue = a[sortConfig.key];
-            const bValue = b[sortConfig.key];
-            
-            if (aValue < bValue) {
-                return sortConfig.direction === 'asc' ? -1 : 1;
-            }
-            if (aValue > bValue) {
-                return sortConfig.direction === 'asc' ? 1 : -1;
-            }
-        }
-        return 0;
-    });
-
-    // Handle individual test case deletion
-    const handleDelete = async (testCaseId, testCaseTitle) => {
-        if (!hasPermission('write_tests')) {
-            toast.error('You do not have permission to delete test cases');
-            return;
-        }
-
-        // Show confirmation toast
-        toast.custom((t) => (
-            <div className="flex flex-col gap-2 p-4 bg-white border border-red-200 rounded-lg shadow-lg">
-                <div className="flex items-center gap-2">
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                    <span className="font-medium text-gray-900">Delete Test Case</span>
-                </div>
-                <p className="text-sm text-gray-600">
-                    Are you sure you want to delete &quot;{testCaseTitle}&quot;?
-                </p>
-                <div className="flex gap-2 mt-2">
-                    <button
-                        onClick={async () => {
-                            toast.dismiss(t);
-                            try {
-                                toast.loading('Deleting test case...', { id: 'delete-toast' });
-                                
-                                // Delete from subcollection
-                                await deleteDoc(doc(db, 'projects', activeProject.id, 'testCases', testCaseId));
-                                await fetchTestCases(); // Refresh the list
-                                
-                                toast.success('Test case deleted successfully', { id: 'delete-toast' });
-                                if (onDelete) onDelete(testCaseId);
-                            } catch (error) {
-                                console.error('Error deleting test case:', error);
-                                toast.error('Failed to delete test case', { id: 'delete-toast' });
-                            }
-                        }}
-                        className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                    >
-                        Delete
-                    </button>
-                    <button
-                        onClick={() => toast.dismiss(t)}
-                        className="px-3 py-1 bg-gray-200 text-gray-800 text-sm rounded hover:bg-gray-300"
-                    >
-                        Cancel
-                    </button>
-                </div>
-            </div>
-        ), { duration: Infinity });
-    };
-
-    // Handle test case duplication
-    const handleDuplicate = async (testCase) => {
-        if (!hasPermission('write_tests')) {
-            toast.error('You do not have permission to duplicate test cases');
-            return;
-        }
-
-        try {
-            toast.loading('Duplicating test case...', { id: 'duplicate-toast' });
-            
-            const duplicatedTestCase = {
-                ...testCase,
-                title: `${testCase.title} (Copy)`,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                createdBy: currentUser.uid,
-                status: 'draft'
-            };
-            
-            // Remove the original id
-            delete duplicatedTestCase.id;
-            
-            // Add to subcollection
-            await addDoc(collection(db, 'projects', activeProject.id, 'testCases'), duplicatedTestCase);
-            await fetchTestCases(); // Refresh the list
-            
-            toast.success(`Test case "${testCase.title}" duplicated successfully`, { id: 'duplicate-toast' });
-            if (onDuplicate) onDuplicate(testCase);
-        } catch (error) {
-            console.error('Error duplicating test case:', error);
-            toast.error('Failed to duplicate test case', { id: 'duplicate-toast' });
-        }
-    };
-
-    // Handle bulk actions
-    const handleBulkAction = async (action, ids) => {
-        if (!hasPermission('write_tests')) {
-            toast.error('You do not have permission to perform bulk actions');
-            return;
-        }
-
-        const actionLabels = {
-            activate: 'Activating',
-            archive: 'Archiving',
-            delete: 'Deleting'
-        };
-
-        try {
-            toast.loading(`${actionLabels[action]} ${ids.length} test case${ids.length > 1 ? 's' : ''}...`, { 
-                id: 'bulk-action-toast' 
-            });
-            
-            const promises = ids.map(async (id) => {
-                const testCaseRef = doc(db, 'projects', activeProject.id, 'testCases', id);
-                
-                switch (action) {
-                    case 'activate':
-                        return updateDoc(testCaseRef, { 
-                            status: 'active', 
-                            updatedAt: serverTimestamp() 
-                        });
-                    case 'archive':
-                        return updateDoc(testCaseRef, { 
-                            status: 'archived', 
-                            updatedAt: serverTimestamp() 
-                        });
-                    case 'delete':
-                        return deleteDoc(testCaseRef);
-                    default:
-                        return Promise.resolve();
+    const sortedTestCases = useMemo(() => {
+        return [...testCases].sort((a, b) => {
+            if (sortConfig.key) {
+                const aValue = a[sortConfig.key];
+                const bValue = b[sortConfig.key];
+                if (sortConfig.key === 'updated_at' || sortConfig.key === 'lastExecuted') {
+                    const aDate = aValue instanceof Date ? aValue : new Date(aValue);
+                    const bDate = bValue instanceof Date ? bValue : new Date(bValue);
+                    if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
+                    if (isNaN(aDate.getTime())) return 1;
+                    if (isNaN(bDate.getTime())) return -1;
+                    return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
                 }
-            });
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'asc' ? 1 : -1;
+                }
+            }
+            return 0;
+        });
+    }, [testCases, sortConfig]);
 
-            await Promise.all(promises);
-            await fetchTestCases(); // Refresh the list
-            setSelectedIds([]); // Clear selection
+    // Pagination calculations
+    const totalItems = sortedTestCases.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedTestCases = sortedTestCases.slice(startIndex, endIndex);
+
+    // Pagination handlers
+    const handlePageChange = useCallback((page) => {
+        setCurrentPage(page);
+    }, []);
+
+    const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
+        setItemsPerPage(newItemsPerPage);
+        setCurrentPage(1); // Reset to first page
+    }, []);
+
+    // Generate page numbers for pagination
+    const getPageNumbers = useMemo(() => {
+        const pages = [];
+        const maxVisiblePages = 5;
+        
+        if (totalPages <= maxVisiblePages) {
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
             
-            toast.success(`Successfully ${action}d ${ids.length} test case${ids.length > 1 ? 's' : ''}`, { 
-                id: 'bulk-action-toast' 
-            });
-            
-            if (onBulkAction) onBulkAction(action, ids);
-        } catch (error) {
-            console.error(`Error performing bulk ${action}:`, error);
-            toast.error(`Failed to ${action} test cases`, { id: 'bulk-action-toast' });
+            for (let i = startPage; i <= endPage; i++) {
+                pages.push(i);
+            }
         }
-    };
+        
+        return pages;
+    }, [currentPage, totalPages]);
 
-    // Get status badge styling
-    const getStatusBadge = (status) => {
+    const handleChatClick = useCallback((testCase) => {
+        setSelectedTestCase(testCase);
+        setSideModalOpen(true);
+    }, []);
+
+    const handleSideModalClose = useCallback(() => {
+        setSideModalOpen(false);
+        setSelectedTestCase(null);
+    }, []);
+
+    const handleSideModalSave = useCallback((updatedTestCase) => {
+        if (onEdit) {
+            onEdit(updatedTestCase);
+        }
+        setSideModalOpen(false);
+        setSelectedTestCase(null);
+    }, [onEdit]);
+
+    const handleExecutionStatusChange = useCallback((testCaseId, status) => {
+        if (onUpdateExecutionStatus) {
+            onUpdateExecutionStatus(testCaseId, status);
+        }
+    }, [onUpdateExecutionStatus]);
+
+    const getStatusBadge = useCallback((status) => {
         const statusConfig = {
             active: 'bg-green-100 text-green-800 border-green-200',
             draft: 'bg-yellow-100 text-yellow-800 border-yellow-200',
             archived: 'bg-gray-100 text-gray-800 border-gray-200',
-            deprecated: 'bg-red-100 text-red-800 border-red-200'
+            deprecated: 'bg-red-100 text-red-800 border-red-200',
         };
-        return statusConfig[status] || 'bg-gray-100 text-gray-800 border-gray-200';
-    };
+        return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    }, []);
 
-    // Get priority badge styling
-    const getPriorityBadge = (priority) => {
+    const getPriorityBadge = useCallback((priority) => {
         const priorityConfig = {
             high: 'bg-red-100 text-red-800 border-red-200',
             medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            low: 'bg-blue-100 text-blue-800 border-blue-200'
+            low: 'bg-blue-100 text-blue-800 border-blue-200',
         };
-        return priorityConfig[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
-    };
+        return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    }, []);
 
-    // Get sort icon
-    const getSortIcon = (columnKey) => {
+    const getExecutionStatusBadge = useCallback((status) => {
+        const statusConfig = {
+            passed: { bg: 'bg-green-100', text: 'text-green-800', icon: CheckCircle },
+            failed: { bg: 'bg-red-100', text: 'text-red-800', icon: XCircle },
+            blocked: { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: Shield },
+            not_executed: { bg: 'bg-gray-100', text: 'text-gray-800', icon: Clock },
+        };
+        const config = statusConfig[status] || statusConfig.not_executed;
+        const IconComponent = config.icon;
+        
+        return (
+            <div className={`flex items-center gap-1 px-2 py-1 ${config.bg} ${config.text} rounded-full text-xs font-medium whitespace-nowrap w-28 justify-center`}>
+                <IconComponent className="w-3 h-3" />
+                <span>{status?.replace('_', ' ') || 'Not Executed'}</span>
+            </div>
+        );
+    }, []);
+
+    const getAutomationBadge = useCallback((isAutomated) => {
+        if (isAutomated) {
+            return (
+                <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium whitespace-nowrap">
+                    <Bot className="w-3 h-3" />
+                    <span>Automated</span>
+                </div>
+            );
+        }
+        return (
+            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium whitespace-nowrap">
+                <User className="w-3 h-3" />
+                <span>Manual</span>
+            </div>
+        );
+    }, []);
+
+    const getSeverityBadge = useCallback((severity) => {
+        const severityConfig = {
+            critical: 'bg-red-100 text-red-800 border-red-200',
+            high: 'bg-orange-100 text-orange-800 border-orange-200',
+            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+            low: 'bg-blue-100 text-blue-800 border-blue-200',
+        };
+        return severityConfig[severity?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    }, []);
+
+    const getSortIcon = useCallback((columnKey) => {
         if (sortConfig.key !== columnKey) {
             return <ChevronUp className="w-3 h-3 text-gray-400" />;
         }
-        return sortConfig.direction === 'asc' ? 
-            <ChevronUp className="w-3 h-3 text-gray-600" /> : 
-            <ChevronDown className="w-3 h-3 text-gray-600" />;
-    };
-
-    // Loading state
-    if (loading) {
-        return (
-            <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading test cases...</p>
-            </div>
+        return sortConfig.direction === 'asc' ? (
+            <ChevronUp className="w-3 h-3 text-gray-600" />
+        ) : (
+            <ChevronDown className="w-3 h-3 text-gray-600" />
         );
-    }
+    }, [sortConfig]);
 
-    // Error state
-    if (error) {
-        return (
-            <div className="p-8 text-center">
-                <div className="text-red-200 text-6xl mb-4"></div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Test Cases</h3>
-                <p className="text-gray-600 mb-4">{error}</p>
-                <button 
-                    onClick={() => {
-                        toast.loading('Retrying...', { id: 'retry-toast' });
-                        fetchTestCases().then(() => {
-                            toast.success('Successfully refreshed test cases', { id: 'retry-toast' });
-                        });
-                    }}
-                    className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
-                >
-                    Try Again
-                </button>
-            </div>
-        );
-    }
+    const isValidDate = useCallback((date) => {
+        return date instanceof Date && !isNaN(date.getTime());
+    }, []);
 
-    // Empty state
-    if (testCases.length === 0) {
-        return (
-            <div className="p-8 text-center">
-                <div className="text-gray-400 text-6xl mb-4">📋</div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No test cases found</h3>
-                <p className="text-gray-600">
-                    {activeProject ? 
-                        'Create your first test case to get started' : 
-                        'Select a project to view test cases'
-                    }
-                </p>
-            </div>
-        );
-    }
+    const bugOptions = useMemo(() =>
+        Array.isArray(bugs)
+            ? bugs.map((bug) => ({
+                value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
+                label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
+            }))
+            : [],
+        [bugs]
+    );
+
+    const isAllSelected = selectedTestCases.length === testCases.length && testCases.length > 0;
 
     return (
-        <div className="overflow-hidden bg-white shadow-sm rounded-lg border border-gray-200">
-            {/* Bulk Actions Bar */}
-            {selectedIds.length > 0 && (
-                <div className="bg-teal-50 border-b border-teal-200 px-6 py-3">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-teal-700 font-medium">
-                            {selectedIds.length} test case{selectedIds.length > 1 ? 's' : ''} selected
-                        </span>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => handleBulkAction('activate', selectedIds)}
-                                className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
-                                disabled={!hasPermission('write_tests')}
-                            >
-                                Activate
-                            </button>
-                            <button
-                                onClick={() => handleBulkAction('archive', selectedIds)}
-                                className="px-3 py-1 bg-yellow-600 text-white text-sm rounded-md hover:bg-yellow-700 transition-colors"
-                                disabled={!hasPermission('write_tests')}
-                            >
-                                Archive
-                            </button>
-                            <button
-                                onClick={() => handleBulkAction('delete', selectedIds)}
-                                className="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
-                                disabled={!hasPermission('write_tests')}
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+        <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+            <BulkActionBar
+                selectedCount={selectedTestCases.length}
+                onBulkAction={onBulkAction}
+                selectedTestCases={selectedTestCases}
+            />
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-gray-50 sticky top-0 z-20">
                         <tr>
-                            <th className="px-6 py-3 text-left border-r border-gray-200">
+                            <th className="px-4 py-3 text-left border-r border-gray-200 w-12 sticky left-0 bg-gray-50 z-30">
                                 <div className="flex items-center">
-                                    {selectedIds.length === testCases.length ? (
-                                        <CheckSquare 
-                                            className="w-4 h-4 text-teal-600 cursor-pointer" 
+                                    {isAllSelected ? (
+                                        <CheckSquare
+                                            className="w-4 h-4 text-teal-600 cursor-pointer"
                                             onClick={() => handleSelectAll(false)}
                                         />
                                     ) : (
-                                        <Square 
-                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600" 
+                                        <Square
+                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
                                             onClick={() => handleSelectAll(true)}
                                         />
                                     )}
                                 </div>
                             </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-64 sticky left-12 bg-gray-50 z-30"
                                 onClick={() => handleSort('title')}
                             >
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 whitespace-nowrap">
                                     Test Case
                                     {getSortIcon('title')}
                                 </div>
                             </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('status')}
                             >
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 whitespace-nowrap">
                                     Status
                                     {getSortIcon('status')}
                                 </div>
                             </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
                                 onClick={() => handleSort('priority')}
                             >
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 whitespace-nowrap">
                                     Priority
                                     {getSortIcon('priority')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                                Tags
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                                Assignee
-                            </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
-                                onClick={() => handleSort('updatedAt')}
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('severity')}
                             >
-                                <div className="flex items-center gap-1">
-                                    Updated
-                                    {getSortIcon('updatedAt')}
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Severity
+                                    {getSortIcon('severity')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Actions
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-48"
+                                onClick={() => handleSort('executionStatus')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Execution Status
+                                    {getSortIcon('executionStatus')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('automation_status')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Automation
+                                    {getSortIcon('automation_status')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('assignee')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Assignee
+                                    {getSortIcon('assignee')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('component')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Component
+                                    {getSortIcon('component')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('testType')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Test Type
+                                    {getSortIcon('testType')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('environment')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Environment
+                                    {getSortIcon('environment')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('estimatedTime')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Est. Time
+                                    {getSortIcon('estimatedTime')}
+                                </div>
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-48">
+                                <span className="whitespace-nowrap">Linked Bugs</span>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('lastExecuted')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Last Run
+                                    {getSortIcon('lastExecuted')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-32"
+                                onClick={() => handleSort('updated_at')}
+                            >
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                    Last Updated
+                                    {getSortIcon('updated_at')}
+                                </div>
                             </th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {sortedTestCases.map((testCase) => (
-                            <tr key={testCase.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <div className="flex items-center">
-                                        {selectedIds.includes(testCase.id) ? (
-                                            <CheckSquare 
-                                                className="w-4 h-4 text-teal-600 cursor-pointer" 
-                                                onClick={() => handleSelectItem(testCase.id, false)}
-                                            />
-                                        ) : (
-                                            <Square 
-                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600" 
-                                                onClick={() => handleSelectItem(testCase.id, true)}
-                                            />
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <div>
-                                        <div className="text-sm font-medium text-gray-900">
-                                            {testCase.title}
-                                        </div>
-                                        <div className="text-sm text-gray-500 truncate max-w-xs">
-                                            {testCase.description}
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusBadge(testCase.status)}`}>
-                                        {testCase.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityBadge(testCase.priority)}`}>
-                                        {testCase.priority}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-gray-200">
-                                    <div className="flex flex-wrap gap-1">
-                                        {testCase.tags?.slice(0, 2).map((tag, index) => (
-                                            <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded border border-gray-200">
-                                                {tag}
-                                            </span>
-                                        ))}
-                                        {testCase.tags?.length > 2 && (
-                                            <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded border border-gray-200">
-                                                +{testCase.tags.length - 2}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                                    {testCase.assignee || 'Unassigned'}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-500 border-r border-gray-200">
-                                    {testCase.updatedAt ? 
-                                        formatDistanceToNow(testCase.updatedAt, { addSuffix: true }) :
-                                        'Never'
-                                    }
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => {
-                                                if (onView) onView(testCase);
-                                                toast.info(`Viewing "${testCase.title}"`);
-                                            }}
-                                            className="p-1 text-teal-600 hover:text-teal-900 hover:bg-blue-50 rounded transition-colors"
-                                            title="View Test Case"
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (onRun) onRun(testCase);
-                                                toast.loading(`Running "${testCase.title}"...`);
-                                            }}
-                                            className="p-1 text-green-600 hover:text-green-900 hover:bg-green-50 rounded transition-colors"
-                                            title="Run Test Case"
-                                        >
-                                            <Play className="w-4 h-4" />
-                                        </button>
-                                        {hasPermission('write_tests') && (
-                                            <>
-                                                <button
-                                                    onClick={() => {
-                                                        if (onEdit) onEdit(testCase);
-                                                        toast.info(`Editing "${testCase.title}"`);
-                                                    }}
-                                                    className="p-1 text-teal-600 hover:text-teal-900 hover:bg-teal-50 rounded transition-colors"
-                                                    title="Edit Test Case"
-                                                >
-                                                    <Edit3 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDuplicate(testCase)}
-                                                    className="p-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
-                                                    title="Duplicate Test Case"
-                                                >
-                                                    <Copy className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(testCase.id, testCase.title)}
-                                                    className="p-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-                                                    title="Delete Test Case"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={15} className="px-6 py-4 text-center text-sm text-gray-500">
+                                    Loading test cases...
                                 </td>
                             </tr>
-                        ))}
+                        ) : paginatedTestCases.length === 0 ? (
+                            <tr>
+                                <td colSpan={15} className="px-6 py-4 text-center text-sm text-gray-500">
+                                    No test cases found
+                                </td>
+                            </tr>
+                        ) : (
+                            paginatedTestCases.map((testCase) => {
+                                const updatedAt = testCase.updated_at instanceof Date ? testCase.updated_at : new Date(testCase.updated_at);
+                                const lastExecuted = testCase.lastExecuted instanceof Date ? testCase.lastExecuted : new Date(testCase.lastExecuted);
+                                const linkedBugs = relationships.testCaseToBugs[testCase.id] || [];
+
+                                return (
+                                    <tr key={testCase.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-12 sticky left-0 bg-white z-20">
+                                            <div className="flex items-center">
+                                                {selectedTestCases.includes(testCase.id) ? (
+                                                    <CheckSquare
+                                                        className="w-4 h-4 text-teal-600 cursor-pointer"
+                                                        onClick={() => handleSelectItem(testCase.id, false)}
+                                                    />
+                                                ) : (
+                                                    <Square
+                                                        className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                        onClick={() => handleSelectItem(testCase.id, true)}
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-64 sticky left-12 bg-white z-20">
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-sm text-gray-900 truncate max-w-[200px]" title={testCase.title}>
+                                                    {testCase.title || 'Untitled Test Case'}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleChatClick(testCase)}
+                                                    className="ml-2 p-1 text-gray-400 hover:text-teal-600 transition-colors"
+                                                    title="View/Edit Test Case"
+                                                >
+                                                    <MessageSquare className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <span
+                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${getStatusBadge(
+                                                    testCase.status
+                                                )}`}
+                                            >
+                                                {testCase.status || 'Draft'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <span
+                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${getPriorityBadge(
+                                                    testCase.priority
+                                                )}`}
+                                            >
+                                                {testCase.priority || 'Low'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <span
+                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${getSeverityBadge(
+                                                    testCase.severity
+                                                )}`}
+                                            >
+                                                {testCase.severity || 'Low'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-48">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-28 flex justify-start">
+                                                    {getExecutionStatusBadge(testCase.executionStatus)}
+                                                </div>
+                                                <div className="w-px h-6 bg-gray-300"></div>
+                                                <div className="w-24 flex justify-center gap-1">
+                                                    <button
+                                                        onClick={() => handleExecutionStatusChange(testCase.id, 'passed')}
+                                                        className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                                        title="Mark as Passed"
+                                                    >
+                                                        <CheckCircle className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleExecutionStatusChange(testCase.id, 'failed')}
+                                                        className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                                        title="Mark as Failed"
+                                                    >
+                                                        <XCircle className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleExecutionStatusChange(testCase.id, 'blocked')}
+                                                        className="p-1.5 text-yellow-600 hover:bg-yellow-100 rounded transition-colors"
+                                                        title="Mark as Blocked"
+                                                    >
+                                                        <Shield className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            {getAutomationBadge(testCase.is_automated || testCase.automation_status === 'automated')}
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-900 truncate max-w-[120px]" title={testCase.assignee}>
+                                                {testCase.assignee || 'Unassigned'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-900 truncate max-w-[120px]" title={testCase.component}>
+                                                {testCase.component || 'N/A'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-900 truncate max-w-[120px]" title={testCase.testType}>
+                                                {testCase.testType || 'Functional'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-900 truncate max-w-[120px]" title={testCase.environment}>
+                                                {testCase.environment || 'Testing'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-900 whitespace-nowrap">
+                                                {testCase.estimatedTime ? `${testCase.estimatedTime} min` : 'N/A'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-48 relative">
+                                            <div className="w-48">
+                                                <MultiSelectDropdown
+                                                    options={bugOptions}
+                                                    value={linkedBugs}
+                                                    onChange={(newBugs) => onLinkBug(testCase.id, newBugs)}
+                                                    placeholder="Link Bugs..."
+                                                    type="bugs"
+                                                />
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
+                                            <div className="text-sm text-gray-500 whitespace-nowrap">
+                                                {isValidDate(lastExecuted) && testCase.lastExecuted
+                                                    ? formatDistanceToNow(lastExecuted, { addSuffix: true })
+                                                    : 'Never'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap w-32">
+                                            <div className="text-sm text-gray-500 whitespace-nowrap">
+                                                {isValidDate(updatedAt)
+                                                    ? formatDistanceToNow(updatedAt, { addSuffix: true })
+                                                    : 'Invalid Date'}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
                     </tbody>
                 </table>
             </div>
+
+            {/* Modern Pagination Component */}
+            {!loading && totalItems > 0 && (
+                <div className="bg-white px-6 py-4 border-t border-gray-200 flex items-center justify-between rounded-b-lg">
+                    {/* Left side - Results info and items per page */}
+                    <div className="flex items-center gap-6">
+                        <div className="text-sm text-gray-600">
+                            <span className="font-medium">{startIndex + 1}</span> to{' '}
+                            <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
+                            <span className="font-medium">{totalItems}</span> results
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
+                                Rows per page:
+                            </label>
+                            <select
+                                id="itemsPerPage"
+                                value={itemsPerPage}
+                                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                                className="border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
+                                style={{
+                                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+                                    backgroundPosition: 'right 0.5rem center',
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundSize: '1.25em 1.25em'
+                                }}
+                            >
+                                <option value={5}>5</option>
+                                <option value={10}>10</option>
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Right side - Pagination controls */}
+                    <div className="flex items-center gap-3">
+                        {/* First page button */}
+                        <button
+                            onClick={() => handlePageChange(1)}
+                            disabled={currentPage === 1}
+                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
+                                currentPage === 1
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                            title="First page"
+                        >
+                            <ChevronsLeft className="h-4 w-4" />
+                        </button>
+
+                        {/* Previous page button */}
+                        <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
+                                currentPage === 1
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                            title="Previous page"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+
+                        {/* Page numbers */}
+                        <div className="flex items-center gap-2">
+                            {getPageNumbers.map((pageNumber) => (
+                                <button
+                                    key={pageNumber}
+                                    onClick={() => handlePageChange(pageNumber)}
+                                    className={`w-9 h-9 flex items-center justify-center rounded-md border text-sm font-medium transition-all duration-200 ${
+                                        currentPage === pageNumber
+                                            ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
+                                            : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
+                                    }`}
+                                >
+                                    {pageNumber}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Show ellipsis and last page if needed */}
+                        {totalPages > 5 && currentPage < totalPages - 2 && (
+                            <>
+                                {currentPage < totalPages - 3 && (
+                                    <span className="px-2 text-gray-500 text-sm">...</span>
+                                )}
+                                <button
+                                    onClick={() => handlePageChange(totalPages)}
+                                    className="w-9 h-9 flex items-center justify-center rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
+                                >
+                                    {totalPages}
+                                </button>
+                            </>
+                        )}
+
+                        {/* Next page button */}
+                        <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
+                                currentPage === totalPages
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                            title="Next page"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+
+                        {/* Last page button */}
+                        <button
+                            onClick={() => handlePageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
+                                currentPage === totalPages
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                            title="Last page"
+                        >
+                            <ChevronsRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <TestCaseSideModal
+                isOpen={sideModalOpen}
+                testCase={selectedTestCase}
+                onClose={handleSideModalClose}
+                onSave={handleSideModalSave}
+            />
         </div>
     );
-}
+};
+
+export default TestCaseTable;

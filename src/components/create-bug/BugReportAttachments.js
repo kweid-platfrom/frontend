@@ -158,7 +158,7 @@ const BugReportAttachments = ({
                 onDragLeave={handleDragLeave}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${
+                className={`border-2 border-dashed rounded p-8 text-center transition-all duration-200 ${
                     isDragging
                         ? 'border-[#00897B] bg-[#E0F2F1]'
                         : 'border-gray-300 hover:border-gray-400'
@@ -166,7 +166,7 @@ const BugReportAttachments = ({
             >
                 <div className="space-y-4">
                     <div className="flex justify-center">
-                        <div className="p-3 bg-gray-100 rounded-full">
+                        <div className="p-3 bg-gray-100 rounded">
                             <Paperclip className="h-8 w-8 text-gray-400" />
                         </div>
                     </div>
@@ -192,7 +192,7 @@ const BugReportAttachments = ({
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="inline-flex items-center space-x-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors duration-200"
+                            className="inline-flex items-center space-x-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded text-sm font-medium transition-colors duration-200"
                         >
                             <Upload className="h-4 w-4" />
                             <span>Upload Files</span>
@@ -200,7 +200,7 @@ const BugReportAttachments = ({
                         <button
                             type="button"
                             onClick={() => setShowRecordingModal(true)}
-                            className="inline-flex items-center space-x-2 px-6 py-3 bg-[#00897B] hover:bg-[#00796B] text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                            className="inline-flex items-center space-x-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded text-sm font-medium transition-colors duration-200"
                         >
                             <Play className="h-4 w-4" />
                             <span>From Recordings</span>
@@ -233,7 +233,7 @@ const BugReportAttachments = ({
                             Clear All
                         </button>
                     </div>
-                    <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+                    <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded">
                         {attachments.map((attachment) => (
                             <div
                                 key={attachment.id}
@@ -260,12 +260,12 @@ const BugReportAttachments = ({
                                                 <span>{formatFileSize(attachment.size)}</span>
                                             )}
                                             {attachment.isRecording && (
-                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
+                                                <span className="px-2 py-0.5 bg-blue-100 text-teal-700 rounded font-medium">
                                                     Recording
                                                 </span>
                                             )}
                                             {attachment.isUploaded && (
-                                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+                                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">
                                                     Ready
                                                 </span>
                                             )}
@@ -297,7 +297,7 @@ const BugReportAttachments = ({
                                     setShowRecordingModal(false);
                                     setSelectedRecordings([]);
                                 }}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                                className="p-2 hover:bg-gray-100 rounded transition-colors duration-200"
                             >
                                 <X className="w-5 h-5 text-gray-500" />
                             </button>
@@ -306,12 +306,12 @@ const BugReportAttachments = ({
                         <div className="flex-1 overflow-hidden">
                             {isLoadingRecordings ? (
                                 <div className="flex items-center justify-center py-12">
-                                    <div className="w-6 h-6 border-2 border-[#00897B] border-t-transparent rounded-full animate-spin"></div>
+                                    <div className="w-6 h-6 border-2 border-[#00897B] border-t-transparent rounded animate-spin"></div>
                                     <span className="ml-3 text-gray-600">Loading recordings...</span>
                                 </div>
                             ) : recordings.length === 0 ? (
                                 <div className="text-center py-12 text-gray-500">
-                                    <div className="p-4 bg-gray-100 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                                    <div className="p-4 bg-gray-100 rounded w-16 h-16 mx-auto mb-4 flex items-center justify-center">
                                         <Play className="h-8 w-8 text-gray-400" />
                                     </div>
                                     <p className="text-lg font-medium mb-2">No recordings found</p>
@@ -324,7 +324,7 @@ const BugReportAttachments = ({
                                             <div
                                                 key={recording.id}
                                                 onClick={() => toggleRecordingSelection(recording)}
-                                                className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 ${
+                                                className={`p-4 border rounded cursor-pointer transition-all duration-200 ${
                                                     selectedRecordings.some(r => r.id === recording.id)
                                                         ? 'border-[#00897B] bg-[#E0F2F1] shadow-sm'
                                                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -333,7 +333,7 @@ const BugReportAttachments = ({
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center space-x-3 min-w-0 flex-1">
                                                         <div className="flex-shrink-0">
-                                                            <div className={`p-2 rounded-lg ${
+                                                            <div className={`p-2 rounded ${
                                                                 selectedRecordings.some(r => r.id === recording.id)
                                                                     ? 'bg-[#00897B]'
                                                                     : 'bg-blue-100'
@@ -341,7 +341,7 @@ const BugReportAttachments = ({
                                                                 <Play className={`h-4 w-4 ${
                                                                     selectedRecordings.some(r => r.id === recording.id)
                                                                         ? 'text-white'
-                                                                        : 'text-blue-600'
+                                                                        : 'text-teal-600'
                                                                 }`} />
                                                             </div>
                                                         </div>
@@ -384,7 +384,7 @@ const BugReportAttachments = ({
                                         setShowRecordingModal(false);
                                         setSelectedRecordings([]);
                                     }}
-                                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors duration-200"
                                 >
                                     Cancel
                                 </button>
@@ -392,7 +392,7 @@ const BugReportAttachments = ({
                                     type="button"
                                     onClick={addSelectedRecordings}
                                     disabled={selectedRecordings.length === 0}
-                                    className="px-4 py-2 bg-[#00897B] text-white rounded-lg hover:bg-[#00796B] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200"
+                                    className="px-4 py-2 bg-[#00897B] text-white rounded hover:bg-[#00796B] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200"
                                 >
                                     Add Selected ({selectedRecordings.length})
                                 </button>

@@ -14,7 +14,6 @@ import {
     GripVertical
 } from "lucide-react";
 import { BugAntIcon } from "@heroicons/react/24/outline";
-import GroupCreationModal from '../modals/GroupCreationModal';
 import BugTable from './BugTable';
 
 const BugList = ({
@@ -39,7 +38,6 @@ const BugList = ({
 }) => {
     const [selectedBugs, setSelectedBugs] = useState([]);
     const [collapsedGroups, setCollapsedGroups] = useState({});
-    const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [draggedBug, setDraggedBug] = useState(null);
     const [dragOverGroup, setDragOverGroup] = useState(null);
 
@@ -587,15 +585,6 @@ const BugList = ({
                 );
             })}
 
-            {/* Group Creation Modal */}
-            {showCreateGroup && (
-                <GroupCreationModal
-                    show={showCreateGroup}
-                    onClose={() => setShowCreateGroup(false)}
-                    groupBy={groupBy}
-                    onCreateSprint={onCreateSprint}
-                />
-            )}
         </div>
     );
 };

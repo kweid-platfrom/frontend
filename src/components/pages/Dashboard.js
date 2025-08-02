@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Activity, Settings, RotateCcw, AlertCircle, TrendingUp, Bug, TestTube, Plus } from 'lucide-react';
 
 // Import QAID-specific components
 import QAIDMetricsOverview from '../stats/QAIDMetricsOverview';
@@ -12,10 +12,25 @@ import TeamProductivity from '../stats/TeamProductivity';
 import QAIDCharts from '../stats/QAIDCharts';
 import QuickActions from '../stats/QuickActions';
 
-// Import services - Only bug tracking is active
+// Import the CreateTestSuiteModal
+import CreateTestSuiteModal from '../modals/CreateTestSuiteModal';
+
+// Import context and services
+import { useSuite } from '../../contexts/SuiteContext';
 import { useBugTrackingMetrics } from '../../services/bugTrackingService';
 
 const Dashboard = () => {
+    // ALIGNED: Use the correct properties from SuiteContext
+    const { 
+        suites, 
+        isLoading: suiteLoading, 
+        error: suiteError,
+        refetchSuites,
+        createTestSuite,
+        canCreateSuite,
+        shouldFetchSuites
+    } = useSuite();
+
     const [filters, setFilters] = useState({
         timeRange: '7d',
         component: 'all',
@@ -33,25 +48,77 @@ const Dashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [autoRefresh, setAutoRefresh] = useState(true);
 
+    // Modal states - ALIGNED: Simplified modal state management
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [showFirstSuiteModal, setShowFirstSuiteModal] = useState(false);
+
+    // Use refs to prevent infinite loops
+    const timeIntervalRef = useRef(null);
+    const refreshIntervalRef = useRef(null);
+    const firstSuiteCheckRef = useRef(false);
+
     // Use bug tracking metrics service
     const { metrics: bugMetrics, loading: bugLoading, error: bugError, refetch: bugRefetch } = useBugTrackingMetrics(filters);
 
-    const loading = bugLoading;
-    const error = bugError;
+    const loading = bugLoading || suiteLoading;
+    const error = bugError || suiteError;
 
-    // Auto-refresh timer
+    // ALIGNED: Determine if we should show the first suite modal
+    const shouldShowFirstSuiteModal = useMemo(() => {
+        // Only show if:
+        // 1. User should have access to fetch suites
+        // 2. Not currently loading
+        // 3. No suites exist
+        // 4. Can create suites
+        // 5. Haven't already checked
+        return shouldFetchSuites && 
+               !suiteLoading && 
+               Array.isArray(suites) && 
+               suites.length === 0 && 
+               canCreateSuite &&
+               !firstSuiteCheckRef.current;
+    }, [shouldFetchSuites, suiteLoading, suites, canCreateSuite]);
+
+    // ALIGNED: Check for first suite modal with proper state management
     useEffect(() => {
-        const timeInterval = setInterval(() => {
+        if (shouldShowFirstSuiteModal) {
+            setShowFirstSuiteModal(true);
+            firstSuiteCheckRef.current = true;
+        }
+    }, [shouldShowFirstSuiteModal]);
+
+    // Auto-refresh timer - ALIGNED: Cleaner implementation
+    useEffect(() => {
+        // Clear any existing intervals
+        if (timeIntervalRef.current) {
+            clearInterval(timeIntervalRef.current);
+        }
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+        }
+
+        // Set up time interval
+        timeIntervalRef.current = setInterval(() => {
             setCurrentTime(new Date());
         }, 1000);
 
-        const refreshInterval = autoRefresh ? setInterval(() => {
-            bugRefetch();
-        }, 30000) : null;
+        // Set up refresh interval only if autoRefresh is enabled
+        if (autoRefresh) {
+            refreshIntervalRef.current = setInterval(() => {
+                if (bugRefetch) {
+                    bugRefetch();
+                }
+            }, 30000);
+        }
 
+        // Cleanup function
         return () => {
-            clearInterval(timeInterval);
-            if (refreshInterval) clearInterval(refreshInterval);
+            if (timeIntervalRef.current) {
+                clearInterval(timeIntervalRef.current);
+            }
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+            }
         };
     }, [autoRefresh, bugRefetch]);
 
@@ -61,6 +128,7 @@ const Dashboard = () => {
             setIsConnected(navigator.onLine);
         };
 
+        checkConnection();
         window.addEventListener('online', checkConnection);
         window.addEventListener('offline', checkConnection);
 
@@ -70,7 +138,7 @@ const Dashboard = () => {
         };
     }, []);
 
-    // Enhanced metrics calculation using real bug data
+    // Enhanced metrics calculation using real bug data - MEMOIZED
     const enhancedMetrics = useMemo(() => {
         if (!bugMetrics) {
             return {
@@ -78,7 +146,6 @@ const Dashboard = () => {
                 passRate: 87,
                 activeBugs: 0,
                 criticalIssues: 0,
-                // Default bug metrics structure
                 totalBugs: 0,
                 bugsFromScreenRecording: 0,
                 bugsFromManualTesting: 0,
@@ -101,29 +168,19 @@ const Dashboard = () => {
             };
         }
 
-        // Merge mock test data with real bug data
         return {
-            // Mock test case data (since test service is not active)
             totalTestCases: 245,
             passRate: 87,
-
-            // Real bug data from service
             ...bugMetrics,
-
-            // Ensure we have all required fields with defaults
             activeBugs: Array.isArray(bugMetrics.bugs)
                 ? bugMetrics.bugs.filter(bug => !['Resolved', 'Closed'].includes(bug.status)).length
                 : (bugMetrics.activeBugs ?? 0),
             criticalIssues: bugMetrics.criticalBugs || 0,
-
-            // Calculate derived metrics if not provided
             bugsFromManualTesting: bugMetrics.bugsFromManualTesting ||
                 Math.max(0, (bugMetrics.totalBugs || 0) - (bugMetrics.bugsFromScreenRecording || 0)),
-
             avgBugReportCompleteness: bugMetrics.avgBugReportCompleteness || 75,
             bugReproductionRate: bugMetrics.bugReproductionRate ||
                 (bugMetrics.totalBugs > 0 ? Math.round(((bugMetrics.bugsWithVideoEvidence || 0) / bugMetrics.totalBugs) * 100) : 0),
-
             weeklyReportsGenerated: bugMetrics.weeklyReportsGenerated || 4,
             monthlyReportsGenerated: bugMetrics.monthlyReportsGenerated || 1,
             avgBugsPerReport: bugMetrics.avgBugsPerReport ||
@@ -131,7 +188,7 @@ const Dashboard = () => {
         };
     }, [bugMetrics]);
 
-    // Summary stats for header
+    // Summary stats for header - MEMOIZED
     const summaryStats = useMemo(() => {
         return {
             totalTestCases: enhancedMetrics.totalTestCases,
@@ -141,21 +198,99 @@ const Dashboard = () => {
         };
     }, [enhancedMetrics]);
 
+    // MEMOIZED CALLBACKS
+    const handleFilterChange = useCallback((key, value) => {
+        setFilters(prev => ({ ...prev, [key]: value }));
+    }, []);
 
-    const FilterButton = ({ active, onClick, children, disabled = false }) => (
+    const handleRefresh = useCallback(() => {
+        if (bugRefetch) {
+            bugRefetch();
+        }
+        setCurrentTime(new Date());
+        // ALIGNED: Use refetchSuites instead of refreshTestSuites
+        if (refetchSuites) {
+            refetchSuites(true);
+        }
+    }, [bugRefetch, refetchSuites]);
+
+    const handleCreateNewSuite = useCallback(() => {
+        // ALIGNED: Check if user can create suites
+        if (!canCreateSuite) {
+            // Could show a subscription upgrade modal here
+            alert('Suite creation limit reached. Please upgrade your subscription.');
+            return;
+        }
+        setIsCreateModalOpen(true);
+    }, [canCreateSuite]);
+
+    const handleCreateModalClose = useCallback(() => {
+        setIsCreateModalOpen(false);
+    }, []);
+
+    // ALIGNED: Handle first suite success with proper state management
+    const handleFirstSuiteSuccess = useCallback(async (suiteData) => {
+        console.log('First suite created successfully');
+        
+        try {
+            // Create the suite using the context method
+            await createTestSuite(suiteData);
+            
+            // Close the modal
+            setShowFirstSuiteModal(false);
+            
+            // Reset the check flag to allow future first suite checks if needed
+            firstSuiteCheckRef.current = false;
+            
+            // Refresh data to ensure consistency
+            if (refetchSuites) {
+                await refetchSuites(true);
+            }
+        } catch (error) {
+            console.error('Error creating first suite:', error);
+            // Handle error appropriately - maybe show error message
+        }
+    }, [createTestSuite, refetchSuites]);
+
+    const handleNewSuiteSuccess = useCallback(async (suiteData) => {
+        console.log('New suite created successfully');
+        
+        try {
+            // Create the suite using the context method
+            await createTestSuite(suiteData);
+            
+            // Close the modal
+            setIsCreateModalOpen(false);
+            
+            // Refresh data to ensure consistency
+            if (refetchSuites) {
+                await refetchSuites(true);
+            }
+        } catch (error) {
+            console.error('Error creating new suite:', error);
+            // Handle error appropriately
+        }
+    }, [createTestSuite, refetchSuites]);
+
+    const handleAutoRefreshChange = useCallback((e) => {
+        setAutoRefresh(e.target.checked);
+    }, []);
+
+    // MEMOIZED COMPONENTS
+    const FilterButton = useCallback(({ active, onClick, children, disabled = false }) => (
         <button
             onClick={onClick}
             disabled={disabled}
             className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${disabled
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : active
-                        ? 'bg-teal-100 text-teal-700 border border-teal-200'
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : active
+                    ? 'bg-teal-100 text-teal-700 border border-teal-200'
+                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                 }`}
         >
             {children}
         </button>
-    );
+    ), []);
 
     const timeFilterOptions = [
         { value: '1d', label: 'Last 24h' },
@@ -173,16 +308,50 @@ const Dashboard = () => {
         { value: 'automation', label: 'Automation', icon: Settings }
     ];
 
-    const handleFilterChange = (key, value) => {
-        setFilters(prev => ({ ...prev, [key]: value }));
-    };
+    // ALIGNED: Show loading screen while checking suite status
+    // Only show loading if we're actually loading and should have access
+    if (suiteLoading && shouldFetchSuites) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="text-center">
+                    <Activity className="w-12 h-12 text-teal-600 animate-spin mx-auto mb-4" />
+                    <p className="text-lg text-gray-600 mb-2">Loading QAID Dashboard</p>
+                    <p className="text-sm text-gray-500">Checking your test suites...</p>
+                </div>
+            </div>
+        );
+    }
 
-    const handleRefresh = () => {
-        bugRefetch();
-        setCurrentTime(new Date());
-    };
+    // ALIGNED: Show first suite modal if conditions are met
+    if (showFirstSuiteModal) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <CreateTestSuiteModal
+                    isOpen={showFirstSuiteModal}
+                    onClose={() => { }} // Prevent closing for first suite
+                    isFirstSuite={true}
+                    onSuccess={handleFirstSuiteSuccess}
+                />
+            </div>
+        );
+    }
 
-    // Loading state
+    // ALIGNED: If user shouldn't fetch suites, show appropriate message
+    if (!shouldFetchSuites) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="text-center max-w-md">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
+                        <AlertCircle className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                        <h2 className="text-lg font-semibold text-blue-800 mb-2">Authentication Required</h2>
+                        <p className="text-blue-600 mb-4">Please sign in to access your QAID dashboard.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Loading state for metrics only (after suites are loaded)
     if (loading && !bugMetrics) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -240,14 +409,35 @@ const Dashboard = () => {
                                         <span className="text-teal-600">Refreshing...</span>
                                     </>
                                 )}
+                                {/* ALIGNED: Show suite count */}
+                                {suites && (
+                                    <>
+                                        <span>•</span>
+                                        <span>{suites.length} Test Suite{suites.length !== 1 ? 's' : ''}</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center space-x-3">
+                            <button
+                                onClick={handleCreateNewSuite}
+                                disabled={!canCreateSuite}
+                                className={`px-4 py-2 rounded-md flex items-center shadow-md hover:shadow-lg transition-all duration-200 ${
+                                    canCreateSuite
+                                        ? 'bg-gradient-to-r from-teal-600 to-blue-600 text-white hover:from-teal-700 hover:to-blue-700'
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title={!canCreateSuite ? 'Suite creation limit reached' : 'Create new test suite'}
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                New Suite
+                            </button>
+
                             <label className="flex items-center text-sm text-gray-600">
                                 <input
                                     type="checkbox"
                                     checked={autoRefresh}
-                                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                                    onChange={handleAutoRefreshChange}
                                     className="mr-2 text-teal-600 focus:ring-teal-500"
                                 />
                                 Auto-refresh
@@ -294,8 +484,8 @@ const Dashboard = () => {
                                     key={tab.value}
                                     onClick={() => setActiveTab(tab.value)}
                                     className={`flex items-center px-4 py-3 text-sm font-medium rounded transition-colors whitespace-nowrap ${activeTab === tab.value
-                                            ? 'bg-teal-100 text-teal-700'
-                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                        ? 'bg-teal-100 text-teal-700'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                         }`}
                                 >
                                     <IconComponent className="w-4 h-4 mr-2" />
@@ -479,7 +669,7 @@ const Dashboard = () => {
                 <QuickActions
                     metrics={{
                         qa: {
-                            testCases: enhancedMetrics.totalTestCases,
+                            testCases: enhancedMetrics.testCases,
                             passRate: enhancedMetrics.passRate
                         },
                         bugs: enhancedMetrics
@@ -488,6 +678,14 @@ const Dashboard = () => {
                     onRefresh={handleRefresh}
                 />
             </div>
+
+            {/* Regular Create Test Suite Modal - Shows when user clicks "New Suite" */}
+            <CreateTestSuiteModal
+                isOpen={isCreateModalOpen}
+                onClose={handleCreateModalClose}
+                isFirstSuite={false}
+                onSuccess={handleNewSuiteSuccess}
+            />
         </div>
     );
 };

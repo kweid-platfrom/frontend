@@ -1,49 +1,60 @@
-"use client";
-import React from "react";
-import { AuthProvider } from "../context/AuthProvider";
-import { ProjectProvider } from "../context/ProjectContext";
-import { Poppins, Montserrat, Noto_Sans_Hebrew } from "next/font/google";
-import { Toaster } from "sonner";
+'use client';
 
-// Load fonts
-const poppins = Poppins({ subsets: ["latin"], weight: ["400", "700"] });
-const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "600"] });
-const sansHebrew = Noto_Sans_Hebrew({ subsets: ["hebrew"], weight: ["400", "700"] });
+import React, { Suspense } from 'react';
+import { CacheProvider } from '@emotion/react';
+import createCache from '@emotion/cache';
+import AppProviderWrapper from '@/components/AppProviderWrapper';
+import { Poppins, Montserrat, Noto_Sans_Hebrew } from 'next/font/google';
+import LoadingScreen from '@/components/common/LoadingScreen';
+import '@/app/globals.css';
+
+const cache = createCache({ key: 'css', prepend: true });
+
+const poppins = Poppins({
+    subsets: ['latin', 'latin-ext'],
+    weight: ['300', '400', '600', '700'],
+    display: 'swap',
+    variable: '--font-poppins',
+});
+
+const montserrat = Montserrat({
+    subsets: ['latin', 'latin-ext'],
+    weight: ['400', '500', '600'],
+    display: 'swap',
+    variable: '--font-montserrat',
+});
+
+const sansHebrew = Noto_Sans_Hebrew({
+    subsets: ['hebrew'],
+    weight: ['400', '700'],
+    display: 'swap',
+    variable: '--font-sans-hebrew',
+});
 
 export default function RootLayout({ children }) {
     return (
-        <html lang="en">
-            <body className={`${poppins.className} ${montserrat.className} ${sansHebrew.className}`}>
-                <AuthProvider>
-                    <ProjectProvider>
-                        {children}
-                        <div id="modal-root"></div>
-                        <Toaster
-                            richColors
-                            closeButton={false}
-                            position="top-center"
-                            expand={true}
-                            visibleToasts={4}
-                            toastOptions={{
-                                style: {
-                                    background: "rgba(255, 255, 255, 0.95)",
-                                    backdropFilter: "blur(12px)",
-                                    border: "1px solid rgba(148, 163, 184, 0.2)",
-                                    borderRadius: "5px",
-                                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-                                    fontFamily: "inherit",
-                                },
-                                className: "font-medium",
-                                duration: 4000,
-                                error: {
-                                    icon: null,
-                                },
-                            }}
-                            theme="light"
-                        />
-                    </ProjectProvider>
-                </AuthProvider>
-            </body>
-        </html>
+        <CacheProvider value={cache}>
+            <html
+                lang="en"
+                className={`${poppins.variable} ${montserrat.variable} ${sansHebrew.variable}`}
+                suppressHydrationWarning
+            >
+                <head>
+                    <meta charSet="utf-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1" />
+                    <meta name="description" content="Assura for efficient test management" />
+                    <title>Assura</title>
+                    <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                </head>
+                <body className={`${poppins.className} antialiased min-h-screen transition-colors duration-200`}>
+                    <AppProviderWrapper>
+                        <Suspense fallback={<LoadingScreen message="Loading page..." />}>
+                            {children}
+                        </Suspense>
+                    </AppProviderWrapper>
+                </body>
+            </html>
+        </CacheProvider>
     );
 }

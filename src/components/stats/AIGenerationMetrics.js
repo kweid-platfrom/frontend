@@ -1,284 +1,479 @@
-import React from 'react';
-import { Brain, Zap, Target, DollarSign, FileText, CheckCircle, XCircle, TrendingUp, Lightbulb } from 'lucide-react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, TrendingUp, Clock, DollarSign, Target, Zap, AlertTriangle, CheckCircle, Download, RefreshCw } from 'lucide-react';
+import aiIntegrationService from '../../services/AIIntegrationService';
 
-const AIGenerationMetrics = ({ metrics = {} }) => {
-    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend }) => (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-2">
-                <div className={`p-2 rounded-lg bg-${color}-50`}>
-                    <Icon className={`w-5 h-5 text-${color}-600`} />
-                </div>
-                {trend && (
-                    <div className={`flex items-center text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        <TrendingUp className="w-4 h-4 mr-1" />
-                        {Math.abs(trend)}%
-                    </div>
-                )}
-            </div>
-            <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900">{value}</p>
-                <p className="text-sm font-medium text-gray-600">{title}</p>
-                {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-            </div>
-        </div>
-    );
+const AIGenerationMetrics = () => {
+    const [metrics, setMetrics] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [dateRange, setDateRange] = useState(30);
+    const [serviceStatus, setServiceStatus] = useState(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
-    const ProgressBar = ({ label, value, total, color = "blue" }) => {
-        const percentage = total > 0 ? (value / total) * 100 : 0;
-        return (
-            <div className="mb-4">
-                <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">{label}</span>
-                    <span className="text-gray-900 font-medium">{value}/{total} ({percentage.toFixed(1)}%)</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                        className={`bg-${color}-500 h-2 rounded-full transition-all duration-300`}
-                        style={{ width: `${percentage}%` }}
-                    ></div>
-                </div>
-            </div>
-        );
+    useEffect(() => {
+        initializeAndLoadMetrics();
+    }, [dateRange]);
+
+    const initializeAndLoadMetrics = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const status = aiIntegrationService.getServiceStatus();
+            setServiceStatus(status);
+
+            if (!status.initialized || !status.available) {
+                const initResult = await aiIntegrationService.initialize();
+                if (!initResult.success) {
+                    throw new Error(initResult.userMessage || initResult.error || 'Failed to initialize AI services');
+                }
+                const updatedStatus = aiIntegrationService.getServiceStatus();
+                setServiceStatus(updatedStatus);
+            }
+
+            const analyticsResult = await aiIntegrationService.getAIAnalytics(dateRange);
+            if (analyticsResult.success) {
+                setMetrics(analyticsResult.data);
+            } else {
+                throw new Error(analyticsResult.error || 'Failed to load analytics');
+            }
+        } catch (err) {
+            setError(err.message);
+            setMetrics(getDefaultMetrics());
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const GenerationSourceChart = () => {
-        const sources = [
-            { name: 'User Stories', value: metrics.generationsFromUserStories || 0, color: 'bg-blue-500' },
-            { name: 'Documents', value: metrics.generationsFromDocuments || 0, color: 'bg-green-500' },
-            { name: 'Requirements', value: metrics.generationsFromRequirements || 0, color: 'bg-purple-500' }
-        ];
-
-        const total = sources.reduce((sum, source) => sum + source.value, 0);
-
-        return (
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Generation Sources</h3>
-                <div className="space-y-4">
-                    {sources.map((source, index) => {
-                        const percentage = total > 0 ? (source.value / total) * 100 : 0;
-                        return (
-                            <div key={index} className="flex items-center justify-between">
-                                <div className="flex items-center space-x-3">
-                                    <div className={`w-3 h-3 rounded-full ${source.color}`}></div>
-                                    <span className="text-sm font-medium text-gray-700">{source.name}</span>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <span className="text-sm text-gray-600">{source.value}</span>
-                                    <span className="text-xs text-gray-500">({percentage.toFixed(1)}%)</span>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        );
+    const refreshMetrics = async () => {
+        setRefreshing(true);
+        try {
+            const result = await aiIntegrationService.getAIAnalytics(dateRange, true);
+            if (result.success) {
+                setMetrics(result.data);
+                setError(null);
+            } else {
+                setError(result.error || 'Failed to refresh metrics');
+            }
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setRefreshing(false);
+        }
     };
 
-    const TestTypeDistribution = () => {
-        const testTypes = [
-            { name: 'Functional Tests', value: metrics.functionalTestsGenerated || 0, color: 'blue' },
-            { name: 'Edge Cases', value: metrics.edgeTestsGenerated || 0, color: 'orange' },
-            { name: 'Negative Tests', value: metrics.negativeTestsGenerated || 0, color: 'red' }
-        ];
-
-        const total = testTypes.reduce((sum, type) => sum + type.value, 0);
-
-        return (
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Generated Test Types</h3>
-                <div className="space-y-3">
-                    {testTypes.map((type, index) => (
-                        <ProgressBar
-                            key={index}
-                            label={type.name}
-                            value={type.value}
-                            total={total}
-                            color={type.color}
-                        />
-                    ))}
-                </div>
-            </div>
-        );
+    const exportReport = async (format) => {
+        setExporting(true);
+        try {
+            const result = await aiIntegrationService.exportAIReport(format, dateRange);
+            if (result.success) {
+                const blob = new Blob([result.data], { type: result.contentType });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = result.filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                setError(result.error || 'Export failed');
+            }
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setExporting(false);
+        }
     };
 
-    const PromptEffectiveness = () => (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Prompt Usage</h3>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">{metrics.customPromptUsage || 0}</div>
-                    <div className="text-sm text-blue-700 font-medium">Custom Prompts</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-gray-600">{metrics.defaultPromptUsage || 0}</div>
-                    <div className="text-sm text-gray-700 font-medium">Default Prompts</div>
-                </div>
-            </div>
-            <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
-                <div className="flex items-center space-x-2">
-                    <Lightbulb className="w-4 h-4 text-yellow-600" />
-                    <span className="text-sm text-yellow-800">
-                        {metrics.promptFineTuningCount || 0} prompt adjustments made this period
-                    </span>
-                </div>
-            </div>
-        </div>
-    );
+    const getDefaultMetrics = () => ({
+        totalTestCasesGenerated: 0,
+        totalBugReportsGenerated: 0,
+        totalAIGenerations: 0,
+        overallSuccessRate: 0,
+        totalTimeSavedHours: 0,
+        totalCost: 0,
+        costEfficiency: 0,
+        estimatedROI: 0,
+        automationCandidates: 0,
+        criticalBugsIdentified: 0,
+        averageTestCasesPerGeneration: 0,
+        efficiencyScore: 0,
+        qualityScore: 0,
+        productivityIncrease: 0,
+        providerUsage: {},
+        currentSession: {
+            testCasesGenerated: 0,
+            bugReportsGenerated: 0,
+            aiCallsToday: 0,
+            successfulCalls: 0,
+            failedCalls: 0,
+            totalCostToday: 0,
+            timeSaved: 0
+        }
+    });
 
-    const PerformanceMetrics = () => (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">AI Performance</h3>
-            <div className="grid grid-cols-2 gap-6">
-                <div>
-                    <div className="text-2xl font-bold text-gray-900">{metrics.avgGenerationTimeSeconds || 0}s</div>
-                    <div className="text-sm text-gray-600">Avg Generation Time</div>
-                </div>
-                <div>
-                    <div className="text-2xl font-bold text-gray-900">${(metrics.aiCostPerTestCase || 0).toFixed(3)}</div>
-                    <div className="text-sm text-gray-600">Cost per Test Case</div>
-                </div>
-                <div>
-                    <div className="text-2xl font-bold text-gray-900">{(metrics.openAITokensUsed || 0).toLocaleString()}</div>
-                    <div className="text-sm text-gray-600">OpenAI Tokens Used</div>
-                </div>
-                <div>
-                    <div className="text-2xl font-bold text-gray-900">{metrics.openAIAPICallsCount || 0}</div>
-                    <div className="text-sm text-gray-600">API Calls Made</div>
-                </div>
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 4
+        }).format(amount);
+    };
+
+    const formatNumber = (num) => {
+        return new Intl.NumberFormat().format(num);
+    };
+
+    const getHealthColor = (rate) => {
+        if (rate >= 90) return 'text-[rgb(var(--color-success))]';
+        if (rate >= 70) return 'text-[rgb(var(--color-warning))]';
+        return 'text-[rgb(var(--color-error))]';
+    };
+
+    const getProviderStats = () => {
+        if (!metrics?.providerUsage) return [];
+        return Object.entries(metrics.providerUsage).map(([provider, stats]) => ({
+            provider,
+            calls: stats.calls || 0,
+            cost: stats.cost || 0,
+            successRate: stats.successRate || 0
+        }));
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Loader2 className="animate-spin mr-2 text-primary" />
+                <span className="text-foreground">Loading AI metrics...</span>
             </div>
-        </div>
-    );
+        );
+    }
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center space-x-3">
-                <Brain className="w-6 h-6 text-purple-600" />
-                <h2 className="text-xl font-bold text-gray-900">AI Test Generation</h2>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-bold text-foreground">AI Generation Metrics</h2>
+                    <p className="text-muted-foreground">Last {dateRange} days</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={dateRange}
+                        onChange={(e) => setDateRange(Number(e.target.value))}
+                        className="px-3 py-2 border border-border rounded bg-card text-foreground"
+                    >
+                        <option value={7}>Last 7 days</option>
+                        <option value={30}>Last 30 days</option>
+                        <option value={90}>Last 90 days</option>
+                    </select>
+                    <button
+                        onClick={refreshMetrics}
+                        disabled={refreshing}
+                        className="px-3 py-2 bg-[rgb(var(--color-info))] text-white rounded hover:bg-[rgb(var(--color-info)/0.8)] disabled:opacity-50"
+                    >
+                        {refreshing ? <Loader2 className="animate-spin w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+                    </button>
+                    <button
+                        onClick={() => exportReport('json')}
+                        disabled={exporting}
+                        className="px-3 py-2 bg-[rgb(var(--color-success))] text-white rounded hover:bg-[rgb(var(--color-success)/0.8)] disabled:opacity-50"
+                    >
+                        {exporting ? <Loader2 className="animate-spin w-4 h-4" /> : <Download className="w-4 h-4" />}
+                    </button>
+                </div>
             </div>
 
-            {/* Key Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard
-                    title="Total Generations"
-                    value={metrics.totalAIGenerations || 0}
-                    subtitle="This period"
-                    icon={Zap}
-                    color="purple"
-                />
-                <MetricCard
-                    title="Success Rate"
-                    value={`${(metrics.aiSuccessRate || 0).toFixed(1)}%`}
-                    subtitle={`${metrics.successfulGenerations || 0}/${metrics.totalAIGenerations || 0} successful`}
-                    icon={CheckCircle}
-                    color="green"
-                />
-                <MetricCard
-                    title="Avg Tests/Generation"
-                    value={(metrics.avgTestCasesPerGeneration || 0).toFixed(1)}
-                    subtitle="Test cases per generation"
-                    icon={Target}
-                    color="blue"
-                />
-                <MetricCard
-                    title="Tests Needing Revision"
-                    value={metrics.testCasesRequiringRevision || 0}
-                    subtitle="Manual adjustments needed"
-                    icon={FileText}
-                    color="orange"
-                />
-            </div>
+            {error && (
+                <Alert className="border-[rgb(var(--color-error)/0.2)] bg-[rgb(var(--color-error)/0.1)]">
+                    <AlertTriangle className="h-4 w-4 text-[rgb(var(--color-error))]" />
+                    <AlertDescription className="text-[rgb(var(--color-error))]">
+                        {error}
+                    </AlertDescription>
+                </Alert>
+            )}
 
-            {/* Generation Quality Overview */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Generation Quality Overview</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Success vs Failed Generations</h4>
-                        <div className="flex items-center space-x-4">
-                            <div className="flex items-center space-x-2">
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                                <span className="text-sm text-gray-600">Successful: {metrics.successfulGenerations || 0}</span>
+            {serviceStatus && (
+                <Card className="border-[rgb(var(--color-info)/0.2)] bg-[rgb(var(--color-info)/0.1)]">
+                    <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            {serviceStatus.available ? 
+                                <CheckCircle className="w-5 h-5 text-[rgb(var(--color-success))]" /> : 
+                                <AlertTriangle className="w-5 h-5 text-[rgb(var(--color-error))]" />
+                            }
+                            <span className="font-medium text-foreground">
+                                AI Service Status: {serviceStatus.available ? 'Available' : 'Unavailable'}
+                            </span>
+                        </div>
+                        {serviceStatus.provider && (
+                            <p className="text-sm text-muted-foreground">
+                                Provider: {serviceStatus.provider} | Model: {serviceStatus.model}
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="bg-card border-border">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center">
+                            <div className="flex-1">
+                                <p className="text-sm font-medium text-muted-foreground">Total Generations</p>
+                                <p className="text-2xl font-bold text-foreground">{formatNumber(metrics?.totalAIGenerations || 0)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {formatNumber(metrics?.totalTestCasesGenerated || 0)} test cases + {formatNumber(metrics?.totalBugReportsGenerated || 0)} bug reports
+                                </p>
                             </div>
-                            <div className="flex items-center space-x-2">
-                                <XCircle className="w-4 h-4 text-red-600" />
-                                <span className="text-sm text-gray-600">Failed: {metrics.failedGenerations || 0}</span>
+                            <Target className="h-8 w-8 text-[rgb(var(--color-info))]" />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center">
+                            <div className="flex-1">
+                                <p className="text-sm font-medium text-muted-foreground">Success Rate</p>
+                                <p className={`text-2xl font-bold ${getHealthColor(metrics?.overallSuccessRate || 0)}`}>
+                                    {(metrics?.overallSuccessRate || 0).toFixed(1)}%
+                                </p>
+                                <p className="text-xs text-muted-foreground">Overall AI success rate</p>
+                            </div>
+                            <CheckCircle className="h-8 w-8 text-[rgb(var(--color-success))]" />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center">
+                            <div className="flex-1">
+                                <p className="text-sm font-medium text-muted-foreground">Time Saved</p>
+                                <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
+                                    {(metrics?.totalTimeSavedHours || 0).toFixed(1)}h
+                                </p>
+                                <p className="text-xs text-muted-foreground">Estimated manual work saved</p>
+                            </div>
+                            <Clock className="h-8 w-8 text-[rgb(var(--color-success))]" />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center">
+                            <div className="flex-1">
+                                <p className="text-sm font-medium text-muted-foreground">Total Cost</p>
+                                <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">
+                                    {formatCurrency(metrics?.totalCost || 0)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">AI service costs</p>
+                            </div>
+                            <DollarSign className="h-8 w-8 text-[rgb(var(--color-warning))]" />
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-[rgb(var(--color-info))]" />
+                            Efficiency Score
+                        </h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-center">
+                            <div className="text-3xl font-bold text-[rgb(var(--color-info))] mb-2">
+                                {metrics?.efficiencyScore || 0}/100
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                                <div 
+                                    className="bg-[rgb(var(--color-info))] h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${metrics?.efficiencyScore || 0}%` }}
+                                ></div>
                             </div>
                         </div>
-                        <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-                            <div
-                                className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                                style={{
-                                    width: `${metrics.totalAIGenerations > 0 ? (metrics.successfulGenerations / metrics.totalAIGenerations) * 100 : 0}%`
-                                }}
-                            ></div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <Target className="w-5 h-5 text-[rgb(var(--color-success))]" />
+                            Quality Score
+                        </h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-center">
+                            <div className="text-3xl font-bold text-[rgb(var(--color-success))] mb-2">
+                                {metrics?.qualityScore || 0}/100
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                                <div 
+                                    className="bg-[rgb(var(--color-success))] h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${metrics?.qualityScore || 0}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-[rgb(var(--color-info))]" />
+                            ROI
+                        </h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-center">
+                            <div className="text-3xl font-bold text-[rgb(var(--color-info))] mb-2">
+                                {(metrics?.estimatedROI || 0).toFixed(0)}%
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                Return on Investment
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card className="bg-card border-border">
+                <CardHeader>
+                    <h3 className="text-lg font-semibold text-foreground">Current Session</h3>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
+                                {metrics?.currentSession?.testCasesGenerated || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Test Cases</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">
+                                {metrics?.currentSession?.bugReportsGenerated || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Bug Reports</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
+                                {metrics?.currentSession?.aiCallsToday || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">AI Calls</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
+                                {metrics?.currentSession?.successfulCalls || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Successful</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-error))]">
+                                {metrics?.currentSession?.failedCalls || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Failed</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
+                                {formatCurrency(metrics?.currentSession?.totalCostToday || 0)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Cost Today</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
+                                {(metrics?.currentSession?.timeSaved || 0).toFixed(0)}m
+                            </p>
+                            <p className="text-sm text-muted-foreground">Time Saved</p>
                         </div>
                     </div>
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Quality Metrics</h4>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Revision Rate</span>
-                                <span className="font-medium">
-                                    {metrics.totalAIGenerations > 0
-                                        ? ((metrics.testCasesRequiringRevision / (metrics.avgTestCasesPerGeneration * metrics.successfulGenerations)) * 100).toFixed(1)
-                                        : 0}%
+                </CardContent>
+            </Card>
+
+            {getProviderStats().length > 0 && (
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold text-foreground">Provider Usage</h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {getProviderStats().map((provider) => (
+                                <div key={provider.provider} className="flex items-center justify-between p-3 bg-muted rounded">
+                                    <div>
+                                        <h4 className="font-medium capitalize text-foreground">{provider.provider}</h4>
+                                        <p className="text-sm text-muted-foreground">
+                                            {formatNumber(provider.calls)} calls | Success rate: {provider.successRate.toFixed(1)}%
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-medium text-foreground">{formatCurrency(provider.cost)}</p>
+                                        <p className="text-sm text-muted-foreground">Total cost</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold text-foreground">Test Case Quality</h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Average per generation:</span>
+                                <span className="font-medium text-foreground">{(metrics?.averageTestCasesPerGeneration || 0).toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Automation candidates:</span>
+                                <span className="font-medium text-[rgb(var(--color-success))]">{formatNumber(metrics?.automationCandidates || 0)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Critical bugs identified:</span>
+                                <span className="font-medium text-[rgb(var(--color-error))]">{formatNumber(metrics?.criticalBugsIdentified || 0)}</span>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold text-foreground">Productivity Impact</h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Productivity increase:</span>
+                                <span className="font-medium text-[rgb(var(--color-info))]">{(metrics?.productivityIncrease || 0).toFixed(1)}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Cost efficiency:</span>
+                                <span className="font-medium text-foreground">{(metrics?.costEfficiency || 0).toFixed(2)}x</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Time saved per generation:</span>
+                                <span className="font-medium text-[rgb(var(--color-success))]">
+                                    {metrics?.totalAIGenerations > 0 ? 
+                                        ((metrics?.totalTimeSavedHours || 0) / metrics.totalAIGenerations * 60).toFixed(0) : 0}min
                                 </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Avg Quality Score</span>
-                                <span className="font-medium">
-                                    {(100 - ((metrics.testCasesRequiringRevision || 0) / Math.max(1, metrics.totalAIGenerations || 1) * 100)).toFixed(1)}%
-                                </span>
-                            </div>
                         </div>
-                    </div>
-                </div>
+                    </CardContent>
+                </Card>
             </div>
 
-            {/* Charts and Detailed Metrics */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <GenerationSourceChart />
-                <TestTypeDistribution />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <PromptEffectiveness />
-                <PerformanceMetrics />
-            </div>
-
-            {/* Cost Analysis */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Cost & Efficiency Analysis</h3>
-                    <DollarSign className="w-5 h-5 text-green-600" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-xl font-bold text-green-600">
-                            ${((metrics.openAITokensUsed || 0) * 0.00002).toFixed(2)}
-                        </div>
-                        <div className="text-sm text-green-700">Estimated Total Cost</div>
-                    </div>
-                    <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-xl font-bold text-blue-600">
-                            {metrics.avgTestCasesPerGeneration || 0}
-                        </div>
-                        <div className="text-sm text-blue-700">Tests per Generation</div>
-                    </div>
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                        <div className="text-xl font-bold text-purple-600">
-                            {metrics.avgGenerationTimeSeconds || 0}s
-                        </div>
-                        <div className="text-sm text-purple-700">Avg Generation Time</div>
-                    </div>
-                    <div className="text-center p-4 bg-orange-50 rounded-lg">
-                        <div className="text-xl font-bold text-orange-600">
-                            {((metrics.successfulGenerations || 0) * (metrics.avgTestCasesPerGeneration || 0) * 5).toFixed(0)}min
-                        </div>
-                        <div className="text-sm text-orange-700">Est. Time Saved</div>
-                    </div>
-                </div>
+            <div className="text-center text-sm text-muted-foreground">
+                Last updated: {metrics?.lastUpdated ? new Date(metrics.lastUpdated).toLocaleString() : 'Never'}
             </div>
         </div>
     );

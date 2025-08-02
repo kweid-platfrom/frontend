@@ -1,403 +1,476 @@
-// services/testCaseService.js
+import firestoreService from './firestoreService';
+import { doc, setDoc, updateDoc, serverTimestamp, arrayUnion, arrayRemove, runTransaction} from 'firebase/firestore';
+import { db } from '../config/firebase';
 
-class TestCaseService {
-    constructor() {
-        this.baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
-        this.mockData = this.generateMockData();
-    }
-
-    // Generate mock data for development
-    generateMockData() {
-        const statuses = ['active', 'draft', 'archived', 'review'];
-        const priorities = ['low', 'medium', 'high', 'critical'];
-        const assignees = ['John Doe', 'Jane Smith', 'Bob Wilson', 'Alice Brown', 'Charlie Davis'];
-        const tags = ['smoke', 'regression', 'api', 'ui', 'integration', 'performance', 'security'];
-
-        const testCases = [];
-        for (let i = 1; i <= 50; i++) {
-            testCases.push({
-                id: i,
-                title: `Test Case ${i} - ${this.getRandomFeature()}`,
-                description: `This is a comprehensive test case that verifies the functionality of ${this.getRandomFeature()}. It includes multiple scenarios and edge cases to ensure robust testing coverage.`,
-                status: statuses[Math.floor(Math.random() * statuses.length)],
-                priority: priorities[Math.floor(Math.random() * priorities.length)],
-                assignee: assignees[Math.floor(Math.random() * assignees.length)],
-                tags: this.getRandomTags(tags),
-                preconditions: 'User must be logged in with appropriate permissions',
-                steps: [
-                    'Navigate to the application homepage',
-                    'Click on the target feature/module',
-                    'Enter valid test data in required fields',
-                    'Click submit or save button',
-                    'Verify the expected outcome occurs'
-                ],
-                expectedResult: 'The feature should work as expected and display appropriate success messages',
-                actualResult: '',
-                testData: 'username: testuser@example.com, password: Test123!',
-                environment: 'QA Environment',
-                browser: 'Chrome 120.0',
-                createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-                updatedAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-                createdBy: assignees[Math.floor(Math.random() * assignees.length)],
-                executionHistory: this.generateExecutionHistory(),
-                requirements: [`REQ-${1000 + i}`, `REQ-${2000 + Math.floor(Math.random() * 100)}`],
-                automationStatus: Math.random() > 0.7 ? 'automated' : 'manual',
-                estimatedTime: Math.floor(Math.random() * 60) + 5 // 5-65 minutes
+const testCaseService = {
+    async getTestCases(suiteId) {
+        if (!suiteId) {
+            console.warn('getTestCases: Suite ID is required');
+            return { success: false, error: { message: 'Suite ID is required' } };
+        }
+        const collectionPath = `testSuites/${suiteId}/testCases`;
+        const result = await firestoreService.queryDocuments(collectionPath, [], 'created_at');
+        if (!result.success) {
+            console.error('getTestCases error:', {
+                suiteId,
+                errorCode: result.error.code,
+                errorMessage: result.error.message,
+                originalError: result.error.originalError,
             });
-        }
-        return testCases;
-    }
-
-    getRandomFeature() {
-        const features = [
-            'User Registration', 'Login Authentication', 'Password Reset', 'Profile Management',
-            'Shopping Cart', 'Payment Processing', 'Order Management', 'Inventory Tracking',
-            'Search Functionality', 'Filter Options', 'Data Export', 'File Upload',
-            'Notification System', 'User Permissions', 'Report Generation', 'API Integration'
-        ];
-        return features[Math.floor(Math.random() * features.length)];
-    }
-
-    getRandomTags(tags) {
-        const count = Math.floor(Math.random() * 3) + 1;
-        const shuffled = [...tags].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, count);
-    }
-
-    generateExecutionHistory() {
-        const history = [];
-        const executionCount = Math.floor(Math.random() * 5) + 1;
-        
-        for (let i = 0; i < executionCount; i++) {
-            history.push({
-                id: Date.now() + i,
-                executedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-                executedBy: 'John Doe',
-                result: Math.random() > 0.3 ? 'passed' : 'failed',
-                notes: Math.random() > 0.3 ? 'Test executed successfully' : 'Minor issue found, needs investigation',
-                duration: Math.floor(Math.random() * 30) + 5 // 5-35 minutes
-            });
-        }
-        
-        return history.sort((a, b) => new Date(b.executedAt) - new Date(a.executedAt));
-    }
-
-    // Simulate API delay
-    async delay(ms = 500) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    // Get all test cases
-    async getTestCases() {
-        await this.delay();
-        
-        try {
-            // In a real application, this would be an API call
-            // const response = await fetch(`${this.baseUrl}/test-cases`, {
-            //     method: 'GET',
-            //     headers: { 'Content-Type': 'application/json' }
-            // });
-            // return await response.json();
-            
-            return this.mockData;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
-
-    // Get single test case
-    async getTestCase(id) {
-        await this.delay();
-        
-        try {
-            const testCase = this.mockData.find(tc => tc.id === parseInt(id));
-            if (!testCase) {
-                throw new Error('Test case not found');
+            if (result.error.code === 'permission-denied') {
+                return { success: false, error: { message: 'Failed to load test cases' } };
             }
-            return testCase;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
+            return result;
         }
-    }
+        return result;
+    },
 
-    // Create new test case
-    async createTestCase(testCaseData) {
-        await this.delay();
-        
+    async createTestCase(suiteId, testCaseData, user, userProfile) {
+        if (!suiteId) {
+            return { success: false, error: { message: 'Suite ID is required' } };
+        }
+        if (!user?.uid) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
         try {
-            const newTestCase = {
-                id: Math.max(...this.mockData.map(tc => tc.id)) + 1,
+            const testCaseId = `tc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const testCaseRef = doc(db, 'testSuites', suiteId, 'testCases', testCaseId);
+
+            const userDisplayName =
+                userProfile?.displayName ||
+                `${userProfile?.firstName} ${userProfile?.lastName}`.trim() ||
+                user.email ||
+                'Unknown User';
+
+            const firestoreData = {
                 ...testCaseData,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                createdBy: 'Current User',
+                id: testCaseId,
+                suite_id: suiteId,
+                created_by: user.uid,
+                createdByName: userDisplayName,
+                created_at: serverTimestamp(),
+                updated_at: serverTimestamp(),
+                updated_by: user.uid,
+                updatedByName: userDisplayName,
+                version: 1,
                 executionHistory: [],
-                automationStatus: testCaseData.automationStatus || 'manual'
+                lastExecuted: null,
+                executionCount: 0,
+                linkedBugs: [], // Initialize linkedBugs array
             };
-            
-            this.mockData.push(newTestCase);
-            return newTestCase;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
 
-    // Update test case
-    async updateTestCase(id, testCaseData) {
-        await this.delay();
-        
+            await setDoc(testCaseRef, firestoreData);
+            return { success: true, data: firestoreData };
+        } catch (error) {
+            console.error('createTestCase error:', {
+                suiteId,
+                testCaseId: testCaseData.id,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to create test case' } };
+        }
+    },
+
+    async updateTestCase(suiteId, testCaseId, testCaseData) {
+        if (!suiteId || !testCaseId) {
+            return { success: false, error: { message: 'Suite ID and Test Case ID are required' } };
+        }
+
         try {
-            const index = this.mockData.findIndex(tc => tc.id === parseInt(id));
-            if (index === -1) {
-                throw new Error('Test case not found');
-            }
-            
-            this.mockData[index] = {
-                ...this.mockData[index],
+            const testCaseRef = doc(db, 'testSuites', suiteId, 'testCases', testCaseId);
+            const updateData = {
                 ...testCaseData,
-                updatedAt: new Date().toISOString()
+                updated_at: serverTimestamp(),
+                version: (testCaseData.version || 0) + 1,
             };
-            
-            return this.mockData[index];
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
 
-    // Delete test case
-    async deleteTestCase(id) {
-        await this.delay();
-        
-        try {
-            const index = this.mockData.findIndex(tc => tc.id === parseInt(id));
-            if (index === -1) {
-                throw new Error('Test case not found');
-            }
-            
-            this.mockData.splice(index, 1);
-            return { success: true };
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
+            await updateDoc(testCaseRef, updateData);
+            return { success: true, data: { ...updateData, id: testCaseId, suite_id: suiteId } };
+        } catch (error) {
+            console.error('updateTestCase error:', {
+                suiteId,
+                testCaseId,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to update test case' } };
         }
-    }
+    },
 
-    // Bulk operations
-    async bulkDelete(ids) {
-        await this.delay();
-        
-        try {
-            const idsToDelete = ids.map(id => parseInt(id));
-            this.mockData = this.mockData.filter(tc => !idsToDelete.includes(tc.id));
-            return { success: true, deletedCount: ids.length };
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
+    // Enhanced method to link bugs to a test case with comprehensive error handling
+    async linkBugsToTestCase(suiteId, testCaseId, bugIds, activeSuite) {
+        if (!suiteId || !testCaseId || !bugIds?.length) {
+            return { success: false, error: { message: 'Suite ID, Test Case ID, and Bug IDs are required' } };
         }
-    }
 
-    async bulkUpdateStatus(ids, status) {
-        await this.delay();
-        
+        // Validate bugIds format
+        if (!Array.isArray(bugIds) || bugIds.some(id => !id || typeof id !== 'string')) {
+            return { success: false, error: { message: 'Invalid bug IDs format' } };
+        }
+
         try {
-            const idsToUpdate = ids.map(id => parseInt(id));
-            this.mockData.forEach(tc => {
-                if (idsToUpdate.includes(tc.id)) {
-                    tc.status = status;
-                    tc.updatedAt = new Date().toISOString();
+            const result = await runTransaction(db, async (transaction) => {
+                const testCaseRef = doc(db, 'testSuites', suiteId, 'testCases', testCaseId);
+                
+                // Get current test case data to check for existing links
+                const testCaseDoc = await transaction.get(testCaseRef);
+                if (!testCaseDoc.exists()) {
+                    throw new Error('Test case not found');
                 }
-            });
-            return { success: true, updatedCount: ids.length };
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
 
-    async bulkCreate(testCases) {
-        await this.delay();
-        
-        try {
-            const maxId = Math.max(...this.mockData.map(tc => tc.id));
-            const newTestCases = testCases.map((tc, index) => ({
-                ...tc,
-                id: maxId + index + 1,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                createdBy: 'Current User',
-                executionHistory: [],
-                automationStatus: tc.automationStatus || 'manual'
-            }));
-            
-            this.mockData.push(...newTestCases);
-            return newTestCases;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
+                const testCaseData = testCaseDoc.data();
+                const existingLinkedBugs = testCaseData.linkedBugs || [];
+                
+                // Filter out already linked bugs to prevent duplicates
+                const newBugIds = bugIds.filter(bugId => !existingLinkedBugs.includes(bugId));
+                
+                if (newBugIds.length === 0) {
+                    return { alreadyLinked: true, skippedCount: bugIds.length };
+                }
 
-    // Execute test case
-    async executeTestCase(id, executionData) {
-        await this.delay();
-        
-        try {
-            const testCase = this.mockData.find(tc => tc.id === parseInt(id));
-            if (!testCase) {
-                throw new Error('Test case not found');
-            }
-            
-            const execution = {
-                id: Date.now(),
-                executedAt: new Date().toISOString(),
-                executedBy: 'Current User',
-                result: executionData.result,
-                notes: executionData.notes || '',
-                duration: executionData.duration || 0,
-                actualResult: executionData.actualResult || ''
-            };
-            
-            testCase.executionHistory = testCase.executionHistory || [];
-            testCase.executionHistory.unshift(execution);
-            testCase.updatedAt = new Date().toISOString();
-            
-            return execution;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
+                // Determine the bugs collection path based on account type
+                const getBugsCollectionPath = () => {
+                    if (activeSuite?.accountType === 'individual') {
+                        return `individualAccounts/${activeSuite.userId}/testSuites/${suiteId}/bugs`;
+                    }
+                    return `organizations/${activeSuite.org_id}/testSuites/${suiteId}/bugs`;
+                };
 
-    // Get traceability matrix data
-    async getTraceabilityMatrix() {
-        await this.delay();
-        
-        try {
-            const matrix = this.mockData.map(tc => ({
-                testCaseId: tc.id,
-                testCaseTitle: tc.title,
-                requirements: tc.requirements || [],
-                status: tc.status,
-                priority: tc.priority,
-                lastExecution: tc.executionHistory?.[0] || null,
-                coverage: tc.requirements?.length > 0 ? 'covered' : 'not_covered'
-            }));
-            
-            return matrix;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
-
-    // Get requirements for traceability
-    async getRequirements() {
-        await this.delay();
-        
-        try {
-            // Mock requirements data
-            const requirements = [];
-            for (let i = 1001; i <= 1050; i++) {
-                requirements.push({
-                    id: `REQ-${i}`,
-                    title: `Requirement ${i} - ${this.getRandomFeature()}`,
-                    description: `This requirement defines the expected behavior for ${this.getRandomFeature()}`,
-                    priority: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)],
-                    status: ['draft', 'approved', 'implemented'][Math.floor(Math.random() * 3)],
-                    testCases: this.mockData
-                        .filter(tc => tc.requirements?.includes(`REQ-${i}`))
-                        .map(tc => ({ id: tc.id, title: tc.title }))
+                const bugsCollectionPath = getBugsCollectionPath();
+                
+                // Verify all bugs exist before linking
+                const bugVerificationPromises = newBugIds.map(async (bugId) => {
+                    const bugRef = doc(db, bugsCollectionPath.split('/').slice(0, -1).join('/'), 'bugs', bugId);
+                    const bugDoc = await transaction.get(bugRef);
+                    return { bugId, exists: bugDoc.exists() };
                 });
-            }
-            
-            return requirements;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
 
-    // Link test case to requirement
-    async linkRequirement(testCaseId, requirementId) {
-        await this.delay();
-        
-        try {
-            const testCase = this.mockData.find(tc => tc.id === parseInt(testCaseId));
-            if (!testCase) {
-                throw new Error('Test case not found');
-            }
-            
-            testCase.requirements = testCase.requirements || [];
-            if (!testCase.requirements.includes(requirementId)) {
-                testCase.requirements.push(requirementId);
-                testCase.updatedAt = new Date().toISOString();
-            }
-            
-            return testCase;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
-
-    // Unlink requirement from test case
-    async unlinkRequirement(testCaseId, requirementId) {
-        await this.delay();
-        
-        try {
-            const testCase = this.mockData.find(tc => tc.id === parseInt(testCaseId));
-            if (!testCase) {
-                throw new Error('Test case not found');
-            }
-            
-            testCase.requirements = testCase.requirements?.filter(req => req !== requirementId) || [];
-            testCase.updatedAt = new Date().toISOString();
-            
-            return testCase;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
-
-    // Get test execution statistics
-    async getExecutionStats() {
-        await this.delay();
-        
-        try {
-            const stats = {
-                total: this.mockData.length,
-                passed: 0,
-                failed: 0,
-                notExecuted: 0,
-                automated: 0,
-                manual: 0,
-                byPriority: { low: 0, medium: 0, high: 0, critical: 0 },
-                byStatus: { active: 0, draft: 0, archived: 0, review: 0 }
-            };
-            
-            this.mockData.forEach(tc => {
-                // Execution status
-                const lastExecution = tc.executionHistory?.[0];
-                if (!lastExecution) {
-                    stats.notExecuted++;
-                } else if (lastExecution.result === 'passed') {
-                    stats.passed++;
-                } else {
-                    stats.failed++;
+                const bugVerifications = await Promise.all(bugVerificationPromises);
+                const nonExistentBugs = bugVerifications.filter(v => !v.exists).map(v => v.bugId);
+                
+                if (nonExistentBugs.length > 0) {
+                    throw new Error(`Bugs not found: ${nonExistentBugs.join(', ')}`);
                 }
-                
-                // Automation
-                if (tc.automationStatus === 'automated') {
-                    stats.automated++;
-                } else {
-                    stats.manual++;
+
+                // Update test case's linkedBugs
+                transaction.update(testCaseRef, {
+                    linkedBugs: arrayUnion(...newBugIds),
+                    updated_at: serverTimestamp(),
+                });
+
+                // Update each bug's linkedTestCases
+                for (const bugId of newBugIds) {
+                    const bugRef = doc(db, bugsCollectionPath.split('/').slice(0, -1).join('/'), 'bugs', bugId);
+                    transaction.update(bugRef, {
+                        linkedTestCases: arrayUnion(testCaseId),
+                        updated_at: serverTimestamp(),
+                    });
                 }
-                
-                // Priority
-                stats.byPriority[tc.priority]++;
-                
-                // Status
-                stats.byStatus[tc.status]++;
+
+                return { 
+                    success: true, 
+                    linkedCount: newBugIds.length, 
+                    skippedCount: bugIds.length - newBugIds.length,
+                    linkedBugIds: newBugIds
+                };
             });
-            
-            return stats;
-        } catch {
-            throw new Error('Failed to fetch execution statistics');
-        }
-    }
-}
 
-// Export singleton instance
-export const testCaseService = new TestCaseService();
+            if (result.alreadyLinked) {
+                return { 
+                    success: true, 
+                    message: 'All bugs were already linked to this test case',
+                    linkedCount: 0,
+                    skippedCount: result.skippedCount
+                };
+            }
+
+            return { 
+                success: true, 
+                message: `Successfully linked ${result.linkedCount} bug(s)${result.skippedCount > 0 ? ` (${result.skippedCount} already linked)` : ''}`,
+                linkedCount: result.linkedCount,
+                skippedCount: result.skippedCount,
+                linkedBugIds: result.linkedBugIds
+            };
+        } catch (error) {
+            console.error('linkBugsToTestCase error:', {
+                suiteId,
+                testCaseId,
+                bugIds,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to link bugs' } };
+        }
+    },
+
+    // Enhanced method to unlink bugs from a test case
+    async unlinkBugsFromTestCase(suiteId, testCaseId, bugIds, activeSuite) {
+        if (!suiteId || !testCaseId || !bugIds?.length) {
+            return { success: false, error: { message: 'Suite ID, Test Case ID, and Bug IDs are required' } };
+        }
+
+        // Validate bugIds format
+        if (!Array.isArray(bugIds) || bugIds.some(id => !id || typeof id !== 'string')) {
+            return { success: false, error: { message: 'Invalid bug IDs format' } };
+        }
+
+        try {
+            const result = await runTransaction(db, async (transaction) => {
+                const testCaseRef = doc(db, 'testSuites', suiteId, 'testCases', testCaseId);
+                
+                // Get current test case data to check existing links
+                const testCaseDoc = await transaction.get(testCaseRef);
+                if (!testCaseDoc.exists()) {
+                    throw new Error('Test case not found');
+                }
+
+                const testCaseData = testCaseDoc.data();
+                const existingLinkedBugs = testCaseData.linkedBugs || [];
+                
+                // Filter to only unlink bugs that are actually linked
+                const bugsToUnlink = bugIds.filter(bugId => existingLinkedBugs.includes(bugId));
+                
+                if (bugsToUnlink.length === 0) {
+                    return { nothingToUnlink: true, skippedCount: bugIds.length };
+                }
+
+                // Determine the bugs collection path based on account type
+                const getBugsCollectionPath = () => {
+                    if (activeSuite?.accountType === 'individual') {
+                        return `individualAccounts/${activeSuite.userId}/testSuites/${suiteId}/bugs`;
+                    }
+                    return `organizations/${activeSuite.org_id}/testSuites/${suiteId}/bugs`;
+                };
+
+                const bugsCollectionPath = getBugsCollectionPath();
+
+                // Remove bugs from test case's linkedBugs
+                transaction.update(testCaseRef, {
+                    linkedBugs: arrayRemove(...bugsToUnlink),
+                    updated_at: serverTimestamp(),
+                });
+
+                // Remove test case from each bug's linkedTestCases
+                for (const bugId of bugsToUnlink) {
+                    const bugRef = doc(db, bugsCollectionPath.split('/').slice(0, -1).join('/'), 'bugs', bugId);
+                    transaction.update(bugRef, {
+                        linkedTestCases: arrayRemove(testCaseId),
+                        updated_at: serverTimestamp(),
+                    });
+                }
+
+                return { 
+                    success: true, 
+                    unlinkedCount: bugsToUnlink.length, 
+                    skippedCount: bugIds.length - bugsToUnlink.length,
+                    unlinkedBugIds: bugsToUnlink
+                };
+            });
+
+            if (result.nothingToUnlink) {
+                return { 
+                    success: true, 
+                    message: 'None of the specified bugs were linked to this test case',
+                    unlinkedCount: 0,
+                    skippedCount: result.skippedCount
+                };
+            }
+
+            return { 
+                success: true, 
+                message: `Successfully unlinked ${result.unlinkedCount} bug(s)${result.skippedCount > 0 ? ` (${result.skippedCount} were not linked)` : ''}`,
+                unlinkedCount: result.unlinkedCount,
+                skippedCount: result.skippedCount,
+                unlinkedBugIds: result.unlinkedBugIds
+            };
+        } catch (error) {
+            console.error('unlinkBugsFromTestCase error:', {
+                suiteId,
+                testCaseId,
+                bugIds,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to unlink bugs' } };
+        }
+    },
+
+    // New method to get available bugs for linking (bugs not already linked to a test case)
+    async getAvailableBugsForLinking(suiteId, testCaseId, activeSuite) {
+        if (!suiteId || !testCaseId) {
+            return { success: false, error: { message: 'Suite ID and Test Case ID are required' } };
+        }
+
+        try {
+            // Get current test case to see already linked bugs
+            const testCaseResult = await firestoreService.getDocument(`testSuites/${suiteId}/testCases`, testCaseId);
+            if (!testCaseResult.success) {
+                return { success: false, error: { message: 'Test case not found' } };
+            }
+
+            const linkedBugs = testCaseResult.data.linkedBugs || [];
+
+            // Get all bugs in the suite
+            const getBugsCollectionPath = () => {
+                if (activeSuite?.accountType === 'individual') {
+                    return `individualAccounts/${activeSuite.userId}/testSuites/${suiteId}/bugs`;
+                }
+                return `organizations/${activeSuite.org_id}/testSuites/${suiteId}/bugs`;
+            };
+
+            const bugsResult = await firestoreService.queryDocuments(getBugsCollectionPath(), []);
+            if (!bugsResult.success) {
+                return { success: false, error: { message: 'Failed to fetch bugs' } };
+            }
+
+            // Filter out already linked bugs
+            const availableBugs = bugsResult.data.filter(bug => !linkedBugs.includes(bug.id));
+
+            return { 
+                success: true, 
+                data: availableBugs,
+                totalBugs: bugsResult.data.length,
+                availableCount: availableBugs.length,
+                linkedCount: linkedBugs.length
+            };
+        } catch (error) {
+            console.error('getAvailableBugsForLinking error:', {
+                suiteId,
+                testCaseId,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to get available bugs' } };
+        }
+    },
+
+    // New method to get linked bugs for a test case with full bug details
+    async getLinkedBugsForTestCase(suiteId, testCaseId, activeSuite) {
+        if (!suiteId || !testCaseId) {
+            return { success: false, error: { message: 'Suite ID and Test Case ID are required' } };
+        }
+
+        try {
+            // Get current test case to see linked bugs
+            const testCaseResult = await firestoreService.getDocument(`testSuites/${suiteId}/testCases`, testCaseId);
+            if (!testCaseResult.success) {
+                return { success: false, error: { message: 'Test case not found' } };
+            }
+
+            const linkedBugIds = testCaseResult.data.linkedBugs || [];
+
+            if (linkedBugIds.length === 0) {
+                return { success: true, data: [], count: 0 };
+            }
+
+            // Get full bug details
+            const getBugsCollectionPath = () => {
+                if (activeSuite?.accountType === 'individual') {
+                    return `individualAccounts/${activeSuite.userId}/testSuites/${suiteId}/bugs`;
+                }
+                return `organizations/${activeSuite.org_id}/testSuites/${suiteId}/bugs`;
+            };
+
+            const bugDetailsPromises = linkedBugIds.map(async (bugId) => {
+                const bugResult = await firestoreService.getDocument(getBugsCollectionPath(), bugId);
+                if (bugResult.success) {
+                    return { ...bugResult.data, id: bugId };
+                }
+                return null;
+            });
+
+            const bugDetails = await Promise.all(bugDetailsPromises);
+            const validBugs = bugDetails.filter(bug => bug !== null);
+
+            return { 
+                success: true, 
+                data: validBugs,
+                count: validBugs.length,
+                requestedCount: linkedBugIds.length
+            };
+        } catch (error) {
+            console.error('getLinkedBugsForTestCase error:', {
+                suiteId,
+                testCaseId,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to get linked bugs' } };
+        }
+    },
+
+    // Bulk operations for professional use
+    async bulkLinkBugsToTestCases(suiteId, testCaseIds, bugIds, activeSuite) {
+        if (!suiteId || !testCaseIds?.length || !bugIds?.length) {
+            return { success: false, error: { message: 'Suite ID, Test Case IDs, and Bug IDs are required' } };
+        }
+
+        const results = [];
+        let successCount = 0;
+        let failureCount = 0;
+
+        for (const testCaseId of testCaseIds) {
+            try {
+                const result = await this.linkBugsToTestCase(suiteId, testCaseId, bugIds, activeSuite);
+                results.push({ testCaseId, result });
+                if (result.success) {
+                    successCount++;
+                } else {
+                    failureCount++;
+                }
+            } catch (error) {
+                results.push({ testCaseId, result: { success: false, error: { message: error.message } } });
+                failureCount++;
+            }
+        }
+
+        return {
+            success: successCount > 0,
+            results,
+            summary: {
+                successCount,
+                failureCount,
+                totalProcessed: testCaseIds.length
+            }
+        };
+    },
+
+    async bulkUnlinkBugsFromTestCases(suiteId, testCaseIds, bugIds, activeSuite) {
+        if (!suiteId || !testCaseIds?.length || !bugIds?.length) {
+            return { success: false, error: { message: 'Suite ID, Test Case IDs, and Bug IDs are required' } };
+        }
+
+        const results = [];
+        let successCount = 0;
+        let failureCount = 0;
+
+        for (const testCaseId of testCaseIds) {
+            try {
+                const result = await this.unlinkBugsFromTestCase(suiteId, testCaseId, bugIds, activeSuite);
+                results.push({ testCaseId, result });
+                if (result.success) {
+                    successCount++;
+                } else {
+                    failureCount++;
+                }
+            } catch (error) {
+                results.push({ testCaseId, result: { success: false, error: { message: error.message } } });
+                failureCount++;
+            }
+        }
+
+        return {
+            success: successCount > 0,
+            results,
+            summary: {
+                successCount,
+                failureCount,
+                totalProcessed: testCaseIds.length
+            }
+        };
+    }
+};
+
+export default testCaseService;
