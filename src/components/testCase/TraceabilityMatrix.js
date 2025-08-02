@@ -17,7 +17,6 @@ const TraceabilityMatrix = ({ onClose }) => {
     const [defects, setDefects] = useState([]);
     const [traceabilityMatrix, setTraceabilityMatrix] = useState([]);
     const [loading, setLoading] = useState(true);
-    // Removed unused activeTab state
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
 
@@ -123,18 +122,18 @@ const TraceabilityMatrix = ({ onClose }) => {
     const getDefectById = (id) => defects.find(def => def.id === id);
 
     const getCoverageColor = (coverage) => {
-        if (coverage >= 80) return 'text-green-600 bg-green-100';
-        if (coverage >= 60) return 'text-yellow-600 bg-yellow-100';
-        return 'text-red-600 bg-red-100';
+        if (coverage >= 80) return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30';
+        if (coverage >= 60) return 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30';
+        return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30';
     };
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'approved': return 'text-green-600 bg-green-100';
-            case 'draft': return 'text-gray-600 bg-gray-100';
-            case 'open': return 'text-red-600 bg-red-100';
-            case 'fixed': return 'text-green-600 bg-green-100';
-            default: return 'text-gray-600 bg-gray-100';
+            case 'approved': return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30';
+            case 'draft': return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-900/30';
+            case 'open': return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30';
+            case 'fixed': return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30';
+            default: return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-900/30';
         }
     };
 
@@ -155,13 +154,22 @@ const TraceabilityMatrix = ({ onClose }) => {
         };
     }, [requirements, traceabilityMatrix, defects]);
 
+    const handleBackdropClick = (e) => {
+        if (e.target === e.currentTarget) {
+            onClose();
+        }
+    };
+
     if (loading) {
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-8">
+            <div 
+                className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/30"
+                onClick={handleBackdropClick}
+            >
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-8">
                     <div className="flex items-center space-x-3">
-                        <ArrowPathIcon className="h-6 w-6 animate-spin text-blue-600" />
-                        <span>Loading traceability data...</span>
+                        <ArrowPathIcon className="h-6 w-6 animate-spin text-blue-600 dark:text-blue-400" />
+                        <span className="text-gray-900 dark:text-gray-100">Loading traceability data...</span>
                     </div>
                 </div>
             </div>
@@ -169,67 +177,70 @@ const TraceabilityMatrix = ({ onClose }) => {
     }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] overflow-hidden">
+        <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/30"
+            onClick={handleBackdropClick}
+        >
+            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-7xl w-full max-h-[90vh] overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center space-x-3">
-                        <LinkIcon className="h-6 w-6 text-blue-600" />
-                        <h2 className="text-xl font-semibold">Requirements Traceability Matrix</h2>
+                        <LinkIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Requirements Traceability Matrix</h2>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                     >
                         <XMarkIcon className="h-6 w-6" />
                     </button>
                 </div>
 
                 {/* Stats Overview */}
-                <div className="p-6 bg-gray-50 border-b">
+                <div className="p-6 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-600">{overallStats.totalRequirements}</div>
-                            <div className="text-sm text-gray-600">Total Requirements</div>
+                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{overallStats.totalRequirements}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Total Requirements</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-green-600">{overallStats.coveredRequirements}</div>
-                            <div className="text-sm text-gray-600">Covered</div>
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{overallStats.coveredRequirements}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Covered</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-purple-600">{overallStats.coveragePercentage}%</div>
-                            <div className="text-sm text-gray-600">Coverage</div>
+                            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{overallStats.coveragePercentage}%</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Coverage</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-orange-600">{overallStats.avgCoverage}%</div>
-                            <div className="text-sm text-gray-600">Avg Quality</div>
+                            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{overallStats.avgCoverage}%</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Avg Quality</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-red-600">{overallStats.totalDefects}</div>
-                            <div className="text-sm text-gray-600">Total Defects</div>
+                            <div className="text-2xl font-bold text-red-600 dark:text-red-400">{overallStats.totalDefects}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Total Defects</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-red-700">{overallStats.openDefects}</div>
-                            <div className="text-sm text-gray-600">Open Defects</div>
+                            <div className="text-2xl font-bold text-red-700 dark:text-red-500">{overallStats.openDefects}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Open Defects</div>
                         </div>
                     </div>
                 </div>
 
                 {/* Controls */}
-                <div className="p-6 border-b bg-white">
+                <div className="p-6 border-b bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                     <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1 relative">
-                            <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                            <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                             <input
                                 type="text"
                                 placeholder="Search requirements..."
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
                         <select
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                             value={filterType}
                             onChange={(e) => setFilterType(e.target.value)}
                         >
@@ -245,38 +256,38 @@ const TraceabilityMatrix = ({ onClose }) => {
                 {/* Traceability Matrix */}
                 <div className="overflow-auto max-h-[50vh]">
                     <table className="w-full">
-                        <thead className="bg-gray-50 sticky top-0">
+                        <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     Requirement
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     Status
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     Test Cases
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     Coverage
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     Defects
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             {filteredMatrix.map((item) => {
                                 const requirement = getRequirementById(item.requirementId);
                                 if (!requirement) return null;
 
                                 return (
-                                    <tr key={item.requirementId} className="hover:bg-gray-50">
+                                    <tr key={item.requirementId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                         <td className="px-6 py-4">
                                             <div>
-                                                <div className="text-sm font-medium text-gray-900">
+                                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                     {requirement.id}
                                                 </div>
-                                                <div className="text-sm text-gray-600">
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">
                                                     {requirement.title}
                                                 </div>
                                             </div>
@@ -292,13 +303,13 @@ const TraceabilityMatrix = ({ onClose }) => {
                                                     item.testCases.map((tcId) => (
                                                         <span
                                                             key={tcId}
-                                                            className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded"
+                                                            className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 rounded"
                                                         >
                                                             {tcId}
                                                         </span>
                                                     ))
                                                 ) : (
-                                                    <span className="text-sm text-gray-400 italic">No test cases</span>
+                                                    <span className="text-sm text-gray-400 dark:text-gray-500 italic">No test cases</span>
                                                 )}
                                             </div>
                                         </td>
@@ -308,7 +319,7 @@ const TraceabilityMatrix = ({ onClose }) => {
                                                     {item.coverage}%
                                                 </span>
                                                 {item.coverage < 60 && (
-                                                    <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
+                                                    <ExclamationTriangleIcon className="h-4 w-4 text-red-500 dark:text-red-400" />
                                                 )}
                                             </div>
                                         </td>
@@ -321,7 +332,7 @@ const TraceabilityMatrix = ({ onClose }) => {
                                                             <span
                                                                 key={defId}
                                                                 className={`inline-flex px-2 py-1 text-xs font-medium rounded ${
-                                                                    defect.status === 'open' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                                                                    defect.status === 'open' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
                                                                 }`}
                                                             >
                                                                 {defId}
@@ -329,7 +340,7 @@ const TraceabilityMatrix = ({ onClose }) => {
                                                         ) : null;
                                                     })
                                                 ) : (
-                                                    <span className="text-sm text-gray-400 italic">No defects</span>
+                                                    <span className="text-sm text-gray-400 dark:text-gray-500 italic">No defects</span>
                                                 )}
                                             </div>
                                         </td>
@@ -341,14 +352,14 @@ const TraceabilityMatrix = ({ onClose }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 bg-gray-50 border-t">
+                <div className="p-6 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex justify-between items-center">
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
                             Showing {filteredMatrix.length} of {traceabilityMatrix.length} requirements
                         </div>
                         <button
                             onClick={loadTraceabilityData}
-                            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
                         >
                             <ArrowPathIcon className="h-4 w-4" />
                             <span>Refresh</span>

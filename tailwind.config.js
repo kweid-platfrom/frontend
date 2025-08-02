@@ -11,7 +11,6 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Map your existing classes to CSS variables
         border: 'rgb(var(--color-border))',
         input: 'rgb(var(--color-input))',
         ring: 'rgb(var(--color-ring))',
@@ -45,7 +44,6 @@ module.exports = {
           DEFAULT: 'rgb(var(--color-card))',
           foreground: 'rgb(var(--color-card-foreground))',
         },
-        // App-specific colors
         sidebar: {
           DEFAULT: 'rgb(var(--color-sidebar))',
           foreground: 'rgb(var(--color-sidebar-foreground))',
@@ -58,12 +56,18 @@ module.exports = {
           DEFAULT: 'rgb(var(--color-content))',
           foreground: 'rgb(var(--color-content-foreground))',
         },
-        // Status colors
         success: 'rgb(var(--color-success))',
         warning: 'rgb(var(--color-warning))',
         error: 'rgb(var(--color-error))',
         info: 'rgb(var(--color-info))',
-        // Override common gray colors to use theme variables
+        teal: {
+          50: 'rgb(var(--color-teal-50, 240 253 250))',
+          100: 'rgb(var(--color-teal-100, 204 251 241))',
+          300: 'rgb(var(--color-teal-300, 94 234 212))',
+          500: 'rgb(var(--color-teal-500, 20 184 166))',
+          600: 'rgb(var(--color-teal-600, 13 148 136))',
+          800: 'rgb(var(--color-teal-800, 15 118 110))',
+        },
         gray: {
           50: 'rgb(var(--color-muted))',
           100: 'rgb(var(--color-muted))',
@@ -77,7 +81,6 @@ module.exports = {
           900: 'rgb(var(--color-foreground))',
           950: 'rgb(var(--color-background))',
         },
-        // Override white/black to use theme variables
         white: 'rgb(var(--color-background))',
         black: 'rgb(var(--color-foreground))',
       },
@@ -98,6 +101,5 @@ module.exports = {
   plugins: [
     require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
-    // Add any other plugins you're using
   ],
-}
+};

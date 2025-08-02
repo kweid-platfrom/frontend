@@ -245,25 +245,25 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
     }, [generatedTestCases, generationSummary, actions]);
 
     const renderHeader = () => (
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="bg-card border-b border-border px-6 py-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={handleBack}
-                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft size={20} />
                         <span>Back</span>
                     </button>
-                    <div className="h-6 w-px bg-gray-300" />
+                    <div className="h-6 w-px bg-border" />
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <Wand2 className="h-8 w-8 text-teal-600" />
-                            <Sparkles className="h-4 w-4 text-yellow-500 absolute -top-1 -right-1" />
+                            <Sparkles className="h-4 w-4 text-warning absolute -top-1 -right-1" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-900">AI Test Case Generation</h1>
-                            <p className="text-sm text-gray-600">Generate comprehensive test cases with artificial intelligence</p>
+                            <h1 className="text-2xl font-bold text-foreground">Generate Test Cases with AI</h1>
+                            <p className="text-sm text-muted-foreground">Generate comprehensive test cases with artificial intelligence</p>
                         </div>
                     </div>
                 </div>
@@ -272,7 +272,7 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleExportDocument}
-                            className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 text-muted-foreground bg-card border border-border rounded-md hover:bg-muted transition-colors"
                         >
                             <Download size={16} />
                             Export
@@ -284,14 +284,14 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
     );
 
     const renderTipsPanel = () => (
-        <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-lg border border-teal-200 p-4">
+        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg border border-teal-200 p-4">
             <button
                 onClick={() => setShowTips(!showTips)}
                 className="flex items-center justify-between w-full text-left"
             >
                 <div className="flex items-center gap-2">
                     <Lightbulb className="h-5 w-5 text-teal-600" />
-                    <h3 className="font-semibold text-gray-900">Tips for Better Results</h3>
+                    <h3 className="font-semibold text-foreground">Tips for Better Results</h3>
                 </div>
                 {showTips ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -300,24 +300,24 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                 <div className="mt-4 space-y-3 text-sm">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                            <p className="font-medium text-gray-900">✓ Be Specific</p>
-                            <p className="text-gray-600 text-xs">Include user flows, business rules, edge cases</p>
+                            <p className="font-medium text-foreground">✓ Be Specific</p>
+                            <p className="text-muted-foreground text-xs">Include user flows, business rules, edge cases</p>
                         </div>
                         <div>
-                            <p className="font-medium text-gray-900">✓ Add Context</p>
-                            <p className="text-gray-600 text-xs">Mention system, platform, user roles</p>
+                            <p className="font-medium text-foreground">✓ Add Context</p>
+                            <p className="text-muted-foreground text-xs">Mention system, platform, user roles</p>
                         </div>
                         <div>
-                            <p className="font-medium text-gray-900">✓ Define Success</p>
-                            <p className="text-gray-600 text-xs">State what constitutes pass/fail</p>
+                            <p className="font-medium text-foreground">✓ Define Success</p>
+                            <p className="text-muted-foreground text-xs">State what constitutes pass/fail</p>
                         </div>
                         <div>
-                            <p className="font-medium text-gray-900">✓ Include Examples</p>
-                            <p className="text-gray-600 text-xs">Provide sample data or workflows</p>
+                            <p className="font-medium text-foreground">✓ Include Examples</p>
+                            <p className="text-muted-foreground text-xs">Provide sample data or workflows</p>
                         </div>
                     </div>
-                    <div className="mt-3 p-2 bg-white rounded border border-teal-200">
-                        <p className="text-xs text-gray-700">
+                    <div className="mt-3 p-2 bg-card rounded border border-teal-200">
+                        <p className="text-xs text-muted-foreground">
                             <strong>Example:</strong> &quot;Test user login with email/password, error handling for invalid credentials, 
                             password reset, account lockout after 3 attempts&quot;
                         </p>
@@ -329,23 +329,23 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
     const renderGeneratingStep = () => (
         <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+            <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12">
                 <div className="flex flex-col items-center justify-center text-center">
                     <div className="relative mb-6">
                         <div className="animate-pulse">
                             <Wand2 className="h-16 w-16 text-teal-600" />
                         </div>
                         <div className="absolute -top-2 -right-2 animate-bounce">
-                            <Sparkles className="h-6 w-6 text-yellow-500" />
+                            <Sparkles className="h-6 w-6 text-warning" />
                         </div>
                     </div>
-                    <h2 className="text-2xl font-semibold text-gray-900 mb-4">Generating Test Cases...</h2>
-                    <p className="text-gray-600 mb-8 max-w-md">
+                    <h2 className="text-2xl font-semibold text-foreground mb-4">Generating Test Cases...</h2>
+                    <p className="text-muted-foreground mb-8 max-w-md">
                         AI is analyzing your requirements and creating comprehensive test cases.
                     </p>
                     <div className="flex items-center gap-3">
                         <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
-                        <span className="text-sm text-gray-500">Please wait...</span>
+                        <span className="text-sm text-muted-foreground">Please wait...</span>
                     </div>
                 </div>
             </div>
@@ -354,31 +354,31 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
     const renderSavingStep = () => (
         <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+            <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12">
                 <div className="flex flex-col items-center justify-center text-center">
                     <div className="relative mb-6">
                         <div className="animate-pulse">
-                            <Save className="h-16 w-16 text-green-600" />
+                            <Save className="h-16 w-16 text-success" />
                         </div>
                         <div className="absolute -top-2 -right-2 animate-bounce">
-                            <CheckCircle2 className="h-6 w-6 text-green-500" />
+                            <CheckCircle2 className="h-6 w-6 text-success" />
                         </div>
                     </div>
-                    <h2 className="text-2xl font-semibold text-gray-900 mb-4">Saving Test Cases...</h2>
-                    <p className="text-gray-600 mb-8 max-w-md">
+                    <h2 className="text-2xl font-semibold text-foreground mb-4">Saving Test Cases...</h2>
+                    <p className="text-muted-foreground mb-8 max-w-md">
                         Saving {selectedTestCases.size} test case{selectedTestCases.size === 1 ? '' : 's'} to your test suite.
                     </p>
                     <div className="flex items-center gap-3">
-                        <Loader2 className="h-5 w-5 animate-spin text-green-600" />
-                        <span className="text-sm text-gray-500">
+                        <Loader2 className="h-5 w-5 animate-spin text-success" />
+                        <span className="text-sm text-muted-foreground">
                             Saved {savedCount} of {selectedTestCases.size} test cases
                         </span>
                     </div>
                     
                     <div className="w-full max-w-md mt-4">
-                        <div className="bg-gray-200 rounded-full h-2">
+                        <div className="bg-muted rounded-full h-2">
                             <div 
-                                className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                                className="bg-success h-2 rounded-full transition-all duration-300"
                                 style={{ width: `${(savedCount / selectedTestCases.size) * 100}%` }}
                             />
                         </div>
@@ -389,7 +389,7 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
     );
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-background">
             {renderHeader()}
             
             <div className="max-w-7xl mx-auto px-6 py-8">

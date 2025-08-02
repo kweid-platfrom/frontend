@@ -1,11 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React from 'react';
 import { Users, TrendingUp, Award, Clock, Target, Activity } from 'lucide-react';
 
 const TeamProductivity = ({ metrics }) => {
-    // Handle null/undefined metrics prop safely
     const safeMetrics = metrics || {};
     
-    // Default values for metrics
     const {
         activeTeamMembers = 0,
         testCasesCreatedPerMember = 0,
@@ -21,89 +20,122 @@ const TeamProductivity = ({ metrics }) => {
         testCoverageGrowth = 0
     } = safeMetrics;
 
-    // Team performance indicators
+    const getColorClasses = (color, intensity = 'base') => {
+        const colorMap = {
+            success: {
+                bg: 'bg-[rgb(var(--color-success)/0.1)]',
+                text: 'text-[rgb(var(--color-success))]',
+                bar: 'bg-[rgb(var(--color-success))]'
+            },
+            info: {
+                bg: 'bg-[rgb(var(--color-info)/0.1)]',
+                text: 'text-[rgb(var(--color-info))]',
+                bar: 'bg-[rgb(var(--color-info))]'
+            },
+            warning: {
+                bg: 'bg-[rgb(var(--color-warning)/0.1)]',
+                text: 'text-[rgb(var(--color-warning))]',
+                bar: 'bg-[rgb(var(--color-warning))]'
+            },
+            error: {
+                bg: 'bg-[rgb(var(--color-error)/0.1)]',
+                text: 'text-[rgb(var(--color-error))]',
+                bar: 'bg-[rgb(var(--color-error))]'
+            },
+            muted: {
+                bg: 'bg-muted',
+                text: 'text-muted-foreground',
+                bar: 'bg-muted-foreground'
+            }
+        };
+        return colorMap[color] || colorMap.info;
+    };
+
     const teamPerformanceData = [
-        { name: 'Test Cases', value: testCasesCreatedPerMember, target: 25, color: 'bg-blue-500' },
-        { name: 'Bugs Found', value: bugsFoundPerMember, target: 8, color: 'bg-red-500' },
-        { name: 'Recordings', value: recordingsPerMember, target: 12, color: 'bg-purple-500' }
+        { name: 'Test Cases', value: testCasesCreatedPerMember, target: 25, color: 'info' },
+        { name: 'Bugs Found', value: bugsFoundPerMember, target: 8, color: 'error' },
+        { name: 'Recordings', value: recordingsPerMember, target: 12, color: 'info' }
     ];
 
-    // Progress metrics
     const progressMetrics = [
         {
             label: 'Sprint Progress',
             value: sprintTestingProgress,
-            color: 'text-blue-600',
-            bgColor: 'bg-blue-100',
+            color: 'info',
             icon: Target
         },
         {
             label: 'Release Readiness',
             value: releaseReadiness,
-            color: 'text-green-600',
-            bgColor: 'bg-green-100',
+            color: 'success',
             icon: Award
         },
         {
             label: 'Quality Trend',
             value: qualityTrendScore,
-            color: qualityTrendScore >= 70 ? 'text-green-600' : 'text-orange-600',
-            bgColor: qualityTrendScore >= 70 ? 'bg-green-100' : 'bg-orange-100',
+            color: qualityTrendScore >= 70 ? 'success' : 'warning',
             icon: TrendingUp
         }
     ];
 
-    const MetricCard = ({ icon: Icon, label, value, unit = '', color = 'text-gray-600' }) => (
-        <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                    <Icon className={`w-4 h-4 ${color}`} />
-                    <span className="text-sm font-medium text-gray-700">{label}</span>
+    const MetricCard = ({ icon: Icon, label, value, unit = '', color = 'muted' }) => {
+        const colors = getColorClasses(color);
+        return (
+            <div className="bg-[rgb(var(--color-muted)/0.1)] rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <Icon className={`w-4 h-4 ${colors.text}`} />
+                        <span className="text-sm font-medium text-foreground">{label}</span>
+                    </div>
+                    <span className={`text-lg font-bold ${colors.text}`}>
+                        {typeof value === 'number' ? value.toFixed(1) : value}{unit}
+                    </span>
                 </div>
-                <span className={`text-lg font-bold ${color}`}>
-                    {typeof value === 'number' ? value.toFixed(1) : value}{unit}
-                </span>
             </div>
-        </div>
-    );
+        );
+    };
 
-    const ProgressBar = ({ label, value, color, bgColor, icon: Icon }) => (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                    <Icon className={`w-4 h-4 ${color}`} />
-                    <span className="text-sm font-medium text-gray-700">{label}</span>
+    const ProgressBar = ({ label, value, color, icon: Icon }) => {
+        const colors = getColorClasses(color);
+        return (
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <Icon className={`w-4 h-4 ${colors.text}`} />
+                        <span className="text-sm font-medium text-foreground">{label}</span>
+                    </div>
+                    <span className={`text-sm font-bold ${colors.text}`}>{value}%</span>
                 </div>
-                <span className={`text-sm font-bold ${color}`}>{value}%</span>
+                <div className="w-full bg-muted rounded-full h-2">
+                    <div
+                        className={`h-2 rounded-full ${colors.bar}`}
+                        style={{ width: `${Math.min(value, 100)}%` }}
+                    ></div>
+                </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                    className={`h-2 rounded-full ${bgColor.replace('bg-', 'bg-').replace('-100', '-500')}`}
-                    style={{ width: `${Math.min(value, 100)}%` }}
-                ></div>
-            </div>
-        </div>
-    );
+        );
+    };
 
     const PerformanceBar = ({ name, value, target, color }) => {
-        const percentage = (value / target) * 100;
+        const percentage = target > 0 ? (value / target) * 100 : 0;
         const isOnTarget = percentage >= 80;
+        const colors = getColorClasses(isOnTarget ? 'success' : 'warning');
+        const barColors = getColorClasses(color);
 
         return (
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">{name}</span>
+                    <span className="text-sm font-medium text-foreground">{name}</span>
                     <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">{value}/{target}</span>
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${isOnTarget ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                            }`}>
+                        <span className="text-sm text-muted-foreground">{value}/{target}</span>
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${colors.bg} ${colors.text}`}>
                             {percentage.toFixed(0)}%
                         </span>
                     </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                     <div
-                        className={`h-2 rounded-full ${color}`}
+                        className={`h-2 rounded-full ${barColors.bar}`}
                         style={{ width: `${Math.min(percentage, 100)}%` }}
                     ></div>
                 </div>
@@ -112,29 +144,28 @@ const TeamProductivity = ({ metrics }) => {
     };
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b border-gray-200">
+        <div className="bg-card rounded-lg shadow-theme-sm border border-border">
+            <div className="p-6 border-b border-border">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <Users className="w-5 h-5 text-teal-600" />
+                        <div className="p-2 bg-[rgb(var(--color-info)/0.1)] rounded-lg">
+                            <Users className="w-5 h-5 text-[rgb(var(--color-info))]" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold text-gray-900">Team Productivity</h3>
-                            <p className="text-sm text-gray-600">{activeTeamMembers} active members</p>
+                            <h3 className="text-lg font-semibold text-foreground">Team Productivity</h3>
+                            <p className="text-sm text-muted-foreground">{activeTeamMembers} active members</p>
                         </div>
                     </div>
                     <div className="text-right">
-                        <div className="text-sm text-gray-500">Features Under Test</div>
-                        <div className="text-2xl font-bold text-gray-900">{featuresUnderTest}</div>
+                        <div className="text-sm text-muted-foreground">Features Under Test</div>
+                        <div className="text-2xl font-bold text-foreground">{featuresUnderTest}</div>
                     </div>
                 </div>
             </div>
 
             <div className="p-6 space-y-6">
-                {/* Team Performance Metrics */}
                 <div>
-                    <h4 className="text-sm font-semibold text-gray-900 mb-4">Individual Performance (Per Member)</h4>
+                    <h4 className="text-sm font-semibold text-foreground mb-4">Individual Performance (Per Member)</h4>
                     <div className="space-y-4">
                         {teamPerformanceData.map((item) => (
                             <PerformanceBar
@@ -148,9 +179,8 @@ const TeamProductivity = ({ metrics }) => {
                     </div>
                 </div>
 
-                {/* Progress Indicators */}
                 <div>
-                    <h4 className="text-sm font-semibold text-gray-900 mb-4">Project Progress</h4>
+                    <h4 className="text-sm font-semibold text-foreground mb-4">Project Progress</h4>
                     <div className="space-y-4">
                         {progressMetrics.map((metric) => (
                             <ProgressBar
@@ -158,73 +188,70 @@ const TeamProductivity = ({ metrics }) => {
                                 label={metric.label}
                                 value={metric.value}
                                 color={metric.color}
-                                bgColor={metric.bgColor}
                                 icon={metric.icon}
                             />
                         ))}
                     </div>
                 </div>
 
-                {/* Collaboration Metrics */}
                 <div>
-                    <h4 className="text-sm font-semibold text-gray-900 mb-4">Team Collaboration</h4>
+                    <h4 className="text-sm font-semibold text-foreground mb-4">Team Collaboration</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <MetricCard
                             icon={Users}
                             label="Cross-Team Score"
                             value={crossTeamCollaboration}
                             unit="%"
-                            color={crossTeamCollaboration >= 70 ? 'text-green-600' : 'text-orange-600'}
+                            color={crossTeamCollaboration >= 70 ? 'success' : 'warning'}
                         />
                         <MetricCard
                             icon={Clock}
                             label="Review Cycle"
                             value={testCaseReviewCycle}
                             unit="h"
-                            color="text-blue-600"
+                            color="info"
                         />
                         <MetricCard
                             icon={Activity}
                             label="Knowledge Sharing"
                             value={knowledgeSharing}
                             unit="%"
-                            color={knowledgeSharing >= 70 ? 'text-green-600' : 'text-orange-600'}
+                            color={knowledgeSharing >= 70 ? 'success' : 'warning'}
                         />
                         <MetricCard
                             icon={TrendingUp}
                             label="Coverage Growth"
                             value={testCoverageGrowth}
                             unit="%"
-                            color={testCoverageGrowth >= 0 ? 'text-green-600' : 'text-red-600'}
+                            color={testCoverageGrowth >= 0 ? 'success' : 'error'}
                         />
                     </div>
                 </div>
 
-                {/* Team Insights */}
-                <div className="bg-blue-50 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-teal-900 mb-2">Team Insights</h4>
-                    <div className="space-y-2 text-sm text-teal-800">
+                <div className="bg-[rgb(var(--color-info)/0.1)] rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-foreground mb-2">Team Insights</h4>
+                    <div className="space-y-2 text-sm text-[rgb(var(--color-info))]">
                         {sprintTestingProgress >= 80 && (
                             <div className="flex items-center space-x-2">
-                                <Award className="w-4 h-4 text-green-600" />
+                                <Award className="w-4 h-4 text-[rgb(var(--color-success))]" />
                                 <span>Sprint testing is on track - great progress!</span>
                             </div>
                         )}
                         {crossTeamCollaboration < 60 && (
                             <div className="flex items-center space-x-2">
-                                <Users className="w-4 h-4 text-orange-600" />
+                                <Users className="w-4 h-4 text-[rgb(var(--color-warning))]" />
                                 <span>Consider improving cross-team collaboration</span>
                             </div>
                         )}
                         {testCaseReviewCycle > 48 && (
                             <div className="flex items-center space-x-2">
-                                <Clock className="w-4 h-4 text-red-600" />
+                                <Clock className="w-4 h-4 text-[rgb(var(--color-error))]" />
                                 <span>Review cycle time could be optimized</span>
                             </div>
                         )}
                         {qualityTrendScore >= 80 && (
                             <div className="flex items-center space-x-2">
-                                <TrendingUp className="w-4 h-4 text-green-600" />
+                                <TrendingUp className="w-4 h-4 text-[rgb(var(--color-success))]" />
                                 <span>Quality metrics are trending upward</span>
                             </div>
                         )}

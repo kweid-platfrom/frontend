@@ -4,31 +4,32 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 export const AutomationProgressChart = ({ data, height = 300 }) => (
     <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="period" stroke="#666" fontSize={12} />
-            <YAxis stroke="#666" fontSize={12} />
+            <CartesianGrid stroke="rgb(var(--color-muted)/0.5)" strokeDasharray="3 3" />
+            <XAxis dataKey="period" stroke="rgb(var(--color-muted-foreground))" fontSize={12} />
+            <YAxis stroke="rgb(var(--color-muted-foreground))" fontSize={12} />
             <Tooltip
                 contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px'
+                    backgroundColor: 'rgb(var(--color-card))',
+                    border: '1px solid rgb(var(--color-border))',
+                    borderRadius: '8px',
+                    color: 'rgb(var(--color-foreground))'
                 }}
             />
             <Line
                 type="monotone"
                 dataKey="manual"
-                stroke="#EF4444"
+                stroke="rgb(var(--color-error))"
                 strokeWidth={3}
-                dot={{ fill: '#EF4444', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: '#EF4444', strokeWidth: 2 }}
+                dot={{ fill: 'rgb(var(--color-error))', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: 'rgb(var(--color-error))', strokeWidth: 2 }}
             />
             <Line
                 type="monotone"
                 dataKey="automated"
-                stroke="#10B981"
+                stroke="rgb(var(--color-success))"
                 strokeWidth={3}
-                dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: '#10B981', strokeWidth: 2 }}
+                dot={{ fill: 'rgb(var(--color-success))', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: 'rgb(var(--color-success))', strokeWidth: 2 }}
             />
         </LineChart>
     </ResponsiveContainer>

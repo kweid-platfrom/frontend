@@ -1,5 +1,3 @@
-
-// components/dashboard/FilterControls.jsx
 import React from 'react';
 
 const TIME_FILTER_OPTIONS = [
@@ -16,10 +14,10 @@ const FilterButton = ({ active, onClick, children, disabled = false }) => (
         disabled={disabled}
         className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
             disabled
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                ? 'bg-muted text-muted-foreground cursor-not-allowed'
                 : active
-                ? 'bg-teal-100 text-teal-700 border border-teal-200'
-                : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                ? 'bg-teal-50 text-teal-800 border border-teal-300'
+                : 'bg-background text-foreground hover:bg-background/80 border border-border'
         }`}
         aria-pressed={active}
         aria-disabled={disabled}
@@ -29,11 +27,11 @@ const FilterButton = ({ active, onClick, children, disabled = false }) => (
 );
 
 export const FilterControls = ({ filters, onFilterChange, loading }) => (
-    <div className="bg-white rounded-lg shadow-sm border p-4">
+    <div className="bg-card rounded-lg shadow-theme border border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-700">Time Range:</span>
+                    <span className="text-sm font-medium text-foreground">Time Range:</span>
                     <div className="flex space-x-1">
                         {TIME_FILTER_OPTIONS.map((option) => (
                             <FilterButton
@@ -50,12 +48,12 @@ export const FilterControls = ({ filters, onFilterChange, loading }) => (
             </div>
             <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-700">Priority:</span>
+                    <span className="text-sm font-medium text-foreground">Priority:</span>
                     <select
                         value={filters.priority}
                         onChange={(e) => onFilterChange('priority', e.target.value)}
                         disabled={loading}
-                        className="px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 bg-background text-foreground"
                         aria-label="Select priority"
                     >
                         <option value="all">All Priorities</option>
@@ -66,12 +64,12 @@ export const FilterControls = ({ filters, onFilterChange, loading }) => (
                     </select>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-700">Status:</span>
+                    <span className="text-sm font-medium text-foreground">Status:</span>
                     <select
                         value={filters.status}
                         onChange={(e) => onFilterChange('status', e.target.value)}
                         disabled={loading}
-                        className="px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 bg-background text-foreground"
                         aria-label="Select status"
                     >
                         <option value="all">All Statuses</option>
@@ -83,12 +81,12 @@ export const FilterControls = ({ filters, onFilterChange, loading }) => (
                     </select>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-700">Source:</span>
+                    <span className="text-sm font-medium text-foreground">Source:</span>
                     <select
                         value={filters.source}
                         onChange={(e) => onFilterChange('source', e.target.value)}
                         disabled={loading}
-                        className="px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 bg-background text-foreground"
                         aria-label="Select source"
                     >
                         <option value="all">All Sources</option>

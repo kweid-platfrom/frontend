@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
+
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '../../context/AppProvider';
@@ -12,10 +13,8 @@ import {
     PlayIcon,
     PlusIcon,
     ChevronDownIcon,
-    
-    
 } from '@heroicons/react/24/outline';
-import { X, Bell, Building2, Calendar, } from 'lucide-react';
+import { X, Bell, Building2, Calendar } from 'lucide-react';
 
 // Import components
 import BugReportButton from '../modals/BugReportButton';
@@ -204,15 +203,15 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     return (
         <>
-            <header className="bg-white shadow-sm border-b border-gray-200 relative z-50 overflow-visible">
+            <header className="bg-nav border-b border-border relative z-50 overflow-visible shadow-theme">
                 {/* Top Layer */}
-                <div className="px-4 sm:px-6 lg:px-8 border-b border-gray-100">
+                <div className="px-4 sm:px-6 lg:px-8 border-b border-border">
                     <div className="flex justify-between items-center h-14">
                         {/* Left Section */}
                         <div className="flex items-center flex-1">
                             <button
                                 onClick={onMenuClick}
-                                className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+                                className="lg:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80"
                             >
                                 <Bars3Icon className="h-6 w-6" />
                             </button>
@@ -222,20 +221,20 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                     <button
                                         ref={suiteSelectorButtonRef}
                                         onClick={() => toggleDropdown('suite')}
-                                        className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors"
+                                        className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-secondary-foreground bg-secondary hover:bg-secondary/80 rounded-lg border border-border transition-colors"
                                     >
-                                        <Building2 className="h-4 w-4 text-teal-600" />
+                                        <Building2 className="h-4 w-4 text-primary" />
                                         <span className="max-w-24 sm:max-w-32 lg:max-w-48 truncate">
                                             {activeSuite ? activeSuite.name : 'Select Suite'}
                                         </span>
-                                        <ChevronDownIcon className="h-4 w-4 text-gray-500" />
+                                        <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
                                     </button>
                                 </div>
                             )}
 
                             <button
                                 onClick={handleCreateSprint}
-                                className="hidden sm:flex items-center space-x-2 ml-4 text-gray-700 px-3 py-2 text-sm rounded-md hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
+                                className="hidden sm:flex items-center space-x-2 ml-4 px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors"
                                 title="Create Sprint"
                             >
                                 <Calendar className="h-4 w-4" />
@@ -253,11 +252,11 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 <button
                                     ref={notificationsButtonRef}
                                     onClick={() => toggleDropdown('notifications')}
-                                    className="relative p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md"
+                                    className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md"
                                 >
                                     <Bell className="h-5 w-5" />
                                     {unreadNotificationsCount > 0 && (
-                                        <span className="absolute top-0 right-0 -mt-1 -mr-1 px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
+                                        <span className="absolute top-0 right-0 -mt-1 -mr-1 px-2 py-1 text-xs font-bold leading-none text-destructive-foreground bg-destructive rounded-full">
                                             {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
                                         </span>
                                     )}
@@ -272,7 +271,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                             setShowSuiteSelector(false);
                                             setShowNotifications(false);
                                         }}
-                                        className="flex items-center space-x-2 p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md"
+                                        className="flex items-center space-x-2 p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md"
                                     >
                                         {currentUser?.photoURL ? (
                                             <img
@@ -281,7 +280,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                                 alt={currentUser.displayName || 'User'}
                                             />
                                         ) : (
-                                            <div className="h-8 w-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-sm font-medium">
+                                            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
                                                 {(currentUser?.displayName || currentUser?.email || 'U')
                                                     .split(' ')
                                                     .map(name => name.charAt(0))
@@ -314,11 +313,11 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                         <div className="flex items-center flex-1">
                             <div className="relative flex-1 max-w-md">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                                    <MagnifyingGlassIcon className="h-4 w-4 text-muted-foreground" />
                                 </div>
                                 <input
                                     type="text"
-                                    className="block w-full pl-10 pr-3 py-2 rounded-md border border-gray-300 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                    className="block w-full pl-10 pr-3 py-2 rounded-md border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background"
                                     placeholder="Search test cases, bugs, reports..."
                                 />
                             </div>
@@ -326,18 +325,18 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
                         <div className="flex items-center">
                             <div className="sm:hidden">
-                                <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-md">
+                                <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md">
                                     <Bars3Icon className="h-5 w-5" />
                                 </button>
                             </div>
 
                             <div className="hidden sm:flex items-center space-x-1 lg:space-x-2">
-                                <button className="text-gray-700 px-2 lg:px-3 py-2 text-sm rounded-md flex items-center space-x-1 lg:space-x-2 hover:bg-green-100 hover:text-green-700 transition-colors">
+                                <button className="px-2 lg:px-3 py-2 text-sm rounded-md flex items-center space-x-1 lg:space-x-2 text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors">
                                     <PlayIcon className="h-4 w-4" />
                                     <span className="hidden lg:inline">Run Tests</span>
                                 </button>
 
-                                <BugReportButton className="text-gray-700 hover:bg-orange-100 hover:text-orange-700 cursor-pointer px-2 lg:px-3 py-2 rounded-md transition-colors" />
+                                <BugReportButton className="px-2 lg:px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors" />
 
                                 <ScreenRecorderButton setShowBugForm={setShowBugForm} actions={actions} />
 
@@ -347,7 +346,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
                                 <button
                                     onClick={handleCreateSprint}
-                                    className="sm:hidden flex items-center space-x-1 text-gray-700 px-2 py-2 text-sm rounded-md hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
+                                    className="sm:hidden flex items-center space-x-1 px-2 py-2 text-sm rounded-md text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors"
                                     title="Create Sprint"
                                 >
                                     <Calendar className="h-4 w-4" />
@@ -361,7 +360,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 {showSuiteSelector && (
                     <div
                         ref={suiteSelectorRef}
-                        className="fixed bg-white border border-gray-200 shadow-lg rounded-lg z-50"
+                        className="fixed bg-card border border-border shadow-theme-lg rounded-lg z-50"
                         style={{
                             top: `${suiteSelectorPosition.top}px`,
                             left: suiteSelectorPosition.left !== 'auto' ? `${suiteSelectorPosition.left}px` : 'auto',
@@ -373,7 +372,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                         <div className="p-2">
                             <button
                                 onClick={handleCreateSuite}
-                                className="w-full flex items-center px-3 py-2 text-sm text-teal-700 hover:bg-teal-50 rounded-md border-b border-gray-100 mb-2"
+                                className="w-full flex items-center px-3 py-2 text-sm text-primary hover:bg-teal-50 hover:text-teal-800 rounded-md border-b border-border mb-2"
                             >
                                 <PlusIcon className="h-4 w-4 mr-2" />
                                 Create New Suite
@@ -381,8 +380,8 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
                             <div className="max-h-64 overflow-y-auto">
                                 {safeLength(safeSuites) === 0 ? (
-                                    <div className="px-3 py-4 text-center text-gray-500 text-sm">
-                                        <Building2 className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                    <div className="px-3 py-4 text-center text-muted-foreground text-sm">
+                                        <Building2 className="h-8 w-8 mx-auto mb-2 text-muted" />
                                         <p>No test suites yet</p>
                                         <p className="text-xs">Create your first suite to get started</p>
                                     </div>
@@ -394,13 +393,13 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                                 onClick={() => handleSelectSuite(suite)}
                                                 className={`w-full flex items-center px-3 py-2 text-sm rounded-md text-left transition-colors ${
                                                     activeSuite?.id === suite.id
-                                                        ? 'bg-teal-50 text-teal-700 font-medium'
-                                                        : 'text-gray-700 hover:bg-gray-50'
+                                                        ? 'bg-teal-50 text-teal-800 font-medium'
+                                                        : 'text-foreground hover:bg-secondary/80'
                                                 }`}
                                             >
                                                 <div
                                                     className={`w-2 h-2 rounded-full mr-3 flex-shrink-0 ${
-                                                        activeSuite?.id === suite.id ? 'bg-teal-500' : 'bg-gray-300'
+                                                        activeSuite?.id === suite.id ? 'bg-primary' : 'bg-muted'
                                                     }`}
                                                 ></div>
                                                 <div className="flex-1 min-w-0">
@@ -408,7 +407,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                                         {suite.name}
                                                     </p>
                                                     {suite.description && (
-                                                        <p className="text-xs text-gray-500 truncate" title={suite.description}>
+                                                        <p className="text-xs text-muted-foreground truncate" title={suite.description}>
                                                             {suite.description}
                                                         </p>
                                                     )}
@@ -426,7 +425,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 {showNotifications && (
                     <div
                         ref={notificationsRef}
-                        className="fixed bg-white border border-gray-200 shadow-lg rounded-lg z-50"
+                        className="fixed bg-card border border-border shadow-theme-lg rounded-lg z-50"
                         style={{
                             top: `${notificationsPosition.top}px`,
                             left: notificationsPosition.left !== 'auto' ? `${notificationsPosition.left}px` : 'auto',
@@ -437,11 +436,11 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                     >
                         <div className="p-4">
                             <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
+                                <h3 className="text-sm font-medium text-foreground">Notifications</h3>
                                 {safeLength(safeNotifications) > 0 && (
                                     <button
                                         onClick={handleMarkAllAsRead}
-                                        className="text-xs text-teal-600 hover:text-teal-700"
+                                        className="text-xs text-primary hover:text-teal-800"
                                     >
                                         Mark all as read
                                     </button>
@@ -449,8 +448,8 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                             </div>
                             <div className="max-h-80 overflow-y-auto">
                                 {safeLength(safeNotifications) === 0 ? (
-                                    <div className="text-center py-6 text-gray-500">
-                                        <Bell className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                    <div className="text-center py-6 text-muted-foreground">
+                                        <Bell className="h-8 w-8 mx-auto mb-2 text-muted" />
                                         <p className="text-sm">No notifications yet</p>
                                     </div>
                                 ) : (
@@ -460,21 +459,21 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                                 key={notification.id}
                                                 className={`p-3 rounded-lg border transition-colors ${
                                                     notification.read
-                                                        ? 'bg-gray-50 border-gray-200'
-                                                        : 'bg-blue-50 border-blue-200'
+                                                        ? 'bg-secondary border-border'
+                                                        : 'bg-teal-50 border-teal-300'
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1">
                                                         <p
                                                             className={`text-sm ${
-                                                                notification.read ? 'text-gray-700' : 'text-gray-900 font-medium'
+                                                                notification.read ? 'text-foreground' : 'text-teal-800 font-medium'
                                                             }`}
                                                         >
                                                             {notification.message}
                                                         </p>
                                                         {notification.timestamp && (
-                                                            <p className="text-xs text-gray-500 mt-1">
+                                                            <p className="text-xs text-muted-foreground mt-1">
                                                                 {new Date(notification.timestamp).toLocaleString()}
                                                             </p>
                                                         )}
@@ -483,14 +482,14 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                                         {!notification.read && (
                                                             <button
                                                                 onClick={() => handleMarkAsRead(notification.id)}
-                                                                className="text-xs text-blue-600 hover:text-blue-700"
+                                                                className="text-xs text-primary hover:text-teal-800"
                                                             >
                                                                 Read
                                                             </button>
                                                         )}
                                                         <button
                                                             onClick={() => handleClearNotification(notification.id)}
-                                                            className="text-gray-400 hover:text-gray-600"
+                                                            className="text-muted-foreground hover:text-foreground"
                                                         >
                                                             <X className="h-3 w-3" />
                                                         </button>

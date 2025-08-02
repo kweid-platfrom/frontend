@@ -48,14 +48,24 @@ export const useBugs = () => {
             if (!actions.bugs.updateBug) {
                 throw new Error('Update bug action not available');
             }
-            return actions.bugs.updateBug(bugId, updates);
+            // Ensure suiteId is included in updates
+            const suiteId = state.suites?.activeSuite?.id;
+            if (!suiteId) {
+                throw new Error('No active suite selected');
+            }
+            return actions.bugs.updateBug(bugId, { ...updates, suite_id: suiteId });
         },
         
         deleteBug: async (bugId) => {
             if (!actions.bugs.deleteBug) {
                 throw new Error('Delete bug action not available');
             }
-            return actions.bugs.deleteBug(bugId);
+            // Pass suiteId to deleteBug function
+            const suiteId = state.suites?.activeSuite?.id;
+            if (!suiteId) {
+                throw new Error('No active suite selected');
+            }
+            return actions.bugs.deleteBug(bugId, suiteId);
         },
         
         // Relationship actions
@@ -75,23 +85,33 @@ export const useBugs = () => {
         
         // Bulk operations
         bulkUpdateBugs: async (bugIds, updates) => {
+            const suiteId = state.suites?.activeSuite?.id;
+            if (!suiteId) {
+                throw new Error('No active suite selected');
+            }
+            
             if (!actions.bugs.bulkUpdateBugs) {
                 // Fallback to individual updates
                 return Promise.all(
-                    bugIds.map(id => actions.bugs.updateBug(id, updates))
+                    bugIds.map(id => actions.bugs.updateBug(id, { ...updates, suite_id: suiteId }))
                 );
             }
-            return actions.bugs.bulkUpdateBugs(bugIds, updates);
+            return actions.bugs.bulkUpdateBugs(bugIds, { ...updates, suite_id: suiteId });
         },
         
         bulkDeleteBugs: async (bugIds) => {
+            const suiteId = state.suites?.activeSuite?.id;
+            if (!suiteId) {
+                throw new Error('No active suite selected');
+            }
+            
             if (!actions.bugs.bulkDeleteBugs) {
                 // Fallback to individual deletes
                 return Promise.all(
-                    bugIds.map(id => actions.bugs.deleteBug(id))
+                    bugIds.map(id => actions.bugs.deleteBug(id, suiteId))
                 );
             }
-            return actions.bugs.bulkDeleteBugs(bugIds);
+            return actions.bugs.bulkDeleteBugs(bugIds, suiteId);
         },
         
         // Refresh data

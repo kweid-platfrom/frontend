@@ -119,10 +119,35 @@ const Bugs = () => {
         return filtered;
     }, []);
 
+    // FIXED: Better filter management to prevent bugs disappearing
     useEffect(() => {
-        const newFilteredBugs = applyFilters(bugsHook.bugs, filters);
-        setFilteredBugs(newFilteredBugs);
+        // Only apply filters if we have bugs data
+        if (bugsHook.bugs && bugsHook.bugs.length >= 0) {
+            const newFilteredBugs = applyFilters(bugsHook.bugs, filters);
+            setFilteredBugs(newFilteredBugs);
+        }
     }, [bugsHook.bugs, filters, applyFilters]);
+
+    // FIXED: Reset filtered bugs when filters are cleared
+    const handleFiltersChange = useCallback((newFilters) => {
+        setFilters(newFilters);
+        
+        // Check if all filters are cleared (reset to default)
+        const isFiltersCleared = 
+            newFilters.search === '' &&
+            newFilters.status === 'all' &&
+            newFilters.severity === 'all' &&
+            newFilters.priority === 'all' &&
+            newFilters.assignee === 'all' &&
+            newFilters.reporter === 'all' &&
+            newFilters.lastUpdated === 'all' &&
+            (!newFilters.tags || newFilters.tags.length === 0);
+        
+        // If filters are cleared, immediately reset to show all bugs
+        if (isFiltersCleared && bugsHook.bugs) {
+            setFilteredBugs([...bugsHook.bugs]);
+        }
+    }, [bugsHook.bugs]);
 
     const handleError = useCallback((error, context) => {
         console.error(`Error in ${context}:`, error);
@@ -148,7 +173,6 @@ const Bugs = () => {
 
             const result = await bugsHook.updateBug(bugId, {
                 ...updates,
-                suite_id: bugsHook.activeSuite?.id,
                 updated_at: new Date(),
             });
 
@@ -184,13 +208,11 @@ const Bugs = () => {
             if (selectedBug) {
                 await handleUpdateBug(selectedBug.id, {
                     ...bugData,
-                    suite_id: bugsHook.activeSuite?.id,
                     updated_at: timestamp,
                 });
             } else {
                 const result = await bugsHook.createBug({
                     ...bugData,
-                    suite_id: bugsHook.activeSuite?.id,
                     created_at: timestamp,
                     updated_at: timestamp,
                 });
@@ -274,7 +296,7 @@ const Bugs = () => {
                 throw new Error('Bugs are locked. Upgrade to access.');
             }
 
-            await bugsHook.deleteBug(id, bugsHook.activeSuite?.id);
+            await bugsHook.deleteBug(id);
             uiHook.addNotification?.({
                 type: 'success',
                 title: 'Success',
@@ -283,7 +305,7 @@ const Bugs = () => {
         } catch (error) {
             handleError(error, 'delete bug');
         }
-    }, [bugsHook.bugsLocked, bugsHook.deleteBug, bugsHook.activeSuite, uiHook.addNotification, handleError]);
+    }, [bugsHook.bugsLocked, bugsHook.deleteBug, uiHook.addNotification, handleError]);
 
     const handleDuplicateBug = useCallback(async (bug) => {
         try {
@@ -294,7 +316,6 @@ const Bugs = () => {
             const timestamp = new Date();
             await bugsHook.createBug({
                 ...bug,
-                suite_id: bugsHook.activeSuite?.id,
                 title: `${bug.title} (Copy)`,
                 created_at: timestamp,
                 updated_at: timestamp,
@@ -308,7 +329,7 @@ const Bugs = () => {
         } catch (error) {
             handleError(error, 'duplicate bug');
         }
-    }, [bugsHook.bugsLocked, bugsHook.createBug, bugsHook.activeSuite, uiHook.addNotification, handleError]);
+    }, [bugsHook.bugsLocked, bugsHook.createBug, uiHook.addNotification, handleError]);
 
     const handleBulkAction = useCallback(async (action, selectedIds) => {
         try {
@@ -317,14 +338,13 @@ const Bugs = () => {
             }
 
             if (action === 'delete') {
-                await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id, bugsHook.activeSuite?.id)));
+                await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id)));
             } else {
                 const timestamp = new Date();
                 await Promise.all(
                     selectedIds.map((id) =>
                         handleUpdateBug(id, {
                             status: action,
-                            suite_id: bugsHook.activeSuite?.id,
                             updated_at: timestamp,
                         })
                     )
@@ -342,7 +362,6 @@ const Bugs = () => {
     }, [
         bugsHook.bugsLocked,
         bugsHook.deleteBug,
-        bugsHook.activeSuite,
         handleUpdateBug,
         uiHook.addNotification,
         handleError
@@ -416,7 +435,7 @@ const Bugs = () => {
 
                 <BugFilterBar
                     filters={filters}
-                    onFiltersChange={setFilters}
+                    onFiltersChange={handleFiltersChange}
                     bugs={bugsHook.bugs}
                     viewMode={viewMode}
                     setViewMode={setViewMode}

@@ -5,7 +5,7 @@
 /* CSS Custom Properties for Theme System */
 :root {
   /* Light theme colors */
-  --color-primary: 59 130 246; /* blue-500 */
+  --color-primary: 45 212 191; /* teal-400 */
   --color-primary-foreground: 255 255 255;
   --color-secondary: 244 244 245; /* zinc-100 */
   --color-secondary-foreground: 39 39 42; /* zinc-800 */
@@ -17,28 +17,29 @@
   --color-destructive-foreground: 255 255 255;
   --color-border: 228 228 231; /* zinc-200 */
   --color-input: 228 228 231; /* zinc-200 */
-  --color-ring: 59 130 246; /* blue-500 */
+  --color-ring: 45 212 191; /* teal-400 */
   --color-background: 255 255 255;
   --color-foreground: 39 39 42; /* zinc-800 */
   --color-card: 255 255 255;
   --color-card-foreground: 39 39 42; /* zinc-800 */
   --color-popover: 255 255 255;
   --color-popover-foreground: 39 39 42; /* zinc-800 */
-  
-  /* App specific colors */
   --color-sidebar: 249 250 251; /* gray-50 */
   --color-sidebar-foreground: 17 24 39; /* gray-900 */
   --color-nav: 255 255 255;
   --color-nav-foreground: 17 24 39; /* gray-900 */
   --color-content: 255 255 255;
   --color-content-foreground: 17 24 39; /* gray-900 */
-  
-  /* Status colors */
   --color-success: 34 197 94; /* green-500 */
   --color-warning: 245 158 11; /* amber-500 */
   --color-error: 239 68 68; /* red-500 */
   --color-info: 59 130 246; /* blue-500 */
-  
+  --color-teal-50: 240 253 250;
+  --color-teal-100: 204 251 241;
+  --color-teal-300: 94 234 212;
+  --color-teal-500: 20 184 166;
+  --color-teal-600: 13 148 136;
+  --color-teal-800: 15 118 110;
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
@@ -47,9 +48,8 @@
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }
 
-/* Dark theme colors */
 .dark {
-  --color-primary: 59 130 246; /* blue-500 */
+  --color-primary: 20 184 166; /* teal-500 */
   --color-primary-foreground: 255 255 255;
   --color-secondary: 39 39 42; /* zinc-800 */
   --color-secondary-foreground: 244 244 245; /* zinc-100 */
@@ -61,29 +61,29 @@
   --color-destructive-foreground: 255 255 255;
   --color-border: 39 39 42; /* zinc-800 */
   --color-input: 39 39 42; /* zinc-800 */
-  --color-ring: 59 130 246; /* blue-500 */
+  --color-ring: 20 184 166; /* teal-500 */
   --color-background: 9 9 11; /* zinc-950 */
   --color-foreground: 244 244 245; /* zinc-100 */
   --color-card: 24 24 27; /* zinc-900 */
   --color-card-foreground: 244 244 245; /* zinc-100 */
   --color-popover: 24 24 27; /* zinc-900 */
   --color-popover-foreground: 244 244 245; /* zinc-100 */
-  
-  /* App specific colors */
   --color-sidebar: 17 24 39; /* gray-900 */
   --color-sidebar-foreground: 249 250 251; /* gray-50 */
   --color-nav: 31 41 55; /* gray-800 */
   --color-nav-foreground: 249 250 251; /* gray-50 */
   --color-content: 24 24 27; /* zinc-900 */
   --color-content-foreground: 244 244 245; /* zinc-100 */
-  
-  /* Status colors */
   --color-success: 34 197 94; /* green-500 */
   --color-warning: 245 158 11; /* amber-500 */
   --color-error: 239 68 68; /* red-500 */
   --color-info: 59 130 246; /* blue-500 */
-  
-  /* Shadows in dark mode */
+  --color-teal-50: 15 118 110;
+  --color-teal-100: 17 94 89;
+  --color-teal-300: 45 212 191;
+  --color-teal-500: 20 184 166;
+  --color-teal-600: 13 148 136;
+  --color-teal-800: 6 78 59;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
@@ -92,18 +92,13 @@
 }
 
 @layer base {
-  /* Updated body styles to use theme variables */
   body {
     background-color: rgb(var(--color-background));
     color: rgb(var(--color-foreground));
   }
-
-  /* Prevent theme flashing */
   .theme-loading * {
     transition: none !important;
   }
-
-  /* Smooth transitions for theme changes */
   * {
     transition: background-color 0.2s ease-in-out, 
                 color 0.2s ease-in-out, 
@@ -113,11 +108,23 @@
 }
 
 @layer components {
-  .btn-primary {
-    @apply bg-brand-400 text-white rounded px-4 py-2 hover:bg-brand-500 transition-colors duration-200;
+  /* Override default select styles */
+  select {
+    @apply bg-background text-foreground border-border focus:outline-none focus:ring-2 focus:ring-primary;
   }
-
-  /* Utility classes using CSS variables */
+  select[data-active='true'] {
+    @apply bg-teal-50 text-teal-800 border-teal-500;
+  }
+  /* Override default input styles */
+  input[type="text"] {
+    @apply bg-background text-foreground border-border focus:outline-none focus:ring-2 focus:ring-primary;
+  }
+  input[type="text"][data-active='true'] {
+    @apply bg-teal-50 text-teal-800 border-teal-500;
+  }
+  .btn-primary {
+    @apply bg-primary text-primary-foreground rounded px-4 py-2 hover:bg-teal-500 transition-colors duration-200;
+  }
   .bg-background { background-color: rgb(var(--color-background)); }
   .bg-foreground { background-color: rgb(var(--color-foreground)); }
   .bg-card { background-color: rgb(var(--color-card)); }
@@ -139,7 +146,12 @@
   .bg-sidebar { background-color: rgb(var(--color-sidebar)); }
   .bg-nav { background-color: rgb(var(--color-nav)); }
   .bg-content { background-color: rgb(var(--color-content)); }
-
+  .bg-teal-50 { background-color: rgb(var(--color-teal-50)); }
+  .bg-teal-100 { background-color: rgb(var(--color-teal-100)); }
+  .bg-teal-300 { background-color: rgb(var(--color-teal-300)); }
+  .bg-teal-500 { background-color: rgb(var(--color-teal-500)); }
+  .bg-teal-600 { background-color: rgb(var(--color-teal-600)); }
+  .bg-teal-800 { background-color: rgb(var(--color-teal-800)); }
   .text-background { color: rgb(var(--color-background)); }
   .text-foreground { color: rgb(var(--color-foreground)); }
   .text-card { color: rgb(var(--color-card)); }
@@ -162,23 +174,23 @@
   .text-sidebar-foreground { color: rgb(var(--color-sidebar-foreground)); }
   .text-nav-foreground { color: rgb(var(--color-nav-foreground)); }
   .text-content-foreground { color: rgb(var(--color-content-foreground)); }
-
   .text-success { color: rgb(var(--color-success)); }
   .text-warning { color: rgb(var(--color-warning)); }
   .text-error { color: rgb(var(--color-error)); }
   .text-info { color: rgb(var(--color-info)); }
-
+  .text-teal-500 { color: rgb(var(--color-teal-500)); }
+  .text-teal-600 { color: rgb(var(--color-teal-600)); }
+  .text-teal-800 { color: rgb(var(--color-teal-800)); }
   .border-border { border-color: rgb(var(--color-border)); }
   .border-input { border-color: rgb(var(--color-input)); }
   .border-ring { border-color: rgb(var(--color-ring)); }
   .border-primary { border-color: rgb(var(--color-primary)); }
   .border-secondary { border-color: rgb(var(--color-secondary)); }
   .border-destructive { border-color: rgb(var(--color-destructive)); }
-
+  .border-teal-300 { border-color: rgb(var(--color-teal-300)); }
+  .border-teal-500 { border-color: rgb(var(--color-teal-500)); }
   .ring-ring { --tw-ring-color: rgb(var(--color-ring)); }
   .ring-offset-background { --tw-ring-offset-color: rgb(var(--color-background)); }
-
-  /* Shadow utilities */
   .shadow-theme-sm { box-shadow: var(--shadow-sm); }
   .shadow-theme { box-shadow: var(--shadow); }
   .shadow-theme-md { box-shadow: var(--shadow-md); }
@@ -186,15 +198,14 @@
   .shadow-theme-xl { box-shadow: var(--shadow-xl); }
 }
 
-/* Scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;
   height: 3px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: #A5D6A7;
+  background-color: rgb(var(--color-teal-300));
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #00695C;
+  background-color: rgb(var(--color-teal-600));
 }

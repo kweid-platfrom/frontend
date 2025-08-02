@@ -151,29 +151,29 @@ const AppSidebar = ({
             {/* Mobile backdrop */}
             {open && (
                 <div 
-                    className="fixed inset-0 z-40 bg-gray-600/75 lg:hidden transition-opacity duration-300 ease-in-out"
+                    className="fixed inset-0 z-40 bg-background/50 lg:hidden transition-opacity duration-300 ease-in-out"
                     onClick={onClose}
                 />
             )}
             
             {/* Sidebar */}
             <div className={`
-                fixed inset-y-0 left-0 z-50 bg-white shadow-xl transform transition-all duration-300 ease-in-out
+                fixed inset-y-0 left-0 z-50 bg-nav shadow-theme-xl transform transition-all duration-300 ease-in-out
                 lg:translate-x-0 lg:static lg:inset-0
                 ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                 ${isCollapsed ? 'lg:w-16' : 'lg:w-64'}
                 w-64 flex flex-col min-w-[64px] max-h-screen overflow-hidden
             `}>
                 {/* Sidebar Header */}
-                <div className="flex items-center h-16 px-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-white flex-shrink-0">
+                <div className="flex items-center h-16 px-4 border-b border-border bg-nav flex-shrink-0">
                     <div className="flex items-center min-w-0 flex-1">
                         <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
                             <div className="w-8 h-8 bg-gradient-to-br from-teal-200 to-teal-700 rounded-lg flex items-center justify-center shadow-lg">
-                                <BeakerIcon className="h-5 w-5 text-white" />
+                                <BeakerIcon className="h-5 w-5 text-primary-foreground" />
                             </div>
                         </div>
                         <div className={`ml-3 overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
-                            <span className="text-xl font-bold text-gray-900 whitespace-nowrap bg-gradient-to-r from-purple-600 to-teal-700 bg-clip-text text-transparent">
+                            <span className="text-xl font-bold text-foreground whitespace-nowrap bg-gradient-to-r from-purple-600 to-teal-700 bg-clip-text">
                                 Assura
                             </span>
                         </div>
@@ -183,13 +183,13 @@ const AppSidebar = ({
                         {/* Desktop collapse button */}
                         <button
                             onClick={toggleCollapse}
-                            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 hover:scale-105"
+                            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-105"
                             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                         >
                             <div className="transition-all duration-300">
                                 {isCollapsed ?
-                                    <ChevronRight className="h-4 w-4 text-gray-600" /> :
-                                    <ChevronLeft className="h-4 w-4 text-gray-600" />
+                                    <ChevronRight className="h-4 w-4" /> :
+                                    <ChevronLeft className="h-4 w-4" />
                                 }
                             </div>
                         </button>
@@ -197,9 +197,9 @@ const AppSidebar = ({
                         {/* Mobile close button */}
                         <button
                             onClick={onClose}
-                            className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-all duration-200"
+                            className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all duration-200"
                         >
-                            <X className="h-5 w-5 text-gray-600" />
+                            <X className="h-5 w-5" />
                         </button>
                     </div>
                 </div>
@@ -207,16 +207,16 @@ const AppSidebar = ({
                 {/* Active Suite Info - Only show when not collapsed or when there's a suite */}
                 {activeSuite && (
                     <div className={`
-                        bg-gray-50 border-b border-gray-200/50
+                        bg-secondary border-b border-border
                         transition-all duration-300 ease-in-out flex-shrink-0
                         ${isCollapsed ? 'h-0 overflow-hidden opacity-0' : 'min-h-[60px] px-4 opacity-100'}
                         flex items-center
                     `}>
                         <div className="w-full">
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-foreground">
                                 Current Suite
                             </div>
-                            <div className="text-sm text-gray-600 truncate">
+                            <div className="text-sm text-muted-foreground truncate">
                                 {activeSuite.name}
                             </div>
                         </div>
@@ -238,8 +238,8 @@ const AppSidebar = ({
                                         group/btn flex items-center w-full h-12 text-sm rounded-lg transition-all duration-300 ease-in-out
                                         ${isCollapsed ? 'px-2 justify-center' : 'px-3 justify-start'}
                                         ${isActive
-                                            ? 'bg-gradient-to-r from-blue-50 to-teal-50 text-teal-700 shadow-md shadow-teal-500/20 border border-teal-200/50'
-                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                                            ? 'bg-teal-50 text-teal-800 border border-teal-300 shadow-md shadow-teal-500/20'
+                                            : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground'
                                         }
                                     `}
                                 >
@@ -247,8 +247,8 @@ const AppSidebar = ({
                                     <div className="flex items-center justify-center w-5 h-5 flex-shrink-0">
                                         <Icon
                                             className={`h-5 w-5 transition-all duration-300 ease-in-out ${isActive
-                                                ? 'text-teal-700'
-                                                : 'text-gray-500 group-hover/btn:text-gray-700'
+                                                ? 'text-teal-800'
+                                                : 'text-muted-foreground group-hover/btn:text-foreground'
                                                 }`}
                                         />
                                     </div>
@@ -267,10 +267,10 @@ const AppSidebar = ({
 
                                 {/* Tooltip for collapsed state */}
                                 {isCollapsed && (
-                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200 ease-in-out">
+                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-background/90 text-foreground text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200 ease-in-out shadow-theme">
                                         <div className="relative">
                                             {item.name}
-                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900/90 rotate-45 transform"></div>
+                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-background/90 rotate-45 transform"></div>
                                         </div>
                                     </div>
                                 )}
@@ -281,7 +281,7 @@ const AppSidebar = ({
                 
                 {/* Subscription Status */}
                 <div className={`
-                    border-t border-gray-200/50 bg-gradient-to-r from-gray-50/50 to-white
+                    border-t border-border bg-nav
                     ${isCollapsed ? 'px-2' : 'px-4'}
                     transition-all duration-300 ease-in-out
                     py-3 flex-shrink-0
@@ -291,22 +291,22 @@ const AppSidebar = ({
                         ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}
                     `}>
                         {isPremiumUser ? (
-                            <div className="flex items-center space-x-2 text-sm text-green-600">
+                            <div className="flex items-center space-x-2 text-sm text-green-500">
                                 <Crown className="h-4 w-4 flex-shrink-0" />
                                 <span className="font-medium">Premium Plan</span>
                             </div>
                         ) : isTrialUser ? (
                             <div className="space-y-1">
-                                <div className="flex items-center space-x-2 text-sm text-blue-600">
+                                <div className="flex items-center space-x-2 text-sm text-blue-500">
                                     <Crown className="h-4 w-4 flex-shrink-0" />
                                     <span className="font-medium">Trial Active</span>
                                 </div>
-                                <div className="text-xs text-blue-500 ml-6">
+                                <div className="text-xs text-blue-400 ml-6">
                                     {trialDaysRemaining || 0} days remaining
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                                 <span className="font-medium">Free Plan</span>
                             </div>
                         )}
@@ -315,7 +315,7 @@ const AppSidebar = ({
                 
                 {/* Footer */}
                 <div className={`
-                    border-t border-gray-200/50
+                    border-t border-border
                     ${isCollapsed ? 'px-2' : 'px-4'}
                     transition-all duration-300 ease-in-out
                     py-2 flex-shrink-0
@@ -330,11 +330,11 @@ const AppSidebar = ({
                                 className={`
                                     group/btn flex items-center w-full h-10 text-sm rounded-lg transition-all duration-300 ease-in-out
                                     ${isCollapsed ? 'px-2 justify-center' : 'px-3 justify-start'}
-                                    text-gray-600 hover:bg-gray-50 hover:text-gray-800
+                                    text-muted-foreground hover:bg-secondary/80 hover:text-foreground
                                 `}
                             >
                                 <div className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-                                    <Settings className="h-5 w-5 text-gray-500 group-hover/btn:text-gray-700 transition-colors duration-300 ease-in-out" />
+                                    <Settings className="h-5 w-5 text-muted-foreground group-hover/btn:text-foreground transition-colors duration-300 ease-in-out" />
                                 </div>
                                 <span className={`
                                     font-medium whitespace-nowrap
@@ -347,10 +347,10 @@ const AppSidebar = ({
 
                             {/* Tooltip for collapsed state */}
                             {isCollapsed && (
-                                <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200 ease-in-out">
+                                <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-background/90 text-foreground text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200 ease-in-out shadow-theme">
                                     <div className="relative">
                                         Settings
-                                        <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900/90 rotate-45 transform"></div>
+                                        <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-background/90 rotate-45 transform"></div>
                                     </div>
                                 </div>
                             )}
@@ -363,11 +363,11 @@ const AppSidebar = ({
                                     className={`
                                         group/btn flex items-center w-full h-10 text-sm rounded-lg transition-all duration-300 ease-in-out
                                         ${isCollapsed ? 'px-2 justify-center' : 'px-3 justify-start'}
-                                        text-gray-600 hover:bg-gray-50 hover:text-gray-800
+                                        text-muted-foreground hover:bg-secondary/80 hover:text-foreground
                                     `}
                                 >
                                     <div className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-                                        <CreditCard className="h-5 w-5 text-gray-500 group-hover/btn:text-gray-700 transition-colors duration-300 ease-in-out" />
+                                        <CreditCard className="h-5 w-5 text-muted-foreground group-hover/btn:text-foreground transition-colors duration-300 ease-in-out" />
                                     </div>
                                     <span className={`
                                         font-medium whitespace-nowrap
@@ -380,10 +380,10 @@ const AppSidebar = ({
 
                                 {/* Tooltip for collapsed state */}
                                 {isCollapsed && (
-                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-gray-900/90 backdrop-blur-sm text-white text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200 ease-in-out">
+                                    <div className="hidden lg:group-hover:block absolute left-full top-0 ml-6 px-3 py-2 bg-background/90 text-foreground text-sm rounded-lg whitespace-nowrap z-[60] pointer-events-none transition-all duration-200 ease-in-out shadow-theme">
                                         <div className="relative">
                                             Upgrade
-                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900/90 rotate-45 transform"></div>
+                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-background/90 rotate-45 transform"></div>
                                         </div>
                                     </div>
                                 )}

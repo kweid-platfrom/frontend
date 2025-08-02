@@ -132,6 +132,44 @@ export const AppProvider = ({ children }) => {
         return await deleteFunction(testCaseId);
     }, [testCases.actions.deleteTestCase, getCurrentAppState]);
 
+    // Create properly wrapped bug functions that work with the updated bugReducer
+    const wrappedCreateBug = useCallback(async (bugData, sprintId = null) => {
+        const currentSuiteId = suites.state.activeSuite?.id;
+        if (!currentSuiteId && !bugData.suiteId && !bugData.suite_id) {
+            throw new Error('No active suite found. Please select a test suite first.');
+        }
+
+        const enhancedBugData = {
+            ...bugData,
+            suiteId: bugData.suiteId || bugData.suite_id || currentSuiteId,
+        };
+
+        return await bugs.actions.createBug(enhancedBugData, sprintId);
+    }, [bugs.actions.createBug, suites.state.activeSuite?.id]);
+
+    const wrappedUpdateBug = useCallback(async (bugId, updateData) => {
+        const currentSuiteId = suites.state.activeSuite?.id;
+        if (!currentSuiteId && !updateData.suiteId && !updateData.suite_id) {
+            throw new Error('No active suite found. Please select a test suite first.');
+        }
+
+        const enhancedUpdateData = {
+            ...updateData,
+            suiteId: updateData.suiteId || updateData.suite_id || currentSuiteId,
+        };
+
+        return await bugs.actions.updateBug(bugId, enhancedUpdateData);
+    }, [bugs.actions.updateBug, suites.state.activeSuite?.id]);
+
+    const wrappedDeleteBug = useCallback(async (bugId) => {
+        const currentSuiteId = suites.state.activeSuite?.id;
+        if (!currentSuiteId) {
+            throw new Error('No active suite found. Please select a test suite first.');
+        }
+
+        return await bugs.actions.deleteBug(bugId, currentSuiteId);
+    }, [bugs.actions.deleteBug, suites.state.activeSuite?.id]);
+
     // Theme management functions
     const setTheme = useCallback((newTheme) => {
         try {
@@ -390,7 +428,7 @@ export const AppProvider = ({ children }) => {
         }
     }, [ai.actions, ai.state.settings.provider, ui.actions]);
 
-    // Helper functions for linking operations (unchanged)
+    // Helper functions for linking operations (updated to use wrapped bug functions)
     const linkTestCasesToBug = async (bugId, testCaseIds) => {
         return handleFirebaseOperation(
             () => FirestoreService.batchLinkTestCasesToBug(bugId, testCaseIds),
@@ -403,7 +441,8 @@ export const AppProvider = ({ children }) => {
             })
         ).then((result) => {
             if (result.success) {
-                bugs.actions.updateBug(bugId, result.data.bug);
+                // Use wrapped updateBug function
+                wrappedUpdateBug(bugId, result.data.bug);
                 result.data.testCases.forEach((tc) => {
                     testCases.actions.updateTestCase(tc.id, tc);
                 });
@@ -424,7 +463,8 @@ export const AppProvider = ({ children }) => {
             })
         ).then((result) => {
             if (result.success) {
-                bugs.actions.updateBug(bugId, result.data.bug);
+                // Use wrapped updateBug function
+                wrappedUpdateBug(bugId, result.data.bug);
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
             }
             return result;
@@ -445,7 +485,8 @@ export const AppProvider = ({ children }) => {
             if (result.success) {
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
                 result.data.bugs.forEach((bug) => {
-                    bugs.actions.updateBug(bug.id, bug);
+                    // Use wrapped updateBug function
+                    wrappedUpdateBug(bug.id, bug);
                 });
             }
             return result;
@@ -465,7 +506,8 @@ export const AppProvider = ({ children }) => {
         ).then((result) => {
             if (result.success) {
                 testCases.actions.updateTestCase(testCaseId, result.data.testCase);
-                bugs.actions.updateBug(bugId, result.data.bug);
+                // Use wrapped updateBug function
+                wrappedUpdateBug(bugId, result.data.bug);
             }
             return result;
         });
@@ -527,7 +569,7 @@ export const AppProvider = ({ children }) => {
             })(recordingData);
 
             if (result.success && networkErrors.length > 0) {
-                // Create bug for network errors
+                // Create bug for network errors using wrapped function
                 const bugData = {
                     title: `Network Error: ${networkErrors[0].status || 'Unknown'}`,
                     description: `Auto-detected network error during recording:\n${JSON.stringify(networkErrors, null, 2)}`,
@@ -536,7 +578,7 @@ export const AppProvider = ({ children }) => {
                     created_at: new Date().toISOString(),
                     recordingIds: [recordingId],
                 };
-                const bugResult = await bugs.actions.createBug(bugData);
+                const bugResult = await wrappedCreateBug(bugData);
                 if (bugResult.success) {
                     // Link recording to bug
                     await FirestoreService.recordings.linkRecordingToBug(recordingId, bugResult.data.id);
@@ -1066,7 +1108,12 @@ export const AppProvider = ({ children }) => {
                 updateTestCase: wrappedUpdateTestCase,
                 deleteTestCase: wrappedDeleteTestCase,
             },
-            bugs: bugs.actions,
+            bugs: {
+                ...bugs.actions,
+                createBug: wrappedCreateBug,
+                updateBug: wrappedUpdateBug,
+                deleteBug: wrappedDeleteBug,
+            },
             recordings: {
                 ...recordings.actions,
                 saveRecording,
@@ -1156,6 +1203,9 @@ export const AppProvider = ({ children }) => {
         wrappedCreateTestCase,
         wrappedUpdateTestCase,
         wrappedDeleteTestCase,
+        wrappedCreateBug,
+        wrappedUpdateBug,
+        wrappedDeleteBug,
         saveRecording,
         linkRecordingToBug,
         generateTestCasesWithAI,

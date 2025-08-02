@@ -65,14 +65,14 @@ const AIGenerationForm = ({
 
     const saveEdit = () => {
         if (!editingCell) return;
-        
+
         const [testCaseId, field] = editingCell.split('-');
         const newValue = field === 'steps' ? editValue.split('\n').filter(s => s.trim()) : editValue;
-        
+
         setGeneratedTestCases(prev =>
             prev.map(tc => tc.id === testCaseId ? { ...tc, [field]: newValue } : tc)
         );
-        
+
         setEditingCell(null);
         setEditValue('');
     };
@@ -83,33 +83,30 @@ const AIGenerationForm = ({
     };
 
     const renderInputForm = () => (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-card rounded-lg shadow-theme-sm border border-border p-6">
             <div className="space-y-6">
                 <div>
-                    <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                        Generate Test Cases with AI
-                    </h2>
-                    <p className="text-gray-600">
+                    <p className="text-muted-foreground">
                         Describe your requirements to automatically generate comprehensive test cases.
                     </p>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2">
                         Requirements / User Story *
                     </label>
                     <textarea
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         placeholder="Enter requirements, user story, or feature description..."
-                        className="w-full border border-gray-300 rounded-md px-4 py-3 h-40 resize-y focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 text-sm"
+                        className="w-full bg-background text-foreground border border-border rounded-md px-4 py-3 h-40 resize-y focus:outline-none focus:ring-1 focus:ring-primary text-sm"
                         disabled={isGenerating}
                     />
                     <div className="mt-2 flex items-center justify-between">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                             {prompt.length} characters
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                             Recommended: 200+ characters
                         </span>
                     </div>
@@ -117,7 +114,7 @@ const AIGenerationForm = ({
 
                 <button
                     onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                    className="flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800 transition-colors"
+                    className="flex items-center gap-2 text-sm text-primary hover:text-primary-foreground transition-colors"
                     disabled={isGenerating}
                 >
                     <Settings size={16} />
@@ -125,15 +122,15 @@ const AIGenerationForm = ({
                 </button>
 
                 {showAdvancedSettings && (
-                    <div className="border border-gray-200 rounded-md p-6 space-y-4 bg-gray-50">
-                        <h3 className="font-medium text-gray-900">Advanced Configuration</h3>
+                    <div className="border border-border rounded-md p-6 space-y-4 bg-muted">
+                        <h3 className="font-medium text-foreground">Advanced Configuration</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
+                                <label className="block text-sm font-medium text-foreground mb-2">Format</label>
                                 <select
                                     value={templateConfig.format}
                                     onChange={(e) => handleConfigChange('format', e.target.value)}
-                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                    className="w-full bg-background text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
                                     <option value="Given-When-Then">Given-When-Then</option>
                                     <option value="BDD">BDD</option>
@@ -142,11 +139,11 @@ const AIGenerationForm = ({
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Framework</label>
+                                <label className="block text-sm font-medium text-foreground mb-2">Framework</label>
                                 <select
                                     value={templateConfig.framework}
                                     onChange={(e) => handleConfigChange('framework', e.target.value)}
-                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                    className="w-full bg-background text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
                                     <option value="Generic">Generic</option>
                                     <option value="Cypress">Cypress</option>
@@ -157,12 +154,12 @@ const AIGenerationForm = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Test Types</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Test Types</label>
                             <input
                                 type="text"
                                 value={templateConfig.types}
                                 onChange={(e) => handleConfigChange('types', e.target.value)}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                className="w-full bg-background text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 placeholder="Functional, Integration, Edge Case, etc."
                             />
                         </div>
@@ -172,9 +169,9 @@ const AIGenerationForm = ({
                                 type="checkbox"
                                 checked={templateConfig.includeTestData}
                                 onChange={(e) => handleConfigChange('includeTestData', e.target.checked)}
-                                className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
                             />
-                            <label className="text-sm text-gray-700">Include Test Data Examples</label>
+                            <label className="text-sm text-foreground">Include Test Data Examples</label>
                         </div>
                     </div>
                 )}
@@ -182,7 +179,7 @@ const AIGenerationForm = ({
                 <div className="flex justify-end pt-4">
                     <button
                         onClick={onGenerate}
-                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded hover:from-teal-700 hover:to-teal-800 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-teal-500 transition-all shadow-theme-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                         disabled={isGenerating || !prompt?.trim()}
                     >
                         <Wand2 size={16} />
@@ -196,7 +193,7 @@ const AIGenerationForm = ({
     const EditableCell = ({ value, testCaseId, field, isEditing, multiline = false }) => {
         const displayValue = Array.isArray(value) ? value.join(', ') : value;
         const cellKey = `${testCaseId}-${field}`;
-        
+
         if (isEditing && editingCell === cellKey) {
             return (
                 <div className="flex items-center gap-2">
@@ -204,7 +201,7 @@ const AIGenerationForm = ({
                         <textarea
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs resize-y"
+                            className="w-full bg-background text-foreground border border-border rounded px-2 py-1 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-primary"
                             rows={3}
                             autoFocus
                         />
@@ -213,14 +210,14 @@ const AIGenerationForm = ({
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                            className="w-full bg-background text-foreground border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
                             autoFocus
                         />
                     )}
-                    <button onClick={saveEdit} className="text-green-600 hover:text-green-800">
+                    <button onClick={saveEdit} className="text-success hover:text-green-800">
                         <Check size={12} />
                     </button>
-                    <button onClick={cancelEdit} className="text-red-600 hover:text-red-800">
+                    <button onClick={cancelEdit} className="text-destructive hover:text-red-800">
                         <X size={12} />
                     </button>
                 </div>
@@ -228,12 +225,12 @@ const AIGenerationForm = ({
         }
 
         return (
-            <div 
-                className="group flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+            <div
+                className="group flex items-center gap-2 cursor-pointer hover:bg-muted p-1 rounded"
                 onClick={() => startEdit(testCaseId, field, value)}
             >
-                <span className="text-xs text-gray-900 flex-1">{displayValue}</span>
-                <Edit2 size={10} className="text-gray-400 opacity-0 group-hover:opacity-100" />
+                <span className="text-xs text-foreground flex-1">{displayValue}</span>
+                <Edit2 size={10} className="text-muted-foreground opacity-0 group-hover:opacity-100" />
             </div>
         );
     };
@@ -248,16 +245,16 @@ const AIGenerationForm = ({
 
         return Object.entries(groupedTestCases).map(([type, testCases]) => (
             <div key={type} className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                     {type} Tests ({testCases.length})
                 </h3>
-                
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+
+                <div className="bg-card rounded-lg border border-border overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-border">
+                            <thead className="bg-muted">
                                 <tr>
-                                    <th className="w-12 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="w-12 px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         <input
                                             type="checkbox"
                                             checked={testCases.every(tc => selectedTestCases.has(tc.id))}
@@ -273,83 +270,83 @@ const AIGenerationForm = ({
                                                 });
                                                 setSelectedTestCases(newSet);
                                             }}
-                                            className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                            className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
                                         />
                                     </th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         ID
                                     </th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         Test Case Description
                                     </th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         Preconditions
                                     </th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         Steps
                                     </th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         Expected Result
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-card divide-y divide-border">
                                 {testCases.map((testCase, index) => (
-                                    <tr 
-                                        key={testCase.id} 
-                                        className={`hover:bg-gray-50 ${selectedTestCases.has(testCase.id) ? 'bg-teal-50' : ''}`}
+                                    <tr
+                                        key={testCase.id}
+                                        className={`hover:bg-muted ${selectedTestCases.has(testCase.id) ? 'bg-teal-50' : ''}`}
                                     >
                                         <td className="px-3 py-4 whitespace-nowrap">
                                             <input
                                                 type="checkbox"
                                                 checked={selectedTestCases.has(testCase.id)}
                                                 onChange={() => handleToggleSelect(testCase.id)}
-                                                className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                                className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
                                             />
                                         </td>
-                                        <td className="px-3 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
+                                        <td className="px-3 py-4 whitespace-nowrap text-xs font-medium text-foreground">
                                             TC-{String(index + 1).padStart(3, '0')}
                                         </td>
-                                        <td className="px-3 py-4 text-xs text-gray-900 max-w-xs">
+                                        <td className="px-3 py-4 text-xs text-foreground max-w-xs">
                                             <div className="font-medium mb-1">
-                                                <EditableCell 
-                                                    value={testCase.title} 
-                                                    testCaseId={testCase.id} 
-                                                    field="title" 
+                                                <EditableCell
+                                                    value={testCase.title}
+                                                    testCaseId={testCase.id}
+                                                    field="title"
                                                     isEditing={true}
                                                 />
                                             </div>
-                                            <EditableCell 
-                                                value={testCase.description} 
-                                                testCaseId={testCase.id} 
-                                                field="description" 
+                                            <EditableCell
+                                                value={testCase.description}
+                                                testCaseId={testCase.id}
+                                                field="description"
                                                 isEditing={true}
                                                 multiline={true}
                                             />
                                         </td>
-                                        <td className="px-3 py-4 text-xs text-gray-900 max-w-xs">
-                                            <EditableCell 
-                                                value={testCase.preconditions} 
-                                                testCaseId={testCase.id} 
-                                                field="preconditions" 
+                                        <td className="px-3 py-4 text-xs text-foreground max-w-xs">
+                                            <EditableCell
+                                                value={testCase.preconditions}
+                                                testCaseId={testCase.id}
+                                                field="preconditions"
                                                 isEditing={true}
                                                 multiline={true}
                                             />
                                         </td>
-                                        <td className="px-3 py-4 text-xs text-gray-900 max-w-xs">
-                                            <EditableCell 
-                                                value={testCase.steps} 
-                                                testCaseId={testCase.id} 
-                                                field="steps" 
+                                        <td className="px-3 py-4 text-xs text-foreground max-w-xs">
+                                            <EditableCell
+                                                value={testCase.steps}
+                                                testCaseId={testCase.id}
+                                                field="steps"
                                                 isEditing={true}
                                                 multiline={true}
                                             />
                                         </td>
-                                        <td className="px-3 py-4 text-xs text-gray-900 max-w-xs">
-                                            <EditableCell 
-                                                value={testCase.expectedResult} 
-                                                testCaseId={testCase.id} 
-                                                field="expectedResult" 
+                                        <td className="px-3 py-4 text-xs text-foreground max-w-xs">
+                                            <EditableCell
+                                                value={testCase.expectedResult}
+                                                testCaseId={testCase.id}
+                                                field="expectedResult"
                                                 isEditing={true}
                                                 multiline={true}
                                             />
@@ -367,24 +364,24 @@ const AIGenerationForm = ({
     const renderReviewStep = () => (
         <div className="space-y-6">
             {generationSummary && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <div className="bg-card rounded-lg shadow-theme-sm border border-border p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                         <div className="relative">
-                            <CheckCircle2 className="h-5 w-5 text-green-600" />
-                            <Sparkles className="h-3 w-3 text-yellow-500 absolute -top-1 -right-1" />
+                            <CheckCircle2 className="h-5 w-5 text-success" />
+                            <Sparkles className="h-3 w-3 text-warning absolute -top-1 -right-1" />
                         </div>
                         AI Analysis
                     </h3>
-                    <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-4 border border-teal-200">
-                        <p className="text-gray-700 leading-relaxed">
-                            {generationSummary?.automationRecommendations || 
-                             generationSummary?.riskAssessment || 
-                             generationSummary?.aiResponse ||
-                             `I analyzed your requirements and generated ${generatedTestCases.length} comprehensive test cases. The test suite covers various scenarios including functional testing, edge cases, and validation flows to ensure thorough coverage of your application's requirements. Each test case has been designed with clear steps, expected results, and appropriate priority levels.`}
+                    <div className="bg-gradient-to-r from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200">
+                        <p className="text-foreground leading-relaxed">
+                            {generationSummary?.automationRecommendations ||
+                                generationSummary?.riskAssessment ||
+                                generationSummary?.aiResponse ||
+                                `I analyzed your requirements and generated ${generatedTestCases.length} comprehensive test cases. The test suite covers various scenarios including functional testing, edge cases, and validation flows to ensure thorough coverage of your application's requirements. Each test case has been designed with clear steps, expected results, and appropriate priority levels.`}
                         </p>
                         {generationSummary?.coverageAreas && generationSummary.coverageAreas.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-teal-200">
-                                <p className="text-sm font-medium text-gray-700 mb-2">Coverage Areas:</p>
+                                <p className="text-sm font-medium text-foreground mb-2">Coverage Areas:</p>
                                 <div className="flex flex-wrap gap-2">
                                     {generationSummary.coverageAreas.map((area, index) => (
                                         <span key={index} className="px-2 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-medium">
@@ -398,11 +395,11 @@ const AIGenerationForm = ({
                 </div>
             )}
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="px-6 py-4 border-b border-gray-200">
+            <div className="bg-card rounded-lg shadow-theme-sm border border-border">
+                <div className="px-6 py-4 border-b border-border">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-lg font-semibold text-gray-900">
+                            <h3 className="text-lg font-semibold text-foreground">
                                 Generated Test Cases ({generatedTestCases.length})
                             </h3>
                             <span className="px-3 py-1 text-sm bg-teal-100 text-teal-700 rounded-full font-medium">
@@ -412,20 +409,20 @@ const AIGenerationForm = ({
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={handleSelectAll}
-                                className="text-sm text-teal-600 hover:text-teal-800 font-medium transition-colors"
+                                className="text-sm text-primary hover:text-primary-foreground font-medium transition-colors"
                             >
                                 {selectedTestCases.size === generatedTestCases.length ? 'Deselect All' : 'Select All'}
                             </button>
-                            <div className="h-4 w-px bg-gray-300" />
+                            <div className="h-4 w-px bg-border" />
                             <button
                                 onClick={onBackToEdit}
-                                className="px-3 py-1 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors text-sm"
+                                className="px-3 py-1 text-muted-foreground bg-card border border-border rounded-md hover:bg-muted transition-colors text-sm"
                             >
                                 Back to Edit
                             </button>
                             <button
                                 onClick={onSaveSelected}
-                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-md hover:from-green-700 hover:to-green-800 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                className="flex items-center gap-2 px-4 py-2 bg-success text-primary-foreground rounded-md hover:bg-green-700 transition-all shadow-theme-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                                 disabled={selectedTestCases.size === 0}
                             >
                                 <Save size={16} />
@@ -437,10 +434,10 @@ const AIGenerationForm = ({
 
                 <div className="p-6">
                     {renderTestCasesByType()}
-                    
+
                     {generatedTestCases.length === 0 && (
                         <div className="text-center py-12">
-                            <div className="text-gray-500">No test cases generated yet.</div>
+                            <div className="text-muted-foreground">No test cases generated yet.</div>
                         </div>
                     )}
                 </div>

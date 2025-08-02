@@ -9,27 +9,57 @@ const TestCaseMetrics = ({
     refresh = () => {},
     isRealtime = false
 }) => {
+    const getColorClasses = (color) => {
+        const colorMap = {
+            success: {
+                bg: 'bg-[rgb(var(--color-success)/0.1)]',
+                text: 'text-[rgb(var(--color-success))]',
+                bar: 'bg-[rgb(var(--color-success))]',
+                border: 'border-[rgb(var(--color-success)/0.2)]'
+            },
+            info: {
+                bg: 'bg-[rgb(var(--color-info)/0.1)]',
+                text: 'text-[rgb(var(--color-info))]',
+                bar: 'bg-[rgb(var(--color-info))]',
+                border: 'border-[rgb(var(--color-info)/0.2)]'
+            },
+            warning: {
+                bg: 'bg-[rgb(var(--color-warning)/0.1)]',
+                text: 'text-[rgb(var(--color-warning))]',
+                bar: 'bg-[rgb(var(--color-warning))]',
+                border: 'border-[rgb(var(--color-warning)/0.2)]'
+            },
+            error: {
+                bg: 'bg-[rgb(var(--color-error)/0.1)]',
+                text: 'text-[rgb(var(--color-error))]',
+                bar: 'bg-[rgb(var(--color-error))]',
+                border: 'border-[rgb(var(--color-error)/0.2)]'
+            }
+        };
+        return colorMap[color] || colorMap.info; // Default to info if color is not found
+    };
+
     // Handle loading state
     if (loading) {
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-900">Test Case Management</h2>
-                    <div className="flex items-center text-sm text-gray-500">
+                    <h2 className="text-xl font-bold text-foreground">Test Case Management</h2>
+                    <div className="flex items-center text-sm text-muted-foreground">
                         <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
                         Loading metrics...
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {[...Array(4)].map((_, i) => (
-                        <div key={i} className="bg-white rounded-lg border border-gray-200 p-6 animate-pulse">
+                        <div key={i} className="bg-card rounded-lg border border-border p-6 animate-pulse">
                             <div className="flex items-center justify-between mb-4">
-                                <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
+                                <div className="w-12 h-12 bg-muted rounded-lg"></div>
                             </div>
                             <div className="space-y-2">
-                                <div className="w-16 h-8 bg-gray-200 rounded"></div>
-                                <div className="w-24 h-4 bg-gray-200 rounded"></div>
-                                <div className="w-20 h-3 bg-gray-200 rounded"></div>
+                                <div className="w-16 h-8 bg-muted rounded"></div>
+                                <div className="w-24 h-4 bg-muted rounded"></div>
+                                <div className="w-20 h-3 bg-muted rounded"></div>
                             </div>
                         </div>
                     ))}
@@ -43,21 +73,21 @@ const TestCaseMetrics = ({
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-900">Test Case Management</h2>
+                    <h2 className="text-xl font-bold text-foreground">Test Case Management</h2>
                     <button
                         onClick={refresh}
-                        className="flex items-center px-3 py-1 text-sm text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50"
+                        className="flex items-center px-3 py-1 text-sm text-[rgb(var(--color-info))] hover:text-[rgb(var(--color-info)/0.8)] border border-[rgb(var(--color-info)/0.2)] rounded-lg hover:bg-[rgb(var(--color-info)/0.1)]"
                     >
                         <RefreshCw className="w-4 h-4 mr-1" />
                         Retry
                     </button>
                 </div>
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                <div className="bg-[rgb(var(--color-error)/0.1)] border border-[rgb(var(--color-error)/0.2)] rounded-lg p-6">
                     <div className="flex items-center">
-                        <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                        <AlertCircle className="w-5 h-5 text-[rgb(var(--color-error))] mr-2" />
                         <div>
-                            <h3 className="text-sm font-medium text-red-800">Error Loading Metrics</h3>
-                            <p className="text-sm text-red-600 mt-1">
+                            <h3 className="text-sm font-medium text-[rgb(var(--color-error))]">Error Loading Metrics</h3>
+                            <p className="text-sm text-[rgb(var(--color-error))] mt-1">
                                 {error?.message || 'Failed to load test case metrics. Please try again.'}
                             </p>
                         </div>
@@ -87,58 +117,42 @@ const TestCaseMetrics = ({
         trends = {}
     } = metrics;
 
-    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "blue", trend = null }) => {
-        const colorClasses = {
-            blue: 'bg-blue-50 text-blue-600',
-            green: 'bg-green-50 text-green-600',
-            orange: 'bg-orange-50 text-orange-600',
-            purple: 'bg-purple-50 text-purple-600',
-            red: 'bg-red-50 text-red-600',
-            yellow: 'bg-yellow-50 text-yellow-600'
-        };
-
+    const MetricCard = ({ title, value, subtitle, icon: Icon, color = "info", trend = null }) => {
+        const colors = getColorClasses(color);
         return (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+            <div className="bg-card rounded-lg border border-border p-6 hover:shadow-theme-md transition-shadow">
                 <div className="flex items-center justify-between mb-4">
-                    <div className={`p-3 rounded-lg ${colorClasses[color] || colorClasses.blue}`}>
-                        <Icon className="w-6 h-6" />
+                    <div className={`p-3 rounded-lg ${colors.bg}`}>
+                        <Icon className={`w-6 h-6 ${colors.text}`} />
                     </div>
                     {trend && (
-                        <div className={`flex items-center text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <div className={`flex items-center text-sm ${trend > 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-error))]'}`}>
                             <TrendingUp className={`w-4 h-4 mr-1 ${trend < 0 ? 'rotate-180' : ''}`} />
                             {Math.abs(trend)}%
                         </div>
                     )}
                 </div>
                 <div className="space-y-1">
-                    <p className="text-2xl font-bold text-gray-900">{value?.toLocaleString()}</p>
-                    <p className="text-sm font-medium text-gray-600">{title}</p>
-                    {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+                    <p className="text-2xl font-bold text-foreground">{value?.toLocaleString()}</p>
+                    <p className="text-sm font-medium text-muted-foreground">{title}</p>
+                    {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
                 </div>
             </div>
         );
     };
 
-    const ProgressBar = ({ label, value, total, color = "blue" }) => {
+    const ProgressBar = ({ label, value, total, color = "info" }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-        const colorClasses = {
-            blue: 'bg-blue-500',
-            green: 'bg-green-500',
-            orange: 'bg-orange-500',
-            purple: 'bg-purple-500',
-            red: 'bg-red-500',
-            yellow: 'bg-yellow-500'
-        };
-
+        const colors = getColorClasses(color);
         return (
             <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">{label}</span>
-                    <span className="font-medium text-gray-900">{value} ({percentage}%)</span>
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium text-foreground">{value} ({percentage}%)</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                     <div
-                        className={`${colorClasses[color] || colorClasses.blue} h-2 rounded-full transition-all duration-300`}
+                        className={`h-2 rounded-full transition-all duration-300 ${colors.bar}`}
                         style={{ width: `${percentage}%` }}
                     ></div>
                 </div>
@@ -148,27 +162,26 @@ const TestCaseMetrics = ({
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Test Case Management</h2>
+                <h2 className="text-xl font-bold text-foreground">Test Case Management</h2>
                 <div className="flex items-center space-x-4">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-muted-foreground">
                         Total: {totalTestCases.toLocaleString()} test cases
                     </div>
                     {lastUpdated && (
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-muted-foreground">
                             Last updated: {lastUpdated.toLocaleTimeString()}
                         </div>
                     )}
                     {isRealtime && (
-                        <div className="flex items-center text-xs text-green-600">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                        <div className="flex items-center text-xs text-[rgb(var(--color-success))]">
+                            <div className="w-2 h-2 bg-[rgb(var(--color-success))] rounded-full mr-1 animate-pulse"></div>
                             Live
                         </div>
                     )}
                     <button
                         onClick={refresh}
-                        className="flex items-center px-3 py-1 text-sm text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50"
+                        className="flex items-center px-3 py-1 text-sm text-[rgb(var(--color-info))] hover:text-[rgb(var(--color-info)/0.8)] border border-[rgb(var(--color-info)/0.2)] rounded-lg hover:bg-[rgb(var(--color-info)/0.1)]"
                     >
                         <RefreshCw className="w-4 h-4 mr-1" />
                         Refresh
@@ -176,14 +189,13 @@ const TestCaseMetrics = ({
                 </div>
             </div>
 
-            {/* Core Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard
                     title="Total Test Cases"
                     value={totalTestCases}
                     subtitle="All test cases created"
                     icon={CheckCircle}
-                    color="blue"
+                    color="info"
                     trend={trends.totalTestCases}
                 />
                 <MetricCard
@@ -191,7 +203,7 @@ const TestCaseMetrics = ({
                     value={manualTestCases}
                     subtitle={`${totalTestCases > 0 ? Math.round((manualTestCases / totalTestCases) * 100) : 0}% of total`}
                     icon={Clock}
-                    color="orange"
+                    color="warning"
                     trend={trends.manualTestCases}
                 />
                 <MetricCard
@@ -199,7 +211,7 @@ const TestCaseMetrics = ({
                     value={automatedTestCases}
                     subtitle={`${totalTestCases > 0 ? Math.round((automatedTestCases / totalTestCases) * 100) : 0}% automated`}
                     icon={Zap}
-                    color="green"
+                    color="success"
                     trend={trends.automatedTestCases}
                 />
                 <MetricCard
@@ -207,17 +219,15 @@ const TestCaseMetrics = ({
                     value={aiGeneratedTestCases}
                     subtitle={`${avgTestCasesPerAIGeneration} avg per generation`}
                     icon={Bot}
-                    color="purple"
+                    color="info"
                     trend={trends.aiGeneratedTestCases}
                 />
             </div>
 
-            {/* Test Case Distribution */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Test Case Types */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                        <Tags className="w-5 h-5 mr-2 text-blue-600" />
+                <div className="bg-card rounded-lg border border-border p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                        <Tags className="w-5 h-5 mr-2 text-[rgb(var(--color-info))]" />
                         Test Case Distribution
                     </h3>
                     <div className="space-y-4">
@@ -225,135 +235,132 @@ const TestCaseMetrics = ({
                             label="Manual Test Cases"
                             value={manualTestCases}
                             total={totalTestCases}
-                            color="orange"
+                            color="warning"
                         />
                         <ProgressBar
                             label="Automated Test Cases"
                             value={automatedTestCases}
                             total={totalTestCases}
-                            color="green"
+                            color="success"
                         />
                         <ProgressBar
                             label="AI Generated"
                             value={aiGeneratedTestCases}
                             total={totalTestCases}
-                            color="purple"
+                            color="info"
                         />
                     </div>
                 </div>
 
-                {/* Coverage Metrics */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Coverage Analysis</h3>
+                <div className="bg-card rounded-lg border border-border p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Coverage Analysis</h3>
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <div className="flex justify-between items-center p-3 bg-[rgb(var(--color-info)/0.1)] rounded-lg">
                             <div>
-                                <p className="font-medium text-blue-900">Functional Coverage</p>
-                                <p className="text-sm text-blue-600">Core functionality tests</p>
+                                <p className="font-medium text-foreground">Functional Coverage</p>
+                                <p className="text-sm text-muted-foreground">Core functionality tests</p>
                             </div>
-                            <div className="text-2xl font-bold text-blue-700">{functionalCoverage}%</div>
+                            <div className="text-2xl font-bold text-[rgb(var(--color-info))]">{functionalCoverage}%</div>
                         </div>
-                        <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
+                        <div className="flex justify-between items-center p-3 bg-[rgb(var(--color-warning)/0.1)] rounded-lg">
                             <div>
-                                <p className="font-medium text-yellow-900">Edge Case Coverage</p>
-                                <p className="text-sm text-yellow-600">Boundary & edge cases</p>
+                                <p className="font-medium text-foreground">Edge Case Coverage</p>
+                                <p className="text-sm text-muted-foreground">Boundary & edge cases</p>
                             </div>
-                            <div className="text-2xl font-bold text-yellow-700">{edgeCaseCoverage}%</div>
+                            <div className="text-2xl font-bold text-[rgb(var(--color-warning))]">{edgeCaseCoverage}%</div>
                         </div>
-                        <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                        <div className="flex justify-between items-center p-3 bg-[rgb(var(--color-error)/0.1)] rounded-lg">
                             <div>
-                                <p className="font-medium text-red-900">Negative Testing</p>
-                                <p className="text-sm text-red-600">Error & failure scenarios</p>
+                                <p className="font-medium text-foreground">Negative Testing</p>
+                                <p className="text-sm text-muted-foreground">Error & failure scenarios</p>
                             </div>
-                            <div className="text-2xl font-bold text-red-700">{negativeCaseCoverage}%</div>
+                            <div className="text-2xl font-bold text-[rgb(var(--color-error))]">{negativeCaseCoverage}%</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Quality & Enhancement Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Test Case Quality</h3>
+                <div className="bg-card rounded-lg border border-border p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Test Case Quality</h3>
                     <div className="space-y-4">
                         <div className="flex justify-between">
-                            <span className="text-gray-600">With Tags</span>
-                            <span className="font-medium">{testCasesWithTags}</span>
+                            <span className="text-muted-foreground">With Tags</span>
+                            <span className="font-medium text-foreground">{testCasesWithTags}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-gray-600">Linked to Bugs</span>
-                            <span className="font-medium">{testCasesLinkedToBugs}</span>
+                            <span className="text-muted-foreground">Linked to Bugs</span>
+                            <span className="font-medium text-foreground">{testCasesLinkedToBugs}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-gray-600">With Recordings</span>
-                            <span className="font-medium">{testCasesWithRecordings}</span>
+                            <span className="text-muted-foreground">With Recordings</span>
+                            <span className="font-medium text-foreground">{testCasesWithRecordings}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">AI Generation</h3>
+                <div className="bg-card rounded-lg border border-border p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4">AI Generation</h3>
                     <div className="space-y-4">
                         <div className="flex justify-between">
-                            <span className="text-gray-600">Success Rate</span>
-                            <span className="font-medium text-green-600">{aiGenerationSuccessRate}%</span>
+                            <span className="text-muted-foreground">Success Rate</span>
+                            <span className="font-medium text-[rgb(var(--color-success))]">{aiGenerationSuccessRate}%</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-gray-600">Avg per Generation</span>
-                            <span className="font-medium">{avgTestCasesPerAIGeneration}</span>
+                            <span className="text-muted-foreground">Avg per Generation</span>
+                            <span className="font-medium text-foreground">{avgTestCasesPerAIGeneration}</span>
                         </div>
-                        <div className="text-xs text-gray-500 pt-2">
+                        <div className="text-xs text-muted-foreground pt-2">
                             AI generates {avgTestCasesPerAIGeneration} test cases per successful attempt
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Maintenance</h3>
+                <div className="bg-card rounded-lg border border-border p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Maintenance</h3>
                     <div className="space-y-4">
                         <div className="flex justify-between">
-                            <span className="text-gray-600">Outdated</span>
-                            <span className="font-medium text-red-600">{outdatedTestCases}</span>
+                            <span className="text-muted-foreground">Outdated</span>
+                            <span className="font-medium text-[rgb(var(--color-error))]">{outdatedTestCases}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-gray-600">Recently Updated</span>
-                            <span className="font-medium text-green-600">{recentlyUpdatedTestCases}</span>
+                            <span className="text-muted-foreground">Recently Updated</span>
+                            <span className="font-medium text-[rgb(var(--color-success))]">{recentlyUpdatedTestCases}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-gray-600">Updates/Week</span>
-                            <span className="font-medium">{testCaseUpdateFrequency}</span>
+                            <span className="text-muted-foreground">Updates/Week</span>
+                            <span className="font-medium text-foreground">{testCaseUpdateFrequency}</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Test Case Health Summary */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Test Case Health Summary</h3>
+            <div className="bg-[rgb(var(--color-info)/0.1)] rounded-lg border border-[rgb(var(--color-info)/0.2)] p-6">
+                <h3 className="text-lg font-semibold text-foreground mb-4">Test Case Health Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-info))]">
                             {totalTestCases > 0 ? Math.round(((testCasesWithTags + testCasesWithRecordings) / (totalTestCases * 2)) * 100) : 0}%
                         </div>
-                        <div className="text-sm text-gray-600">Quality Score</div>
+                        <div className="text-sm text-muted-foreground">Quality Score</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-success))]">
                             {totalTestCases > 0 ? Math.round((automatedTestCases / totalTestCases) * 100) : 0}%
                         </div>
-                        <div className="text-sm text-gray-600">Automation Rate</div>
+                        <div className="text-sm text-muted-foreground">Automation Rate</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-2xl font-bold text-purple-600">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-info))]">
                             {totalTestCases > 0 ? Math.round((aiGeneratedTestCases / totalTestCases) * 100) : 0}%
                         </div>
-                        <div className="text-sm text-gray-600">AI Contribution</div>
+                        <div className="text-sm text-muted-foreground">AI Contribution</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-2xl font-bold text-orange-600">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-warning))]">
                             {totalTestCases > 0 ? Math.round(((functionalCoverage + edgeCaseCoverage + negativeCaseCoverage) / 3)) : 0}%
                         </div>
-                        <div className="text-sm text-gray-600">Avg Coverage</div>
+                        <div className="text-sm text-muted-foreground">Avg Coverage</div>
                     </div>
                 </div>
             </div>

@@ -34,7 +34,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Get data from context - memoized to prevent re-renders
+    // Memoized data from context
     const suites = useMemo(() => state.suites.testSuites || [], [state.suites.testSuites]);
     const userProfile = useMemo(() => state.auth.profile, [state.auth.profile]);
 
@@ -71,16 +71,15 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         setMounted(true);
     }, []);
 
+    // Prevent body scroll when modal is open
     useEffect(() => {
-        if (mounted) {
-            document.body.style.overflow = showBugForm ? "hidden" : "auto";
+        if (showBugForm) {
+            document.body.style.overflow = 'hidden';
         }
         return () => {
-            if (mounted) {
-                document.body.style.overflow = "auto";
-            }
+            document.body.style.overflow = 'unset';
         };
-    }, [showBugForm, mounted]);
+    }, [showBugForm]);
 
     useEffect(() => {
         if (mounted && showBugForm && activeSuite && !formData.selectedSuiteId) {
@@ -160,7 +159,26 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         setIsSubmitting(false);
     }, []);
 
-    // Helper function to safely convert values to lowercase strings
+    // Handle backdrop click
+    const handleBackdropClick = useCallback((e) => {
+        if (e.target === e.currentTarget) {
+            closeForm();
+        }
+    }, [closeForm]);
+
+    // Handle escape key
+    useEffect(() => {
+        const handleEscape = (e) => {
+            if (e.key === 'Escape' && showBugForm) {
+                closeForm();
+            }
+        };
+        
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [showBugForm, closeForm]);
+
+    // Helper function for safe lowercase conversion
     const safeToLowerCase = (value) => {
         if (value === null || value === undefined) return null;
         if (typeof value === 'string') return value.toLowerCase();
@@ -168,9 +186,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         return String(value).toLowerCase();
     };
 
-    // FIXED: Prevent page reload and handle form submission properly
     const handleSubmit = async (event) => {
-        // Prevent default form submission and page reload
         if (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -206,7 +222,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             const priority = getPriorityFromSeverity(formData.severity);
             const currentTimestamp = Timestamp.fromDate(new Date());
 
-            // FIX: Ensure we have the current user
             if (!currentUser?.uid) {
                 throw new Error('User authentication required');
             }
@@ -224,7 +239,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 priority: priority,
                 severity: formData.severity,
                 category: formData.category,
-                tags: [formData.category.toLowerCase().replace(/\s+/g, '_')],
+                tags: [safeToLowerCase(formData.category).replace(/\s+/g, '_')],
                 source: formData.source || "Manual",
                 environment: formData.environment || "Production",
                 frequency: formData.frequency || "Once",
@@ -248,9 +263,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 resolutionHistory: [],
                 commentCount: 0,
                 viewCount: 0,
-                // FIX: Only include suiteId (will be removed in reducer)
                 suiteId: formData.selectedSuiteId,
-                // FIX: Ensure correct user fields
                 created_by: currentUser.uid,
                 created_at: currentTimestamp,
                 updated_at: currentTimestamp,
@@ -275,13 +288,10 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             console.log('Submitting bug with user UID:', currentUser.uid);
             console.log('Bug data keys:', Object.keys(bugData));
 
-            // FIXED: Use await to ensure proper async handling
             const result = await actions.bugs.createBug(bugData);
             
-            // Wait a brief moment to ensure the bug is created before updating UI
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Call the optional callback
             if (onCreateBug && typeof onCreateBug === 'function') {
                 try {
                     await onCreateBug(result);
@@ -290,14 +300,12 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 }
             }
 
-            // Show success notification using the central toast system
             actions.ui.showNotification({
                 type: 'success',
                 title: 'Bug Created Successfully',
                 message: `Bug "${formData.title.trim()}" has been created and assigned.`
             });
 
-            // Close the modal after successful creation
             closeForm();
 
         } catch (error) {
@@ -316,7 +324,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     };
 
     const handleButtonClick = useCallback((event) => {
-        // Prevent any default behavior that might cause navigation
         if (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -370,32 +377,58 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
 
     return (
         <>
+            <style jsx global>{`
+                .bug-report-modal textarea,
+                .bug-report-modal input,
+                .bug-report-modal select {
+                    background-color: rgb(var(--color-background)) !important;
+                    color: rgb(var(--color-foreground)) !important;
+                    border: 1px solid rgb(var(--color-border)) !important;
+                }
+                .bug-report-modal textarea:focus,
+                .bug-report-modal input:focus,
+                .bug-report-modal select:focus {
+                    outline: none !important;
+                    border-color: rgb(var(--color-primary)) !important;
+                    box-shadow: 0 0 0 2px rgb(var(--color-primary)) !important;
+                }
+                .bug-report-modal textarea::placeholder,
+                .bug-report-modal input::placeholder {
+                    color: rgb(var(--color-muted-foreground)) !important;
+                }
+                .bug-report-modal label {
+                    color: rgb(var(--color-foreground)) !important;
+                }
+            `}</style>
             <button
                 type="button"
-                className={`group px-3 py-2 text-sm bg-teal-50 text-teal-700 border border-blue-200 hover:bg-teal-100 hover:border-teal-300 hover:shadow-md rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+                className={`group px-3 py-2 text-sm bg-primary text-primary-foreground border border-border hover:bg-primary/80 hover:border-border/80 hover:shadow-md rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
                 onClick={handleButtonClick}
                 disabled={isSubmitting || !canCreateBugs || !hasActiveSubscription}
             >
-                <BugAntIcon className="h-4 w-4 transition-transform group-hover:scale-110" />
+                <BugAntIcon className="h-4 w-4 text-primary-foreground transition-transform group-hover:scale-110" />
                 <span className="hidden sm:inline font-medium">Report Bug</span>
             </button>
 
             {showBugForm && createPortal(
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                    <div className="relative bg-white rounded shadow-2xl w-full max-w-2xl animate-in fade-in-0 zoom-in-95 duration-200"
-                        style={{ maxHeight: '90vh', overflowY: 'auto' }}>
-                        <div className="flex-shrink-0 border-b px-4 sm:px-6 py-4 bg-white rounded-t-xl">
+                <div 
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                    onClick={handleBackdropClick}
+                >
+                    <div className="relative bg-card rounded-lg shadow-theme-xl w-full max-w-2xl max-h-[95vh] overflow-hidden flex flex-col z-[10000] bug-report-modal">
+                        <div className="flex-shrink-0 border-b border-border px-4 sm:px-6 py-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                                    <h2 className="text-lg sm:text-xl font-semibold text-foreground">
                                         Report Bug
                                     </h2>
-                                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                                    <p className="text-sm text-muted-foreground mt-1">
                                         {selectedSuiteInfo ? (
                                             <>
-                                                Test Suite: <span className="font-medium text-gray-700">{selectedSuiteInfo.name}</span>
+                                                Suite: <span className="font-medium text-foreground">{selectedSuiteInfo.name}</span>
                                                 {selectedSuiteInfo.isOrganization && (
-                                                    <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">
+                                                    <span className="ml-2 px-2 py-1 text-xs bg-primary/10 text-primary rounded-full">
                                                         Organization
                                                     </span>
                                                 )}
@@ -407,32 +440,35 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                                 </div>
                                 <button
                                     onClick={closeForm}
-                                    className="text-gray-400 hover:text-gray-600 text-2xl p-1 hover:bg-gray-100 rounded transition-colors"
+                                    className="text-muted-foreground hover:text-foreground text-2xl p-1"
                                     type="button"
                                     disabled={isSubmitting}
+                                    aria-label="Close"
                                 >
                                     ×
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-hidden"
-                            style={{ height: 'calc(100% - 80px)' }}>
-                            <BugReportForm
-                                formData={formData}
-                                updateFormData={updateFormData}
-                                attachments={attachments}
-                                setAttachments={setAttachments}
-                                teamMembers={teamMembers}
-                                error={error}
-                                setError={setError}
-                                isSubmitting={isSubmitting}
-                                onSubmit={handleSubmit}
-                                onClose={closeForm}
-                                suites={suites}
-                                activeSuite={activeSuite}
-                                userProfile={userProfile}
-                                showSuiteSelector={true}
-                            />
+                        
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="p-4 sm:p-6">
+                                <BugReportForm
+                                    formData={formData}
+                                    updateFormData={updateFormData}
+                                    attachments={attachments}
+                                    setAttachments={setAttachments}
+                                    teamMembers={teamMembers}
+                                    error={error}
+                                    setError={setError}
+                                    isSubmitting={isSubmitting}
+                                    onSubmit={handleSubmit}
+                                    onClose={closeForm}
+                                    suites={suites}
+                                    activeSuite={activeSuite}
+                                    userProfile={userProfile}
+                                    showSuiteSelector={true}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>,

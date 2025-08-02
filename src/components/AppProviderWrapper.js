@@ -10,7 +10,6 @@ import CreateSuiteModal from './modals/createSuiteModal';
 import Register from './auth/Register';
 import Login from './auth/Login';
 import PageLayout from './layout/PageLayout';
-import NotificationCenter from './notifications/NotificationCenter';
 import { toast } from 'sonner';
 
 const AppProviderWrapper = ({ children }) => {
@@ -304,7 +303,6 @@ const ProtectedRouteContent = ({ children }) => {
     // Render protected content with PageLayout
     return (
         <PageLayout>
-            <NotificationCenter />
             {children}
             <div id="modal-root" />
             <div id="toast-root" />

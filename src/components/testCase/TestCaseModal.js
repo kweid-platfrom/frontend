@@ -36,6 +36,14 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         }
     }, [testCase]);
 
+    // Prevent body scroll when modal is open
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, []);
+
     const validateForm = useCallback(() => {
         const newErrors = {};
         if (!formData.title.trim()) {
@@ -71,8 +79,6 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         setTagInput('');
         setErrors({});
     }, []);
-
-
 
     const handleInputChange = useCallback((field, value) => {
         setFormData((prev) => ({
@@ -164,7 +170,6 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                 linkedBugIds: formData.linkedBugIds || [],
                 created_at: testCase ? testCase.created_at : new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-
             };
 
             await onSave(dataToSave);
@@ -185,13 +190,6 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         }
     }, [formData, testCase, onSave, validateForm, resetForm, onClose, activeSuite, currentUser]);
 
-    console.log('Debug Info:', {
-        activeSuite: activeSuite,
-        currentUser: currentUser,
-        formData: formData
-    });
-
-
     const handleKeyPress = useCallback((e) => {
         if (e.key === 'Enter' && e.target.name === 'tagInput') {
             e.preventDefault();
@@ -199,24 +197,47 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         }
     }, [handleAddTag]);
 
+    // Handle backdrop click
+    const handleBackdropClick = useCallback((e) => {
+        if (e.target === e.currentTarget) {
+            onClose();
+        }
+    }, [onClose]);
+
+    // Handle escape key
+    useEffect(() => {
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [onClose]);
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[95vh] overflow-hidden flex flex-col">
-                <div className="flex-shrink-0 border-b px-4 sm:px-6 py-4">
+        <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            onClick={handleBackdropClick}
+        >
+            <div className="relative bg-card rounded-lg shadow-theme-xl w-full max-w-2xl max-h-[95vh] overflow-hidden flex flex-col z-[10000]">
+                <div className="flex-shrink-0 border-b border-border px-4 sm:px-6 py-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                        <h2 className="text-lg sm:text-xl font-semibold text-foreground">
                             {testCase ? 'Edit Test Case' : 'Create Test Case'}
                         </h2>
                         <button
                             onClick={onClose}
-                            className="text-gray-400 hover:text-gray-600 text-2xl p-1"
+                            className="text-muted-foreground hover:text-foreground text-2xl p-1"
                             type="button"
                             aria-label="Close"
                         >
                             ×
                         </button>
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                         Suite: {activeSuite?.name || activeSuite?.id}
                     </p>
                 </div>
@@ -225,50 +246,50 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                     <form onSubmit={handleSubmit} className="p-4 sm:p-6">
                         <div className="space-y-6">
                             {errors.submit && (
-                                <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">
+                                <div className="bg-destructive text-destructive-foreground p-3 rounded-md text-sm">
                                     {errors.submit}
                                 </div>
                             )}
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Title *
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.title}
                                         onChange={(e) => handleInputChange('title', e.target.value)}
-                                        className={`w-full px-3 py-2 border ${errors.title ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base`}
+                                        className={`w-full px-3 py-2 bg-background text-foreground border ${errors.title ? 'border-destructive' : 'border-border'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base`}
                                         placeholder="Enter test case title"
                                     />
                                     {errors.title && (
-                                        <p className="text-red-500 text-xs mt-1">{errors.title}</p>
+                                        <p className="text-destructive text-xs mt-1">{errors.title}</p>
                                     )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Description
                                     </label>
                                     <textarea
                                         value={formData.description}
                                         onChange={(e) => handleInputChange('description', e.target.value)}
                                         rows={3}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                         placeholder="Describe what this test case validates"
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label className="block text-sm font-medium text-foreground mb-2">
                                             Priority
                                         </label>
                                         <select
                                             value={formData.priority}
                                             onChange={(e) => handleInputChange('priority', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                         >
                                             <option value="low">Low</option>
                                             <option value="medium">Medium</option>
@@ -277,13 +298,13 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label className="block text-sm font-medium text-foreground mb-2">
                                             Status
                                         </label>
                                         <select
                                             value={formData.status}
                                             onChange={(e) => handleInputChange('status', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                         >
                                             <option value="draft">Draft</option>
                                             <option value="active">Active</option>
@@ -295,20 +316,20 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label className="block text-sm font-medium text-foreground mb-2">
                                             Assignee
                                         </label>
                                         <input
                                             type="text"
                                             value={formData.assignee}
                                             onChange={(e) => handleInputChange('assignee', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                             placeholder="Assign to team member"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label className="block text-sm font-medium text-foreground mb-2">
                                             Estimated Time (minutes)
                                         </label>
                                         <input
@@ -316,7 +337,7 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                             min="1"
                                             value={formData.estimatedTime}
                                             onChange={(e) => handleInputChange('estimatedTime', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                             placeholder="Execution time estimate"
                                         />
                                     </div>
@@ -324,7 +345,7 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Tags
                                 </label>
                                 <div className="flex flex-wrap gap-2 mb-2">
@@ -352,13 +373,13 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                         value={tagInput}
                                         onChange={(e) => setTagInput(e.target.value)}
                                         onKeyPress={handleKeyPress}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className="flex-1 px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                         placeholder="Add tag and press Enter"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleAddTag}
-                                        className="px-3 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 text-sm whitespace-nowrap"
+                                        className="px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-teal-500 text-sm whitespace-nowrap"
                                     >
                                         Add
                                     </button>
@@ -367,13 +388,13 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Execution Type
                                     </label>
                                     <select
                                         value={formData.executionType}
                                         onChange={(e) => handleInputChange('executionType', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                     >
                                         <option value="manual">Manual</option>
                                         <option value="automated">Automated</option>
@@ -382,13 +403,13 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Automation Status
                                     </label>
                                     <select
                                         value={formData.automationStatus}
                                         onChange={(e) => handleInputChange('automationStatus', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                     >
                                         <option value="none">None</option>
                                         <option value="planned">Planned</option>
@@ -398,71 +419,71 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Environment
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.environment}
                                         onChange={(e) => handleInputChange('environment', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                         placeholder="e.g., Production, Staging, QA"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Test Data
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.testData}
                                         onChange={(e) => handleInputChange('testData', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                         placeholder="Required test data or dataset reference"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Preconditions
                                 </label>
                                 <textarea
                                     value={formData.preconditions}
                                     onChange={(e) => handleInputChange('preconditions', e.target.value)}
                                     rows={4}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm sm:text-base"
+                                    className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
                                     placeholder="What needs to be set up or configured before executing this test"
                                 />
                             </div>
 
                             <div>
                                 <div className="flex items-center justify-between mb-4">
-                                    <label className="block text-sm font-medium text-gray-700">
+                                    <label className="block text-sm font-medium text-foreground">
                                         Test Steps *
                                     </label>
                                     <button
                                         type="button"
                                         onClick={handleAddTestStep}
-                                        className="px-3 py-1 bg-teal-600 text-white text-sm rounded hover:bg-teal-700"
+                                        className="px-3 py-1 bg-primary text-primary-foreground text-sm rounded hover:bg-teal-500"
                                     >
                                         Add Step
                                     </button>
                                 </div>
                                 {errors.testSteps && (
-                                    <p className="text-red-500 text-xs mt-1">{errors.testSteps}</p>
+                                    <p className="text-destructive text-xs mt-1">{errors.testSteps}</p>
                                 )}
                                 <div className="space-y-4">
                                     {formData.testSteps.map((step, index) => (
-                                        <div key={index} className="border border-gray-200 rounded-lg p-3 sm:p-4">
+                                        <div key={index} className="border border-border rounded-lg p-3 sm:p-4">
                                             <div className="flex items-center justify-between mb-3">
-                                                <h4 className="text-sm font-medium text-gray-700">Step {index + 1}</h4>
+                                                <h4 className="text-sm font-medium text-foreground">Step {index + 1}</h4>
                                                 {formData.testSteps.length > 1 && (
                                                     <button
                                                         type="button"
                                                         onClick={() => handleRemoveTestStep(index)}
-                                                        className="text-red-600 hover:text-red-800 text-sm"
+                                                        className="text-destructive hover:text-red-800 text-sm"
                                                     >
                                                         Remove
                                                     </button>
@@ -470,26 +491,26 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                             </div>
                                             <div className="space-y-3">
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                                                         Action
                                                     </label>
                                                     <textarea
                                                         value={step.action || ''}
                                                         onChange={(e) => handleUpdateTestStep(index, 'action', e.target.value)}
                                                         rows={2}
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                                                         placeholder="Describe the action to perform"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                                                         Expected Result
                                                     </label>
                                                     <textarea
                                                         value={step.expectedResult || ''}
                                                         onChange={(e) => handleUpdateTestStep(index, 'expectedResult', e.target.value)}
                                                         rows={2}
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                                                         placeholder="What should happen"
                                                     />
                                                 </div>
@@ -502,12 +523,12 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                     </form>
                 </div>
 
-                <div className="flex-shrink-0 border-t px-4 sm:px-6 py-4">
+                <div className="flex-shrink-0 border-t border-border px-4 sm:px-6 py-4">
                     <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="w-full sm:w-auto px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 text-sm"
+                            className="w-full sm:w-auto px-4 py-2 text-muted-foreground bg-muted rounded-md hover:bg-muted-foreground text-sm"
                         >
                             Cancel
                         </button>
@@ -515,7 +536,7 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                             type="submit"
                             onClick={handleSubmit}
                             disabled={loading}
-                            className="w-full sm:w-auto px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 text-sm"
+                            className="w-full sm:w-auto px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-teal-500 disabled:opacity-50 text-sm"
                         >
                             {loading ? 'Saving...' : (testCase ? 'Update' : 'Create')} Test Case
                         </button>
