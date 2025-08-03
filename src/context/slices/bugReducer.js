@@ -131,9 +131,9 @@ export const useBugReducer = () => {
 
                 console.log('Updating bug with data:', { suiteId, bugId, formattedUpdateData });
 
-                // FIXED: Use the correct service method for updating bugs
-                const result = await firestoreService.updateBug(suiteId, bugId, formattedUpdateData);
-                
+                // FIXED: Correct parameter order - bugId first, then updates, then suiteId
+                const result = await firestoreService.updateBug(bugId, formattedUpdateData, suiteId);
+
                 if (result.success) {
                     dispatch({ type: 'BUG_UPDATED', payload: { id: bugId, ...result.data } });
                     toast.success('Bug updated successfully', { duration: 5000 });
@@ -157,10 +157,10 @@ export const useBugReducer = () => {
                 if (!suiteId) {
                     throw new Error('Suite ID is required for delete');
                 }
-                
-                // FIXED: Use the correct service method for deleting bugs
-                const result = await firestoreService.deleteBug(suiteId, bugId);
-                
+
+                // FIXED: Correct parameter order - bugId first, then suiteId
+                const result = await firestoreService.deleteBug(bugId, suiteId);
+
                 if (result.success) {
                     dispatch({ type: 'BUG_DELETED', payload: bugId });
                     toast.success('Bug deleted successfully', { duration: 5000 });

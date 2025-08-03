@@ -1,63 +1,144 @@
-// app/dashboard/reports/page.js - Reports Page
-'use client'
+'use client';
 
-export default function ReportsPage() {
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppProvider';
+import { useUI } from '../../hooks/useUI';
+import { useReports } from '../../hooks/useReports';
+import ReportTable from '../../components/report/ReportTable';
+import GenerateReportModal from '../../components/report/GenerateReportModal';
+import ReportViewerModal from '../../components/report/ReportViewerModal';
+import ScheduleToggle from '../../components/report/ScheduleToggle';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Calendar } from 'lucide-react';
+
+const Reports = () => {
+    const { state } = useApp();
+    const { toggleSidebar, sidebarOpen } = useUI();
+    const { reports, loading, filters, setFilters, reportTypes, hasPermission } = useReports();
+    const { suites } = state;
+    const [generateModalOpen, setGenerateModalOpen] = useState(false);
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [selectedReport, setSelectedReport] = useState(null);
+
     return (
-            <div className="space-y-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
-                    <p className="text-gray-600">View detailed test reports and analytics</p>
-                </div>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-lg shadow">
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-4">Test Execution Summary</h3>
-                            <div className="space-y-2">
-                                <div className="flex justify-between">
-                                    <span>Total Tests</span>
-                                    <span className="font-semibold">124</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Passed</span>
-                                    <span className="font-semibold text-green-600">114</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Failed</span>
-                                    <span className="font-semibold text-red-600">8</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Skipped</span>
-                                    <span className="font-semibold text-gray-600">2</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="bg-white rounded-lg shadow">
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-4">Bug Status Overview</h3>
-                            <div className="space-y-2">
-                                <div className="flex justify-between">
-                                    <span>Open</span>
-                                    <span className="font-semibold text-red-600">8</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>In Progress</span>
-                                    <span className="font-semibold text-yellow-600">5</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Resolved</span>
-                                    <span className="font-semibold text-green-600">23</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Closed</span>
-                                    <span className="font-semibold text-gray-600">45</span>
-                                </div>
-                            </div>
-                        </div>
+        <div className="min-h-screen">
+            <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+                    <div className="flex space-x-4">
+                        {hasPermission() && (
+                            <Button onClick={() => setGenerateModalOpen(true)}>
+                                <Calendar className="mr-2 h-4 w-4" /> Generate Report
+                            </Button>
+                        )}
+                        <ScheduleToggle />
+                        <Button
+                            onClick={toggleSidebar}
+                            className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+                        >
+                            {sidebarOpen ? 'Close' : 'Open'} Sidebar
+                        </Button>
                     </div>
                 </div>
+
+                <div className="bg-white shadow rounded-lg p-4 mb-6">
+                    <div className="flex flex-wrap gap-4">
+                        <Select
+                            value={filters.type}
+                            onValueChange={(value) => setFilters({ ...filters, type: value })}
+                        >
+                            <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Filter by type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Types</SelectItem>
+                                {reportTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>
+                                        {type}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            value={filters.status}
+                            onValueChange={(value) => setFilters({ ...filters, status: value })}
+                        >
+                            <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Statuses</SelectItem>
+                                <SelectItem value="Generated">Generated</SelectItem>
+                                <SelectItem value="Reviewed">Reviewed</SelectItem>
+                                <SelectItem value="Published">Published</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Input
+                            type="date"
+                            value={filters.date}
+                            onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+                            placeholder="Filter by date"
+                            className="w-48"
+                        />
+                        <Input
+                            value={filters.author}
+                            onChange={(e) => setFilters({ ...filters, author: e.target.value })}
+                            placeholder="Filter by author"
+                            className="w-48"
+                        />
+                        <Select
+                            value={filters.suite}
+                            onValueChange={(value) => setFilters({ ...filters, suite: value })}
+                        >
+                            <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Filter by suite" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Suites</SelectItem>
+                                {suites.testSuites.map((suite) => (
+                                    <SelectItem key={suite.id} value={suite.id}>
+                                        {suite.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                <ReportTable
+                    reports={reports}
+                    loading={loading}
+                    onView={(report) => {
+                        setSelectedReport(report);
+                        setViewModalOpen(true);
+                    }}
+                    onDelete={(reportId) => state.reports.actions.deleteReport(state)(reportId)}
+                />
+
+                <GenerateReportModal
+                    open={generateModalOpen}
+                    onOpenChange={setGenerateModalOpen}
+                    reportTypes={reportTypes}
+                    suites={suites.testSuites}
+                    sprints={state.sprints.sprints}
+                />
+
+                <ReportViewerModal
+                    open={viewModalOpen}
+                    onOpenChange={setViewModalOpen}
+                    report={selectedReport}
+                />
             </div>
+        </div>
     );
-}
+};
+
+export default Reports;

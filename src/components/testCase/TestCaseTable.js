@@ -41,7 +41,7 @@ const TestCaseTable = ({
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
     const [sideModalOpen, setSideModalOpen] = useState(false);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
-    
+
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -115,7 +115,7 @@ const TestCaseTable = ({
     const getPageNumbers = useMemo(() => {
         const pages = [];
         const maxVisiblePages = 5;
-        
+
         if (totalPages <= maxVisiblePages) {
             for (let i = 1; i <= totalPages; i++) {
                 pages.push(i);
@@ -123,12 +123,12 @@ const TestCaseTable = ({
         } else {
             const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
             const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-            
+
             for (let i = startPage; i <= endPage; i++) {
                 pages.push(i);
             }
         }
-        
+
         return pages;
     }, [currentPage, totalPages]);
 
@@ -184,9 +184,9 @@ const TestCaseTable = ({
         };
         const config = statusConfig[status] || statusConfig.not_executed;
         const IconComponent = config.icon;
-        
+
         return (
-            <div className={`flex items-center gap-1 px-2 py-1 ${config.bg} ${config.text} rounded-full text-xs font-medium whitespace-nowrap w-28 justify-center`}>
+            <div className={`flex items-center gap-1 px-2 py-2 ${config.bg} ${config.text} rounded text-xs font-medium whitespace-nowrap w-28 justify-center`}>
                 <IconComponent className="w-3 h-3" />
                 <span>{status?.replace('_', ' ') || 'Not Executed'}</span>
             </div>
@@ -196,14 +196,14 @@ const TestCaseTable = ({
     const getAutomationBadge = useCallback((isAutomated) => {
         if (isAutomated) {
             return (
-                <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium whitespace-nowrap">
+                <div className="flex items-center gap-1 px-2 py-2 bg-blue-100 text-blue-800 rounded text-xs font-medium whitespace-nowrap">
                     <Bot className="w-3 h-3" />
                     <span>Automated</span>
                 </div>
             );
         }
         return (
-            <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium whitespace-nowrap">
+            <div className="flex items-center gap-1 px-2 py-2 bg-gray-100 text-gray-800 rounded text-xs font-medium whitespace-nowrap">
                 <User className="w-3 h-3" />
                 <span>Manual</span>
             </div>
@@ -279,7 +279,7 @@ const TestCaseTable = ({
                                 onClick={() => handleSort('title')}
                             >
                                 <div className="flex items-center gap-1 whitespace-nowrap">
-                                    Test Case
+                                    Test Cases
                                     {getSortIcon('title')}
                                 </div>
                             </th>
@@ -437,18 +437,20 @@ const TestCaseTable = ({
                                                 <div className="text-sm text-gray-900 truncate max-w-[200px]" title={testCase.title}>
                                                     {testCase.title || 'Untitled Test Case'}
                                                 </div>
-                                                <button
-                                                    onClick={() => handleChatClick(testCase)}
-                                                    className="ml-2 p-1 text-gray-400 hover:text-teal-600 transition-colors"
-                                                    title="View/Edit Test Case"
-                                                >
-                                                    <MessageSquare className="h-4 w-4" />
-                                                </button>
+                                                <div className="flex-shrink-0 border-l border-gray-200 pl-2">
+                                                    <button
+                                                        onClick={() => handleChatClick(testCase)}
+                                                        className="ml-1 p-2 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                        title="View/Edit Test Case"
+                                                    >
+                                                        <MessageSquare className="h-4 w-4" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             <span
-                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${getStatusBadge(
+                                                className={`px-2.5 py-1.5 inline-flex text-xs w-16 leading-5 font-semibold rounded whitespace-nowrap ${getStatusBadge(
                                                     testCase.status
                                                 )}`}
                                             >
@@ -457,7 +459,7 @@ const TestCaseTable = ({
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             <span
-                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${getPriorityBadge(
+                                                className={`px-2.5 py-1.5 w-20 inline-flex text-xs leading-5 font-semibold rounded whitespace-nowrap ${getPriorityBadge(
                                                     testCase.priority
                                                 )}`}
                                             >
@@ -466,7 +468,7 @@ const TestCaseTable = ({
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap border-r border-gray-200 w-32">
                                             <span
-                                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${getSeverityBadge(
+                                                className={`px-2.5 py-1.5 w-20 inline-flex text-xs leading-5 font-semibold rounded whitespace-nowrap ${getSeverityBadge(
                                                     testCase.severity
                                                 )}`}
                                             >
@@ -575,7 +577,7 @@ const TestCaseTable = ({
                             <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
                             <span className="font-medium">{totalItems}</span> results
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                             <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
                                 Rows per page:
@@ -584,7 +586,7 @@ const TestCaseTable = ({
                                 id="itemsPerPage"
                                 value={itemsPerPage}
                                 onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                                className="border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
+                                className="border border-gray-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
                                 style={{
                                     backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                     backgroundPosition: 'right 0.5rem center',
@@ -607,11 +609,10 @@ const TestCaseTable = ({
                         <button
                             onClick={() => handlePageChange(1)}
                             disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
-                                currentPage === 1
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
                                     ? 'border-gray-200 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                                }`}
                             title="First page"
                         >
                             <ChevronsLeft className="h-4 w-4" />
@@ -621,11 +622,10 @@ const TestCaseTable = ({
                         <button
                             onClick={() => handlePageChange(currentPage - 1)}
                             disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
-                                currentPage === 1
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
                                     ? 'border-gray-200 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                                }`}
                             title="Previous page"
                         >
                             <ChevronLeft className="h-4 w-4" />
@@ -637,11 +637,10 @@ const TestCaseTable = ({
                                 <button
                                     key={pageNumber}
                                     onClick={() => handlePageChange(pageNumber)}
-                                    className={`w-9 h-9 flex items-center justify-center rounded-md border text-sm font-medium transition-all duration-200 ${
-                                        currentPage === pageNumber
+                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${currentPage === pageNumber
                                             ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
                                             : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
-                                    }`}
+                                        }`}
                                 >
                                     {pageNumber}
                                 </button>
@@ -656,7 +655,7 @@ const TestCaseTable = ({
                                 )}
                                 <button
                                     onClick={() => handlePageChange(totalPages)}
-                                    className="w-9 h-9 flex items-center justify-center rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
+                                    className="w-9 h-9 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
                                 >
                                     {totalPages}
                                 </button>
@@ -667,11 +666,10 @@ const TestCaseTable = ({
                         <button
                             onClick={() => handlePageChange(currentPage + 1)}
                             disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
-                                currentPage === totalPages
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
                                     ? 'border-gray-200 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                                }`}
                             title="Next page"
                         >
                             <ChevronRight className="h-4 w-4" />
@@ -681,11 +679,10 @@ const TestCaseTable = ({
                         <button
                             onClick={() => handlePageChange(totalPages)}
                             disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded-md border transition-colors ${
-                                currentPage === totalPages
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
                                     ? 'border-gray-200 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                                }`}
                             title="Last page"
                         >
                             <ChevronsRight className="h-4 w-4" />

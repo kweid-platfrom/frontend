@@ -138,6 +138,11 @@ const AppSidebar = ({
         router.push('/upgrade', { scroll: false });
         onClose?.();
     }, [router, onClose]);
+
+    const handleSettingsClick = useCallback(() => {
+        router.push('/profile-settings', { scroll: false });
+        onClose?.();
+    }, [router, onClose]);
     
     const isPremiumUser = hasActiveSubscription;
     const isTrialUser = isTrialActive;
@@ -323,22 +328,27 @@ const AppSidebar = ({
                     <div className="space-y-1">
                         <div className="relative group">
                             <button
-                                onClick={() => {
-                                    router.push('/settings', { scroll: false });
-                                    onClose?.();
-                                }}
+                                onClick={handleSettingsClick}
                                 className={`
                                     group/btn flex items-center w-full h-10 text-sm rounded-lg transition-all duration-300 ease-in-out
                                     ${isCollapsed ? 'px-2 justify-center' : 'px-3 justify-start'}
-                                    text-muted-foreground hover:bg-secondary/80 hover:text-foreground
+                                    ${currentPath === '/profile-settings'
+                                        ? 'bg-teal-50 text-teal-800 border border-teal-300 shadow-md shadow-teal-500/20'
+                                        : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground'
+                                    }
                                 `}
                             >
                                 <div className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-                                    <Settings className="h-5 w-5 text-muted-foreground group-hover/btn:text-foreground transition-colors duration-300 ease-in-out" />
+                                    <Settings className={`h-5 w-5 transition-colors duration-300 ease-in-out ${
+                                        currentPath === '/profile-settings'
+                                            ? 'text-teal-800'
+                                            : 'text-muted-foreground group-hover/btn:text-foreground'
+                                    }`} />
                                 </div>
                                 <span className={`
-                                    font-medium whitespace-nowrap
+                                    whitespace-nowrap
                                     ${isCollapsed ? 'ml-0 w-0 opacity-0' : 'ml-3 w-auto opacity-100'}
+                                    ${currentPath === '/profile-settings' ? 'font-semibold' : 'font-medium'}
                                     transition-all duration-300 ease-in-out
                                 `}>
                                     Settings
