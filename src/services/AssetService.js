@@ -158,33 +158,52 @@ export class AssetService extends FirestoreService {
     }
 
     async updateBug(bugId, updates, suiteId = null, sprintId = null) {
-        // If suite context is not provided, we need to find it
-        if (!suiteId) {
-            // Try to get suiteId from the updates or existing bug data
+        // FIXED: Better suiteId resolution and validation
+        let resolvedSuiteId = suiteId;
+        
+        // If suite context is not provided, try to get it from updates
+        if (!resolvedSuiteId) {
             if (updates.suite_id) {
-                suiteId = updates.suite_id;
+                resolvedSuiteId = updates.suite_id;
             } else {
                 return { success: false, error: { message: 'Suite context required for bug update' } };
             }
         }
 
-        // FIX: Ensure suiteId is a string, not an object
-        const suiteIdString = typeof suiteId === 'object' ? suiteId.id || suiteId.suiteId : suiteId;
-
-        if (!suiteIdString || typeof suiteIdString !== 'string') {
-            console.error('Invalid suiteId:', suiteId, 'Type:', typeof suiteId);
-            return { success: false, error: { message: 'Invalid suite ID provided' } };
+        // FIXED: More robust suiteId validation and conversion
+        if (typeof resolvedSuiteId === 'object') {
+            // Handle object cases more carefully
+            if (resolvedSuiteId && resolvedSuiteId.id) {
+                resolvedSuiteId = resolvedSuiteId.id;
+            } else if (resolvedSuiteId && resolvedSuiteId.suiteId) {
+                resolvedSuiteId = resolvedSuiteId.suiteId;
+            } else if (resolvedSuiteId && typeof resolvedSuiteId.toString === 'function') {
+                resolvedSuiteId = resolvedSuiteId.toString();
+            } else {
+                console.error('Invalid suiteId object:', resolvedSuiteId);
+                return { success: false, error: { message: 'Invalid suite ID format provided' } };
+            }
         }
 
-        console.log('updateBug - suiteId check:', {
+        // Ensure we have a valid string ID
+        if (!resolvedSuiteId || typeof resolvedSuiteId !== 'string' || resolvedSuiteId.trim() === '') {
+            console.error('Invalid suiteId after resolution:', {
+                original: suiteId,
+                resolved: resolvedSuiteId,
+                type: typeof resolvedSuiteId
+            });
+            return { success: false, error: { message: 'Valid suite ID is required' } };
+        }
+
+        console.log('updateBug - suiteId validation passed:', {
             original: suiteId,
-            resolved: suiteIdString,
-            type: typeof suiteIdString
+            resolved: resolvedSuiteId,
+            type: typeof resolvedSuiteId
         });
 
         const collectionPath = sprintId
-            ? `testSuites/${suiteIdString}/sprints/${sprintId}/bugs`
-            : `testSuites/${suiteIdString}/bugs`;
+            ? `testSuites/${resolvedSuiteId}/sprints/${sprintId}/bugs`
+            : `testSuites/${resolvedSuiteId}/bugs`;
 
         return await this.updateAsset(collectionPath, bugId, updates);
     }

@@ -212,34 +212,15 @@ const AddAccountModal = ({
     };
 
     const handleSuccess = () => {
-        // Generate a proper account data structure that matches what AccountSection expects
         const newAccountData = {
-            id: currentUser?.uid || 'temp_id', // Use current user ID as it's the same user, different context
-            email: formData.email || currentUser?.email,
-            accountType: accountType,
-            // Organization-specific fields
-            organizationId: accountType === 'organization' ? `org_${Date.now()}` : null,
+            type: accountType,
+            email: formData.email,
+            name: accountType === 'individual' 
+                ? `${formData.firstName} ${formData.lastName}`
+                : formData.organizationName,
             organizationName: accountType === 'organization' ? formData.organizationName : null,
             organizationSize: accountType === 'organization' ? formData.organizationSize : null,
-            // Individual account fields
-            name: accountType === 'individual' 
-                ? `${formData.firstName} ${formData.lastName}`.trim()
-                : formData.organizationName,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            // Additional metadata
-            role: accountType === 'organization' ? 'admin' : 'member', // New org creator is admin
-            addedAt: new Date().toISOString(),
-            isActive: false, // Will become active when switched to
-            // For debugging - remove in production
-            _debug: {
-                createdVia: mode,
-                originalAccountType: currentAccountType,
-                organizationCode: formData.organizationCode || null
-            }
         };
-
-        console.log('🔄 Account data being passed to onAccountAdded:', newAccountData);
         
         onAccountAdded?.(newAccountData);
         onClose();

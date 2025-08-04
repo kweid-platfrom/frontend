@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '../../context/AppProvider';
+import AccountSection from '../AccountSection';
 import {
     Video, 
     Zap, 
@@ -36,7 +37,6 @@ const AppSidebar = ({
     const [currentPath, setCurrentPath] = useState('');
     
     // Extract state from context
-    const { activeSuite } = state.suites;
     const { isTrialActive, hasActiveSubscription, trialDaysRemaining } = state.subscription;
     
     // Handle mounting and localStorage
@@ -209,24 +209,15 @@ const AppSidebar = ({
                     </div>
                 </div>
                 
-                {/* Active Suite Info - Only show when not collapsed or when there's a suite */}
-                {activeSuite && (
-                    <div className={`
-                        bg-secondary border-b border-border
-                        transition-all duration-300 ease-in-out flex-shrink-0
-                        ${isCollapsed ? 'h-0 overflow-hidden opacity-0' : 'min-h-[60px] px-4 opacity-100'}
-                        flex items-center
-                    `}>
-                        <div className="w-full">
-                            <div className="text-sm font-medium text-foreground">
-                                Current Suite
-                            </div>
-                            <div className="text-sm text-muted-foreground truncate">
-                                {activeSuite.name}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* Account Section - Replaces Active Suite Info */}
+                <div className={`
+                    bg-secondary/30 border-b border-border
+                    transition-all duration-300 ease-in-out flex-shrink-0
+                    ${isCollapsed ? 'h-16 px-2' : 'min-h-[76px] px-4'}
+                    flex items-center
+                `}>
+                    <AccountSection isCollapsed={isCollapsed} />
+                </div>
                 
                 {/* Navigation - This should be scrollable and flexible */}
                 <nav className="flex-1 py-4 space-y-1 px-4 overflow-y-auto min-h-0">
