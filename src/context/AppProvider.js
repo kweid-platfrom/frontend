@@ -18,7 +18,6 @@ import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/fireb
 import FirestoreService from '../services';
 import { useReports } from './slices/reportSlice';
 
-
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
@@ -40,6 +39,10 @@ export const AppProvider = ({ children }) => {
     const [suiteSubscriptionActive, setSuiteSubscriptionActive] = useState(false);
     const [aiInitialized, setAiInitialized] = useState(false);
 
+    // Registration flow states
+    const [registrationState, setRegistrationState] = useState('completed'); // 'pending', 'org-setup', 'completed'
+    const [pendingRegistrationData, setPendingRegistrationData] = useState(null);
+
     const unsubscribeSuitesRef = useRef(null);
     const assetUnsubscribersRef = useRef({});
     const retryTimeoutRef = useRef(null);
@@ -60,19 +63,9 @@ export const AppProvider = ({ children }) => {
         reports: reports.state,
         theme: theme.state,
     }), [
-        auth.state,
-        suites.state,
-        testCases.state,
-        bugs.state,
-        recordings.state,
-        sprints.state,
-        subscription.state,
-        team.state,
-        automation.state,
-        ui.state,
-        ai.state,
-        reports.state,
-        theme.state,
+        auth.state, suites.state, testCases.state, bugs.state, recordings.state,
+        sprints.state, subscription.state, team.state, automation.state,
+        ui.state, ai.state, reports.state, theme.state,
     ]);
 
     // Helper function to get current app actions
@@ -91,43 +84,271 @@ export const AppProvider = ({ children }) => {
         reports: reports.actions,
         theme: theme.actions,
     }), [
-        auth.actions,
-        suites.actions,
-        testCases.actions,
-        bugs.actions,
-        recordings.actions,
-        sprints.actions,
-        subscription.actions,
-        team.actions,
-        automation.actions,
-        ui.actions,
-        ai.actions,
-        reports.actions,
-        theme.actions,
+        auth.actions, suites.actions, testCases.actions, bugs.actions, recordings.actions,
+        sprints.actions, subscription.actions, team.actions, automation.actions,
+        ui.actions, ai.actions, reports.actions, theme.actions,
     ]);
+
+    // Check if user needs to complete registration
+    const checkRegistrationStatus = useCallback(async (user) => {
+        if (!user?.uid) return 'completed';
+
+        try {
+            console.log('🔍 Checking registration status for user:', user.uid);
+
+            // Check pending registration first
+            const pendingResult = await FirestoreService.getDocument('pendingRegistrations', user.uid);
+            if (pendingResult.success) {
+                console.log('📝 Pending registration found:', pendingResult.data);
+                if (!pendingResult.data.accountType) {
+                    throw new Error('Invalid accountType in pendingRegistrations');
+                }
+                setPendingRegistrationData(pendingResult.data);
+                return pendingResult.data.accountType === 'organization' ? 'org-setup' : 'pending';
+            }
+
+            // Check if user profile exists and is complete
+            const profileResult = await FirestoreService.user.getUserProfile(user.uid);
+            if (!profileResult.success) {
+                if (profileResult.error.message === 'Document not found') {
+                    console.log('📝 User profile not found - registration pending');
+                    return 'pending';
+                }
+                throw new Error(profileResult.error.message);
+            }
+
+            const profile = profileResult.data;
+            console.log('👤 User profile found:', {
+                accountType: profile.account_type,
+                organizationId: profile.organizationId,
+                registrationCompleted: profile.registrationCompleted
+            });
+
+            // Check if registration is marked as incomplete
+            if (profile.registrationCompleted === false) {
+                console.log('📋 Registration marked as incomplete');
+                return profile.account_type === 'organization' ? 'org-setup' : 'pending';
+            }
+
+            // For organization accounts, check if organization exists
+            if (profile.account_type === 'organization' && profile.organizationId) {
+                const orgResult = await FirestoreService.organization.getOrganization(profile.organizationId);
+                if (!orgResult.success) {
+                    console.log('🏢 Organization not found - needs org setup');
+                    return 'org-setup';
+                }
+            }
+
+            console.log('✅ Registration completed');
+            return 'completed';
+
+        } catch (error) {
+            console.error('Error checking registration status:', error);
+            return 'pending';
+        }
+    }, [ui.actions]);
+
+    // Complete pending registration
+    const completePendingRegistration = useCallback(async (registrationData) => {
+        try {
+            console.log('🚀 Completing pending registration:', registrationData);
+
+            const currentUser = auth.state.currentUser;
+            if (!currentUser?.uid) {
+                throw new Error('No authenticated user found');
+            }
+
+            if (!registrationData.accountType || !['individual', 'organization'].includes(registrationData.accountType)) {
+                throw new Error('Invalid or missing accountType');
+            }
+
+            // Create or update user profile with accountType from pendingRegistrations
+            const profileData = {
+                user_id: currentUser.uid,
+                display_name: registrationData.displayName || currentUser.displayName || '',
+                email: currentUser.email,
+                first_name: registrationData.firstName || '',
+                last_name: registrationData.lastName || '',
+                account_type: registrationData.accountType,
+                registrationCompleted: registrationData.accountType === 'organization' ? false : true,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                created_by: currentUser.uid,
+                updated_by: currentUser.uid,
+            };
+
+            // Save user profile and verify creation
+            const profileResult = await FirestoreService.user.createOrUpdateUserProfile(profileData);
+            if (!profileResult.success) {
+                throw new Error(profileResult.error.message || 'Failed to create user profile');
+            }
+
+            // Verify user document exists and has correct account_type
+            const verifyProfile = await FirestoreService.user.getUserProfile(currentUser.uid);
+            if (!verifyProfile.success || verifyProfile.data.account_type !== registrationData.accountType) {
+                throw new Error(`User profile verification failed: expected account_type ${registrationData.accountType}, got ${verifyProfile.data?.account_type}`);
+            }
+
+            console.log('✅ User profile created/updated:', verifyProfile.data);
+
+            // Delete pending registration to prevent reuse
+            await FirestoreService.deleteDocument('pendingRegistrations', currentUser.uid);
+
+            // Store registration data for organization setup if needed
+            setPendingRegistrationData({
+                ...registrationData,
+                userId: currentUser.uid,
+                profileId: profileResult.data.id
+            });
+
+            // Update auth state with profile info
+            const enhancedUser = {
+                ...currentUser,
+                displayName: profileData.display_name,
+                firstName: profileData.first_name,
+                lastName: profileData.last_name,
+                accountType: profileData.account_type,
+            };
+
+            auth.actions.restoreAuth({
+                user: enhancedUser,
+                profile: profileResult.data,
+                accountType: profileData.account_type,
+            });
+
+            // Set appropriate registration state
+            setRegistrationState(registrationData.accountType === 'organization' ? 'org-setup' : 'completed');
+
+            return { success: true, data: profileResult.data };
+
+        } catch (error) {
+            console.error('❌ Error completing registration:', error);
+            ui.actions.showNotification?.({
+                id: 'registration-error',
+                type: 'error',
+                message: 'Registration failed',
+                description: error.message,
+                duration: 5000,
+            });
+            return { success: false, error: error.message };
+        }
+    }, [auth.state.currentUser, auth.actions, ui.actions]);
+
+    // Complete organization setup
+    const completeOrganizationSetup = useCallback(async (organizationData) => {
+        try {
+            console.log('🏢 Setting up organization:', organizationData);
+            console.log('Current user:', auth.state.currentUser?.email, auth.state.currentUser?.uid);
+
+            const currentUser = auth.state.currentUser;
+            if (!currentUser?.uid || !pendingRegistrationData) {
+                throw new Error('Invalid state for organization setup');
+            }
+
+            // Verify user exists in Firestore and has correct account_type
+            const userProfile = await FirestoreService.user.getUserProfile(currentUser.uid);
+            if (!userProfile.success) {
+                throw new Error('User profile not found. Please complete registration first.');
+            }
+            if (userProfile.data.account_type !== 'organization') {
+                throw new Error(`Invalid account_type: expected 'organization', got '${userProfile.data.account_type}'`);
+            }
+
+            // Create organization
+            const orgResult = await FirestoreService.organization.createOrganization({
+                name: organizationData.organizationName,
+                description: organizationData.description || '',
+                industry: organizationData.industry || '',
+                size: organizationData.size || '',
+                owner_id: currentUser.uid,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                created_by: currentUser.uid,
+                updated_by: currentUser.uid,
+            });
+
+            if (!orgResult.success) {
+                throw new Error(orgResult.error.message || 'Failed to create organization');
+            }
+
+            console.log('✅ Organization created:', orgResult.data.id);
+
+            // Update user profile with organization info and complete registration
+            const updatedProfileData = {
+                user_id: currentUser.uid,
+                organizationId: orgResult.data.id,
+                organizationName: orgResult.data.name,
+                role: 'owner',
+                registrationCompleted: true,
+                updated_at: new Date().toISOString(),
+                updated_by: currentUser.uid,
+            };
+
+            const profileUpdateResult = await FirestoreService.user.createOrUpdateUserProfile(updatedProfileData);
+            if (!profileUpdateResult.success) {
+                throw new Error(profileUpdateResult.error.message || 'Failed to update user profile');
+            }
+
+            console.log('✅ User profile updated with organization info:', profileUpdateResult.data);
+
+            // Update auth state
+            const enhancedUser = {
+                ...currentUser,
+                organizationId: orgResult.data.id,
+                organizationName: orgResult.data.name,
+                role: 'owner',
+                accountType: 'organization',
+            };
+
+            auth.actions.restoreAuth({
+                user: enhancedUser,
+                profile: profileUpdateResult.data,
+                accountType: 'organization',
+            });
+
+            // Clear pending data and mark as completed
+            setPendingRegistrationData(null);
+            setRegistrationState('completed');
+
+            ui.actions.showNotification?.({
+                id: 'org-setup-success',
+                type: 'success',
+                message: 'Organization setup completed!',
+                description: `Welcome to ${orgResult.data.name}`,
+                duration: 5000,
+            });
+
+            return { success: true, data: orgResult.data };
+
+        } catch (error) {
+            console.error('❌ Error setting up organization:', error);
+            ui.actions.showNotification?.({
+                id: 'org-setup-error',
+                type: 'error',
+                message: 'Organization setup failed',
+                description: error.message,
+                duration: 5000,
+            });
+            return { success: false, error: error.message };
+        }
+    }, [auth.state.currentUser, auth.actions, ui.actions, pendingRegistrationData]);
 
     // Create properly wrapped test case functions that directly call the slice functions
     const wrappedCreateTestCase = useCallback(async (testCaseData) => {
         const appState = getCurrentAppState();
         const appActions = getCurrentAppActions();
-
-        // Call the function returned by the slice (the curried function)
         const createFunction = testCases.actions.createTestCase(appState, appActions);
         return await createFunction(testCaseData);
     }, [testCases.actions.createTestCase, getCurrentAppState, getCurrentAppActions]);
 
     const wrappedUpdateTestCase = useCallback(async (testCaseId, updateData) => {
         const appState = getCurrentAppState();
-
-        // Call the function returned by the slice (the curried function)
         const updateFunction = testCases.actions.updateTestCase(appState);
         return await updateFunction(testCaseId, updateData);
     }, [testCases.actions.updateTestCase, getCurrentAppState]);
 
     const wrappedDeleteTestCase = useCallback(async (testCaseId) => {
         const appState = getCurrentAppState();
-
-        // Call the function returned by the slice (the curried function)
         const deleteFunction = testCases.actions.deleteTestCase(appState);
         return await deleteFunction(testCaseId);
     }, [testCases.actions.deleteTestCase, getCurrentAppState]);
@@ -136,15 +357,8 @@ export const AppProvider = ({ children }) => {
     const setTheme = useCallback((newTheme) => {
         try {
             theme.actions.setTheme(newTheme);
-            
-            // Show notification for theme change (optional)
             if (ui.actions.showNotification) {
-                const themeNames = {
-                    light: 'Light',
-                    dark: 'Dark',
-                    system: 'System'
-                };
-                
+                const themeNames = { light: 'Light', dark: 'Dark', system: 'System' };
                 ui.actions.showNotification({
                     id: 'theme-changed',
                     type: 'success',
@@ -154,15 +368,13 @@ export const AppProvider = ({ children }) => {
             }
         } catch (error) {
             console.error('Failed to set theme:', error);
-            if (ui.actions.showNotification) {
-                ui.actions.showNotification({
-                    id: 'theme-change-error',
-                    type: 'error',
-                    message: 'Failed to change theme',
-                    description: error.message,
-                    duration: 3000,
-                });
-            }
+            ui.actions.showNotification?.({
+                id: 'theme-change-error',
+                type: 'error',
+                message: 'Failed to change theme',
+                description: error.message,
+                duration: 3000,
+            });
         }
     }, [theme.actions, ui.actions]);
 
@@ -171,21 +383,18 @@ export const AppProvider = ({ children }) => {
             theme.actions.toggleTheme();
         } catch (error) {
             console.error('Failed to toggle theme:', error);
-            if (ui.actions.showNotification) {
-                ui.actions.showNotification({
-                    id: 'theme-toggle-error',
-                    type: 'error',
-                    message: 'Failed to toggle theme',
-                    description: error.message,
-                    duration: 3000,
-                });
-            }
+            ui.actions.showNotification?.({
+                id: 'theme-toggle-error',
+                type: 'error',
+                message: 'Failed to toggle theme',
+                description: error.message,
+                duration: 3000,
+            });
         }
     }, [theme.actions, ui.actions]);
 
     // Initialize AI service when authentication is ready
     const initializeAI = useCallback(async () => {
-        // Only initialize once and when user is authenticated
         if (!auth.state.isAuthenticated || aiInitialized || ai.state.isInitialized) {
             return;
         }
@@ -193,21 +402,15 @@ export const AppProvider = ({ children }) => {
         console.log('Initializing AI service...');
 
         try {
-            // Call the AI initialization action
             const result = await ai.actions.initializeAI();
-
             if (result.success) {
                 setAiInitialized(true);
                 console.log('✅ AI service initialized successfully');
-
-                // Update the AI state with the initialized service
-                // The updateSettings action is curried and updates the state automatically
                 await ai.actions.updateSettings({
                     isInitialized: true,
                     serviceInstance: result.data.aiService,
                     error: null
                 });
-
                 ui.actions.showNotification?.({
                     id: 'ai-initialized',
                     type: 'success',
@@ -221,19 +424,14 @@ export const AppProvider = ({ children }) => {
         } catch (error) {
             console.error('AI service initialization error:', error);
             setAiInitialized(false);
-
-            // Update AI state with error
-            // The updateSettings action is curried and updates the state automatically
             await ai.actions.updateSettings({
                 isInitialized: false,
                 error: error.message,
                 serviceInstance: null
             });
 
-            // Show appropriate error message
             let message = 'AI assistant unavailable';
             let description = 'Please check your AI configuration';
-
             if (error.message.includes('API_KEY')) {
                 description = 'Please configure your AI provider API key';
             } else if (error.message.includes('provider')) {
@@ -250,13 +448,7 @@ export const AppProvider = ({ children }) => {
                 duration: 8000,
             });
         }
-    }, [
-        auth.state.isAuthenticated,
-        aiInitialized,
-        ai.state.isInitialized,
-        ai.actions,
-        ui.actions
-    ]);
+    }, [auth.state.isAuthenticated, aiInitialized, ai.state.isInitialized, ai.actions, ui.actions]);
 
     // AI-powered test case generation wrapper
     const generateTestCasesWithAI = useCallback(async (documentContent, documentTitle, templateConfig = {}) => {
@@ -276,23 +468,16 @@ export const AppProvider = ({ children }) => {
 
         try {
             console.log('🚀 Starting AI test case generation...', { documentTitle });
-
-            // Call the AI generation action directly
             const result = await ai.actions.generateTestCases(documentContent, documentTitle, templateConfig);
 
             if (result.success && result.data?.testCases?.length > 0) {
                 console.log(`✅ Generated ${result.data.testCases.length} test cases`);
-
-                // IMPORTANT: Only return the generated test cases - DO NOT SAVE THEM HERE
-                // The modal will handle saving when user clicks "Save Selected"
                 return {
                     success: true,
                     data: {
                         testCases: result.data.testCases.map((testCase, index) => ({
                             ...testCase,
-                            // Ensure unique temporary ID for the review phase
                             id: testCase.id || `temp_${Date.now()}_${index}`,
-                            // Add generation metadata but don't save yet
                             _isGenerated: true,
                             _generationTimestamp: new Date().toISOString(),
                             _generationId: result.generationId || `gen_${Date.now()}`,
@@ -322,7 +507,6 @@ export const AppProvider = ({ children }) => {
                 });
                 return result;
             }
-
             return result;
         } catch (error) {
             console.error('❌ AI test case generation failed:', error);
@@ -335,22 +519,13 @@ export const AppProvider = ({ children }) => {
             });
             return { success: false, error: error.message };
         }
-    }, [
-        ai.state.isInitialized,
-        ai.actions,
-        getCurrentAppState,
-        ui.actions
-    ]);
+    }, [ai.state.isInitialized, ai.actions, getCurrentAppState, ui.actions]);
 
     // Get AI generation statistics for dashboard/analytics
     const getAIAnalytics = useCallback(() => {
         if (!ai.state.isInitialized) {
-            return {
-                available: false,
-                message: 'AI service not available'
-            };
+            return { available: false, message: 'AI service not available' };
         }
-
         const stats = ai.actions.getGenerationStats();
         return {
             available: true,
@@ -365,9 +540,7 @@ export const AppProvider = ({ children }) => {
     // Update AI settings
     const updateAISettings = useCallback(async (newSettings) => {
         try {
-            // The AI action should handle the state update automatically
             await ai.actions.updateSettings(newSettings);
-
             ui.actions.showNotification?.({
                 id: 'ai-settings-updated',
                 type: 'success',
@@ -375,7 +548,6 @@ export const AppProvider = ({ children }) => {
                 description: `Provider: ${newSettings.provider || ai.state.settings.provider}`,
                 duration: 3000,
             });
-
             return { success: true };
         } catch (error) {
             console.error('Failed to update AI settings:', error);
@@ -390,7 +562,7 @@ export const AppProvider = ({ children }) => {
         }
     }, [ai.actions, ai.state.settings.provider, ui.actions]);
 
-    // Helper functions for linking operations (unchanged)
+    // Helper functions for linking operations
     const linkTestCasesToBug = async (bugId, testCaseIds) => {
         return handleFirebaseOperation(
             () => FirestoreService.batchLinkTestCasesToBug(bugId, testCaseIds),
@@ -512,14 +684,13 @@ export const AppProvider = ({ children }) => {
             const recordingId = `rec_${Date.now()}`;
             const recordingData = {
                 id: recordingId,
-                url: URL.createObjectURL(blob), // Temporary URL for client-side preview
+                url: URL.createObjectURL(blob),
                 size: blob.size,
                 created_at: new Date().toISOString(),
                 networkErrors,
                 suiteId: suites.state.activeSuite?.id,
             };
 
-            // Save to Firestore
             const result = await recordings.actions.createRecording(suites.state, {
                 recordings: recordings.actions,
                 ui: ui.actions,
@@ -527,7 +698,6 @@ export const AppProvider = ({ children }) => {
             })(recordingData);
 
             if (result.success && networkErrors.length > 0) {
-                // Create bug for network errors
                 const bugData = {
                     title: `Network Error: ${networkErrors[0].status || 'Unknown'}`,
                     description: `Auto-detected network error during recording:\n${JSON.stringify(networkErrors, null, 2)}`,
@@ -538,7 +708,6 @@ export const AppProvider = ({ children }) => {
                 };
                 const bugResult = await bugs.actions.createBug(bugData);
                 if (bugResult.success) {
-                    // Link recording to bug
                     await FirestoreService.recordings.linkRecordingToBug(recordingId, bugResult.data.id);
                     recordings.actions.updateRecording(recordingId, { bugId: bugResult.data.id });
                 }
@@ -549,7 +718,6 @@ export const AppProvider = ({ children }) => {
                     duration: 3000,
                 });
             }
-
             return result;
         } catch (error) {
             ui.actions.showNotification?.({
@@ -581,9 +749,10 @@ export const AppProvider = ({ children }) => {
     };
 
     const logout = async () => {
-        // Clear AI state on logout
         ai.actions.clearAIState();
         setAiInitialized(false);
+        setRegistrationState('completed');
+        setPendingRegistrationData(null);
         return auth.actions.signOut();
     };
 
@@ -591,6 +760,7 @@ export const AppProvider = ({ children }) => {
         return auth.actions.initializeAuth();
     };
 
+    // Refresh user profile
     const refreshUserProfile = async () => {
         try {
             console.log('🔄 Refreshing user profile from AppProvider...');
@@ -598,6 +768,18 @@ export const AppProvider = ({ children }) => {
             if (!auth.state.currentUser?.uid) {
                 console.error('No authenticated user found');
                 throw new Error('No authenticated user');
+            }
+
+            // Check registration status first
+            const regStatus = await checkRegistrationStatus(auth.state.currentUser);
+            console.log('📋 Registration status:', regStatus);
+
+            setRegistrationState(regStatus);
+
+            // If registration is not complete, don't proceed with normal profile refresh
+            if (regStatus !== 'completed') {
+                console.log('⏸️ Registration not completed, skipping full profile refresh');
+                return { success: true, registrationPending: true, status: regStatus };
             }
 
             if (auth.actions.refreshUserProfile) {
@@ -623,7 +805,7 @@ export const AppProvider = ({ children }) => {
                     organizationId: profileData.organizationId || null,
                     orgId: profileData.organizationId || null,
                     role: profileData.role || 'member',
-                    accountType: profileData.account_type || 'individual',
+                    accountType: profileData.account_type || 'organization',
                 };
 
                 console.log('Enhanced user object:', {
@@ -635,15 +817,21 @@ export const AppProvider = ({ children }) => {
                 auth.actions.restoreAuth({
                     user: enhancedUser,
                     profile: profileData,
-                    accountType: profileData.account_type || 'individual',
+                    accountType: profileData.account_type || 'organization',
                 });
 
                 return profileResult;
             } else if (profileResult.error.message === 'Document not found') {
                 console.log('Creating new user profile...');
                 const createResult = await FirestoreService.user.createOrUpdateUserProfile({
+                    user_id: auth.state.currentUser.uid,
                     display_name: auth.state.currentUser.displayName || '',
                     email: auth.state.currentUser.email || '',
+                    account_type: pendingRegistrationData?.accountType || 'organization',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    created_by: auth.state.currentUser.uid,
+                    updated_by: auth.state.currentUser.uid,
                 });
                 if (createResult.success) {
                     const enhancedUser = {
@@ -656,13 +844,13 @@ export const AppProvider = ({ children }) => {
                         organizationId: createResult.data.organizationId || null,
                         orgId: createResult.data.organizationId || null,
                         role: createResult.data.role || 'member',
-                        accountType: createResult.data.account_type || 'individual',
+                        accountType: createResult.data.account_type || 'organization',
                     };
 
                     auth.actions.restoreAuth({
                         user: enhancedUser,
                         profile: createResult.data,
-                        accountType: createResult.data.account_type || 'individual',
+                        accountType: createResult.data.account_type || 'organization',
                     });
 
                     return createResult;
@@ -713,7 +901,10 @@ export const AppProvider = ({ children }) => {
             automation.actions.clearAutomation?.();
             ui.actions.clearUI?.();
             ai.actions.clearAIState();
-            // Note: We don't clear theme state on logout as it's user preference
+
+            setRegistrationState('completed');
+            setPendingRegistrationData(null);
+
             setSuitesLoaded(false);
             setSuiteSubscriptionActive(false);
             setAiInitialized(false);
@@ -733,7 +924,7 @@ export const AppProvider = ({ children }) => {
         initializeAuth();
     }, []);
 
-
+    // Main auth effect with registration flow handling
     useEffect(() => {
         console.log('Auth state changed:', {
             isAuthenticated: auth.state.isAuthenticated,
@@ -746,6 +937,7 @@ export const AppProvider = ({ children }) => {
             subscriptionLoading: subscription.state.loading,
             suiteSubscriptionActive,
             aiInitialized,
+            registrationState,
         });
 
         if (!auth.state.isInitialized || auth.state.loading || subscription.state.loading) {
@@ -756,12 +948,21 @@ export const AppProvider = ({ children }) => {
         }
 
         if (auth.state.isAuthenticated && auth.state.currentUser) {
-            console.log('User authenticated, refreshing profile and setting up subscriptions...');
-            refreshUserProfile().then(() => {
+            console.log('User authenticated, checking registration status...');
+
+            refreshUserProfile().then((result) => {
+                if (result?.registrationPending) {
+                    console.log('📋 Registration pending, stopping here');
+                    setSuitesLoaded(false);
+                    setSuiteSubscriptionActive(false);
+                    return;
+                }
+
+                console.log('✅ Registration completed, proceeding with app initialization');
+
                 suites.actions.loadSuitesStart();
                 setSuitesLoaded(false);
 
-                // Initialize AI service after auth is complete
                 initializeAI();
 
                 if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
@@ -911,7 +1112,8 @@ export const AppProvider = ({ children }) => {
         auth.state.currentUser?.organizationId,
         subscription.state.loading,
         subscription.state.isTrialActive,
-        subscription.state.isSubscriptionActive
+        subscription.state.isSubscriptionActive,
+        registrationState,
     ]);
 
     useEffect(() => {
@@ -1088,6 +1290,10 @@ export const AppProvider = ({ children }) => {
                 setTheme,
                 toggleTheme,
             },
+            registration: {
+                completePendingRegistration,
+                completeOrganizationSetup,
+            },
             linkTestCasesToBug,
             unlinkTestCaseFromBug,
             linkBugsToTestCase,
@@ -1105,7 +1311,10 @@ export const AppProvider = ({ children }) => {
         planLimits: subscription.state.planLimits,
         aiAvailable: ai.state.isInitialized && !ai.state.error,
         aiGenerating: ai.state.isGenerating,
-        // Theme-related convenience properties
+        registrationState,
+        pendingRegistrationData,
+        needsRegistration: registrationState !== 'completed',
+        needsOrgSetup: registrationState === 'org-setup',
         isDarkMode: theme.state.isDark,
         isLightMode: theme.state.isLight,
         isSystemTheme: theme.state.isSystem,
@@ -1128,53 +1337,18 @@ export const AppProvider = ({ children }) => {
             theme.state.isLoading ||
             !suitesLoaded,
     }), [
-        auth.state,
-        suites.state,
-        testCases.state,
-        bugs.state,
-        recordings.state,
-        sprints.state,
-        subscription.state,
-        team.state,
-        automation.state,
-        ui.state,
-        ai.state,
-        reports.state,
-        theme.state,
-        auth.actions,
-        suites.actions,
-        testCases.actions,
-        bugs.actions,
-        recordings.actions,
-        sprints.actions,
-        subscription.actions,
-        team.actions,
-        automation.actions,
-        ui.actions,
-        ai.actions,
-        theme.actions,
-        wrappedCreateTestCase,
-        wrappedUpdateTestCase,
-        wrappedDeleteTestCase,
-        saveRecording,
-        linkRecordingToBug,
-        generateTestCasesWithAI,
-        getAIAnalytics,
-        updateAISettings,
-        setTheme,
-        toggleTheme,
-        linkTestCasesToBug,
-        unlinkTestCaseFromBug,
-        linkBugsToTestCase,
-        unlinkBugFromTestCase,
-        addTestCasesToSprint,
-        addBugsToSprint,
-        clearState,
-        logout,
-        initializeAuth,
-        refreshUserProfile,
-        suitesLoaded,
-        aiInitialized,
+        auth.state, suites.state, testCases.state, bugs.state, recordings.state,
+        sprints.state, subscription.state, team.state, automation.state,
+        ui.state, ai.state, reports.state, theme.state,
+        auth.actions, suites.actions, testCases.actions, bugs.actions, recordings.actions,
+        sprints.actions, subscription.actions, team.actions, automation.actions,
+        ui.actions, ai.actions, theme.actions,
+        wrappedCreateTestCase, wrappedUpdateTestCase, wrappedDeleteTestCase,
+        saveRecording, linkRecordingToBug, generateTestCasesWithAI, getAIAnalytics, updateAISettings,
+        setTheme, toggleTheme, completePendingRegistration, completeOrganizationSetup,
+        linkTestCasesToBug, unlinkTestCaseFromBug, linkBugsToTestCase, unlinkBugFromTestCase,
+        addTestCasesToSprint, addBugsToSprint, clearState, logout, initializeAuth, refreshUserProfile,
+        suitesLoaded, aiInitialized, registrationState, pendingRegistrationData,
     ]);
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

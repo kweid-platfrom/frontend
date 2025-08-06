@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
+// components/auth/VerifyEmail.jsx
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -28,19 +29,10 @@ const VerifyEmail = () => {
     const [status, setStatus] = useState('verifying'); // 'verifying', 'success', 'error'
     const [message, setMessage] = useState('');
 
-
     const handleEmailVerified = useCallback(async () => {
         console.log('Email verified successfully');
         setStatus('success');
-        setMessage('Email verified successfully! Please return to the registration tab to complete your setup.');
-
-        // Set a flag to indicate email verification is complete (for the polling mechanism)
-        try {
-            localStorage.setItem('emailVerified', 'true');
-            localStorage.setItem('emailVerifiedAt', Date.now().toString());
-        } catch (error) {
-            console.warn('Failed to set verification flag:', error);
-        }
+        setMessage('Your email has been verified successfully! You can now sign in to complete your account setup.');
     }, []);
 
     useEffect(() => {
@@ -50,7 +42,7 @@ const VerifyEmail = () => {
             const actionCode = searchParams.get('oobCode');
             if (!actionCode) {
                 setStatus('error');
-                setMessage('Invalid verification link. Please request a new one from the registration page.');
+                setMessage('Invalid verification link. Please try registering again.');
                 return;
             }
 
@@ -75,18 +67,12 @@ const VerifyEmail = () => {
                         await applyActionCode(auth, actionCode);
                     });
                     console.log('Email verification applied successfully');
-                    
-                    // Reload the current user to update emailVerified status
-                    if (auth.currentUser) {
-                        await auth.currentUser.reload();
-                        console.log('User reloaded, emailVerified:', auth.currentUser.emailVerified);
-                    }
                 } catch (error) {
                     console.error('Failed to apply action code:', error);
                     throw error;
                 }
 
-                // Email verification complete - set flags for the other tab to detect
+                // Email verification complete
                 await handleEmailVerified();
 
             } catch (error) {
@@ -95,9 +81,9 @@ const VerifyEmail = () => {
                 let errorMessage = 'Failed to verify email. Please try again.';
 
                 if (error.code === 'auth/expired-action-code') {
-                    errorMessage = 'This verification link has expired. Please request a new one from the registration page.';
+                    errorMessage = 'This verification link has expired. Please register again to get a new verification link.';
                 } else if (error.code === 'auth/invalid-action-code') {
-                    errorMessage = 'This verification link is invalid. Please request a new one from the registration page.';
+                    errorMessage = 'This verification link is invalid. Please register again to get a new verification link.';
                 } else if (error.code === 'auth/user-disabled') {
                     errorMessage = 'This account has been disabled.';
                 }
@@ -110,19 +96,12 @@ const VerifyEmail = () => {
         return () => clearTimeout(timeoutId);
     }, [searchParams, handleEmailVerified]);
 
-    const handleGoBackToRegistration = () => {
-        try {
-            // Clear any stale verification flags
-            localStorage.removeItem('emailVerified');
-            localStorage.removeItem('emailVerifiedAt');
-            
-            // Go back to registration page
-            const redirectUrl = localStorage.getItem('registrationRedirectUrl') || '/register';
-            router.push(redirectUrl);
-        } catch (error) {
-            console.error('Error during navigation to registration:', error);
-            router.push('/register');
-        }
+    const handleGoToLogin = () => {
+        router.push('/login');
+    };
+
+    const handleGoToRegister = () => {
+        router.push('/register');
     };
 
     return (
@@ -159,12 +138,13 @@ const VerifyEmail = () => {
                                 <h1 className="text-2xl font-bold text-slate-900 mb-2">Email Verified!</h1>
                                 <p className="text-slate-600 mb-6">{message}</p>
                                 
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <p className="text-sm text-blue-800">
-                                        <strong>Next Step:</strong> Return to your registration tab. 
-                                        Your email verification will be detected automatically and registration will continue.
-                                    </p>
-                                </div>
+                                <button
+                                    onClick={handleGoToLogin}
+                                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-cyan-700 transition-all transform hover:scale-[1.02] font-medium flex items-center justify-center gap-2"
+                                >
+                                    Continue to Sign In
+                                    <ArrowRight className="w-4 h-4" />
+                                </button>
                             </div>
                         )}
 
@@ -175,13 +155,23 @@ const VerifyEmail = () => {
                                 </div>
                                 <h1 className="text-2xl font-bold text-slate-900 mb-2">Verification Failed</h1>
                                 <p className="text-slate-600 mb-6">{message}</p>
-                                <button
-                                    onClick={handleGoBackToRegistration}
-                                    className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-cyan-700 transition-all transform hover:scale-[1.02] font-medium flex items-center justify-center gap-2"
-                                >
-                                    Back to Registration
-                                    <ArrowRight className="w-4 h-4" />
-                                </button>
+                                
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={handleGoToRegister}
+                                        className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white py-3 px-4 rounded-lg hover:from-teal-700 hover:to-cyan-700 transition-all transform hover:scale-[1.02] font-medium flex items-center justify-center gap-2"
+                                    >
+                                        Try Registration Again
+                                        <ArrowRight className="w-4 h-4" />
+                                    </button>
+                                    
+                                    <button
+                                        onClick={handleGoToLogin}
+                                        className="w-full border border-slate-300 text-slate-700 py-3 px-4 rounded-lg hover:bg-slate-50 transition-all font-medium"
+                                    >
+                                        Go to Sign In
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>

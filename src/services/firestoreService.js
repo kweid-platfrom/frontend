@@ -13,6 +13,7 @@ import {
     onSnapshot,
     serverTimestamp,
     writeBatch,
+    arrayUnion,
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
@@ -285,6 +286,96 @@ export class FirestoreService {
         this.unsubscribes.clear();
     }
 
+    // Add missing method that was referenced in recordings.linkRecordingToBug
+    getCurrentSuiteId() {
+        // You'll need to implement this based on your app's state management
+        // This is likely stored in context, local storage, or passed as a parameter
+        return null; // Placeholder - implement based on your app structure
+    }
+
+    // Placeholder organization service methods
+    // These should be replaced with actual service implementations
+    organization = {
+        getReports: async (orgId) => {
+            return await this.queryDocuments(`organizations/${orgId}/reports`, [], 'created_at', 100);
+        },
+        saveReport: async (reportData) => {
+            return await this.createDocument(`organizations/${reportData.organizationId}/reports`, reportData);
+        },
+        deleteReport: async (reportId, orgId) => {
+            return await this.deleteDocument(`organizations/${orgId}/reports`, reportId);
+        },
+        toggleSchedule: async ({ organizationId, enabled }) => {
+            return await this.updateDocument(`organizations/${organizationId}/settings`, 'reportSchedule', { enabled });
+        },
+        subscribeToTriggers: (orgId, callback) => {
+            return this.subscribeToCollection(`organizations/${orgId}/triggers`, [], callback);
+        },
+        generatePDF: async (report) => {
+            return { success: true, data: { url: `/pdf/${report.id}` } };
+        },
+        createOrganization: async (orgData) => {
+            try {
+                console.log('OrganizationService.createOrganization called with:', orgData);
+                
+                // Validate required fields
+                if (!orgData.name) {
+                    return { success: false, error: { message: 'Organization name is required' } };
+                }
+                
+                // Create the organization document
+                const result = await this.createDocument('organizations', orgData);
+                
+                console.log('Organization creation result:', result);
+                return result;
+            } catch (error) {
+                console.error('Error in createOrganization:', error);
+                return this.handleFirestoreError(error, 'create organization');
+            }
+        },
+        cleanup: () => {
+            // Cleanup logic if needed
+        }
+    };
+
+    // User service methods
+    user = {
+        getUserProfile: async (userId) => {
+            return await this.getDocument('users', userId);
+        },
+        createOrUpdateUserProfile: async (userData) => {
+            try {
+                console.log('UserService.createOrUpdateUserProfile called with:', userData);
+                
+                // Validate required fields
+                if (!userData.user_id) {
+                    return { success: false, error: { message: 'User ID is required' } };
+                }
+                
+                // Use setDoc to create or update the user document
+                const result = await this.createDocument('users', userData, userData.user_id);
+                
+                console.log('User profile creation result:', result);
+                return result;
+            } catch (error) {
+                console.error('Error in createOrUpdateUserProfile:', error);
+                return this.handleFirestoreError(error, 'create or update user profile');
+            }
+        },
+        cleanup: () => {
+            // Cleanup logic if needed
+        }
+    };
+
+    // Direct methods that delegate to service objects (for backward compatibility)
+    async getUserProfile(userId) {
+        return this.user.getUserProfile(userId);
+    }
+
+    async createOrUpdateUserProfile(userData) {
+        return this.user.createOrUpdateUserProfile(userData);
+    }
+
     recordings = {
         createRecording: async (recordingData) => {
             try {
@@ -362,8 +453,16 @@ export class FirestoreService {
         },
     };
 
-
     cleanup() {
         this.unsubscribeAll();
+        this.user?.cleanup?.();
+        this.organization?.cleanup?.();
     }
 }
+
+// Create and export a default instance
+const firestoreService = new FirestoreService();
+export default firestoreService;
+
+// Also export the class for direct instantiation if needed
+export { FirestoreService };

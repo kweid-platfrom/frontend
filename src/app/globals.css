@@ -5,7 +5,7 @@
 /* CSS Custom Properties for Theme System */
 :root {
   /* Light theme colors */
-  --color-primary: 45 212 191; /* teal-400 */
+  --color-primary: 13 148 136; /* teal-600 */
   --color-primary-foreground: 255 255 255;
   --color-secondary: 244 244 245; /* zinc-100 */
   --color-secondary-foreground: 39 39 42; /* zinc-800 */

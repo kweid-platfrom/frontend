@@ -2,9 +2,64 @@ import { FirestoreService } from './firestoreService';
 import { orderBy } from 'firebase/firestore';
 
 export class AssetService extends FirestoreService {
-    constructor(testSuiteService) {
+    constructor(testSuiteService = null) {
         super();
         this.testSuiteService = testSuiteService;
+    }
+
+    // Fallback validation method when testSuiteService is not available
+    async validateTestSuiteAccess(suiteId, accessType = 'read') {
+        if (this.testSuiteService && typeof this.testSuiteService.validateTestSuiteAccess === 'function') {
+            return await this.testSuiteService.validateTestSuiteAccess(suiteId, accessType);
+        }
+
+        // Fallback validation logic
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            console.error('No authenticated user found for test suite access validation');
+            return false;
+        }
+
+        try {
+            // Check if the user owns or has access to the test suite
+            const suiteDoc = await this.getDocument('testSuites', suiteId);
+            if (!suiteDoc.success) {
+                console.warn(`Test suite ${suiteId} not found`);
+                return false;
+            }
+
+            const suiteData = suiteDoc.data;
+            
+            // Check if user is the owner
+            if (suiteData.ownerId === userId || suiteData.created_by === userId) {
+                return true;
+            }
+
+            // Check if user has organization access (if it's an organization suite)
+            if (suiteData.organizationId) {
+                const memberDoc = await this.getDocument(`organizations/${suiteData.organizationId}/members`, userId);
+                if (memberDoc.success) {
+                    const memberData = memberDoc.data;
+                    if (accessType === 'read') return true;
+                    if (accessType === 'write' && ['Admin', 'Editor'].includes(memberData.role)) return true;
+                }
+            }
+
+            // Check if user is explicitly added as a collaborator
+            if (suiteData.collaborators && Array.isArray(suiteData.collaborators)) {
+                const userCollaborator = suiteData.collaborators.find(c => c.userId === userId);
+                if (userCollaborator) {
+                    if (accessType === 'read') return true;
+                    if (accessType === 'write' && ['admin', 'editor', 'write'].includes(userCollaborator.role)) return true;
+                }
+            }
+
+            console.warn(`User ${userId} lacks ${accessType} access to test suite ${suiteId}`);
+            return false;
+        } catch (error) {
+            console.error('Error validating test suite access:', error);
+            return false;
+        }
     }
 
     async createSuiteAsset(suiteId, assetType, assetData, sprintId = null) {
@@ -13,7 +68,7 @@ export class AssetService extends FirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+        const hasAccess = await this.validateTestSuiteAccess(suiteId, 'write');
         if (!hasAccess) {
             return { success: false, error: { message: `Insufficient permissions to create ${assetType} in this test suite` } };
         }
@@ -38,7 +93,7 @@ export class AssetService extends FirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'read');
+        const hasAccess = await this.validateTestSuiteAccess(suiteId, 'read');
         if (!hasAccess) {
             return { success: false, error: { message: `Insufficient permissions to access ${assetType} in this test suite` } };
         }
@@ -92,7 +147,7 @@ export class AssetService extends FirestoreService {
         const pathParts = collectionPath.split('/');
         if (pathParts[0] === 'testSuites' && pathParts[1]) {
             const suiteId = pathParts[1];
-            const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+            const hasAccess = await this.validateTestSuiteAccess(suiteId, 'write');
             if (!hasAccess) {
                 return { success: false, error: { message: 'Insufficient permissions to update this asset' } };
             }
@@ -111,7 +166,7 @@ export class AssetService extends FirestoreService {
         const pathParts = collectionPath.split('/');
         if (pathParts[0] === 'testSuites' && pathParts[1]) {
             const suiteId = pathParts[1];
-            const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+            const hasAccess = await this.validateTestSuiteAccess(suiteId, 'write');
             if (!hasAccess) {
                 return { success: false, error: { message: 'Insufficient permissions to delete this asset' } };
             }

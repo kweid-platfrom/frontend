@@ -1,181 +1,153 @@
-import React from 'react';
-import { TestTube, Upload, Users, FileText, TrendingUp, Bug, Activity } from 'lucide-react';
+import React, { useState } from 'react';
+import { TestTube, Users, Plus, Upload, Bug, Activity, FileText, TrendingUp, CheckCircle } from 'lucide-react';
+import CreateSuiteModal from './modals/createSuiteModal';
 
-const TipsMode = ({ activeSuite, isTrialActive, trialDaysRemaining, isOrganizationAccount }) => {
+const TipsMode = ({ 
+    isTrialActive, 
+    trialDaysRemaining, 
+    isOrganizationAccount,
+    onSuiteCreated // Add this prop to handle suite creation
+}) => {
+    const [showCreateModal, setShowCreateModal] = useState(false);
+
+    const handleCreateSuite = () => {
+        setShowCreateModal(true);
+    };
+
+    const handleCloseModal = () => {
+        setShowCreateModal(false);
+    };
+
+    const handleSuiteCreationComplete = async (newSuite) => {
+        setShowCreateModal(false);
+        if (onSuiteCreated) {
+            await onSuiteCreated(newSuite);
+        }
+    };
+
     return (
-        <div className="max-w-6xl mx-auto">
-            <div className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-lg p-8 mb-8">
-                <div className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mb-4">
-                        <TestTube className="w-8 h-8 text-teal-600" />
+        <>
+            <div className="h-full flex flex-col max-w-6xl mx-auto px-4">
+                {/* Welcome Header */}
+                <div className="rounded-lg p-6 mb-6 text-center flex-shrink-0 shadow-sm">
+                    <div className="mx-auto w-12 h-12 bg-gradient-to-br from-teal-100 to-teal-200 rounded-full flex items-center justify-center mb-3 shadow-md">
+                        <TestTube className="w-6 h-6 text-teal-600" />
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                        Welcome to {activeSuite?.name || 'Your Test Suite'}!
+                        Welcome to QAiD
                     </h2>
                     <p className="text-gray-600 mb-4">
-                        Your workspace is ready. Use the buttons in the header above to get started with quality assurance testing.
+                        Start your quality assurance journey by creating your first test suite
                     </p>
+                    
                     {isTrialActive && trialDaysRemaining > 0 && (
-                        <div className="bg-white/80 rounded-lg p-3 inline-block">
-                            <p className="text-blue-700 font-medium">
+                        <div className="bg-white/90 backdrop-blur-sm rounded-lg p-2 inline-block mb-3 shadow-sm border border-blue-100">
+                            <p className="text-primary font-semibold text-sm">
                                 🎉 Free trial active: {trialDaysRemaining} days remaining
                             </p>
                         </div>
                     )}
-                </div>
-            </div>
 
-            <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">
-                    Available Actions in Header
-                </h3>
-                <div className={`grid ${isOrganizationAccount ? 'md:grid-cols-2' : 'md:grid-cols-1'} gap-6`}>
-                    <div className="text-center">
-                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                            <Upload className="w-6 h-6 text-blue-600" />
+                    {/* Prominent Create Button */}
+                    <button
+                        onClick={handleCreateSuite}
+                        className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+                    >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Test Suite
+                    </button>
+                </div>
+
+                {/* Quick Start Guide */}
+                <div className="rounded-lg p-4 flex-grow flex flex-col justify-center shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">
+                        Your QA Journey in 3 Steps
+                    </h3>
+                    <div className="grid md:grid-cols-3 gap-4 mb-4">
+                        {/* Step 1 Card */}
+                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-teal-200 group">
+                            <div className="w-12 h-12 bg-gradient-to-br from-teal-100 to-teal-200 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                                <TestTube className="w-6 h-6 text-teal-600" />
+                            </div>
+                            <h4 className="font-bold text-gray-900 mb-2 text-sm">Create Test Suite</h4>
+                            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
+                                Set up your workspace and define your project scope with custom configurations.
+                            </p>
+                            <div className="space-y-1">
+                                <div className="flex items-center text-xs text-gray-500">
+                                    <CheckCircle className="w-3 h-3 mr-1 text-teal-500" />
+                                    Define project parameters
+                                </div>
+                                <div className="flex items-center text-xs text-gray-500">
+                                    <CheckCircle className="w-3 h-3 mr-1 text-teal-500" />
+                                    Configure environment
+                                </div>
+                            </div>
                         </div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Create/Upload Documents</h4>
-                        <p className="text-gray-600 text-sm">
-                            Upload project requirements, specifications, or create new test documentation to get started
-                        </p>
+
+                        {/* Step 2 Card */}
+                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-blue-200 group">
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                                <FileText className="w-6 h-6 text-blue-600" />
+                            </div>
+                            <h4 className="font-bold text-gray-900 mb-2 text-sm">Build Test Cases</h4>
+                            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
+                                Create comprehensive test scenarios and upload documents for AI-assisted generation.
+                            </p>
+                            <div className="space-y-1">
+                                <div className="flex items-center text-xs text-gray-500">
+                                    <Upload className="w-3 h-3 mr-1 text-blue-500" />
+                                    Upload requirements
+                                </div>
+                                <div className="flex items-center text-xs text-gray-500">
+                                    <Activity className="w-3 h-3 mr-1 text-blue-500" />
+                                    Generate scenarios
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Step 3 Card */}
+                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-green-200 group">
+                            <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                                <TrendingUp className="w-6 h-6 text-green-600" />
+                            </div>
+                            <h4 className="font-bold text-gray-900 mb-2 text-sm">Execute & Monitor</h4>
+                            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
+                                Run tests, track progress, and generate comprehensive quality reports.
+                            </p>
+                            <div className="space-y-1">
+                                <div className="flex items-center text-xs text-gray-500">
+                                    <Activity className="w-3 h-3 mr-1 text-green-500" />
+                                    Execute test runs
+                                </div>
+                                <div className="flex items-center text-xs text-gray-500">
+                                    <Bug className="w-3 h-3 mr-1 text-green-500" />
+                                    Track defects
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
                     {isOrganizationAccount && (
                         <div className="text-center">
-                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                                <Users className="w-6 h-6 text-purple-600" />
+                            <div className="inline-flex items-center bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 px-4 py-2 rounded-lg shadow-sm border border-purple-100">
+                                <Users className="w-4 h-4 mr-2" />
+                                <span className="text-xs font-semibold">Organization Account: Invite team members to collaborate</span>
                             </div>
-                            <h4 className="font-semibold text-gray-900 mb-2">Invite Team Members</h4>
-                            <p className="text-gray-600 text-sm">
-                                Collaborate with your team by inviting members to join your workspace
-                            </p>
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">
-                    Navigate to Add Data
-                </h3>
-                <div className="grid md:grid-cols-3 gap-6">
-                    <div className="text-center">
-                        <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                            <TestTube className="w-6 h-6 text-teal-600" />
-                        </div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Test Cases</h4>
-                        <p className="text-gray-600 text-sm mb-3">
-                            Use the sidebar to navigate to Test Cases and start creating comprehensive test scenarios
-                        </p>
-                        <p className="text-xs text-teal-600 font-medium">Sidebar → Test Cases → Create</p>
-                    </div>
-
-                    <div className="text-center">
-                        <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                            <Bug className="w-6 h-6 text-red-600" />
-                        </div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Bug Reports</h4>
-                        <p className="text-gray-600 text-sm mb-3">
-                            Navigate to Bugs section to start tracking issues and defects found during testing
-                        </p>
-                        <p className="text-xs text-red-600 font-medium">Sidebar → Bugs → Report</p>
-                    </div>
-
-                    <div className="text-center">
-                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                            <Activity className="w-6 h-6 text-green-600" />
-                        </div>
-                        <h4 className="font-semibold text-gray-900 mb-2">Test Execution</h4>
-                        <p className="text-gray-600 text-sm mb-3">
-                            Once you have test cases, use Test Runs to execute and track testing progress
-                        </p>
-                        <p className="text-xs text-green-600 font-medium">Sidebar → Test Runs → Execute</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                        <FileText className="w-5 h-5 text-blue-600 mr-2" />
-                        Test Case Best Practices
-                    </h3>
-                    <ul className="space-y-3 text-gray-700">
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-teal-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Clear Steps:</strong> Write specific, actionable test steps that anyone can follow</span>
-                        </li>
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-teal-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Expected Results:</strong> Define clear expected outcomes for each test</span>
-                        </li>
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-teal-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Descriptive Names:</strong> Use meaningful titles that explain what&apos;s being tested</span>
-                        </li>
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-teal-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Tags & Categories:</strong> Organize tests with relevant tags for easy filtering</span>
-                        </li>
-                    </ul>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                        <TrendingUp className="w-5 h-5 text-green-600 mr-2" />
-                        Getting Started Tips
-                    </h3>
-                    <ul className="space-y-3 text-gray-700">
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Start Small:</strong> Begin with critical user flows and expand coverage gradually</span>
-                        </li>
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Use Documentation:</strong> Upload project docs to generate test cases automatically</span>
-                        </li>
-                        <li className="flex items-start">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                            <span><strong>Track Everything:</strong> Log bugs and issues as you find them</span>
-                        </li>
-                        {isOrganizationAccount && (
-                            <li className="flex items-start">
-                                <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                                <span><strong>Team Collaboration:</strong> Invite team members to work together</span>
-                            </li>
-                        )}
-                    </ul>
-                </div>
-            </div>
-
-            <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-                    Ready to Get Started?
-                </h3>
-                <div className="text-center text-gray-600">
-                    <p className="mb-4">
-                        Use the navigation and header buttons to begin building your quality assurance process.
-                    </p>
-                    <div className="grid md:grid-cols-3 gap-4 text-center">
-                        <div className="bg-white rounded-lg p-4">
-                            <div className="text-2xl mb-2">1️⃣</div>
-                            <p className="text-sm font-medium text-gray-900">Upload Documents</p>
-                            <p className="text-xs text-gray-600 mt-1">Start with project requirements</p>
-                        </div>
-                        <div className="bg-white rounded-lg p-4">
-                            <div className="text-2xl mb-2">2️⃣</div>
-                            <p className="text-sm font-medium text-gray-900">Create Test Cases</p>
-                            <p className="text-xs text-gray-600 mt-1">Build your test scenarios</p>
-                        </div>
-                        <div className="bg-white rounded-lg p-4">
-                            <div className="text-2xl mb-2">3️⃣</div>
-                            <p className="text-sm font-medium text-gray-900">Execute & Track</p>
-                            <p className="text-xs text-gray-600 mt-1">Run tests and monitor progress</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+            {/* Create Suite Modal */}
+            <CreateSuiteModal
+                isOpen={showCreateModal}
+                onSuiteCreated={handleSuiteCreationComplete}
+                onClose={handleCloseModal}
+                onCancel={handleCloseModal}
+                isRequired={false} // Not enforcing since this is optional
+            />
+        </>
     );
 };
 

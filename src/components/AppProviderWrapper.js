@@ -4,9 +4,8 @@
 import React, { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '../context/AppProvider';
-import { useSuiteAccess } from '../hooks/useSuiteAccess';
 import LoadingScreen from './common/LoadingScreen';
-import CreateSuiteModal from './modals/createSuiteModal';
+import OrganizationSetupModal from './modals/OrganizationSetupModal';
 import Register from './auth/Register';
 import Login from './auth/Login';
 import PageLayout from './layout/PageLayout';
@@ -38,11 +37,19 @@ const AppProviderWrapper = ({ children }) => {
 // This component runs INSIDE AppProvider, so it can use useApp
 const ProtectedRouteContent = ({ children }) => {
     const router = useRouter();
-    const { state, actions, isAuthenticated, isLoading } = useApp();
-    const { needsSuiteCreation, shouldShowSuiteModal, createSuite, suiteCreationBlocked } = useSuiteAccess();
+    const { 
+        state, 
+        actions, 
+        isAuthenticated, 
+        isLoading,
+        registrationState,
+        needsRegistration,
+        needsOrgSetup,
+        pendingRegistrationData 
+    } = useApp();
     const [appReady, setAppReady] = useState(false);
     const [authMode, setAuthMode] = useState('login');
-    const [suiteCreationInProgress, setSuiteCreationInProgress] = useState(false); // Track suite creation
+    const [orgSetupInProgress, setOrgSetupInProgress] = useState(false);
 
     // Helper functions
     const needsEmailVerification = () => {
@@ -74,6 +81,7 @@ const ProtectedRouteContent = ({ children }) => {
         // If user needs email verification, redirect
         if (needsEmailVerification()) {
             actions.ui.closeModal('createSuite');
+            actions.ui.closeModal('organizationSetup');
             actions.suites.clearSuites();
             router.push('/verify-email');
             setAppReady(false);
@@ -86,8 +94,38 @@ const ProtectedRouteContent = ({ children }) => {
             return;
         }
 
+        // If authenticated but registration is incomplete, handle registration flow
+        if (isFullyAuthenticated() && needsRegistration) {
+            console.log('Registration incomplete, current state:', registrationState);
+            
+            // For individual accounts with pending registration, auto-complete it
+            if (registrationState === 'pending' && state.auth.currentUser?.accountType === 'individual') {
+                console.log('Auto-completing individual account registration');
+                // This should be handled automatically by the AppProvider's checkRegistrationStatus
+                // The system should complete the registration and update the state
+                setAppReady(false);
+                return;
+            }
+            
+            // For organization accounts, show organization setup modal
+            if (registrationState === 'org-setup' && !orgSetupInProgress) {
+                if (!state.ui.modals?.organizationSetup?.isOpen) {
+                    console.log('Opening organization setup modal');
+                    actions.ui.openModal('organizationSetup');
+                }
+                setAppReady(false);
+                return;
+            }
+            
+            // If org setup is in progress, show loading
+            if (orgSetupInProgress) {
+                setAppReady(false);
+                return;
+            }
+        }
+
         // If authenticated but no profile data, fetch it
-        if (isAuthenticated && state.auth.currentUser?.uid && !state.auth.profileLoaded) {
+        if (isAuthenticated && state.auth.currentUser?.uid && !state.auth.profileLoaded && !needsRegistration) {
             console.log('Fetching user profile data...');
             actions.auth.refreshUserProfile()
                 .then(() => {
@@ -118,49 +156,26 @@ const ProtectedRouteContent = ({ children }) => {
             return;
         }
 
-        // FIX 3: Improved suite creation logic
-        const hasAnySuites = state.suites.testSuites && state.suites.testSuites.length > 0;
-        const hasActiveSuite = state.suites.activeSuite;
+        // Dashboard access logic (after registration is complete)
+        if (isFullyAuthenticated() && !needsRegistration) {
+            const hasAnySuites = state.suites.testSuites && state.suites.testSuites.length > 0;
+            const hasActiveSuite = state.suites.activeSuite;
 
-        console.log('Suite readiness check:', {
-            isFullyAuthenticated: isFullyAuthenticated(),
-            hasAnySuites,
-            hasActiveSuite,
-            needsSuiteCreation,
-            suiteCreationBlocked,
-            shouldShowSuiteModal,
-            suiteCreationInProgress
-        });
+            console.log('Dashboard readiness check:', {
+                isFullyAuthenticated: isFullyAuthenticated(),
+                hasAnySuites,
+                hasActiveSuite,
+                registrationComplete: !needsRegistration
+            });
 
-        // If user is authenticated but has no suites and isn't blocked, show suite creation modal
-        if (isFullyAuthenticated() && !hasAnySuites && !suiteCreationBlocked && !suiteCreationInProgress) {
-            // Don't open modal if it's already open
-            if (!state.ui.modals?.createSuite?.isOpen) {
-                console.log('Opening suite creation modal - no suites found');
-                actions.ui.openModal('createSuite');
+            // If user has suites but no active suite, activate the first one
+            if (hasAnySuites && !hasActiveSuite) {
+                console.log('Activating first available suite:', state.suites.testSuites[0]);
+                actions.suites.activateSuite(state.suites.testSuites[0]);
             }
-            setAppReady(false);
-            return;
-        }
 
-        // If user has suites but no active suite, activate the first one
-        if (isFullyAuthenticated() && hasAnySuites && !hasActiveSuite && !suiteCreationInProgress) {
-            console.log('Activating first available suite:', state.suites.testSuites[0]);
-            actions.suites.activateSuite(state.suites.testSuites[0]);
-            // Continue to set app as ready
-        }
-
-        // All checks passed - close any open modals and set ready
-        if (state.ui.modals?.createSuite?.isOpen && (hasAnySuites || suiteCreationBlocked)) {
-            console.log('Closing suite creation modal - conditions met');
-            actions.ui.closeModal('createSuite');
-        }
-
-        // App is ready if user is authenticated and either has suites or creation is blocked
-        if (isFullyAuthenticated() && (hasAnySuites || suiteCreationBlocked)) {
+            // App is ready - user can access dashboard with or without suites
             setAppReady(true);
-        } else {
-            setAppReady(false);
         }
     }, [
         state.auth.isInitialized,
@@ -171,60 +186,39 @@ const ProtectedRouteContent = ({ children }) => {
         state.auth.currentUser?.emailVerified,
         state.subscription.loading,
         state.suites.loading,
-        state.suites.testSuites?.length, // Track changes in suite count
-        state.suites.activeSuite?.id, // Track active suite changes
-        needsSuiteCreation,
-        suiteCreationBlocked,
-        shouldShowSuiteModal,
+        state.suites.testSuites?.length,
+        state.suites.activeSuite?.id,
         state.subscription.isTrialActive,
         state.subscription.trialEndsAt,
-        suiteCreationInProgress, // Track suite creation progress
+        registrationState,
+        needsRegistration,
+        needsOrgSetup,
+        orgSetupInProgress,
     ]);
 
-    const handleSuiteCreated = async (newSuite) => {
-        try {
-            setSuiteCreationInProgress(true);
-            console.log('Creating suite with data:', newSuite);
 
-            const result = await createSuite({
-                ...newSuite,
-                ownerType: state.auth.accountType || 'individual',
-                ownerId: state.auth.currentUser?.uid,
-                organizationId: state.auth.currentUser?.organizationId || null,
-                status: 'active',
-            });
+
+    // Handle organization setup completion
+    const handleOrganizationSetupComplete = async (organizationData) => {
+        try {
+            setOrgSetupInProgress(true);
+            console.log('Setting up organization:', organizationData);
+
+            const result = await actions.registration.completeOrganizationSetup(organizationData);
 
             if (result.success) {
-                console.log('Suite created successfully:', result.data);
-
-                // Close modal immediately
-                actions.ui.closeModal('createSuite');
-
-                // Show success message
-                toast.success(`Welcome to ${newSuite.name}! Your workspace is ready.`, { duration: 5000 });
-
-                // The suite should already be added to the state via the createSuite action
-                // The real-time subscription will also pick it up, but the action handles immediate state update
-
-                // Small delay to ensure state propagation
-                setTimeout(() => {
-                    setSuiteCreationInProgress(false);
-
-                    // Check if we have suites now and set app ready
-                    if (state.suites.testSuites?.length > 0) {
-                        setAppReady(true);
-                    }
-                }, 100);
-
+                console.log('Organization setup completed successfully');
+                actions.ui.closeModal('organizationSetup');
+                toast.success(`Welcome to ${organizationData.organizationName}! Your organization is ready.`, { duration: 5000 });
             } else {
-                console.error('Suite creation failed:', result.error);
-                toast.error(result.error?.message || 'Failed to create suite', { duration: 5000 });
-                setSuiteCreationInProgress(false);
+                console.error('Organization setup failed:', result.error);
+                toast.error(result.error || 'Organization setup failed. Please try again.', { duration: 5000 });
             }
         } catch (error) {
-            console.error('Suite creation error:', error);
+            console.error('Organization setup error:', error);
             toast.error(error.message || 'An unexpected error occurred', { duration: 5000 });
-            setSuiteCreationInProgress(false);
+        } finally {
+            setOrgSetupInProgress(false);
         }
     };
 
@@ -240,16 +234,17 @@ const ProtectedRouteContent = ({ children }) => {
         if (!state.auth.isInitialized) return "Initializing application...";
         if (state.auth.loading) return "Authenticating...";
         if (needsEmailVerification()) return "Redirecting to email verification...";
+        if (orgSetupInProgress) return "Setting up your organization...";
         if (state.subscription.loading) return "Loading subscription info...";
         if (state.suites.loading) return "Loading workspaces...";
-        if (suiteCreationInProgress) return "Creating your workspace...";
         if (isLoading) return "Preparing your workspace...";
         return "Loading...";
     };
 
     // Show loading when necessary
     if (!state.auth.isInitialized ||
-        (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading || suiteCreationInProgress))) {
+        orgSetupInProgress ||
+        (isFullyAuthenticated() && !needsRegistration && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
         return <LoadingScreen message={getLoadingMessage()} />;
     }
 
@@ -274,20 +269,16 @@ const ProtectedRouteContent = ({ children }) => {
         );
     }
 
-    // Show suite creation modal
-    const shouldShowModal = isFullyAuthenticated() &&
-        (!state.suites.testSuites || state.suites.testSuites.length === 0) &&
-        !suiteCreationBlocked &&
-        !appReady &&
-        !suiteCreationInProgress;
-
-    if (shouldShowModal) {
+    // Show organization setup modal for organization accounts
+    if (isFullyAuthenticated() && needsRegistration && registrationState === 'org-setup') {
         return (
             <>
-                <CreateSuiteModal
+                <OrganizationSetupModal
                     isOpen={true}
-                    onSuiteCreated={handleSuiteCreated}
+                    onComplete={handleOrganizationSetupComplete}
                     isRequired={true}
+                    user={state.auth.currentUser}
+                    pendingData={pendingRegistrationData}
                 />
                 <div id="modal-root" />
                 <div id="toast-root" />

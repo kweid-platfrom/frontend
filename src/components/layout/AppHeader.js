@@ -26,7 +26,7 @@ import CreateSuiteModal from '../modals/createSuiteModal';
 import UserMenuDropdown from '../UserMenuDropdown';
 import { safeArray, safeLength, safeMap } from '../../utils/safeArrayUtils';
 
-const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
+const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = false }) => {
     const { state, actions } = useApp();
     const router = useRouter();
 
@@ -62,8 +62,10 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
     // Check if user is organization admin
     const isOrganizationAdmin = accountType === 'organization' && userRole === 'admin';
 
-    // Toggle dropdown helper
+    // Toggle dropdown helper - disabled when header is disabled
     const toggleDropdown = (type) => {
+        if (disabled) return;
+        
         switch (type) {
             case 'suite':
                 setShowSuiteSelector(!showSuiteSelector);
@@ -82,6 +84,8 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     // Close menus when clicking outside
     useEffect(() => {
+        if (disabled) return;
+        
         const handleClickOutside = (event) => {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
                 setShowUserMenu(false);
@@ -106,10 +110,12 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [disabled]);
 
     // Calculate dropdown positions
     useEffect(() => {
+        if (disabled) return;
+        
         if (showSuiteSelector && suiteSelectorButtonRef.current) {
             const rect = suiteSelectorButtonRef.current.getBoundingClientRect();
             const dropdownWidth = 300;
@@ -122,9 +128,11 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 right: spaceOnRight >= dropdownWidth ? 'auto' : windowWidth - rect.right,
             });
         }
-    }, [showSuiteSelector]);
+    }, [showSuiteSelector, disabled]);
 
     useEffect(() => {
+        if (disabled) return;
+        
         if (showNotifications && notificationsButtonRef.current) {
             const rect = notificationsButtonRef.current.getBoundingClientRect();
             const dropdownWidth = 320;
@@ -137,9 +145,11 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 right: spaceOnRight >= dropdownWidth ? 'auto' : windowWidth - rect.right,
             });
         }
-    }, [showNotifications]);
+    }, [showNotifications, disabled]);
 
     const handleSignOut = async () => {
+        if (disabled) return;
+        
         try {
             if (actions.auth && typeof actions.auth.signOut === 'function') {
                 await actions.auth.signOut();
@@ -158,17 +168,23 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     // Suite handlers
     const handleSelectSuite = (suite) => {
+        if (disabled) return;
+        
         actions.suites.activateSuite(suite);
         setShowSuiteSelector(false);
         actions.ui.showNotification('info', `Switched to suite: ${suite.name}`, 2000);
     };
 
     const handleCreateSuite = () => {
+        if (disabled) return;
+        
         setShowSuiteSelector(false);
         setShowCreateSuiteModal(true);
     };
 
     const handleSuiteCreated = (suite) => {
+        if (disabled) return;
+        
         actions.suites.activateSuite(suite);
         setShowCreateSuiteModal(false);
         actions.ui.showNotification('success', `Suite "${suite.name}" created successfully!`, 3000);
@@ -179,6 +195,8 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     // Sprint creation handler
     const handleCreateSprint = () => {
+        if (disabled) return;
+        
         if (setActivePage) {
             setActivePage('sprints');
         }
@@ -190,28 +208,36 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
     // Handle notification actions
     const handleMarkAsRead = (notificationId) => {
+        if (disabled) return;
         actions.ui.markNotificationAsRead(notificationId);
     };
 
     const handleMarkAllAsRead = () => {
+        if (disabled) return;
         actions.ui.markAllNotificationsAsRead();
     };
 
     const handleClearNotification = (notificationId) => {
+        if (disabled) return;
         actions.ui.clearNotification(notificationId);
     };
 
     return (
         <>
-            <header className="bg-nav border-b border-border relative z-50 overflow-visible shadow-theme">
+            <header className={`bg-nav border-b border-border relative z-50 overflow-visible shadow-theme ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
                 {/* Top Layer */}
                 <div className="px-4 sm:px-6 lg:px-8 border-b border-border">
                     <div className="flex justify-between items-center h-14">
                         {/* Left Section */}
                         <div className="flex items-center flex-1">
                             <button
-                                onClick={onMenuClick}
-                                className="lg:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                                onClick={disabled ? undefined : onMenuClick}
+                                className={`lg:hidden p-2 rounded-md text-muted-foreground transition-colors ${
+                                    disabled 
+                                        ? 'cursor-not-allowed' 
+                                        : 'hover:text-foreground hover:bg-secondary/80'
+                                }`}
+                                disabled={disabled}
                             >
                                 <Bars3Icon className="h-6 w-6" />
                             </button>
@@ -221,7 +247,12 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                     <button
                                         ref={suiteSelectorButtonRef}
                                         onClick={() => toggleDropdown('suite')}
-                                        className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-secondary-foreground bg-secondary hover:bg-secondary/80 rounded-lg border border-border transition-colors"
+                                        className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium text-secondary-foreground bg-secondary rounded-lg border border-border transition-colors ${
+                                            disabled 
+                                                ? 'cursor-not-allowed opacity-50' 
+                                                : 'hover:bg-secondary/80'
+                                        }`}
+                                        disabled={disabled}
                                     >
                                         <Building2 className="h-4 w-4 text-primary" />
                                         <span className="max-w-24 sm:max-w-32 lg:max-w-48 truncate">
@@ -234,8 +265,13 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
 
                             <button
                                 onClick={handleCreateSprint}
-                                className="hidden sm:flex items-center space-x-2 ml-4 px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors"
+                                className={`hidden sm:flex items-center space-x-2 ml-4 px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary border border-border transition-colors ${
+                                    disabled 
+                                        ? 'cursor-not-allowed opacity-50' 
+                                        : 'hover:bg-secondary/80'
+                                }`}
                                 title="Create Sprint"
+                                disabled={disabled}
                             >
                                 <Calendar className="h-4 w-4" />
                                 <span className="hidden lg:inline">Create Sprint</span>
@@ -245,14 +281,23 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                         {/* Right Section - Top Layer */}
                         <div className="flex items-center space-x-2">
                             {isOrganizationAdmin && (
-                                <TeamInviteButton currentUser={currentUser} actions={actions} />
+                                <TeamInviteButton 
+                                    currentUser={currentUser} 
+                                    actions={actions} 
+                                    disabled={disabled}
+                                />
                             )}
 
                             <div className="relative">
                                 <button
                                     ref={notificationsButtonRef}
                                     onClick={() => toggleDropdown('notifications')}
-                                    className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md"
+                                    className={`relative p-2 text-muted-foreground rounded-md transition-colors ${
+                                        disabled 
+                                            ? 'cursor-not-allowed opacity-50' 
+                                            : 'hover:text-foreground hover:bg-secondary/80'
+                                    }`}
+                                    disabled={disabled}
                                 >
                                     <Bell className="h-5 w-5" />
                                     {unreadNotificationsCount > 0 && (
@@ -267,11 +312,17 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 <div className="relative" ref={userMenuRef}>
                                     <button
                                         onClick={() => {
+                                            if (disabled) return;
                                             setShowUserMenu(!showUserMenu);
                                             setShowSuiteSelector(false);
                                             setShowNotifications(false);
                                         }}
-                                        className="flex items-center space-x-2 p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md"
+                                        className={`flex items-center space-x-2 p-2 text-muted-foreground rounded-md transition-colors ${
+                                            disabled 
+                                                ? 'cursor-not-allowed opacity-50' 
+                                                : 'hover:text-foreground hover:bg-secondary/80'
+                                        }`}
+                                        disabled={disabled}
                                     >
                                         {currentUser?.photoURL ? (
                                             <img
@@ -290,7 +341,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                             </div>
                                         )}
                                     </button>
-                                    {showUserMenu && (
+                                    {showUserMenu && !disabled && (
                                         <UserMenuDropdown
                                             currentUser={currentUser}
                                             accountType={accountType}
@@ -317,37 +368,70 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                                 </div>
                                 <input
                                     type="text"
-                                    className="block w-full pl-10 pr-3 py-2 rounded-md border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background"
+                                    className={`block w-full pl-10 pr-3 py-2 rounded-md border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background ${
+                                        disabled ? 'cursor-not-allowed opacity-50' : ''
+                                    }`}
                                     placeholder="Search test cases, bugs, reports..."
+                                    disabled={disabled}
                                 />
                             </div>
                         </div>
 
                         <div className="flex items-center">
                             <div className="sm:hidden">
-                                <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md">
+                                <button 
+                                    className={`p-2 text-muted-foreground rounded-md transition-colors ${
+                                        disabled 
+                                            ? 'cursor-not-allowed opacity-50' 
+                                            : 'hover:text-foreground hover:bg-secondary/80'
+                                    }`}
+                                    disabled={disabled}
+                                >
                                     <Bars3Icon className="h-5 w-5" />
                                 </button>
                             </div>
 
                             <div className="hidden sm:flex items-center space-x-1 lg:space-x-2">
-                                <button className="px-2 lg:px-3 py-2 text-sm rounded-md flex items-center space-x-1 lg:space-x-2 text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors">
+                                <button 
+                                    className={`px-2 lg:px-3 py-2 text-sm rounded-md flex items-center space-x-1 lg:space-x-2 text-secondary-foreground bg-secondary border border-border transition-colors ${
+                                        disabled 
+                                            ? 'cursor-not-allowed opacity-50' 
+                                            : 'hover:bg-secondary/80'
+                                    }`}
+                                    disabled={disabled}
+                                >
                                     <PlayIcon className="h-4 w-4" />
                                     <span className="hidden lg:inline">Run Tests</span>
                                 </button>
 
-                                <BugReportButton className="px-2 lg:px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors" />
+                                <BugReportButton 
+                                    className={`px-2 lg:px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary border border-border transition-colors ${
+                                        disabled 
+                                            ? 'cursor-not-allowed opacity-50' 
+                                            : 'hover:bg-secondary/80'
+                                    }`}
+                                    disabled={disabled}
+                                />
 
-                                <ScreenRecorderButton setShowBugForm={setShowBugForm} actions={actions} />
+                                <ScreenRecorderButton 
+                                    setShowBugForm={setShowBugForm} 
+                                    actions={actions} 
+                                    disabled={disabled}
+                                />
 
-                                <ReportDropdown />
+                                <ReportDropdown disabled={disabled} />
 
-                                <TestCaseDropdown />
+                                <TestCaseDropdown disabled={disabled} />
 
                                 <button
                                     onClick={handleCreateSprint}
-                                    className="sm:hidden flex items-center space-x-1 px-2 py-2 text-sm rounded-md text-secondary-foreground bg-secondary hover:bg-secondary/80 border border-border transition-colors"
+                                    className={`sm:hidden flex items-center space-x-1 px-2 py-2 text-sm rounded-md text-secondary-foreground bg-secondary border border-border transition-colors ${
+                                        disabled 
+                                            ? 'cursor-not-allowed opacity-50' 
+                                            : 'hover:bg-secondary/80'
+                                    }`}
                                     title="Create Sprint"
+                                    disabled={disabled}
                                 >
                                     <Calendar className="h-4 w-4" />
                                 </button>
@@ -357,7 +441,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 </div>
 
                 {/* Suite Selector Dropdown */}
-                {showSuiteSelector && (
+                {showSuiteSelector && !disabled && (
                     <div
                         ref={suiteSelectorRef}
                         className="fixed bg-card border border-border shadow-theme-lg rounded-lg z-50"
@@ -422,7 +506,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
                 )}
 
                 {/* Notifications Dropdown */}
-                {showNotifications && (
+                {showNotifications && !disabled && (
                     <div
                         ref={notificationsRef}
                         className="fixed bg-card border border-border shadow-theme-lg rounded-lg z-50"
@@ -506,12 +590,13 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage }) => {
             </header>
 
             <CreateSuiteModal
-                isOpen={showCreateSuiteModal}
+                isOpen={showCreateSuiteModal && !disabled}
                 onSuiteCreated={handleSuiteCreated}
                 onCancel={() => setShowCreateSuiteModal(false)}
             />
         </>
     );
-};
 
-export default AppHeader;
+}
+
+export default  AppHeader;
