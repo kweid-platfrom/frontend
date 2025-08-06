@@ -18,7 +18,7 @@ import {
 import { db, auth } from '../config/firebase';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
-export class FirestoreService {
+class FirestoreService {
     constructor() {
         this.db = db;
         this.auth = auth;

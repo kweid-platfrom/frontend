@@ -46,7 +46,6 @@
     "natural": "^8.0.1",
     "next": "15.2.1",
     "nodemailer": "^7.0.3",
-    "openai": "^4.91.1",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^5.1.91",
     "prisma": "^6.5.0",
