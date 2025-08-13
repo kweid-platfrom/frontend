@@ -1,6 +1,9 @@
 import { useReducer } from 'react';
-import {FirestoreService} from '../../services/firestoreService';
+import {BaseFirestoreService} from '../../services/firestoreService';
 import { toast } from 'sonner';
+
+// Create a service instance
+const firestoreService = new BaseFirestoreService();
 
 const initialState = {
     sprints: [],
@@ -66,7 +69,8 @@ export const useSprints = () => {
         loadSprints: async (suiteId) => {
             dispatch({ type: 'SPRINTS_LOADING' });
             try {
-                const result = await FirestoreService.getSprintsBySuite(suiteId);
+                // FIXED: Use the service instance instead of undefined FirestoreService
+                const result = await firestoreService.getSprintsBySuite(suiteId);
                 if (result.success) {
                     dispatch({ type: 'SPRINTS_LOADED', payload: result.data });
                 } else {
@@ -80,7 +84,8 @@ export const useSprints = () => {
         },
         createSprint: async (sprintData, suitesState) => {
             try {
-                const result = await FirestoreService.createSprint({
+                // FIXED: Use the service instance
+                const result = await firestoreService.createSprint({
                     ...sprintData,
                     suiteId: suitesState.activeSuite.id,
                     created_at: new Date().toISOString(),
@@ -103,7 +108,8 @@ export const useSprints = () => {
         },
         updateSprint: async (sprintId, updateData) => {
             try {
-                const result = await FirestoreService.updateSprint(sprintId, updateData);
+                // FIXED: Use the service instance
+                const result = await firestoreService.updateSprint(sprintId, updateData);
                 if (result.success) {
                     dispatch({ type: 'SPRINT_UPDATED', payload: result.data });
                     return result;
@@ -118,7 +124,8 @@ export const useSprints = () => {
         },
         deleteSprint: async (sprintId) => {
             try {
-                const result = await FirestoreService.deleteSprint(sprintId);
+                // FIXED: Use the service instance
+                const result = await firestoreService.deleteSprint(sprintId);
                 if (result.success) {
                     dispatch({ type: 'SPRINT_DELETED', payload: sprintId });
                     toast.success('Sprint deleted successfully', { duration: 5000 });

@@ -5,10 +5,11 @@ import React, { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '../context/AppProvider';
 import LoadingScreen from './common/LoadingScreen';
-import OrganizationSetupModal from './modals/OrganizationSetupModal';
 import Register from './auth/Register';
 import Login from './auth/Login';
 import PageLayout from './layout/PageLayout';
+import CreateSuiteModal from './modals/createSuiteModal';
+import TipsMode from './TipsMode';
 import { toast } from 'sonner';
 
 const AppProviderWrapper = ({ children }) => {
@@ -37,19 +38,21 @@ const AppProviderWrapper = ({ children }) => {
 // This component runs INSIDE AppProvider, so it can use useApp
 const ProtectedRouteContent = ({ children }) => {
     const router = useRouter();
+    const pathname = usePathname();
     const { 
         state, 
         actions, 
         isAuthenticated, 
-        isLoading,
-        registrationState,
-        needsRegistration,
-        needsOrgSetup,
-        pendingRegistrationData 
+        isLoading
     } = useApp();
     const [appReady, setAppReady] = useState(false);
     const [authMode, setAuthMode] = useState('login');
-    const [orgSetupInProgress, setOrgSetupInProgress] = useState(false);
+    const [showCreateSuiteModal, setShowCreateSuiteModal] = useState(false);
+    const [showTipsMode, setShowTipsMode] = useState(false);
+
+    // Routes that should bypass tips mode and show normal content
+    const bypassTipsModeRoutes = ['/documents', '/documents/create'];
+    const shouldBypassTipsMode = bypassTipsModeRoutes.some(route => pathname.startsWith(route));
 
     // Helper functions
     const needsEmailVerification = () => {
@@ -70,6 +73,20 @@ const ProtectedRouteContent = ({ children }) => {
             !state.auth.currentUser?.uid;
     };
 
+    const needsTestSuite = () => {
+        return isFullyAuthenticated() &&
+            state.auth.profileLoaded &&
+            (!state.suites.testSuites || state.suites.testSuites.length === 0) &&
+            !state.suites.loading;
+    };
+
+    const shouldShowDashboard = () => {
+        return isFullyAuthenticated() &&
+            state.suites.testSuites &&
+            state.suites.testSuites.length > 0 &&
+            state.suites.activeSuite;
+    };
+
     // Main authentication and app readiness logic
     useEffect(() => {
         // Wait for auth initialization
@@ -81,7 +98,6 @@ const ProtectedRouteContent = ({ children }) => {
         // If user needs email verification, redirect
         if (needsEmailVerification()) {
             actions.ui.closeModal('createSuite');
-            actions.ui.closeModal('organizationSetup');
             actions.suites.clearSuites();
             router.push('/verify-email');
             setAppReady(false);
@@ -94,38 +110,8 @@ const ProtectedRouteContent = ({ children }) => {
             return;
         }
 
-        // If authenticated but registration is incomplete, handle registration flow
-        if (isFullyAuthenticated() && needsRegistration) {
-            console.log('Registration incomplete, current state:', registrationState);
-            
-            // For individual accounts with pending registration, auto-complete it
-            if (registrationState === 'pending' && state.auth.currentUser?.accountType === 'individual') {
-                console.log('Auto-completing individual account registration');
-                // This should be handled automatically by the AppProvider's checkRegistrationStatus
-                // The system should complete the registration and update the state
-                setAppReady(false);
-                return;
-            }
-            
-            // For organization accounts, show organization setup modal
-            if (registrationState === 'org-setup' && !orgSetupInProgress) {
-                if (!state.ui.modals?.organizationSetup?.isOpen) {
-                    console.log('Opening organization setup modal');
-                    actions.ui.openModal('organizationSetup');
-                }
-                setAppReady(false);
-                return;
-            }
-            
-            // If org setup is in progress, show loading
-            if (orgSetupInProgress) {
-                setAppReady(false);
-                return;
-            }
-        }
-
         // If authenticated but no profile data, fetch it
-        if (isAuthenticated && state.auth.currentUser?.uid && !state.auth.profileLoaded && !needsRegistration) {
+        if (isAuthenticated && state.auth.currentUser?.uid && !state.auth.profileLoaded) {
             console.log('Fetching user profile data...');
             actions.auth.refreshUserProfile()
                 .then(() => {
@@ -156,8 +142,17 @@ const ProtectedRouteContent = ({ children }) => {
             return;
         }
 
-        // Dashboard access logic (after registration is complete)
-        if (isFullyAuthenticated() && !needsRegistration) {
+        // Check if user needs to create their first test suite
+        if (needsTestSuite()) {
+            console.log('User needs to create first test suite');
+            setShowCreateSuiteModal(true);
+            setShowTipsMode(false);
+            setAppReady(false);
+            return;
+        }
+
+        // Dashboard access logic
+        if (isFullyAuthenticated()) {
             const hasAnySuites = state.suites.testSuites && state.suites.testSuites.length > 0;
             const hasActiveSuite = state.suites.activeSuite;
 
@@ -165,7 +160,8 @@ const ProtectedRouteContent = ({ children }) => {
                 isFullyAuthenticated: isFullyAuthenticated(),
                 hasAnySuites,
                 hasActiveSuite,
-                registrationComplete: !needsRegistration
+                pathname,
+                shouldBypassTipsMode
             });
 
             // If user has suites but no active suite, activate the first one
@@ -174,8 +170,26 @@ const ProtectedRouteContent = ({ children }) => {
                 actions.suites.activateSuite(state.suites.testSuites[0]);
             }
 
-            // App is ready - user can access dashboard with or without suites
-            setAppReady(true);
+            // Check if we should show tips mode (has suites but no substantial content)
+            // BUT only if we're not on a route that should bypass tips mode
+            if (hasAnySuites && hasActiveSuite) {
+                if (shouldBypassTipsMode) {
+                    // User is on documents page or create page - show normal content
+                    setShowTipsMode(false);
+                    setAppReady(true);
+                    setShowCreateSuiteModal(false);
+                } else {
+                    // User has substantial content - show normal dashboard
+                    setShowTipsMode(false);
+                    setAppReady(true);
+                    setShowCreateSuiteModal(false);
+                }
+            } else {
+                // App is ready - user can access dashboard
+                setAppReady(true);
+                setShowTipsMode(false);
+                setShowCreateSuiteModal(false);
+            }
         }
     }, [
         state.auth.isInitialized,
@@ -190,51 +204,67 @@ const ProtectedRouteContent = ({ children }) => {
         state.suites.activeSuite?.id,
         state.subscription.isTrialActive,
         state.subscription.trialEndsAt,
-        registrationState,
-        needsRegistration,
-        needsOrgSetup,
-        orgSetupInProgress,
+        pathname,
+        shouldBypassTipsMode
     ]);
 
+    const handleLoginComplete = () => {
+        // Auth state will update automatically, no special handling needed
+        console.log('Login completed, auth state will update automatically');
+    };
 
-
-    // Handle organization setup completion
-    const handleOrganizationSetupComplete = async (organizationData) => {
+    const handleSuiteCreated = async (suiteData) => {
+        console.log('Suite created successfully:', suiteData);
+        toast.success('Test suite created successfully!', { duration: 5000 });
+        
+        // Reload suites to ensure we have the latest data
         try {
-            setOrgSetupInProgress(true);
-            console.log('Setting up organization:', organizationData);
-
-            const result = await actions.registration.completeOrganizationSetup(organizationData);
-
-            if (result.success) {
-                console.log('Organization setup completed successfully');
-                actions.ui.closeModal('organizationSetup');
-                toast.success(`Welcome to ${organizationData.organizationName}! Your organization is ready.`, { duration: 5000 });
-            } else {
-                console.error('Organization setup failed:', result.error);
-                toast.error(result.error || 'Organization setup failed. Please try again.', { duration: 5000 });
+            await actions.suites.loadTestSuites();
+            
+            // Activate the newly created suite
+            if (suiteData && suiteData.id) {
+                await actions.suites.activateSuite(suiteData);
             }
+            
+            // Close the modal and show tips mode
+            setShowCreateSuiteModal(false);
+            setShowTipsMode(true);
+            setAppReady(true);
         } catch (error) {
-            console.error('Organization setup error:', error);
-            toast.error(error.message || 'An unexpected error occurred', { duration: 5000 });
-        } finally {
-            setOrgSetupInProgress(false);
+            console.error('Error after suite creation:', error);
+            toast.error('Suite created but failed to reload. Please refresh the page.');
+            setShowCreateSuiteModal(false);
+            setAppReady(true);
         }
     };
 
-    const handleRegistrationComplete = () => {
-        toast.success('Registration completed! Welcome to QAID!', { duration: 5000 });
+    const handleSuiteModalCancel = () => {
+        // For first-time users, they can't cancel creating a suite
+        // The modal should handle this by not showing cancel option when required
+        if (needsTestSuite()) {
+            return; // Don't allow cancel if they need a suite
+        }
+        setShowCreateSuiteModal(false);
     };
 
-    const handleLoginComplete = () => {
-        // Auth state will update automatically
+    const handleTipsSuiteCreated = async (newSuite) => {
+        // Handle suite creation from tips mode
+        try {
+            await actions.suites.loadTestSuites();
+            if (newSuite && newSuite.id) {
+                await actions.suites.activateSuite(newSuite);
+            }
+            toast.success('Test suite created successfully!', { duration: 5000 });
+        } catch (error) {
+            console.error('Error after tips suite creation:', error);
+            toast.error('Suite created but failed to reload. Please refresh the page.');
+        }
     };
 
     const getLoadingMessage = () => {
         if (!state.auth.isInitialized) return "Initializing application...";
         if (state.auth.loading) return "Authenticating...";
         if (needsEmailVerification()) return "Redirecting to email verification...";
-        if (orgSetupInProgress) return "Setting up your organization...";
         if (state.subscription.loading) return "Loading subscription info...";
         if (state.suites.loading) return "Loading workspaces...";
         if (isLoading) return "Preparing your workspace...";
@@ -243,8 +273,7 @@ const ProtectedRouteContent = ({ children }) => {
 
     // Show loading when necessary
     if (!state.auth.isInitialized ||
-        orgSetupInProgress ||
-        (isFullyAuthenticated() && !needsRegistration && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
+        (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
         return <LoadingScreen message={getLoadingMessage()} />;
     }
 
@@ -254,7 +283,6 @@ const ProtectedRouteContent = ({ children }) => {
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50">
                 {authMode === 'register' ? (
                     <Register
-                        onRegistrationComplete={handleRegistrationComplete}
                         onSwitchToLogin={() => setAuthMode('login')}
                     />
                 ) : (
@@ -269,26 +297,46 @@ const ProtectedRouteContent = ({ children }) => {
         );
     }
 
-    // Show organization setup modal for organization accounts
-    if (isFullyAuthenticated() && needsRegistration && registrationState === 'org-setup') {
+    // Show create suite modal if user needs to create their first suite
+    if (showCreateSuiteModal && needsTestSuite()) {
         return (
-            <>
-                <OrganizationSetupModal
+            <PageLayout>
+                <CreateSuiteModal
                     isOpen={true}
-                    onComplete={handleOrganizationSetupComplete}
-                    isRequired={true}
-                    user={state.auth.currentUser}
-                    pendingData={pendingRegistrationData}
+                    onSuiteCreated={handleSuiteCreated}
+                    onCancel={handleSuiteModalCancel}
+                    isRequired={true} // This prevents cancel and shows appropriate messaging
+                    accountType={state.auth.currentUser?.account_type || state.auth.currentUser?.accountType}
                 />
                 <div id="modal-root" />
                 <div id="toast-root" />
-            </>
+            </PageLayout>
         );
     }
 
     // Show loading if app not ready
     if (!appReady) {
         return <LoadingScreen message="Preparing your workspace..." />;
+    }
+
+    // Show tips mode if user has suites but dashboard would be empty
+    // BUT NOT if user is on a route that should bypass tips mode
+    if (showTipsMode && shouldShowDashboard() && !shouldBypassTipsMode) {
+        return (
+            <PageLayout title="Dashboard">
+                <TipsMode 
+                    isTrialActive={state.subscription.isTrialActive}
+                    trialDaysRemaining={state.subscription.trialDaysRemaining}
+                    isOrganizationAccount={
+                        state.auth.currentUser?.account_type === 'organization' || 
+                        state.auth.currentUser?.accountType === 'organization'
+                    }
+                    onSuiteCreated={handleTipsSuiteCreated}
+                />
+                <div id="modal-root" />
+                <div id="toast-root" />
+            </PageLayout>
+        );
     }
 
     // Render protected content with PageLayout

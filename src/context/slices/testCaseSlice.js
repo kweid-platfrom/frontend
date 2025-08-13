@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useReducer } from 'react';
-import { FirestoreService } from '../../services/firestoreService';
+import { BaseFirestoreService } from '../../services/firestoreService'; // Fixed import
 import { toast } from 'sonner';
 
 // Create a singleton instance
-const firestoreService = new FirestoreService();
+const firestoreService = new BaseFirestoreService();
 
 const initialState = {
     testCases: [],
@@ -55,6 +56,11 @@ export const useTestCases = () => {
         loadTestCases: async (suiteId) => {
             dispatch({ type: 'TEST_CASES_LOADING' });
             try {
+                // Check if queryDocuments method exists
+                if (typeof firestoreService.queryDocuments !== 'function') {
+                    throw new Error('Test case query service is not available');
+                }
+
                 const result = await firestoreService.queryDocuments(`testSuites/${suiteId}/testCases`);
                 if (result.success) {
                     dispatch({ type: 'TEST_CASES_LOADED', payload: result.data });
@@ -63,21 +69,20 @@ export const useTestCases = () => {
                     toast.error(result.error.message, { duration: 5000 });
                 }
             } catch (error) {
-                dispatch({ type: 'TEST_CASES_ERROR', payload: error.message });
-                toast.error(error.message, { duration: 5000 });
+                const errorMessage = error.message || 'An unexpected error occurred while loading test cases';
+                dispatch({ type: 'TEST_CASES_ERROR', payload: errorMessage });
+                toast.error(errorMessage, { duration: 5000 });
             }
         },
-        
-        // Fixed createTestCase with proper field validation for Firestore rules
         createTestCase: (appState, appActions) => {
             return async (testCaseData) => {
                 try {
                     console.log('Creating test case with data:', testCaseData);
-                    
+
                     // Safe access to subscription state with better error handling
                     const planLimits = appState?.subscription?.planLimits;
                     const canCreate = planLimits?.canCreateTestCases !== false;
-                    
+
                     if (!canCreate) {
                         const error = 'Test case creation is locked. Please upgrade your plan.';
                         toast.error(error, { duration: 5000 });
@@ -101,54 +106,41 @@ export const useTestCases = () => {
                         return { success: false, error };
                     }
 
+                    // Check if createDocument method exists
+                    if (typeof firestoreService.createDocument !== 'function') {
+                        throw new Error('Test case creation service is not available');
+                    }
+
                     // Prepare data with ALL required fields for Firestore rules
                     const collectionPath = `testSuites/${activeSuite.id}/testCases`;
                     console.log('Creating test case in collection:', collectionPath);
-                    
-                    // CRITICAL: Ensure all required fields match Firestore security rules
+
                     const testCaseDocument = {
-                        // Required by Firestore rules for test case creation
                         created_by: currentUser.uid,
                         suite_id: activeSuite.id,
-                        
-                        // Core test case fields
                         title: testCaseData.title || '',
                         description: testCaseData.description || '',
                         priority: testCaseData.priority || 'medium',
                         status: testCaseData.status || 'draft',
                         assignee: testCaseData.assignee || '',
-                        
-                        // Steps and expected results
                         steps: testCaseData.steps || [],
                         expected_result: testCaseData.expected_result || '',
-                        
-                        // Additional fields
                         tags: testCaseData.tags || [],
                         linkedBugIds: testCaseData.linkedBugIds || [],
-                        
-                        // Metadata
                         estimated_duration: testCaseData.estimated_duration || null,
                         category: testCaseData.category || 'functional',
-                        
-                        // Execution tracking
                         last_executed: null,
                         execution_history: [],
-                        
-                        // Version control
                         version: 1,
-                        
-                        // Additional properties that might be expected by your rules
                         test_type: testCaseData.test_type || 'manual',
                         automation_status: testCaseData.automation_status || 'not_automated',
-                        
-                        // Ensure we don't have any undefined values
                         ...Object.fromEntries(
-                            Object.entries(testCaseData).filter(([ value]) => value !== undefined)
+                            Object.entries(testCaseData).filter(([_, value]) => value !== undefined)
                         )
                     };
 
                     console.log('Final test case document:', testCaseDocument);
-                    
+
                     const result = await firestoreService.createDocument(collectionPath, testCaseDocument);
 
                     if (result.success) {
@@ -161,15 +153,13 @@ export const useTestCases = () => {
                         return result;
                     }
                 } catch (error) {
+                    const errorMessage = error.message || 'An unexpected error occurred while creating test case';
                     console.error('Error creating test case:', error);
-                    const errorMessage = error.message || 'Unknown error occurred';
                     toast.error(errorMessage, { duration: 5000 });
                     return { success: false, error: errorMessage };
                 }
             };
         },
-        
-        // Fixed updateTestCase with proper validation
         updateTestCase: (appState) => {
             return async (testCaseId, updateData) => {
                 try {
@@ -177,20 +167,24 @@ export const useTestCases = () => {
                     if (!currentUser) {
                         throw new Error('User not authenticated');
                     }
-                    
+
                     const activeSuite = appState?.suites?.activeSuite;
                     if (!activeSuite?.id) {
                         throw new Error('No active suite selected');
                     }
-                    
+
+                    // Check if updateDocument method exists
+                    if (typeof firestoreService.updateDocument !== 'function') {
+                        throw new Error('Test case update service is not available');
+                    }
+
                     const collectionPath = `testSuites/${activeSuite.id}/testCases`;
                     console.log('Updating test case in collection:', collectionPath);
-                    
-                    // Clean update data - remove undefined values
+
                     const cleanUpdateData = Object.fromEntries(
-                        Object.entries(updateData).filter(([ value]) => value !== undefined)
+                        Object.entries(updateData).filter(([_, value]) => value !== undefined)
                     );
-                    
+
                     const result = await firestoreService.updateDocument(collectionPath, testCaseId, cleanUpdateData);
                     if (result.success) {
                         const updatedData = { id: testCaseId, ...result.data };
@@ -202,14 +196,13 @@ export const useTestCases = () => {
                         return result;
                     }
                 } catch (error) {
+                    const errorMessage = error.message || 'An unexpected error occurred while updating test case';
                     console.error('Error updating test case:', error);
-                    toast.error(error.message, { duration: 5000 });
-                    return { success: false, error: error.message };
+                    toast.error(errorMessage, { duration: 5000 });
+                    return { success: false, error: errorMessage };
                 }
             };
         },
-        
-        // Fixed deleteTestCase with proper validation
         deleteTestCase: (appState) => {
             return async (testCaseId) => {
                 try {
@@ -217,15 +210,20 @@ export const useTestCases = () => {
                     if (!currentUser) {
                         throw new Error('User not authenticated');
                     }
-                    
+
                     const activeSuite = appState?.suites?.activeSuite;
                     if (!activeSuite?.id) {
                         throw new Error('No active suite selected');
                     }
-                    
+
+                    // Check if deleteDocument method exists
+                    if (typeof firestoreService.deleteDocument !== 'function') {
+                        throw new Error('Test case deletion service is not available');
+                    }
+
                     const collectionPath = `testSuites/${activeSuite.id}/testCases`;
                     console.log('Deleting test case from collection:', collectionPath);
-                    
+
                     const result = await firestoreService.deleteDocument(collectionPath, testCaseId);
                     if (result.success) {
                         dispatch({ type: 'TEST_CASE_DELETED', payload: testCaseId });
@@ -236,9 +234,10 @@ export const useTestCases = () => {
                         return result;
                     }
                 } catch (error) {
+                    const errorMessage = error.message || 'An unexpected error occurred while deleting test case';
                     console.error('Error deleting test case:', error);
-                    toast.error(error.message, { duration: 5000 });
-                    return { success: false, error: error.message };
+                    toast.error(errorMessage, { duration: 5000 });
+                    return { success: false, error: errorMessage };
                 }
             };
         },

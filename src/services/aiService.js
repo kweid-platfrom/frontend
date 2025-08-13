@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // services/aiService.js - Gemini-only AI Service
-import { FirestoreService } from './firestoreService';
+import { FirestoreService } from '../services'
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 class AIService {

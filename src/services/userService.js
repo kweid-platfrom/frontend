@@ -1,885 +1,339 @@
-import {
-    doc,
-    getDoc,
-    setDoc,
-    updateDoc,
-    onSnapshot,
-    serverTimestamp,
-    writeBatch,
-    collection,
-    query,
-    where,
-    getDocs,
-    runTransaction,
-} from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
-import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
+// services/userService.js
+import { BaseFirestoreService } from './firestoreService';
+import { query, where, getDocs } from 'firebase/firestore';
 
-export class UserService {
-    constructor() {
-        this.db = db;
-        this.auth = auth;
-        this.unsubscribes = new Map();
-        this.userCache = new Map();
-    }
-
-    getCurrentUserId() {
-        return this.auth.currentUser?.uid || null;
-    }
-
-    getCurrentUser() {
-        return this.auth.currentUser || null;
-    }
-
-    validateUserId(userId) {
-        if (!userId || userId === null || userId === undefined) {
-            return null;
-        }
-        const stringId = String(userId).trim();
-        if (stringId === '' || stringId === 'null' || stringId === 'undefined') {
-            return null;
-        }
-        return stringId;
-    }
-
-    handleFirestoreError(error, operation = 'operation') {
-        console.error(`UserService ${operation} error:`, error);
-        const userMessage = getFirebaseErrorMessage(error);
-        return {
-            success: false,
-            error: {
-                code: error.code || 'unknown',
-                message: userMessage,
-                originalError: error
-            }
-        };
-    }
-
-    addCommonFields(data, isUpdate = false) {
-        const userId = this.getCurrentUserId();
-        const cleanData = JSON.parse(JSON.stringify(data, (key, value) => {
-            if (value === null || value === undefined) return undefined;
-            return value;
-        }));
-
-        const commonFields = {
-            updated_at: serverTimestamp(),
-            ...(userId && { updated_by: userId })
-        };
-
-        if (!isUpdate) {
-            commonFields.created_at = serverTimestamp();
-            if (userId) {
-                commonFields.created_by = userId;
-            }
-        }
-
-        return { ...cleanData, ...commonFields };
-    }
-
+export class UserService extends BaseFirestoreService {
     /**
-     * Get user profile data with multi-tenancy support
-     * @param {string} userId - User ID to fetch profile for (defaults to current user)
-     * @returns {Promise} - Success/error object with user data
-     */
-    async getUserProfile(userId = null) {
-        try {
-            const targetUserId = userId || this.getCurrentUserId();
-            const validUserId = this.validateUserId(targetUserId);
-            
-            if (!validUserId) {
-                return { 
-                    success: false, 
-                    error: { message: 'Invalid or missing user ID' } 
-                };
-            }
-
-            // Check cache first
-            if (this.userCache.has(validUserId)) {
-                const cachedData = this.userCache.get(validUserId);
-                // Return cached data if it's less than 5 minutes old
-                if (Date.now() - cachedData.timestamp < 300000) {
-                    return { success: true, data: cachedData.data };
-                }
-            }
-
-            const userRef = doc(this.db, 'users', validUserId);
-            const userSnap = await getDoc(userRef);
-
-            if (userSnap.exists()) {
-                const userData = { id: userSnap.id, ...userSnap.data() };
-                
-                // Ensure availableAccounts is always an array
-                userData.availableAccounts = userData.availableAccounts || [];
-                
-                // Validate and clean up available accounts
-                userData.availableAccounts = await this.validateAvailableAccounts(validUserId, userData.availableAccounts);
-                
-                // Normalize field names for consistency
-                userData.displayName = userData.displayName || userData.display_name || userData.name;
-                userData.firstName = userData.firstName || userData.first_name;
-                userData.lastName = userData.lastName || userData.last_name;
-                userData.accountType = userData.accountType || userData.account_type || 'individual';
-                
-                // Cache the user data
-                this.userCache.set(validUserId, {
-                    data: userData,
-                    timestamp: Date.now()
-                });
-
-                return { success: true, data: userData };
-            }
-            
-            return { 
-                success: false, 
-                error: { message: 'User profile not found', code: 'not-found' } 
-            };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'get user profile');
-        }
-    }
-
-    /**
-     * Validate available accounts and clean up invalid ones
-     * @param {string} userId - User ID
-     * @param {Array} availableAccounts - Array of available accounts
-     * @returns {Array} - Validated accounts array
-     */
-    async validateAvailableAccounts(userId, availableAccounts) {
-        try {
-            if (!Array.isArray(availableAccounts) || availableAccounts.length === 0) {
-                return [];
-            }
-
-            const validatedAccounts = [];
-            
-            for (const account of availableAccounts) {
-                // Basic validation
-                if (!account.accountType || !account.id) {
-                    continue;
-                }
-
-                // For organization accounts, verify the organization still exists and user has access
-                if (account.accountType === 'organization' && account.organizationId) {
-                    const orgAccess = await this.validateOrganizationAccess(userId, account.organizationId);
-                    if (orgAccess.success) {
-                        validatedAccounts.push({
-                            ...account,
-                            organizationName: orgAccess.data.organizationName || account.organizationName,
-                            role: orgAccess.data.role || account.role
-                        });
-                    }
-                } else if (account.accountType === 'individual') {
-                    // Individual accounts are always valid for the same user
-                    if (account.id === userId) {
-                        validatedAccounts.push(account);
-                    }
-                }
-            }
-
-            return validatedAccounts;
-        } catch (error) {
-            console.error('Error validating available accounts:', error);
-            return availableAccounts; // Return original array if validation fails
-        }
-    }
-
-    /**
-     * Validate organization access for a user
-     * @param {string} userId - User ID
-     * @param {string} organizationId - Organization ID
-     * @returns {Promise} - Success/error object with organization data
-     */
-    async validateOrganizationAccess(userId, organizationId) {
-        try {
-            // Check if user has membership in the organization
-            const membershipRef = doc(this.db, 'userMemberships', userId);
-            const membershipSnap = await getDoc(membershipRef);
-            
-            if (membershipSnap.exists()) {
-                const membershipData = membershipSnap.data();
-                const orgMembership = membershipData.organizations?.find(
-                    org => org.organizationId === organizationId
-                );
-                
-                if (orgMembership && orgMembership.status === 'active') {
-                    // Also verify the organization still exists
-                    const orgRef = doc(this.db, 'organizations', organizationId);
-                    const orgSnap = await getDoc(orgRef);
-                    
-                    if (orgSnap.exists()) {
-                        return {
-                            success: true,
-                            data: {
-                                organizationName: orgSnap.data().name,
-                                role: orgMembership.role
-                            }
-                        };
-                    }
-                }
-            }
-            
-            return {
-                success: false,
-                error: 'No valid organization access found'
-            };
-        } catch (error) {
-            console.error('Error validating organization access:', error);
-            return {
-                success: false,
-                error: getFirebaseErrorMessage(error)
-            };
-        }
-    }
-
-    /**
-     * Create or update user profile with multi-tenancy support
-     * @param {Object} userData - User data to create/update
-     * @returns {Promise} - Success/error object
+     * Create or update user profile - FIXED to align with security rules
      */
     async createOrUpdateUserProfile(userData) {
+        const userId = userData.user_id || this.getCurrentUserId();
+        if (!userId) {
+            console.error('No user ID found for createOrUpdateUserProfile');
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
         try {
-            const userId = this.getCurrentUserId();
-            if (!userId) {
-                return { 
-                    success: false, 
-                    error: { message: 'User must be authenticated' } 
-                };
+            // Check if user already exists
+            const userDoc = await this.getDocument('users', userId);
+            const currentUser = this.getCurrentUser();
+
+            // Determine account type based on organization membership
+            let finalAccountType = userData.account_type || userData.accountType || 'individual';
+            let userOrganizationId = userData.organizationId || null;
+            let userOrganizationName = userData.organizationName || null;
+
+            // Check for existing organization memberships
+            if (!userOrganizationId) {
+                try {
+                    const orgMembershipQuery = query(
+                        this.createCollectionRef(`userMemberships/${userId}/organizations`),
+                        where('status', '==', 'active')
+                    );
+                    const orgMembershipSnap = await getDocs(orgMembershipQuery);
+                    
+                    if (!orgMembershipSnap.empty) {
+                        const orgMembership = orgMembershipSnap.docs[0].data();
+                        userOrganizationId = orgMembership.org_id;
+                        userOrganizationName = orgMembership.org_name;
+                        finalAccountType = 'organization';
+                    }
+                } catch (error) {
+                    console.warn('Could not check organization memberships:', error);
+                }
             }
 
-            const userRef = doc(this.db, 'users', userId);
-            const userSnap = await getDoc(userRef);
-            
-            let processedData;
-            let operation;
+            // Parse display name if needed
+            const displayName = userData.display_name || userData.displayName || currentUser?.displayName || '';
+            const nameParts = displayName.trim().split(' ');
+            const firstName = userData.first_name || userData.firstName || nameParts[0] || '';
+            const lastName = userData.last_name || userData.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
 
-            if (userSnap.exists()) {
-                // Update existing profile
-                processedData = this.addCommonFields(userData, true);
-                await updateDoc(userRef, processedData);
-                operation = 'update';
+            if (userDoc.success) {
+                // Update existing user - ONLY SEND SECURITY RULE ALLOWED FIELDS
+                const updateData = this.buildUpdateUserData(userData, {
+                    displayName,
+                    firstName,
+                    lastName,
+                    finalAccountType,
+                    userOrganizationId,
+                    userOrganizationName
+                });
+
+                const result = await this.updateDocument('users', userId, updateData);
+                if (result.success) {
+                    return {
+                        success: true,
+                        data: {
+                            id: userId,
+                            ...userDoc.data,
+                            ...updateData
+                        }
+                    };
+                }
+                return result;
+
             } else {
-                // Create new profile with default multi-tenancy fields
-                const requiredFields = {
-                    user_id: userId,
-                    email: this.getCurrentUser()?.email || '',
-                    accountType: 'individual', // Default to individual
-                    availableAccounts: [], // Initialize empty available accounts
-                    ...userData
-                };
-                processedData = this.addCommonFields(requiredFields, false);
-                await setDoc(userRef, processedData);
-                operation = 'create';
+                // Create new user profile - ONLY SEND SECURITY RULE ALLOWED FIELDS
+                const createData = this.buildCreateUserData(userData, currentUser, {
+                    userId,
+                    displayName,
+                    firstName,
+                    lastName,
+                    finalAccountType,
+                    userOrganizationId,
+                    userOrganizationName
+                });
+
+                const result = await this.createDocument('users', createData, userId);
+                return result;
             }
-
-            // Clear cache for this user
-            this.userCache.delete(userId);
-
-            const finalData = { id: userId, ...processedData };
-            return { 
-                success: true, 
-                data: finalData,
-                operation: operation 
-            };
         } catch (error) {
+            console.error('Error in createOrUpdateUserProfile:', error);
             return this.handleFirestoreError(error, 'create/update user profile');
         }
     }
 
     /**
-     * Update user profile for account switching
-     * @param {string} userId - User ID
-     * @param {Object} updateData - Data to update
-     * @returns {Promise} - Success/error object
+     * Build create user data - ONLY fields allowed by security rules
      */
-    async updateUserProfile(userId, updateData) {
-        try {
-            const validUserId = this.validateUserId(userId);
-            if (!validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Invalid user ID' }
-                };
-            }
-
-            // Security check: only allow users to update their own profile
-            const currentUserId = this.getCurrentUserId();
-            if (currentUserId !== validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Unauthorized: Cannot update another user\'s profile' }
-                };
-            }
-
-            const userRef = doc(this.db, 'users', validUserId);
-            const userSnap = await getDoc(userRef);
+    buildCreateUserData(userData, currentUser, computed) {
+        const { userId, displayName, firstName, lastName, finalAccountType, userOrganizationId, userOrganizationName } = computed;
+        
+        // Base data that security rules expect for creation
+        const createData = {
+            // PRIMARY FIELDS (required by security rules)
+            user_id: userId,                    // Your code uses user_id
+            email: userData.email || currentUser?.email,
+            display_name: displayName,          // Your code uses display_name
+            account_type: finalAccountType,     // Your code uses account_type
             
-            if (!userSnap.exists()) {
-                return {
-                    success: false,
-                    error: { message: 'User profile not found' }
-                };
+            // ADDITIONAL ALLOWED FIELDS
+            first_name: firstName,
+            last_name: lastName,
+            role: userData.role || (finalAccountType === 'organization' ? 'Admin' : 'member'),
+            preferences: userData.preferences || {},
+            contact_info: userData.contact_info || {
+                email: userData.email || currentUser?.email,
+                phone: null
+            },
+            profile_picture: userData.profile_picture || currentUser?.photoURL || null,
+            account_memberships: [],
+            registrationCompleted: userData.registrationCompleted !== false,
+            emailVerified: currentUser?.emailVerified || false,
+            
+            // TIMESTAMPS (handled by base service)
+            // created_at and updated_at will be added by addCommonFields
+        };
+
+        // Add organization data if applicable
+        if (userOrganizationId) {
+            createData.organizationId = userOrganizationId;
+            createData.organizationName = userOrganizationName;
+            createData.account_type = 'organization';
+            
+            if (createData.account_memberships.length === 0) {
+                createData.account_memberships = [{
+                    organization_id: userOrganizationId,
+                    organization_name: userOrganizationName,
+                    role: userData.role || 'Admin',
+                    status: 'active',
+                    joined_at: new Date().toISOString()
+                }];
+            }
+        }
+
+        // Add Google-specific fields if present
+        if (userData.google_id) {
+            createData.google_id = userData.google_id;
+        }
+
+        return createData;
+    }
+
+    /**
+     * Build update user data - ONLY fields allowed by security rules for updates
+     */
+    buildUpdateUserData(userData, computed) {
+        const { displayName, firstName, lastName, finalAccountType, userOrganizationId, userOrganizationName } = computed;
+        
+        // Only include fields that are allowed for updates by security rules
+        const allowedUpdateFields = [
+            'display_name',
+            'first_name', 
+            'last_name',
+            'organizationName',
+            'organizationId',
+            'preferences',
+            'contact_info',
+            'profile_picture',
+            'account_type',
+            'role',
+            'account_memberships',
+            'registrationCompleted',
+            'emailVerified'
+        ];
+
+        const updateData = {};
+        
+        // Only add fields that are in the allowed list and actually provided
+        allowedUpdateFields.forEach(field => {
+            if (userData.hasOwnProperty(field) && userData[field] !== undefined) {
+                updateData[field] = userData[field];
+            }
+        });
+
+        // Add computed fields
+        if (displayName) updateData.display_name = displayName;
+        if (firstName) updateData.first_name = firstName;
+        if (lastName) updateData.last_name = lastName;
+        if (finalAccountType) updateData.account_type = finalAccountType;
+
+        // Ensure organization data is included if user is part of org
+        if (userOrganizationId) {
+            updateData.organizationId = userOrganizationId;
+            updateData.organizationName = userOrganizationName || updateData.organizationName;
+            updateData.account_type = 'organization';
+            
+            // Update account memberships if not already present
+            if (!updateData.account_memberships || updateData.account_memberships.length === 0) {
+                updateData.account_memberships = [{
+                    organization_id: userOrganizationId,
+                    organization_name: userOrganizationName,
+                    role: userData.role || 'Admin',
+                    status: 'active',
+                    joined_at: new Date().toISOString()
+                }];
+            }
+        }
+
+        return updateData;
+    }
+
+    /**
+     * Get user profile with organization data
+     */
+    async getUserProfile(userId = null) {
+        const targetUserId = userId || this.getCurrentUserId();
+        if (!targetUserId) {
+            console.error('No user ID found for getUserProfile');
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        try {
+            const result = await this.getDocument('users', targetUserId);
+            if (!result.success) {
+                console.warn(`User profile not found for userId: ${targetUserId}`);
+                return result;
             }
 
-            const processedData = this.addCommonFields(updateData, true);
-            await updateDoc(userRef, processedData);
+            const userData = result.data;
 
-            // Clear cache for this user
-            this.userCache.delete(validUserId);
+            // Fetch organization details if user is part of an organization
+            if (userData.organizationId) {
+                try {
+                    const orgDoc = await this.getDocument('organizations', userData.organizationId);
+                    if (orgDoc.success) {
+                        userData.organization = orgDoc.data;
+                    }
+                } catch (error) {
+                    console.warn('Could not fetch organization details:', error);
+                }
+            }
 
-            const updatedData = {
-                ...userSnap.data(),
-                ...updateData,
-                updated_at: new Date().toISOString()
-            };
+            // Fetch subscription details
+            try {
+                const subscriptionDoc = await this.getDocument('subscriptions', targetUserId);
+                if (subscriptionDoc.success) {
+                    userData.subscription = subscriptionDoc.data;
+                }
+            } catch (error) {
+                console.warn('Could not fetch subscription details:', error);
+            }
 
             return {
                 success: true,
-                data: updatedData
+                data: userData
             };
         } catch (error) {
-            return this.handleFirestoreError(error, 'update user profile');
+            console.error(`Error fetching user profile for userId: ${targetUserId}`, error);
+            return this.handleFirestoreError(error, 'get user profile');
         }
     }
 
     /**
-     * Add an organization account to user's available accounts
-     * @param {string} userId - User ID
-     * @param {Object} organizationData - Organization account data
-     * @returns {Promise} - Success/error object
+     * Update user's organization membership - FIXED for security rules
      */
-    async addOrganizationAccount(userId, organizationData) {
+    async updateOrganizationMembership(userId, organizationId, role = 'member') {
+        if (!userId || !organizationId) {
+            return { success: false, error: { message: 'User ID and Organization ID are required' } };
+        }
+
         try {
-            const validUserId = this.validateUserId(userId);
-            if (!validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Invalid user ID' }
-                };
-            }
-
-            // Security check
-            const currentUserId = this.getCurrentUserId();
-            if (currentUserId !== validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Unauthorized: Cannot modify another user\'s accounts' }
-                };
-            }
-
-            // Validate organization access
-            const orgValidation = await this.validateOrganizationAccess(validUserId, organizationData.organizationId);
-            if (!orgValidation.success) {
-                return {
-                    success: false,
-                    error: { message: 'No valid access to organization' }
-                };
-            }
-
-            const userRef = doc(this.db, 'users', validUserId);
-
-            // Use transaction to ensure data consistency
-            const result = await runTransaction(this.db, async (transaction) => {
-                const userDoc = await transaction.get(userRef);
-                
-                if (!userDoc.exists()) {
-                    throw new Error('User profile not found');
-                }
-                
-                const userData = userDoc.data();
-                const availableAccounts = userData.availableAccounts || [];
-                
-                // Check if organization account already exists
-                const existingOrgAccount = availableAccounts.find(acc => 
-                    acc.accountType === 'organization' && 
-                    acc.organizationId === organizationData.organizationId
-                );
-                
-                if (existingOrgAccount) {
-                    throw new Error('Organization account already exists');
-                }
-                
-                // Create new organization account entry
-                const newOrgAccount = {
-                    id: validUserId, // Same user, different context
-                    email: userData.email,
-                    accountType: 'organization',
-                    organizationId: organizationData.organizationId,
-                    organizationName: orgValidation.data.organizationName,
-                    role: orgValidation.data.role,
-                    addedAt: new Date().toISOString(),
-                };
-                
-                const updatedAvailableAccounts = [...availableAccounts, newOrgAccount];
-                
-                // Update user document
-                transaction.update(userRef, {
-                    availableAccounts: updatedAvailableAccounts,
-                    updated_at: serverTimestamp()
-                });
-                
-                return newOrgAccount;
-            });
-
-            // Clear cache
-            this.userCache.delete(validUserId);
-
-            console.log('✅ Organization account added successfully');
-            return { success: true, data: result };
-            
-        } catch (error) {
-            console.error('❌ Error adding organization account:', error);
-            return this.handleFirestoreError(error, 'add organization account');
-        }
-    }
-
-    /**
-     * Remove an account from user's available accounts
-     * @param {string} userId - User ID
-     * @param {Object} accountToRemove - Account to remove
-     * @returns {Promise} - Success/error object
-     */
-    async removeAvailableAccount(userId, accountToRemove) {
-        try {
-            const validUserId = this.validateUserId(userId);
-            if (!validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Invalid user ID' }
-                };
-            }
-
-            // Security check
-            const currentUserId = this.getCurrentUserId();
-            if (currentUserId !== validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Unauthorized: Cannot modify another user\'s accounts' }
-                };
-            }
-
-            const userRef = doc(this.db, 'users', validUserId);
-
-            const result = await runTransaction(this.db, async (transaction) => {
-                const userDoc = await transaction.get(userRef);
-                
-                if (!userDoc.exists()) {
-                    throw new Error('User profile not found');
-                }
-                
-                const userData = userDoc.data();
-                const availableAccounts = userData.availableAccounts || [];
-                
-                // Filter out the account to remove
-                const updatedAvailableAccounts = availableAccounts.filter(acc => 
-                    !(acc.accountType === accountToRemove.accountType &&
-                      acc.organizationId === accountToRemove.organizationId)
-                );
-
-                // Prevent removing if this would leave no accounts
-                if (updatedAvailableAccounts.length === 0 && userData.accountType === accountToRemove.accountType) {
-                    throw new Error('Cannot remove the only available account');
-                }
-                
-                // Update user document
-                transaction.update(userRef, {
-                    availableAccounts: updatedAvailableAccounts,
-                    updated_at: serverTimestamp()
-                });
-                
-                return updatedAvailableAccounts;
-            });
-
-            // Clear cache
-            this.userCache.delete(validUserId);
-
-            console.log('✅ Available account removed successfully');
-            return { success: true, data: result };
-            
-        } catch (error) {
-            console.error('❌ Error removing available account:', error);
-            return this.handleFirestoreError(error, 'remove available account');
-        }
-    }
-
-    /**
-     * Switch user's active account context
-     * @param {string} userId - User ID
-     * @param {Object} targetAccount - Target account to switch to
-     * @returns {Promise} - Success/error object
-     */
-    async switchAccountContext(userId, targetAccount) {
-        try {
-            const validUserId = this.validateUserId(userId);
-            if (!validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Invalid user ID' }
-                };
-            }
-
-            // Security check
-            const currentUserId = this.getCurrentUserId();
-            if (currentUserId !== validUserId) {
-                return {
-                    success: false,
-                    error: { message: 'Unauthorized: Cannot switch another user\'s account' }
-                };
-            }
-
-            const userRef = doc(this.db, 'users', validUserId);
-
-            const result = await runTransaction(this.db, async (transaction) => {
-                const userDoc = await transaction.get(userRef);
-                
-                if (!userDoc.exists()) {
-                    throw new Error('User profile not found');
-                }
-                
-                const userData = userDoc.data();
-                const availableAccounts = userData.availableAccounts || [];
-                
-                // Validate target account exists in available accounts or is the user's own account
-                const isValidSwitch = 
-                    targetAccount.id === validUserId || // Same user, different context
-                    availableAccounts.some(acc => 
-                        acc.id === targetAccount.id && 
-                        acc.accountType === targetAccount.accountType &&
-                        acc.organizationId === targetAccount.organizationId
-                    );
-
-                if (!isValidSwitch) {
-                    throw new Error('Unauthorized account access');
-                }
-
-                // For organization accounts, validate current access
-                if (targetAccount.accountType === 'organization' && targetAccount.organizationId) {
-                    const orgAccess = await this.validateOrganizationAccess(validUserId, targetAccount.organizationId);
-                    if (!orgAccess.success) {
-                        throw new Error('No longer have access to this organization');
-                    }
-                }
-
-                // Update account context
-                const updateData = {
-                    accountType: targetAccount.accountType,
-                    organizationId: targetAccount.organizationId || null,
-                    organizationName: targetAccount.organizationName || null,
-                    activeAccountId: targetAccount.id,
-                    updated_at: serverTimestamp()
-                };
-                
-                transaction.update(userRef, updateData);
-                
-                return {
-                    ...userData,
-                    ...updateData,
-                    updated_at: new Date().toISOString()
-                };
-            });
-
-            // Clear cache
-            this.userCache.delete(validUserId);
-
-            console.log('✅ Account context switched successfully');
-            return { success: true, data: result };
-            
-        } catch (error) {
-            console.error('❌ Error switching account context:', error);
-            return this.handleFirestoreError(error, 'switch account context');
-        }
-    }
-
-    /**
-     * Subscribe to user profile changes
-     * @param {string} userId - User ID to subscribe to (defaults to current user)
-     * @param {Function} callback - Callback function for profile updates
-     * @param {Function} errorCallback - Error callback function
-     * @returns {Function} - Unsubscribe function
-     */
-    subscribeToUserProfile(userId = null, callback, errorCallback = null) {
-        const targetUserId = userId || this.getCurrentUserId();
-        const validUserId = this.validateUserId(targetUserId);
-        
-        if (!validUserId) {
-            errorCallback?.({ 
-                success: false, 
-                error: { message: 'Invalid or missing user ID' } 
-            });
-            return () => {};
-        }
-
-        const userRef = doc(this.db, 'users', validUserId);
-        const unsubscribe = onSnapshot(
-            userRef,
-            (doc) => {
-                if (doc.exists()) {
-                    const userData = { id: doc.id, ...doc.data() };
-                    
-                    // Ensure availableAccounts is always an array
-                    userData.availableAccounts = userData.availableAccounts || [];
-                    
-                    // Normalize field names
-                    userData.displayName = userData.displayName || userData.display_name || userData.name;
-                    userData.accountType = userData.accountType || userData.account_type || 'individual';
-                    
-                    // Update cache
-                    this.userCache.set(validUserId, {
-                        data: userData,
-                        timestamp: Date.now()
-                    });
-                    
-                    callback(userData);
-                } else {
-                    callback(null);
-                }
-            },
-            (error) => {
-                errorCallback?.(this.handleFirestoreError(error, 'subscribe to user profile'));
-            }
-        );
-
-        const subscriptionKey = `user_profile_${validUserId}`;
-        this.unsubscribes.set(subscriptionKey, unsubscribe);
-        return unsubscribe;
-    }
-
-    /**
-     * Update specific user profile fields
-     * @param {Object} fieldsToUpdate - Object containing fields to update
-     * @returns {Promise} - Success/error object
-     */
-    async updateUserProfileFields(fieldsToUpdate) {
-        try {
-            const userId = this.getCurrentUserId();
-            if (!userId) {
-                return { 
-                    success: false, 
-                    error: { message: 'User must be authenticated' } 
-                };
-            }
-
-            // Validate allowed fields based on security rules (updated for multi-tenancy)
-            const allowedFields = [
-                'preferences', 
-                'contact_info', 
-                'profile_picture', 
-                'display_name', 
-                'account_memberships',
-                'accountType',
-                'organizationId',
-                'organizationName',
-                'availableAccounts',
-                'activeAccountId'
-            ];
-            
-            const invalidFields = Object.keys(fieldsToUpdate).filter(
-                field => !allowedFields.includes(field)
-            );
-            
-            if (invalidFields.length > 0) {
-                return {
-                    success: false,
-                    error: { 
-                        message: `Invalid fields: ${invalidFields.join(', ')}. Allowed fields: ${allowedFields.join(', ')}` 
-                    }
-                };
-            }
-
-            const userRef = doc(this.db, 'users', userId);
-            const updateData = this.addCommonFields(fieldsToUpdate, true);
-            
-            await updateDoc(userRef, updateData);
-
-            // Clear cache for this user
-            this.userCache.delete(userId);
-
-            return { 
-                success: true, 
-                data: updateData 
-            };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'update user profile fields');
-        }
-    }
-
-    /**
-     * Get user's organization memberships
-     * @param {string} userId - User ID (defaults to current user)
-     * @returns {Promise} - Success/error object with memberships data
-     */
-    async getUserMemberships(userId = null) {
-        try {
-            const targetUserId = userId || this.getCurrentUserId();
-            const validUserId = this.validateUserId(targetUserId);
-            
-            if (!validUserId) {
-                return { 
-                    success: false, 
-                    error: { message: 'Invalid or missing user ID' } 
-                };
-            }
-
-            const membershipRef = doc(this.db, 'userMemberships', validUserId);
-            const membershipSnap = await getDoc(membershipRef);
-
-            if (membershipSnap.exists()) {
-                return { 
-                    success: true, 
-                    data: { id: membershipSnap.id, ...membershipSnap.data() } 
-                };
-            }
-            
-            return { 
-                success: true, 
-                data: { organizations: [] } 
-            };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'get user memberships');
-        }
-    }
-
-    /**
-     * Search users by email (for invitations, etc.)
-     * @param {string} email - Email to search for
-     * @returns {Promise} - Success/error object with user data
-     */
-    async searchUserByEmail(email) {
-        try {
-            if (!email || typeof email !== 'string') {
-                return { 
-                    success: false, 
-                    error: { message: 'Valid email is required' } 
-                };
-            }
-
-            const usersRef = collection(this.db, 'users');
-            const q = query(usersRef, where('email', '==', email.toLowerCase().trim()));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-                const userDoc = querySnapshot.docs[0];
-                const userData = { id: userDoc.id, ...userDoc.data() };
-                return { success: true, data: userData };
-            }
-            
-            return { 
-                success: false, 
-                error: { message: 'User not found' } 
-            };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'search user by email');
-        }
-    }
-
-    /**
-     * Delete user profile (self-deletion only)
-     * @returns {Promise} - Success/error object
-     */
-    async deleteUserProfile() {
-        try {
-            const userId = this.getCurrentUserId();
-            if (!userId) {
-                return { 
-                    success: false, 
-                    error: { message: 'User must be authenticated' } 
-                };
-            }
-
-            const batch = writeBatch(this.db);
-            
-            // Delete user profile
-            const userRef = doc(this.db, 'users', userId);
-            batch.delete(userRef);
-            
-            // Delete user memberships
-            const membershipRef = doc(this.db, 'userMemberships', userId);
-            batch.delete(membershipRef);
-            
-            // Delete individual account if exists
-            const individualAccountRef = doc(this.db, 'individualAccounts', userId);
-            batch.delete(individualAccountRef);
-
-            await batch.commit();
-
-            // Clear cache
-            this.userCache.delete(userId);
-
-            return { success: true };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'delete user profile');
-        }
-    }
-
-    /**
-     * Get current user's full profile with memberships
-     * @returns {Promise} - Success/error object with complete profile data
-     */
-    async getCurrentUserFullProfile() {
-        try {
-            const userId = this.getCurrentUserId();
-            if (!userId) {
-                return { 
-                    success: false, 
-                    error: { message: 'User must be authenticated' } 
-                };
-            }
-
-            // Get user profile
-            const profileResult = await this.getUserProfile(userId);
-            if (!profileResult.success) {
-                return profileResult;
-            }
-
-            // Get user memberships
-            const membershipsResult = await this.getUserMemberships(userId);
-            
-            const fullProfile = {
-                ...profileResult.data,
-                memberships: membershipsResult.success ? membershipsResult.data : { organizations: [] }
+            // Build update data with only allowed fields
+            const updateData = {
+                organizationId: organizationId,
+                account_type: 'organization',
+                role: role,
+                account_memberships: [{
+                    organization_id: organizationId,
+                    role: role,
+                    status: 'active',
+                    joined_at: new Date().toISOString()
+                }]
             };
 
-            return { 
-                success: true, 
-                data: fullProfile 
+            // Update user profile
+            const updateResult = await this.updateDocument('users', userId, updateData);
+
+            if (!updateResult.success) {
+                return updateResult;
+            }
+
+            // Update user membership collection with allowed fields only
+            const membershipData = {
+                org_id: organizationId,
+                user_id: userId,
+                role: role,
+                status: 'active'
+            };
+
+            await this.createDocument(`userMemberships/${userId}/organizations`, membershipData, organizationId);
+
+            return {
+                success: true,
+                message: 'Organization membership updated successfully'
             };
         } catch (error) {
-            return this.handleFirestoreError(error, 'get current user full profile');
+            console.error('Error updating organization membership:', error);
+            return this.handleFirestoreError(error, 'update organization membership');
         }
     }
 
     /**
-     * Clear user cache
-     * @param {string} userId - Specific user ID to clear, or null for all
+     * Check if user has specific role in organization
      */
-    clearUserCache(userId = null) {
-        if (userId) {
-            this.userCache.delete(userId);
-        } else {
-            this.userCache.clear();
-        }
-    }
+    async hasOrganizationRole(userId, organizationId, requiredRole) {
+        try {
+            const userDoc = await this.getUserProfile(userId);
+            if (!userDoc.success) return false;
 
-    /**
-     * Unsubscribe from a specific subscription
-     * @param {string} subscriptionKey - Key of the subscription to cancel
-     */
-    unsubscribe(subscriptionKey) {
-        const unsubscribe = this.unsubscribes.get(subscriptionKey);
-        if (unsubscribe) {
-            unsubscribe();
-            this.unsubscribes.delete(subscriptionKey);
-        }
-    }
+            const userData = userDoc.data;
+            if (userData.organizationId !== organizationId) return false;
 
-    /**
-     * Cleanup all subscriptions and clear cache
-     */
-    cleanup() {
-        this.unsubscribes.forEach((unsubscribe) => {
-            unsubscribe();
-        });
-        this.unsubscribes.clear();
-        this.userCache.clear();
+            const roleHierarchy = {
+                'Admin': 3,
+                'Manager': 2,
+                'member': 1
+            };
+
+            const userRoleLevel = roleHierarchy[userData.role] || 0;
+            const requiredRoleLevel = roleHierarchy[requiredRole] || 0;
+
+            return userRoleLevel >= requiredRoleLevel;
+        } catch (error) {
+            console.error('Error checking organization role:', error);
+            return false;
+        }
     }
 }

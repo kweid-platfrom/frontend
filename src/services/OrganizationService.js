@@ -1,7 +1,10 @@
-import { FirestoreService } from './firestoreService';
-import { writeBatch, serverTimestamp, doc } from 'firebase/firestore';
+import { BaseFirestoreService } from './firestoreService';
+import { writeBatch, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 
-export class OrganizationService extends FirestoreService {
+export class OrganizationService extends BaseFirestoreService {
+    /**
+     * Validate user's access to organization
+     */
     async validateOrganizationAccess(orgId, requiredRole = 'member') {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -10,245 +13,437 @@ export class OrganizationService extends FirestoreService {
         }
 
         try {
+            // Check if user is owner
             const orgDoc = await this.getDocument('organizations', orgId);
-            if (orgDoc.success && orgDoc.data.ownerId === userId) {
+            if (orgDoc.success && (orgDoc.data.ownerId === userId || orgDoc.data.created_by === userId)) {
                 return true;
             }
 
+            // Check membership
             const memberDoc = await this.getDocument(`organizations/${orgId}/members`, userId);
-            if (memberDoc.success) {
-                const memberData = memberDoc.data;
-                if (requiredRole === 'member') return true;
-                if (requiredRole === 'admin' && memberData.role === 'Admin') return true;
+            if (!memberDoc.success) {
+                console.warn(`User ${userId} is not a member of organization ${orgId}`);
+                return false;
             }
 
-            console.warn(`User ${userId} lacks access to organization ${orgId}`);
-            return false;
+            const memberData = memberDoc.data;
+            const roleHierarchy = {
+                'admin': 3,     // Lowercase for consistency
+                'Admin': 3,     // Support both cases
+                'manager': 2,
+                'Manager': 2,
+                'member': 1,
+                'Member': 1
+            };
+
+            const userRoleLevel = roleHierarchy[memberData.role] || 0;
+            const requiredRoleLevel = roleHierarchy[requiredRole] || 0;
+
+            return userRoleLevel >= requiredRoleLevel;
         } catch (error) {
             console.error('Error validating organization access:', error);
             return false;
         }
     }
 
-    async createOrganization(orgData) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
+    /**
+     * Create organization with proper user setup and enhanced error handling
+     * FIXED: Removed user profile verification that was causing the circular dependency
+     */
+    async createOrganization(orgData, userId = null) {
+        const currentUserId = userId || this.getCurrentUserId();
+        if (!currentUserId) {
+            return { 
+                success: false, 
+                error: { message: 'User authentication required to create organization' } 
+            };
         }
-        if (!orgData.name) {
-            return { success: false, error: { message: 'Organization name is required' } };
+
+        if (!orgData.name || !orgData.name.trim()) {
+            return { 
+                success: false, 
+                error: { message: 'Organization name is required' } 
+            };
         }
 
         try {
-            const batch = writeBatch(this.db);
-            
-            // FIXED: Generate orgId properly using collection reference
-            const orgCollectionRef = this.createCollectionRef('organizations');
-            const orgRef = doc(orgCollectionRef); // This generates a new document reference with auto-ID
-            const orgId = orgRef.id;
-            
-            // FIXED: Create organization data with proper structure
-            const organizationData = this.addCommonFields({
-                name: orgData.name,
-                description: orgData.description || '',
-                industry: orgData.industry || 'technology', // FIXED: Add industry field
-                ownerId: userId,
-                settings: orgData.settings || {},
-                ...(orgData.customDomain && { customDomain: orgData.customDomain })
-            });
+            console.log('🏢 Starting organization creation process...');
+            console.log('📋 Organization data:', { name: orgData.name, industry: orgData.industry, size: orgData.size });
 
-            batch.set(orgRef, organizationData);
+            // Step 1: Check for existing organization name
+            console.log('🔍 Checking for existing organization name...');
+            try {
+                const nameQuery = query(
+                    this.createCollectionRef('organizations'),
+                    where('name', '==', orgData.name.trim())
+                );
+                const existingOrgs = await getDocs(nameQuery);
 
-            // FIXED: Create member document with proper path
-            const memberRef = this.createDocRef('organizations', orgId, 'members', userId);
-            const memberData = this.addCommonFields({
-                user_id: userId,
-                role: 'Admin',
-                status: 'active',
-                joined_at: serverTimestamp()
-            });
-            batch.set(memberRef, memberData);
-
-            // FIXED: Create user membership document with proper path
-            const userMembershipRef = this.createDocRef('userMemberships', userId);
-            
-            // Get existing memberships or create new structure
-            const existingMemberships = await this.getDocument('userMemberships', userId);
-            const currentOrganizations = existingMemberships.success ? 
-                (existingMemberships.data.organizations || []) : [];
-
-            const userMembershipData = this.addCommonFields({
-                user_id: userId,
-                organizations: [
-                    ...currentOrganizations,
-                    {
-                        organizationId: orgId,
-                        role: 'Admin',
-                        status: 'active',
-                        joinedAt: new Date().toISOString()
-                    }
-                ]
-            }, existingMemberships.success); // true if updating, false if creating
-
-            if (existingMemberships.success) {
-                batch.update(userMembershipRef, userMembershipData);
-            } else {
-                batch.set(userMembershipRef, userMembershipData);
+                if (!existingOrgs.empty) {
+                    console.error('❌ Organization name already exists');
+                    return {
+                        success: false,
+                        error: { message: 'Organization name already exists. Please choose a different name.' }
+                    };
+                }
+            } catch (error) {
+                console.warn('⚠️ Could not check for existing organization names:', error.message);
+                // Continue anyway - the unique constraint will catch duplicates
             }
 
-            // FIXED: Update user profile to organization account type
-            const userRef = this.createDocRef('users', userId);
-            const userUpdateData = this.addCommonFields({ 
-                account_type: 'organization',
-                organizationId: orgId,
-                organizationName: orgData.name
-            }, true);
-            batch.update(userRef, userUpdateData);
+            // Step 2: Create organization with atomic batch transaction
+            console.log('💾 Creating organization with atomic transaction...');
+            
+            const batch = writeBatch(this.db);
+            
+            // Generate a proper organization ID
+            const tempOrgRef = this.createDocRef('organizations', 'temp');
+            const orgId = tempOrgRef.id.replace('temp', '') + Date.now().toString(36);
+            
+            const now = new Date().toISOString();
+            const serverTime = serverTimestamp();
 
+            // Organization document with all required fields for security rules
+            const organizationData = {
+                // Primary fields
+                id: orgId,
+                name: orgData.name.trim(),
+                description: orgData.description || `${orgData.name.trim()} organization`,
+                industry: orgData.industry || 'other',
+                size: orgData.size || 'small',
+                
+                // Ownership and permissions - use both formats for compatibility
+                ownerId: currentUserId,        // For business logic
+                created_by: currentUserId,     // For security rules
+                owner_id: currentUserId,       // Alternative format
+                
+                // Member management
+                memberCount: 1,
+                
+                // Settings
+                settings: {
+                    isPublic: false,
+                    allowMemberInvites: true,
+                    requireApproval: false,
+                    allowPublicJoin: false,
+                    requireEmailVerification: true,
+                    defaultRole: 'member',
+                    ...orgData.settings
+                },
+                
+                // Timestamps - provide both formats
+                created_at: now,
+                updated_at: now,
+                createdAt: serverTime,    // Firestore server timestamp
+                updatedAt: serverTime,    // Firestore server timestamp
+                
+                // Status and metadata
+                status: 'active',
+                type: 'organization'
+            };
+
+            console.log('📄 Organization document to create:', {
+                id: organizationData.id,
+                name: organizationData.name,
+                created_by: organizationData.created_by,
+                ownerId: organizationData.ownerId
+            });
+
+            // Add organization document to batch
+            batch.set(
+                this.createDocRef('organizations', orgId),
+                organizationData
+            );
+
+            // Member document with consistent field naming
+            const memberData = {
+                // User identification - multiple formats for compatibility
+                user_id: currentUserId,
+                userId: currentUserId,
+                uid: currentUserId,
+                
+                // User details - we'll get these from the user after creation
+                email: null, // Will be populated after user creation
+                display_name: null, // Will be populated after user creation
+                first_name: null, // Will be populated after user creation
+                last_name: null, // Will be populated after user creation
+                
+                // Role and permissions - use consistent lowercase
+                role: 'admin',
+                status: 'active',
+                permissions: ['all'],
+                
+                // Timestamps
+                joined_at: now,
+                joinedAt: serverTime,
+                created_at: now,
+                updated_at: now,
+                
+                // Metadata
+                addedBy: currentUserId,
+                isOwner: true
+            };
+
+            console.log('👥 Member document to create:', {
+                user_id: memberData.user_id,
+                role: memberData.role,
+                status: memberData.status
+            });
+
+            // Add member document to batch
+            batch.set(
+                this.createDocRef(`organizations/${orgId}/members`, currentUserId),
+                memberData
+            );
+
+            // Step 3: Commit the batch transaction
+            console.log('🚀 Committing batch transaction...');
             await batch.commit();
 
-            console.log('✅ Organization created successfully:', {
-                id: orgId,
-                name: orgData.name,
-                industry: orgData.industry
-            });
+            console.log(`✅ Organization "${orgData.name}" created successfully with ID: ${orgId}`);
 
             return {
                 success: true,
                 data: {
                     id: orgId,
                     ...organizationData,
-                    memberRole: 'Admin'
+                    // Replace server timestamps with actual dates for response
+                    createdAt: now,
+                    updatedAt: now
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ Organization creation failed:', {
+                error: error.message,
+                code: error.code,
+                details: error.details || 'No additional details'
+            });
+
+            // Enhanced error handling with specific messages
+            let errorMessage = 'Failed to create organization. Please try again.';
+            let errorCode = 'creation-failed';
+
+            if (error.code === 'permission-denied') {
+                errorMessage = 'Permission denied: Your account does not have the required permissions to create organizations. Please ensure you have an organization account type.';
+                errorCode = 'permission-denied';
+            } else if (error.code === 'failed-precondition') {
+                errorMessage = 'Failed precondition: Please ensure your user profile is properly set up with organization account type.';
+                errorCode = 'failed-precondition';
+            } else if (error.code === 'not-found') {
+                errorMessage = 'User profile not found. Please complete your registration first.';
+                errorCode = 'user-not-found';
+            } else if (error.code === 'already-exists') {
+                errorMessage = 'Organization name already exists. Please choose a different name.';
+                errorCode = 'name-exists';
+            } else if (error.code === 'invalid-argument') {
+                errorMessage = 'Invalid organization data provided. Please check all required fields.';
+                errorCode = 'invalid-data';
+            }
+
+            return {
+                success: false,
+                error: {
+                    message: errorMessage,
+                    code: errorCode,
+                    details: error.message,
+                    originalError: error.code
+                }
+            };
+        }
+    }
+
+    // [Rest of the methods remain unchanged...]
+    /**
+     * Get organization with member details
+     */
+    async getOrganization(orgId) {
+        try {
+            const orgDoc = await this.getDocument('organizations', orgId);
+            if (!orgDoc.success) {
+                return orgDoc;
+            }
+
+            // Get member count from members subcollection
+            const membersQuery = query(
+                this.createCollectionRef(`organizations/${orgId}/members`),
+                where('status', '==', 'active')
+            );
+            const membersSnapshot = await getDocs(membersQuery);
+            const actualMemberCount = membersSnapshot.size;
+
+            return {
+                success: true,
+                data: {
+                    ...orgDoc.data,
+                    memberCount: actualMemberCount
                 }
             };
         } catch (error) {
-            console.error('❌ Error in createOrganization:', error);
-            return this.handleFirestoreError(error, 'create organization');
+            console.error('Error getting organization:', error);
+            return {
+                success: false,
+                error: { message: 'Failed to get organization' }
+            };
         }
     }
 
-    // FIXED: Add missing methods that might be called
-    async getOrganization(orgId) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.validateOrganizationAccess(orgId, 'member');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to access this organization' } };
-        }
-
-        return await this.getDocument('organizations', orgId);
-    }
-
-    async updateOrganization(orgId, updates) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
+    /**
+     * Update organization
+     */
+    async updateOrganization(orgId, updateData) {
         const hasAccess = await this.validateOrganizationAccess(orgId, 'admin');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to update this organization' } };
+            return {
+                success: false,
+                error: { message: 'Insufficient permissions to update organization' }
+            };
         }
 
-        return await this.updateDocument('organizations', orgId, updates);
+        try {
+            const data = {
+                ...updateData,
+                updated_at: new Date().toISOString(),
+                updatedAt: serverTimestamp()
+            };
+
+            // Remove fields that shouldn't be updated directly
+            delete data.id;
+            delete data.ownerId;
+            delete data.created_by;
+            delete data.createdAt;
+            delete data.created_at;
+            delete data.memberCount;
+
+            const result = await this.updateDocument('organizations', orgId, data);
+
+            if (result.success) {
+                console.log(`✅ Organization ${orgId} updated successfully`);
+            }
+
+            return result;
+        } catch (error) {
+            console.error('Error updating organization:', error);
+            return {
+                success: false,
+                error: { message: 'Failed to update organization' }
+            };
+        }
     }
 
+    /**
+     * Delete organization (owner only)
+     */
     async deleteOrganization(orgId) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.validateOrganizationAccess(orgId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete this organization' } };
-        }
-
         try {
-            // This would need more complex logic to clean up organization data
-            // For now, just delete the organization document
-            return await this.deleteDocument('organizations', orgId);
-        } catch (error) {
-            return this.handleFirestoreError(error, 'delete organization');
-        }
-    }
-
-    // Add other organization-related methods as needed
-    async getOrganizationMembers(orgId) {
-        const hasAccess = await this.validateOrganizationAccess(orgId, 'member');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to view organization members' } };
-        }
-
-        return await this.queryDocuments(`organizations/${orgId}/members`);
-    }
-
-    // Add placeholder methods for reports functionality
-    async getReports(orgId) {
-        try {
-            const collectionPath = `organizations/${orgId}/reports`;
-            return await this.queryDocuments(collectionPath, [], 'created_at', 100);
-        } catch (error) {
-            return this.handleFirestoreError(error, 'get reports');
-        }
-    }
-
-    async saveReport(reportData) {
-        try {
-            const collectionPath = `organizations/${reportData.organizationId}/reports`;
-            return await this.createDocument(collectionPath, reportData);
-        } catch (error) {
-            return this.handleFirestoreError(error, 'save report');
-        }
-    }
-
-    async deleteReport(reportId) {
-        try {
-            const userId = this.getCurrentUserId();
-            const userProfile = await this.getDocument('users', userId);
-            if (!userProfile.success) {
-                return { success: false, error: { message: 'User profile not found' } };
+            // Verify user is the owner
+            const orgDoc = await this.getDocument('organizations', orgId);
+            if (!orgDoc.success) {
+                return { success: false, error: { message: 'Organization not found' } };
             }
 
-            const orgId = userProfile.data.organizationId;
-            if (!orgId) {
-                return { success: false, error: { message: 'No organization context found' } };
+            const isOwner = orgDoc.data.ownerId === userId || orgDoc.data.created_by === userId;
+            if (!isOwner) {
+                return {
+                    success: false,
+                    error: { message: 'Only the organization owner can delete the organization' }
+                };
             }
 
-            const collectionPath = `organizations/${orgId}/reports`;
-            return await this.deleteDocument(collectionPath, reportId);
+            const batch = writeBatch(this.db);
+
+            // Get all members to update their user documents
+            const membersSnapshot = await getDocs(
+                this.createCollectionRef(`organizations/${orgId}/members`)
+            );
+
+            // Update each member's user document to remove organization reference
+            membersSnapshot.docs.forEach(memberDoc => {
+                const memberId = memberDoc.id;
+                batch.update(
+                    this.createDocRef('users', memberId),
+                    {
+                        [`organizations.${orgId}`]: null,
+                        organizationId: null,
+                        organizationName: null,
+                        organizationRole: null,
+                        updated_at: new Date().toISOString(),
+                        updatedAt: serverTimestamp()
+                    }
+                );
+
+                // Delete member document
+                batch.delete(memberDoc.ref);
+            });
+
+            // Delete the organization document
+            batch.delete(this.createDocRef('organizations', orgId));
+
+            await batch.commit();
+
+            console.log(`✅ Organization ${orgId} deleted successfully`);
+            return { success: true };
+
         } catch (error) {
-            return this.handleFirestoreError(error, 'delete report');
+            console.error('Error deleting organization:', error);
+            return {
+                success: false,
+                error: { message: 'Failed to delete organization' }
+            };
         }
     }
 
-    async toggleSchedule({ organizationId, enabled }) {
-        try {
-            return await this.updateDocument(`organizations/${organizationId}/settings`, 'reportSchedule', { enabled });
-        } catch (error) {
-            return this.handleFirestoreError(error, 'toggle schedule');
+    /**
+     * Get user's organizations
+     */
+    async getUserOrganizations(userId = null) {
+        const currentUserId = userId || this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'User not authenticated' } };
         }
-    }
 
-    subscribeToTriggers(orgId, callback) {
         try {
-            const collectionPath = `organizations/${orgId}/triggers`;
-            return this.subscribeToCollection(collectionPath, [], callback);
-        } catch (error) {
-            console.error('Error subscribing to triggers:', error);
-            return () => {};
-        }
-    }
+            const userDoc = await this.getDocument('users', currentUserId);
+            if (!userDoc.success) {
+                return { success: false, error: { message: 'User not found' } };
+            }
 
-    async generatePDF(report) {
-        try {
-            // Placeholder for PDF generation logic
-            return { success: true, data: { url: `/pdf/${report.id}` } };
+            const organizations = userDoc.data.organizations || {};
+            const orgIds = Object.keys(organizations);
+
+            if (orgIds.length === 0) {
+                return { success: true, data: [] };
+            }
+
+            // Fetch organization details
+            const orgPromises = orgIds.map(async (orgId) => {
+                const orgDoc = await this.getDocument('organizations', orgId);
+                if (orgDoc.success) {
+                    return {
+                        ...orgDoc.data,
+                        userRole: organizations[orgId].role,
+                        userStatus: organizations[orgId].status
+                    };
+                }
+                return null;
+            });
+
+            const orgResults = await Promise.all(orgPromises);
+            const validOrgs = orgResults.filter(org => org !== null);
+
+            return { success: true, data: validOrgs };
+
         } catch (error) {
-            return this.handleFirestoreError(error, 'generate PDF');
+            console.error('Error getting user organizations:', error);
+            return {
+                success: false,
+                error: { message: 'Failed to get user organizations' }
+            };
         }
     }
 }

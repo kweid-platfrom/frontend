@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // services/AIMetricsTracker.js - Enhanced AI metrics tracking and analytics
-import { FirestoreService } from './firestoreService';
+import { BaseFirestoreService } from './firestoreService';
 
 class AIMetricsTracker {
     constructor() {
-        this.firestoreService = new FirestoreService();
+        this.firestoreService = new BaseFirestoreService();
         this.sessionMetrics = {
             testCasesGenerated: 0,
             bugReportsGenerated: 0,

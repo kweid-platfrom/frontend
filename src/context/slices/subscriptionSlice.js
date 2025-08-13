@@ -1,6 +1,9 @@
 import { useReducer } from 'react';
-import { FirestoreService } from '../../services/firestoreService';
+import { BaseFirestoreService } from '../../services/firestoreService';
 import { toast } from 'sonner';
+
+// Create a service instance
+const firestoreService = new BaseFirestoreService();
 
 const initialState = {
     currentPlan: 'trial', // Aligned with useSubscription.js
@@ -218,7 +221,8 @@ export const useSubscription = () => {
                     return;
                 }
 
-                const subscriptionResult = await FirestoreService.getSubscriptionWithStatus(userId);
+                // FIXED: Use the service instance instead of undefined FirestoreService
+                const subscriptionResult = await firestoreService.getSubscriptionWithStatus(userId);
                 if (subscriptionResult.success) {
                     const subscriptionData = subscriptionResult.data;
                     const planLimits = getPlanLimits(accountType, subscriptionData.plan, subscriptionData.isTrialActive);

@@ -1,35 +1,24 @@
-import React, { useState } from 'react';
-import { TestTube, Users, Plus, Upload, Bug, Activity, FileText, TrendingUp, CheckCircle } from 'lucide-react';
-import CreateSuiteModal from './modals/createSuiteModal';
+'use client'
+import React from 'react';
+import { useRouter } from 'next/navigation';
+import { TestTube, Users, Upload, Bug, Activity, FileText, TrendingUp, CheckCircle } from 'lucide-react';
 
-const TipsMode = ({ 
-    isTrialActive, 
-    trialDaysRemaining, 
-    isOrganizationAccount,
-    onSuiteCreated // Add this prop to handle suite creation
+const TipsMode = ({
+    isTrialActive,
+    trialDaysRemaining,
+    isOrganizationAccount
 }) => {
-    const [showCreateModal, setShowCreateModal] = useState(false);
+    const router = useRouter();
 
-    const handleCreateSuite = () => {
-        setShowCreateModal(true);
-    };
-
-    const handleCloseModal = () => {
-        setShowCreateModal(false);
-    };
-
-    const handleSuiteCreationComplete = async (newSuite) => {
-        setShowCreateModal(false);
-        if (onSuiteCreated) {
-            await onSuiteCreated(newSuite);
-        }
+    const handleCreateTestPlan = () => {
+        router.push('/documents/create');
     };
 
     return (
         <>
             <div className="h-full flex flex-col max-w-6xl mx-auto px-4">
                 {/* Welcome Header */}
-                <div className="rounded-lg p-6 mb-6 text-center flex-shrink-0 shadow-sm">
+                <div className="rounded-lg p-6 mb-6 text-center flex-shrink-0 shadow-sm border border-gray-100">
                     <div className="mx-auto w-12 h-12 bg-gradient-to-br from-teal-100 to-teal-200 rounded-full flex items-center justify-center mb-3 shadow-md">
                         <TestTube className="w-6 h-6 text-teal-600" />
                     </div>
@@ -37,83 +26,83 @@ const TipsMode = ({
                         Welcome to QAiD
                     </h2>
                     <p className="text-gray-600 mb-4">
-                        Start your quality assurance journey by creating your first test suite
+                        Your test suite is ready! Start building your quality assurance framework
                     </p>
-                    
+
                     {isTrialActive && trialDaysRemaining > 0 && (
-                        <div className="bg-white/90 backdrop-blur-sm rounded-lg p-2 inline-block mb-3 shadow-sm border border-blue-100">
+                        <div className="bg-white/90 backdrop-blur-sm rounded-lg p-2 inline-block mb-4 shadow-sm border border-blue-100">
                             <p className="text-primary font-semibold text-sm">
                                 🎉 Free trial active: {trialDaysRemaining} days remaining
                             </p>
                         </div>
                     )}
 
-                    {/* Prominent Create Button */}
+                    {/* Action Button */}
                     <button
-                        onClick={handleCreateSuite}
-                        className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+                        onClick={handleCreateTestPlan}
+                        className="inline-flex items-center px-6 py-3 bg-teal-500 text-white font-semibold rounded-md shadow-lg transition-all duration-300 hover:bg-teal-600"
                     >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Test Suite
+                        <FileText className="w-4 h-4 mr-2" />
+                        Create Test Plan
                     </button>
                 </div>
 
                 {/* Quick Start Guide */}
-                <div className="rounded-lg p-4 flex-grow flex flex-col justify-center shadow-sm">
+                <div className="rounded-lg p-4 flex-grow flex flex-col justify-center shadow-sm border border-gray-100">
                     <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">
                         Your QA Journey in 3 Steps
                     </h3>
                     <div className="grid md:grid-cols-3 gap-4 mb-4">
                         {/* Step 1 Card */}
-                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-teal-200 group">
-                            <div className="w-12 h-12 bg-gradient-to-br from-teal-100 to-teal-200 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                                <TestTube className="w-6 h-6 text-teal-600" />
+                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-teal-200">
+                            <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <FileText className="w-6 h-6 text-teal-600" />
                             </div>
-                            <h4 className="font-bold text-gray-900 mb-2 text-sm">Create Test Suite</h4>
-                            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
-                                Set up your workspace and define your project scope with custom configurations.
+                            <h4 className="font-bold text-gray-900 mb-2 text-sm">Create Test Plan</h4>
+                            <p className="text-gray-600 text-xs mb-3">
+                                Upload requirements and generate test scenarios.
                             </p>
                             <div className="space-y-1">
                                 <div className="flex items-center text-xs text-gray-500">
-                                    <CheckCircle className="w-3 h-3 mr-1 text-teal-500" />
-                                    Define project parameters
+                                    <Upload className="w-3 h-3 mr-1 text-teal-500" />
+                                    Upload documents
                                 </div>
                                 <div className="flex items-center text-xs text-gray-500">
-                                    <CheckCircle className="w-3 h-3 mr-1 text-teal-500" />
-                                    Configure environment
+                                    <Activity className="w-3 h-3 mr-1 text-teal-500" />
+                                    AI-generated scenarios
                                 </div>
                             </div>
                         </div>
 
                         {/* Step 2 Card */}
-                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-blue-200 group">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
-                                <FileText className="w-6 h-6 text-blue-600" />
+                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-blue-200">
+                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <TestTube className="w-6 h-6 text-blue-600" />
                             </div>
                             <h4 className="font-bold text-gray-900 mb-2 text-sm">Build Test Cases</h4>
-                            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
-                                Create comprehensive test scenarios and upload documents for AI-assisted generation.
+                            <p className="text-gray-600 text-xs mb-3">
+                                Create and organize test cases into suites.
                             </p>
                             <div className="space-y-1">
                                 <div className="flex items-center text-xs text-gray-500">
-                                    <Upload className="w-3 h-3 mr-1 text-blue-500" />
-                                    Upload requirements
+                                    <CheckCircle className="w-3 h-3 mr-1 text-blue-500" />
+                                    Define test steps
                                 </div>
                                 <div className="flex items-center text-xs text-gray-500">
                                     <Activity className="w-3 h-3 mr-1 text-blue-500" />
-                                    Generate scenarios
+                                    Organize test suites
                                 </div>
                             </div>
                         </div>
 
                         {/* Step 3 Card */}
-                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-green-200 group">
-                            <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                        <div className="bg-white rounded-lg p-4 text-center shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-green-200">
+                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <TrendingUp className="w-6 h-6 text-green-600" />
                             </div>
                             <h4 className="font-bold text-gray-900 mb-2 text-sm">Execute & Monitor</h4>
-                            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
-                                Run tests, track progress, and generate comprehensive quality reports.
+                            <p className="text-gray-600 text-xs mb-3">
+                                Run tests and track progress.
                             </p>
                             <div className="space-y-1">
                                 <div className="flex items-center text-xs text-gray-500">
@@ -127,26 +116,25 @@ const TipsMode = ({
                             </div>
                         </div>
                     </div>
-                    
+
                     {isOrganizationAccount && (
-                        <div className="text-center">
-                            <div className="inline-flex items-center bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 px-4 py-2 rounded-lg shadow-sm border border-purple-100">
+                        <div className="text-center mt-4">
+                            <div className="inline-flex items-center bg-teal-50 text-teal-700 px-4 py-2 rounded-lg shadow-sm border border-teal-100">
                                 <Users className="w-4 h-4 mr-2" />
-                                <span className="text-xs font-semibold">Organization Account: Invite team members to collaborate</span>
+                                <span className="text-xs font-semibold">Organization Account: Invite team members</span>
                             </div>
                         </div>
                     )}
+                    <div className="text-center mt-6">
+                        <button
+                            className="px-6 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-600"
+                        >
+                            Understood, next
+                        </button>
+                        <p className="text-xs text-gray-500 mt-2">Step 1 of 2</p>
+                    </div>
                 </div>
             </div>
-
-            {/* Create Suite Modal */}
-            <CreateSuiteModal
-                isOpen={showCreateModal}
-                onSuiteCreated={handleSuiteCreationComplete}
-                onClose={handleCloseModal}
-                onCancel={handleCloseModal}
-                isRequired={false} // Not enforcing since this is optional
-            />
         </>
     );
 };

@@ -1,856 +1,125 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useAuth as useAuthSlice } from './slices/authSlice';
-import { useSuites } from './slices/suiteSlice';
-import { useTestCases } from './slices/testCaseSlice';
-import { useBugReducer } from './slices/bugReducer';
-import { useRecordings } from './slices/recordingSlice';
-import { useSprints } from './slices/sprintSlice';
-import { useSubscription } from './slices/subscriptionSlice';
-import { useTeam } from './slices/teamSlice';
-import { useAutomation } from './slices/automationSlice';
-import { useUI } from './slices/uiSlice';
-import { useAI } from './slices/aiSlice';
-import { useTheme } from './slices/themeSlice';
+import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
+import { useSlices, getAppState } from './hooks/useSlices';
+import { useAI } from './hooks/useAI';
+import { useTestCases } from './hooks/useTestCases';
+import { useTheme } from './hooks/useTheme';
+import { useAssetLinking } from './hooks/useAssetLinking';
+import { useRecording } from './hooks/useRecording';
 import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
-import { useReports } from './slices/reportSlice';
 
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-    const auth = useAuthSlice();
-    const suites = useSuites();
-    const testCases = useTestCases();
-    const bugs = useBugReducer();
-    const recordings = useRecordings();
-    const sprints = useSprints();
-    const subscription = useSubscription();
-    const team = useTeam();
-    const automation = useAutomation();
-    const ui = useUI();
-    const ai = useAI();
-    const reports = useReports();
-    const theme = useTheme();
-
+    const slices = useSlices();
     const [suitesLoaded, setSuitesLoaded] = useState(false);
     const [suiteSubscriptionActive, setSuiteSubscriptionActive] = useState(false);
     const [aiInitialized, setAiInitialized] = useState(false);
-
-    // Registration flow states
-    const [registrationState, setRegistrationState] = useState('completed'); // 'pending', 'org-setup', 'completed'
-    const [pendingRegistrationData, setPendingRegistrationData] = useState(null);
 
     const unsubscribeSuitesRef = useRef(null);
     const assetUnsubscribersRef = useRef({});
     const retryTimeoutRef = useRef(null);
 
-    // Helper function to get current app state
-    const getCurrentAppState = useCallback(() => ({
-        auth: auth.state,
-        suites: suites.state,
-        testCases: testCases.state,
-        bugs: bugs.state,
-        recordings: recordings.state,
-        sprints: sprints.state,
-        subscription: subscription.state,
-        team: team.state,
-        automation: automation.state,
-        ui: ui.state,
-        ai: ai.state,
-        reports: reports.state,
-        theme: theme.state,
-    }), [
-        auth.state, suites.state, testCases.state, bugs.state, recordings.state,
-        sprints.state, subscription.state, team.state, automation.state,
-        ui.state, ai.state, reports.state, theme.state,
-    ]);
-
-    // Helper function to get current app actions
-    const getCurrentAppActions = useCallback(() => ({
-        auth: auth.actions,
-        suites: suites.actions,
-        testCases: testCases.actions,
-        bugs: bugs.actions,
-        recordings: recordings.actions,
-        sprints: sprints.actions,
-        subscription: subscription.actions,
-        team: team.actions,
-        automation: automation.actions,
-        ui: ui.actions,
-        ai: ai.actions,
-        reports: reports.actions,
-        theme: theme.actions,
-    }), [
-        auth.actions, suites.actions, testCases.actions, bugs.actions, recordings.actions,
-        sprints.actions, subscription.actions, team.actions, automation.actions,
-        ui.actions, ai.actions, reports.actions, theme.actions,
-    ]);
-
-    // Check if user needs to complete registration
-    const checkRegistrationStatus = useCallback(async (user) => {
-        if (!user?.uid) return 'completed';
-
-        try {
-            console.log('🔍 Checking registration status for user:', user.uid);
-
-            // Check pending registration first
-            const pendingResult = await FirestoreService.getDocument('pendingRegistrations', user.uid);
-            if (pendingResult.success) {
-                console.log('📝 Pending registration found:', pendingResult.data);
-                if (!pendingResult.data.accountType) {
-                    throw new Error('Invalid accountType in pendingRegistrations');
-                }
-                setPendingRegistrationData(pendingResult.data);
-                return pendingResult.data.accountType === 'organization' ? 'org-setup' : 'pending';
-            }
-
-            // Check if user profile exists and is complete
-            const profileResult = await FirestoreService.user.getUserProfile(user.uid);
-            if (!profileResult.success) {
-                if (profileResult.error.message === 'Document not found') {
-                    console.log('📝 User profile not found - registration pending');
-                    return 'pending';
-                }
-                throw new Error(profileResult.error.message);
-            }
-
-            const profile = profileResult.data;
-            console.log('👤 User profile found:', {
-                accountType: profile.account_type,
-                organizationId: profile.organizationId,
-                registrationCompleted: profile.registrationCompleted
-            });
-
-            // Check if registration is marked as incomplete
-            if (profile.registrationCompleted === false) {
-                console.log('📋 Registration marked as incomplete');
-                return profile.account_type === 'organization' ? 'org-setup' : 'pending';
-            }
-
-            // For organization accounts, check if organization exists
-            if (profile.account_type === 'organization' && profile.organizationId) {
-                const orgResult = await FirestoreService.organization.getOrganization(profile.organizationId);
-                if (!orgResult.success) {
-                    console.log('🏢 Organization not found - needs org setup');
-                    return 'org-setup';
-                }
-            }
-
-            console.log('✅ Registration completed');
-            return 'completed';
-
-        } catch (error) {
-            console.error('Error checking registration status:', error);
-            return 'pending';
-        }
-    }, [ui.actions]);
-
-    // Complete pending registration
-    const completePendingRegistration = useCallback(async (registrationData) => {
-        try {
-            console.log('🚀 Completing pending registration:', registrationData);
-
-            const currentUser = auth.state.currentUser;
-            if (!currentUser?.uid) {
-                throw new Error('No authenticated user found');
-            }
-
-            if (!registrationData.accountType || !['individual', 'organization'].includes(registrationData.accountType)) {
-                throw new Error('Invalid or missing accountType');
-            }
-
-            // Create or update user profile with accountType from pendingRegistrations
-            const profileData = {
-                user_id: currentUser.uid,
-                display_name: registrationData.displayName || currentUser.displayName || '',
-                email: currentUser.email,
-                first_name: registrationData.firstName || '',
-                last_name: registrationData.lastName || '',
-                account_type: registrationData.accountType,
-                registrationCompleted: registrationData.accountType === 'organization' ? false : true,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                created_by: currentUser.uid,
-                updated_by: currentUser.uid,
-            };
-
-            // Save user profile and verify creation
-            const profileResult = await FirestoreService.user.createOrUpdateUserProfile(profileData);
-            if (!profileResult.success) {
-                throw new Error(profileResult.error.message || 'Failed to create user profile');
-            }
-
-            // Verify user document exists and has correct account_type
-            const verifyProfile = await FirestoreService.user.getUserProfile(currentUser.uid);
-            if (!verifyProfile.success || verifyProfile.data.account_type !== registrationData.accountType) {
-                throw new Error(`User profile verification failed: expected account_type ${registrationData.accountType}, got ${verifyProfile.data?.account_type}`);
-            }
-
-            console.log('✅ User profile created/updated:', verifyProfile.data);
-
-            // Delete pending registration to prevent reuse
-            await FirestoreService.deleteDocument('pendingRegistrations', currentUser.uid);
-
-            // Store registration data for organization setup if needed
-            setPendingRegistrationData({
-                ...registrationData,
-                userId: currentUser.uid,
-                profileId: profileResult.data.id
-            });
-
-            // Update auth state with profile info
-            const enhancedUser = {
-                ...currentUser,
-                displayName: profileData.display_name,
-                firstName: profileData.first_name,
-                lastName: profileData.last_name,
-                accountType: profileData.account_type,
-            };
-
-            auth.actions.restoreAuth({
-                user: enhancedUser,
-                profile: profileResult.data,
-                accountType: profileData.account_type,
-            });
-
-            // Set appropriate registration state
-            setRegistrationState(registrationData.accountType === 'organization' ? 'org-setup' : 'completed');
-
-            return { success: true, data: profileResult.data };
-
-        } catch (error) {
-            console.error('❌ Error completing registration:', error);
-            ui.actions.showNotification?.({
-                id: 'registration-error',
-                type: 'error',
-                message: 'Registration failed',
-                description: error.message,
-                duration: 5000,
-            });
-            return { success: false, error: error.message };
-        }
-    }, [auth.state.currentUser, auth.actions, ui.actions]);
-
-    // Complete organization setup
-    const completeOrganizationSetup = useCallback(async (organizationData) => {
-        try {
-            console.log('🏢 Setting up organization:', organizationData);
-            console.log('Current user:', auth.state.currentUser?.email, auth.state.currentUser?.uid);
-
-            const currentUser = auth.state.currentUser;
-            if (!currentUser?.uid || !pendingRegistrationData) {
-                throw new Error('Invalid state for organization setup');
-            }
-
-            // Verify user exists in Firestore and has correct account_type
-            const userProfile = await FirestoreService.user.getUserProfile(currentUser.uid);
-            if (!userProfile.success) {
-                throw new Error('User profile not found. Please complete registration first.');
-            }
-            if (userProfile.data.account_type !== 'organization') {
-                throw new Error(`Invalid account_type: expected 'organization', got '${userProfile.data.account_type}'`);
-            }
-
-            // Create organization
-            const orgResult = await FirestoreService.organization.createOrganization({
-                name: organizationData.organizationName,
-                description: organizationData.description || '',
-                industry: organizationData.industry || '',
-                size: organizationData.size || '',
-                owner_id: currentUser.uid,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                created_by: currentUser.uid,
-                updated_by: currentUser.uid,
-            });
-
-            if (!orgResult.success) {
-                throw new Error(orgResult.error.message || 'Failed to create organization');
-            }
-
-            console.log('✅ Organization created:', orgResult.data.id);
-
-            // Update user profile with organization info and complete registration
-            const updatedProfileData = {
-                user_id: currentUser.uid,
-                organizationId: orgResult.data.id,
-                organizationName: orgResult.data.name,
-                role: 'owner',
-                registrationCompleted: true,
-                updated_at: new Date().toISOString(),
-                updated_by: currentUser.uid,
-            };
-
-            const profileUpdateResult = await FirestoreService.user.createOrUpdateUserProfile(updatedProfileData);
-            if (!profileUpdateResult.success) {
-                throw new Error(profileUpdateResult.error.message || 'Failed to update user profile');
-            }
-
-            console.log('✅ User profile updated with organization info:', profileUpdateResult.data);
-
-            // Update auth state
-            const enhancedUser = {
-                ...currentUser,
-                organizationId: orgResult.data.id,
-                organizationName: orgResult.data.name,
-                role: 'owner',
-                accountType: 'organization',
-            };
-
-            auth.actions.restoreAuth({
-                user: enhancedUser,
-                profile: profileUpdateResult.data,
-                accountType: 'organization',
-            });
-
-            // Clear pending data and mark as completed
-            setPendingRegistrationData(null);
-            setRegistrationState('completed');
-
-            ui.actions.showNotification?.({
-                id: 'org-setup-success',
-                type: 'success',
-                message: 'Organization setup completed!',
-                description: `Welcome to ${orgResult.data.name}`,
-                duration: 5000,
-            });
-
-            return { success: true, data: orgResult.data };
-
-        } catch (error) {
-            console.error('❌ Error setting up organization:', error);
-            ui.actions.showNotification?.({
-                id: 'org-setup-error',
-                type: 'error',
-                message: 'Organization setup failed',
-                description: error.message,
-                duration: 5000,
-            });
-            return { success: false, error: error.message };
-        }
-    }, [auth.state.currentUser, auth.actions, ui.actions, pendingRegistrationData]);
-
-    // Create properly wrapped test case functions that directly call the slice functions
-    const wrappedCreateTestCase = useCallback(async (testCaseData) => {
-        const appState = getCurrentAppState();
-        const appActions = getCurrentAppActions();
-        const createFunction = testCases.actions.createTestCase(appState, appActions);
-        return await createFunction(testCaseData);
-    }, [testCases.actions.createTestCase, getCurrentAppState, getCurrentAppActions]);
-
-    const wrappedUpdateTestCase = useCallback(async (testCaseId, updateData) => {
-        const appState = getCurrentAppState();
-        const updateFunction = testCases.actions.updateTestCase(appState);
-        return await updateFunction(testCaseId, updateData);
-    }, [testCases.actions.updateTestCase, getCurrentAppState]);
-
-    const wrappedDeleteTestCase = useCallback(async (testCaseId) => {
-        const appState = getCurrentAppState();
-        const deleteFunction = testCases.actions.deleteTestCase(appState);
-        return await deleteFunction(testCaseId);
-    }, [testCases.actions.deleteTestCase, getCurrentAppState]);
-
-    // Theme management functions
-    const setTheme = useCallback((newTheme) => {
-        try {
-            theme.actions.setTheme(newTheme);
-            if (ui.actions.showNotification) {
-                const themeNames = { light: 'Light', dark: 'Dark', system: 'System' };
-                ui.actions.showNotification({
-                    id: 'theme-changed',
-                    type: 'success',
-                    message: `Theme changed to ${themeNames[newTheme] || newTheme}`,
-                    duration: 2000,
-                });
-            }
-        } catch (error) {
-            console.error('Failed to set theme:', error);
-            ui.actions.showNotification?.({
-                id: 'theme-change-error',
-                type: 'error',
-                message: 'Failed to change theme',
-                description: error.message,
-                duration: 3000,
-            });
-        }
-    }, [theme.actions, ui.actions]);
-
-    const toggleTheme = useCallback(() => {
-        try {
-            theme.actions.toggleTheme();
-        } catch (error) {
-            console.error('Failed to toggle theme:', error);
-            ui.actions.showNotification?.({
-                id: 'theme-toggle-error',
-                type: 'error',
-                message: 'Failed to toggle theme',
-                description: error.message,
-                duration: 3000,
-            });
-        }
-    }, [theme.actions, ui.actions]);
-
-    // Initialize AI service when authentication is ready
-    const initializeAI = useCallback(async () => {
-        if (!auth.state.isAuthenticated || aiInitialized || ai.state.isInitialized) {
-            return;
-        }
-
-        console.log('Initializing AI service...');
-
-        try {
-            const result = await ai.actions.initializeAI();
-            if (result.success) {
-                setAiInitialized(true);
-                console.log('✅ AI service initialized successfully');
-                await ai.actions.updateSettings({
-                    isInitialized: true,
-                    serviceInstance: result.data.aiService,
-                    error: null
-                });
-                ui.actions.showNotification?.({
-                    id: 'ai-initialized',
-                    type: 'success',
-                    message: 'AI assistant ready',
-                    description: `Using ${result.data.provider} provider`,
-                    duration: 3000,
-                });
-            } else {
-                throw new Error(result.error || result.userMessage || 'AI initialization failed');
-            }
-        } catch (error) {
-            console.error('AI service initialization error:', error);
-            setAiInitialized(false);
-            await ai.actions.updateSettings({
-                isInitialized: false,
-                error: error.message,
-                serviceInstance: null
-            });
-
-            let message = 'AI assistant unavailable';
-            let description = 'Please check your AI configuration';
-            if (error.message.includes('API_KEY')) {
-                description = 'Please configure your AI provider API key';
-            } else if (error.message.includes('provider')) {
-                description = 'Please set NEXT_PUBLIC_AI_PROVIDER environment variable';
-            } else if (error.message.includes('Connection')) {
-                description = 'Please check your internet connection and API key';
-            }
-
-            ui.actions.showNotification?.({
-                id: 'ai-init-error',
-                type: 'error',
-                message,
-                description,
-                duration: 8000,
-            });
-        }
-    }, [auth.state.isAuthenticated, aiInitialized, ai.state.isInitialized, ai.actions, ui.actions]);
-
-    // AI-powered test case generation wrapper
-    const generateTestCasesWithAI = useCallback(async (documentContent, documentTitle, templateConfig = {}) => {
-        const currentState = getCurrentAppState();
-
-        if (!currentState.ai.isInitialized || !currentState.ai.serviceInstance) {
-            const error = 'AI service not available. Please check your configuration.';
-            ui.actions.showNotification?.({
-                id: 'ai-service-unavailable',
-                type: 'error',
-                message: error,
-                description: 'Try refreshing the page or check your environment variables',
-                duration: 5000,
-            });
-            return { success: false, error };
-        }
-
-        try {
-            console.log('🚀 Starting AI test case generation...', { documentTitle });
-            const result = await ai.actions.generateTestCases(documentContent, documentTitle, templateConfig);
-
-            if (result.success && result.data?.testCases?.length > 0) {
-                console.log(`✅ Generated ${result.data.testCases.length} test cases`);
-                return {
-                    success: true,
-                    data: {
-                        testCases: result.data.testCases.map((testCase, index) => ({
-                            ...testCase,
-                            id: testCase.id || `temp_${Date.now()}_${index}`,
-                            _isGenerated: true,
-                            _generationTimestamp: new Date().toISOString(),
-                            _generationId: result.generationId || `gen_${Date.now()}`,
-                            _provider: result.provider,
-                            _model: result.model
-                        })),
-                        summary: result.data.summary || {
-                            totalTests: result.data.testCases.length,
-                            breakdown: result.data.testCases.reduce((acc, tc) => {
-                                const type = tc.type?.toLowerCase() || 'functional';
-                                acc[type] = (acc[type] || 0) + 1;
-                                return acc;
-                            }, {})
-                        }
-                    },
-                    generationId: result.generationId,
-                    provider: result.provider,
-                    model: result.model
-                };
-            } else if (result.success && (!result.data?.testCases || result.data.testCases.length === 0)) {
-                ui.actions.showNotification?.({
-                    id: 'no-test-cases-generated',
-                    type: 'warning',
-                    message: 'No test cases generated',
-                    description: 'Try providing more detailed requirements or adjusting the prompt',
-                    duration: 5000,
-                });
-                return result;
-            }
-            return result;
-        } catch (error) {
-            console.error('❌ AI test case generation failed:', error);
-            ui.actions.showNotification?.({
-                id: 'ai-generation-failed',
-                type: 'error',
-                message: 'AI generation failed',
-                description: error.message || 'Unknown error occurred',
-                duration: 5000,
-            });
-            return { success: false, error: error.message };
-        }
-    }, [ai.state.isInitialized, ai.actions, getCurrentAppState, ui.actions]);
-
-    // Get AI generation statistics for dashboard/analytics
-    const getAIAnalytics = useCallback(() => {
-        if (!ai.state.isInitialized) {
-            return { available: false, message: 'AI service not available' };
-        }
-        const stats = ai.actions.getGenerationStats();
-        return {
-            available: true,
-            ...stats,
-            provider: ai.state.settings.provider,
-            isHealthy: ai.state.error === null && stats.isHealthy,
-            lastGeneration: ai.state.lastGeneration,
-            settings: ai.state.settings,
-        };
-    }, [ai.state.isInitialized, ai.state.settings, ai.state.error, ai.state.lastGeneration, ai.actions]);
-
-    // Update AI settings
-    const updateAISettings = useCallback(async (newSettings) => {
-        try {
-            await ai.actions.updateSettings(newSettings);
-            ui.actions.showNotification?.({
-                id: 'ai-settings-updated',
-                type: 'success',
-                message: 'AI settings updated',
-                description: `Provider: ${newSettings.provider || ai.state.settings.provider}`,
-                duration: 3000,
-            });
-            return { success: true };
-        } catch (error) {
-            console.error('Failed to update AI settings:', error);
-            ui.actions.showNotification?.({
-                id: 'ai-settings-update-failed',
-                type: 'error',
-                message: 'Failed to update AI settings',
-                description: error.message,
-                duration: 5000,
-            });
-            return { success: false, error: error.message };
-        }
-    }, [ai.actions, ai.state.settings.provider, ui.actions]);
-
-    // Helper functions for linking operations
-    const linkTestCasesToBug = async (bugId, testCaseIds) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.batchLinkTestCasesToBug(bugId, testCaseIds),
-            'Test cases linked to bug',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `link-testcases-bug-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                bugs.actions.updateBug(bugId, result.data.bug);
-                result.data.testCases.forEach((tc) => {
-                    testCases.actions.updateTestCase(tc.id, tc);
-                });
-            }
-            return result;
-        });
-    };
-
-    const unlinkTestCaseFromBug = async (bugId, testCaseId) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.batchUnlinkTestCaseFromBug(bugId, testCaseId),
-            'Test case unlinked from bug',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `unlink-testcase-bug-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                bugs.actions.updateBug(bugId, result.data.bug);
-                testCases.actions.updateTestCase(testCaseId, result.data.testCase);
-            }
-            return result;
-        });
-    };
-
-    const linkBugsToTestCase = async (testCaseId, bugIds) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.batchLinkBugsToTestCase(testCaseId, bugIds),
-            'Bugs linked to test case',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `link-bugs-testcase-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                testCases.actions.updateTestCase(testCaseId, result.data.testCase);
-                result.data.bugs.forEach((bug) => {
-                    bugs.actions.updateBug(bug.id, bug);
-                });
-            }
-            return result;
-        });
-    };
-
-    const unlinkBugFromTestCase = async (testCaseId, bugId) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.batchUnlinkBugFromTestCase(testCaseId, bugId),
-            'Bug unlinked from test case',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `unlink-bug-testcase-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                testCases.actions.updateTestCase(testCaseId, result.data.testCase);
-                bugs.actions.updateBug(bugId, result.data.bug);
-            }
-            return result;
-        });
-    };
-
-    const addTestCasesToSprint = async (sprintId, testCaseIds) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.addTestCasesToSprint(sprintId, testCaseIds),
-            'Test cases added to sprint',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `add-testcases-sprint-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                sprints.actions.updateSprint(sprintId, result.data);
-            }
-            return result;
-        });
-    };
-
-    const addBugsToSprint = async (sprintId, bugIds) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.addBugsToSprint(sprintId, bugIds),
-            'Bugs added to sprint',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `add-bugs-sprint-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                sprints.actions.updateSprint(sprintId, result.data);
-            }
-            return result;
-        });
-    };
-
-    const saveRecording = async (blob, networkErrors) => {
-        try {
-            const recordingId = `rec_${Date.now()}`;
-            const recordingData = {
-                id: recordingId,
-                url: URL.createObjectURL(blob),
-                size: blob.size,
-                created_at: new Date().toISOString(),
-                networkErrors,
-                suiteId: suites.state.activeSuite?.id,
-            };
-
-            const result = await recordings.actions.createRecording(suites.state, {
-                recordings: recordings.actions,
-                ui: ui.actions,
-                bugs: bugs.actions,
-            })(recordingData);
-
-            if (result.success && networkErrors.length > 0) {
-                const bugData = {
-                    title: `Network Error: ${networkErrors[0].status || 'Unknown'}`,
-                    description: `Auto-detected network error during recording:\n${JSON.stringify(networkErrors, null, 2)}`,
-                    status: 'open',
-                    severity: 'high',
-                    created_at: new Date().toISOString(),
-                    recordingIds: [recordingId],
-                };
-                const bugResult = await bugs.actions.createBug(bugData);
-                if (bugResult.success) {
-                    await FirestoreService.recordings.linkRecordingToBug(recordingId, bugResult.data.id);
-                    recordings.actions.updateRecording(recordingId, { bugId: bugResult.data.id });
-                }
-                ui.actions.showNotification?.({
-                    id: 'bug-created-network-error',
-                    type: 'info',
-                    message: 'Bug created for network error',
-                    duration: 3000,
-                });
-            }
-            return result;
-        } catch (error) {
-            ui.actions.showNotification?.({
-                id: 'save-recording-failed',
-                type: 'error',
-                message: 'Failed to save recording',
-                duration: 5000,
-            });
-            throw error;
-        }
-    };
-
-    const linkRecordingToBug = async (recordingId, bugId) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.recordings.linkRecordingToBug(recordingId, bugId),
-            'Recording linked to bug',
-            (errorMessage) => ui.actions.showNotification?.({
-                id: `link-recording-bug-error-${Date.now()}`,
-                type: 'error',
-                message: errorMessage,
-                duration: 5000,
-            })
-        ).then((result) => {
-            if (result.success) {
-                recordings.actions.updateRecording(recordingId, { bugId });
-            }
-            return result;
-        });
-    };
+    const { initializeAI, generateTestCasesWithAI, getAIAnalytics, updateAISettings } = useAI(
+        slices.auth,
+        slices.ai,
+        slices.ui,
+        aiInitialized,
+        setAiInitialized
+    );
+
+    const { wrappedCreateTestCase, wrappedUpdateTestCase, wrappedDeleteTestCase } = useTestCases(slices);
+
+    const { setTheme, toggleTheme } = useTheme(slices.theme, slices.ui);
+
+    const {
+        linkTestCasesToBug,
+        unlinkTestCaseFromBug,
+        linkBugsToTestCase,
+        unlinkBugFromTestCase,
+        addTestCasesToSprint,
+        addBugsToSprint,
+    } = useAssetLinking(slices);
+
+    const { saveRecording, linkRecordingToBug } = useRecording(slices);
 
     const logout = async () => {
-        ai.actions.clearAIState();
+        slices.ai.actions.clearAIState();
         setAiInitialized(false);
-        setRegistrationState('completed');
-        setPendingRegistrationData(null);
-        return auth.actions.signOut();
+        return slices.auth.actions.signOut();
     };
 
-    const initializeAuth = () => {
-        return auth.actions.initializeAuth();
-    };
+    const initializeAuth = () => slices.auth.actions.initializeAuth();
 
-    // Refresh user profile
     const refreshUserProfile = async () => {
         try {
             console.log('🔄 Refreshing user profile from AppProvider...');
-
-            if (!auth.state.currentUser?.uid) {
-                console.error('No authenticated user found');
+            if (!slices.auth.state.currentUser?.uid) {
                 throw new Error('No authenticated user');
             }
 
-            // Check registration status first
-            const regStatus = await checkRegistrationStatus(auth.state.currentUser);
-            console.log('📋 Registration status:', regStatus);
-
-            setRegistrationState(regStatus);
-
-            // If registration is not complete, don't proceed with normal profile refresh
-            if (regStatus !== 'completed') {
-                console.log('⏸️ Registration not completed, skipping full profile refresh');
-                return { success: true, registrationPending: true, status: regStatus };
-            }
-
-            if (auth.actions.refreshUserProfile) {
-                const result = await auth.actions.refreshUserProfile();
-                if (result.success) {
-                    console.log('✅ Profile refreshed via auth slice:', result);
-                    return result;
-                }
-            }
-
-            const profileResult = await FirestoreService.user.getUserProfile(auth.state.currentUser.uid);
-            console.log('📋 Profile fetched (fallback):', profileResult);
+            // Use FirestoreService to get user profile
+            const profileResult = await FirestoreService.getUserProfile(slices.auth.state.currentUser.uid);
+            console.log('📋 Profile fetched:', profileResult);
 
             if (profileResult.success) {
                 const profileData = profileResult.data;
                 const enhancedUser = {
-                    ...auth.state.currentUser,
-                    displayName: auth.state.currentUser.displayName || profileData.display_name || profileData.name || '',
+                    ...slices.auth.state.currentUser,
+                    displayName: profileData.displayName || profileData.name || '',
                     firstName: profileData.first_name || '',
                     lastName: profileData.last_name || '',
-                    name: profileData.name || profileData.display_name || '',
+                    name: profileData.name || profileData.displayName || '',
                     organizationName: profileData.organizationName || null,
                     organizationId: profileData.organizationId || null,
                     orgId: profileData.organizationId || null,
                     role: profileData.role || 'member',
-                    accountType: profileData.account_type || 'organization',
+                    accountType: profileData.accountType || profileData.account_type || 'individual',
                 };
 
-                console.log('Enhanced user object:', {
-                    uid: enhancedUser.uid,
-                    accountType: enhancedUser.accountType,
-                    organizationId: enhancedUser.organizationId,
-                });
-
-                auth.actions.restoreAuth({
+                slices.auth.actions.restoreAuth({
                     user: enhancedUser,
                     profile: profileData,
-                    accountType: profileData.account_type || 'organization',
+                    accountType: profileData.accountType || profileData.account_type || 'individual',
                 });
 
                 return profileResult;
             } else if (profileResult.error.message === 'Document not found') {
                 console.log('Creating new user profile...');
-                const createResult = await FirestoreService.user.createOrUpdateUserProfile({
-                    user_id: auth.state.currentUser.uid,
-                    display_name: auth.state.currentUser.displayName || '',
-                    email: auth.state.currentUser.email || '',
-                    account_type: pendingRegistrationData?.accountType || 'organization',
+                const userData = {
+                    uid: slices.auth.state.currentUser.uid,
+                    email: slices.auth.state.currentUser.email || '',
+                    displayName: slices.auth.state.currentUser.displayName || '',
+                    accountType: 'individual', // Default to individual, not organization
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
-                    created_by: auth.state.currentUser.uid,
-                    updated_by: auth.state.currentUser.uid,
-                });
+                    created_by: slices.auth.state.currentUser.uid,
+                    updated_by: slices.auth.state.currentUser.uid,
+                };
+
+                const createResult = await FirestoreService.createOrUpdateUserProfile(userData);
+
                 if (createResult.success) {
                     const enhancedUser = {
-                        ...auth.state.currentUser,
-                        displayName: createResult.data.display_name || '',
+                        ...slices.auth.state.currentUser,
+                        displayName: createResult.data.displayName || '',
                         firstName: createResult.data.first_name || '',
                         lastName: createResult.data.last_name || '',
-                        name: createResult.data.name || createResult.data.display_name || '',
+                        name: createResult.data.name || createResult.data.displayName || '',
                         organizationName: createResult.data.organizationName || null,
                         organizationId: createResult.data.organizationId || null,
                         orgId: createResult.data.organizationId || null,
                         role: createResult.data.role || 'member',
-                        accountType: createResult.data.account_type || 'organization',
+                        accountType: createResult.data.accountType || createResult.data.account_type || 'individual',
                     };
 
-                    auth.actions.restoreAuth({
+                    slices.auth.actions.restoreAuth({
                         user: enhancedUser,
                         profile: createResult.data,
-                        accountType: createResult.data.account_type || 'organization',
+                        accountType: createResult.data.accountType || createResult.data.account_type || 'individual',
                     });
 
                     return createResult;
@@ -860,7 +129,7 @@ export const AppProvider = ({ children }) => {
             throw new Error(profileResult.error.message);
         } catch (error) {
             console.error('Error refreshing user profile:', error);
-            ui.actions.showNotification?.({
+            slices.ui.actions.showNotification?.({
                 id: 'refresh-profile-error',
                 type: 'error',
                 message: getFirebaseErrorMessage(error),
@@ -883,34 +152,31 @@ export const AppProvider = ({ children }) => {
                 unsubscribeSuitesRef.current = null;
             }
 
-            Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+            Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribe();
                 }
             });
             assetUnsubscribersRef.current = {};
 
-            auth.actions.clearAuthState();
-            suites.actions.loadSuitesSuccess([]);
-            testCases.actions.loadTestCasesSuccess([]);
-            bugs.actions.loadBugsSuccess([]);
-            recordings.actions.loadRecordingsSuccess([]);
-            sprints.actions.loadSprintsSuccess([]);
-            subscription.actions.clearSubscription?.();
-            team.actions.clearTeam?.();
-            automation.actions.clearAutomation?.();
-            ui.actions.clearUI?.();
-            ai.actions.clearAIState();
-
-            setRegistrationState('completed');
-            setPendingRegistrationData(null);
+            slices.auth.actions.clearAuthState();
+            slices.suites.actions.loadSuitesSuccess([]);
+            slices.testCases.actions.loadTestCasesSuccess([]);
+            slices.bugs.actions.loadBugsSuccess([]);
+            slices.recordings.actions.loadRecordingsSuccess([]);
+            slices.sprints.actions.loadSprintsSuccess([]);
+            slices.subscription.actions.clearSubscription?.();
+            slices.team.actions.clearTeam?.();
+            slices.automation.actions.clearAutomation?.();
+            slices.ui.actions.clearUI?.();
+            slices.ai.actions.clearAIState();
 
             setSuitesLoaded(false);
             setSuiteSubscriptionActive(false);
             setAiInitialized(false);
         } catch (error) {
             console.error('Error clearing state:', error);
-            ui.actions.showNotification?.({
+            slices.ui.actions.showNotification?.({
                 id: 'clear-state-error',
                 type: 'error',
                 message: getFirebaseErrorMessage(error),
@@ -924,45 +190,34 @@ export const AppProvider = ({ children }) => {
         initializeAuth();
     }, []);
 
-    // Main auth effect with registration flow handling
     useEffect(() => {
         console.log('Auth state changed:', {
-            isAuthenticated: auth.state.isAuthenticated,
-            currentUser: auth.state.currentUser?.uid,
-            accountType: auth.state.accountType,
-            organizationId: auth.state.currentUser?.organizationId,
-            authInitialized: auth.state.isInitialized,
-            authLoading: auth.state.loading,
-            profileLoaded: auth.state.profileLoaded,
-            subscriptionLoading: subscription.state.loading,
+            isAuthenticated: slices.auth.state.isAuthenticated,
+            currentUser: slices.auth.state.currentUser?.uid,
+            accountType: slices.auth.state.accountType,
+            organizationId: slices.auth.state.currentUser?.organizationId,
+            authInitialized: slices.auth.state.isInitialized,
+            authLoading: slices.auth.state.loading,
+            profileLoaded: slices.auth.state.profileLoaded,
+            subscriptionLoading: slices.subscription.state.loading,
             suiteSubscriptionActive,
             aiInitialized,
-            registrationState,
         });
 
-        if (!auth.state.isInitialized || auth.state.loading || subscription.state.loading) {
+        if (!slices.auth.state.isInitialized || slices.auth.state.loading || slices.subscription.state.loading) {
             console.log('Waiting for auth and subscription initialization...');
             setSuitesLoaded(false);
             setSuiteSubscriptionActive(false);
             return;
         }
 
-        if (auth.state.isAuthenticated && auth.state.currentUser) {
-            console.log('User authenticated, checking registration status...');
+        if (slices.auth.state.isAuthenticated && slices.auth.state.currentUser) {
+            console.log('User authenticated, refreshing profile and initializing app...');
 
-            refreshUserProfile().then((result) => {
-                if (result?.registrationPending) {
-                    console.log('📋 Registration pending, stopping here');
-                    setSuitesLoaded(false);
-                    setSuiteSubscriptionActive(false);
-                    return;
-                }
-
-                console.log('✅ Registration completed, proceeding with app initialization');
-
-                suites.actions.loadSuitesStart();
+            refreshUserProfile().then(() => {
+                console.log('✅ Profile refreshed, proceeding with app initialization');
+                slices.suites.actions.loadSuitesStart();
                 setSuitesLoaded(false);
-
                 initializeAI();
 
                 if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
@@ -976,47 +231,45 @@ export const AppProvider = ({ children }) => {
 
                 const setupSuiteSubscription = () => {
                     handleFirebaseOperation(
-                        () => new Promise((resolve, reject) => {
-                            console.log(`Setting up suite subscription (attempt ${retryCount + 1}/${maxRetries + 1})`);
+                        () =>
+                            new Promise((resolve, reject) => {
+                                console.log(`Setting up suite subscription (attempt ${retryCount + 1}/${maxRetries + 1})`);
+                                const currentUser = slices.auth.state.currentUser;
+                                const accountType = slices.auth.state.accountType || currentUser?.accountType;
+                                console.log('Subscription setup details:', {
+                                    accountType,
+                                    organizationId: currentUser?.organizationId,
+                                    uid: currentUser?.uid,
+                                });
 
-                            const currentUser = auth.state.currentUser;
-                            const accountType = auth.state.accountType || currentUser?.accountType;
-
-                            console.log('Subscription setup details:', {
-                                accountType,
-                                organizationId: currentUser?.organizationId,
-                                uid: currentUser?.uid
-                            });
-
-                            console.log('Setting up suite subscription for user:', currentUser?.uid);
-                            const subscriptionMethod = FirestoreService.testSuite.subscribeToUserTestSuites(
-                                (fetchedSuites) => {
-                                    const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
-                                    console.log('Suites fetched successfully:', {
-                                        count: safeSuites.length,
-                                        accountType,
-                                        suites: safeSuites.map(s => ({
-                                            id: s.id,
-                                            name: s.name,
-                                            ownerType: s.ownerType,
-                                            ownerId: s.ownerId,
-                                            organizationId: s.organizationId
-                                        }))
-                                    });
-                                    resolve(safeSuites);
-                                },
-                                (error) => {
-                                    console.error('Suite subscription error:', error);
-                                    reject(error);
-                                }
-                            );
-
-                            unsubscribeSuitesRef.current = subscriptionMethod;
-                        }),
+                                // Use FirestoreService.subscribeToUserTestSuites
+                                const subscriptionMethod = FirestoreService.subscribeToUserTestSuites(
+                                    (fetchedSuites) => {
+                                        const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
+                                        console.log('Suites fetched successfully:', {
+                                            count: safeSuites.length,
+                                            accountType,
+                                            suites: safeSuites.map((s) => ({
+                                                id: s.id,
+                                                name: s.name,
+                                                ownerType: s.ownerType,
+                                                ownerId: s.ownerId,
+                                                organizationId: s.organizationId,
+                                            })),
+                                        });
+                                        resolve(safeSuites);
+                                    },
+                                    (error) => reject(error)
+                                );
+                                unsubscribeSuitesRef.current = subscriptionMethod;
+                            }),
                         'Suites loaded successfully',
                         (errorMessage) => {
-                            if (suites.state.testSuites.length === 0 && errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
-                                ui.actions.showNotification?.({
+                            if (
+                                slices.suites.state.testSuites.length === 0 &&
+                                errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })
+                            ) {
+                                slices.ui.actions.showNotification?.({
                                     id: 'suite-subscription-error',
                                     type: 'error',
                                     message: errorMessage,
@@ -1028,30 +281,30 @@ export const AppProvider = ({ children }) => {
                         }
                     ).then((result) => {
                         if (result.success) {
-                            suites.actions.loadSuitesSuccess(result.data);
+                            slices.suites.actions.loadSuitesSuccess(result.data);
                             setSuitesLoaded(true);
                             setSuiteSubscriptionActive(true);
                             retryCount = 0;
 
-                            if (result.data.length > 0 && !suites.state.activeSuite) {
+                            if (result.data.length > 0 && !slices.suites.state.activeSuite) {
                                 console.log('Auto-activating first suite:', result.data[0].name);
-                                suites.actions.activateSuite(result.data[0]);
+                                slices.suites.actions.activateSuite(result.data[0]);
                             }
-                        } else if (suites.state.testSuites.length === 0 && retryCount < maxRetries) {
+                        } else if (slices.suites.state.testSuites.length === 0 && retryCount < maxRetries) {
                             retryCount++;
                             console.log(`Retrying suite subscription in ${retryDelay * retryCount}ms (attempt ${retryCount}/${maxRetries})`);
                             retryTimeoutRef.current = setTimeout(setupSuiteSubscription, retryDelay * retryCount);
                         } else {
-                            suites.actions.loadSuitesSuccess([]);
+                            slices.suites.actions.loadSuitesSuccess([]);
                             setSuitesLoaded(true);
                             setSuiteSubscriptionActive(false);
                         }
                     }).catch((error) => {
                         console.error('Unexpected error setting up suite subscription:', error);
-                        suites.actions.loadSuitesSuccess([]);
+                        slices.suites.actions.loadSuitesSuccess([]);
                         setSuitesLoaded(true);
                         setSuiteSubscriptionActive(false);
-                        ui.actions.showNotification?.({
+                        slices.ui.actions.showNotification?.({
                             id: 'suite-subscription-unexpected-error',
                             type: 'error',
                             message: getFirebaseErrorMessage(error),
@@ -1060,14 +313,14 @@ export const AppProvider = ({ children }) => {
                     });
                 };
 
-                if (subscription.state.isTrialActive || subscription.state.isSubscriptionActive) {
+                if (slices.subscription.state.isTrialActive || slices.subscription.state.isSubscriptionActive) {
                     setupSuiteSubscription();
                 } else {
                     console.log('Subscription not active, skipping suite subscription');
-                    suites.actions.loadSuitesSuccess([]);
+                    slices.suites.actions.loadSuitesSuccess([]);
                     setSuitesLoaded(true);
                     setSuiteSubscriptionActive(false);
-                    ui.actions.showNotification?.({
+                    slices.ui.actions.showNotification?.({
                         id: 'subscription-inactive',
                         type: 'warning',
                         message: 'Your subscription is not active. Upgrade to access test suites!',
@@ -1076,7 +329,7 @@ export const AppProvider = ({ children }) => {
                 }
             }).catch((error) => {
                 console.error('Failed to refresh user profile:', error);
-                suites.actions.loadSuitesSuccess([]);
+                slices.suites.actions.loadSuitesSuccess([]);
                 setSuitesLoaded(true);
                 setSuiteSubscriptionActive(false);
             });
@@ -1096,76 +349,78 @@ export const AppProvider = ({ children }) => {
         } else {
             console.log('User not authenticated, clearing state');
             clearState();
-            subscription.actions.loadSubscriptionInfo(
-                { accountType: 'individual', currentUser: null },
-                ui.actions
-            );
-            suites.actions.loadSuitesSuccess([]);
+            slices.subscription.actions.loadSubscriptionInfo({ accountType: 'individual', currentUser: null }, slices.ui.actions);
+            slices.suites.actions.loadSuitesSuccess([]);
             setSuitesLoaded(true);
             setSuiteSubscriptionActive(false);
         }
     }, [
-        auth.state.isInitialized,
-        auth.state.isAuthenticated,
-        auth.state.currentUser?.uid,
-        auth.state.accountType,
-        auth.state.currentUser?.organizationId,
-        subscription.state.loading,
-        subscription.state.isTrialActive,
-        subscription.state.isSubscriptionActive,
-        registrationState,
+        slices.auth.state.isInitialized,
+        slices.auth.state.isAuthenticated,
+        slices.auth.state.currentUser?.uid,
+        slices.auth.state.accountType,
+        slices.auth.state.currentUser?.organizationId,
+        slices.subscription.state.loading,
+        slices.subscription.state.isTrialActive,
+        slices.subscription.state.isSubscriptionActive,
     ]);
 
     useEffect(() => {
-        if (!auth.state.isAuthenticated || !suites.state.activeSuite?.id || !suitesLoaded || !suiteSubscriptionActive) {
+        if (
+            !slices.auth.state.isAuthenticated ||
+            !slices.suites.state.activeSuite?.id ||
+            !suitesLoaded ||
+            !suiteSubscriptionActive
+        ) {
             console.log('Clearing assets - conditions not met:', {
-                authenticated: auth.state.isAuthenticated,
-                activeSuite: !!suites.state.activeSuite?.id,
+                authenticated: slices.auth.state.isAuthenticated,
+                activeSuite: !!slices.suites.state.activeSuite?.id,
                 suitesLoaded,
-                suiteSubscriptionActive
+                suiteSubscriptionActive,
             });
 
-            Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+            Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribe();
                 }
             });
             assetUnsubscribersRef.current = {};
 
-            testCases.actions.loadTestCasesSuccess([]);
-            bugs.actions.loadBugsSuccess([]);
-            recordings.actions.loadRecordingsSuccess([]);
-            sprints.actions.loadSprintsSuccess([]);
+            slices.testCases.actions.loadTestCasesSuccess([]);
+            slices.bugs.actions.loadBugsSuccess([]);
+            slices.recordings.actions.loadRecordingsSuccess([]);
+            slices.sprints.actions.loadSprintsSuccess([]);
             return;
         }
 
-        const suiteId = suites.state.activeSuite.id;
+        const suiteId = slices.suites.state.activeSuite.id;
         console.log('Setting up asset subscriptions for suite:', suiteId);
 
-        Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+        Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
             if (typeof unsubscribe === 'function') {
                 unsubscribe();
             }
         });
         assetUnsubscribersRef.current = {};
 
-        const subscribeAsset = (type, action, loadSuccess) => {
+        const subscribeAsset = (type, loadSuccess) => {
             return handleFirebaseOperation(
-                () => new Promise((resolve, reject) => {
-                    assetUnsubscribersRef.current[type] = FirestoreService.assets[`subscribeTo${type}`](
-                        suiteId,
-                        (assets) => {
-                            const safeAssets = Array.isArray(assets) ? assets : [];
-                            console.log(`${type} loaded:`, safeAssets.length);
-                            resolve(safeAssets);
-                        },
-                        (error) => reject(error)
-                    );
-                }),
+                () =>
+                    new Promise((resolve, reject) => {
+                        assetUnsubscribersRef.current[type] = FirestoreService[`subscribeTo${type}`](
+                            suiteId,
+                            (assets) => {
+                                const safeAssets = Array.isArray(assets) ? assets : [];
+                                console.log(`${type} loaded:`, safeAssets.length);
+                                resolve(safeAssets);
+                            },
+                            (error) => reject(error)
+                        );
+                    }),
                 `${type} loaded successfully`,
                 (errorMessage) => {
                     if (errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
-                        ui.actions.showNotification?.({
+                        slices.ui.actions.showNotification?.({
                             id: `${type.toLowerCase()}-subscription-error`,
                             type: 'error',
                             message: `Failed to load ${type.toLowerCase()}: ${errorMessage}`,
@@ -1185,36 +440,36 @@ export const AppProvider = ({ children }) => {
             });
         };
 
-        subscribeAsset('TestCases', 'testCases', testCases.actions.loadTestCasesSuccess);
-        subscribeAsset('Bugs', 'bugs', bugs.actions.loadBugsSuccess);
-        subscribeAsset('Recordings', 'recordings', recordings.actions.loadRecordingsSuccess);
-        subscribeAsset('Sprints', 'sprints', sprints.actions.loadSprintsSuccess);
+        subscribeAsset('TestCases', slices.testCases.actions.loadTestCasesSuccess);
+        subscribeAsset('Bugs', slices.bugs.actions.loadBugsSuccess);
+        subscribeAsset('Recordings', slices.recordings.actions.loadRecordingsSuccess);
+        subscribeAsset('Sprints', slices.sprints.actions.loadSprintsSuccess);
 
         return () => {
             console.log('Cleaning up asset subscriptions');
-            Object.values(assetUnsubscribersRef.current).forEach(unsubscribe => {
+            Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribe();
                 }
             });
             assetUnsubscribersRef.current = {};
         };
-    }, [auth.state.isAuthenticated, suites.state.activeSuite?.id, suitesLoaded, suiteSubscriptionActive]);
+    }, [slices.auth.state.isAuthenticated, slices.suites.state.activeSuite?.id, suitesLoaded, suiteSubscriptionActive]);
 
     useEffect(() => {
-        if (!auth.state.isAuthenticated || !subscription.state.isTrialActive) return;
+        if (!slices.auth.state.isAuthenticated || !slices.subscription.state.isTrialActive) return;
 
         console.log('Setting up trial expiry check');
         const checkTrialExpiry = () => {
-            const { trialEndsAt } = subscription.state;
+            const { trialEndsAt } = slices.subscription.state;
             if (trialEndsAt && new Date() > new Date(trialEndsAt)) {
                 console.log('Trial expired');
-                subscription.actions.handleTrialExpiry(suites.state, suites.actions, ui.actions);
+                slices.subscription.actions.handleTrialExpiry(slices.suites.state, slices.suites.actions, slices.ui.actions);
             } else if (trialEndsAt) {
                 const daysRemaining = Math.ceil((new Date(trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
                 if (daysRemaining <= 7) {
                     console.log(`Trial expiring in ${daysRemaining} days`);
-                    ui.actions.showNotification?.({
+                    slices.ui.actions.showNotification?.({
                         id: `trial-warning-${daysRemaining}`,
                         type: 'warning',
                         message: `Your trial expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}. Upgrade to continue using all features!`,
@@ -1227,7 +482,7 @@ export const AppProvider = ({ children }) => {
         checkTrialExpiry();
         const interval = setInterval(checkTrialExpiry, 60000);
         return () => clearInterval(interval);
-    }, [auth.state.isAuthenticated, subscription.state.isTrialActive, subscription.state.trialEndsAt]);
+    }, [slices.auth.state.isAuthenticated, slices.subscription.state.isTrialActive, slices.subscription.state.trialEndsAt]);
 
     useEffect(() => {
         return () => {
@@ -1236,64 +491,78 @@ export const AppProvider = ({ children }) => {
         };
     }, []);
 
-    // Memoize the context value to prevent unnecessary re-renders
-    const value = useMemo(() => ({
-        state: {
-            auth: auth.state,
-            suites: suites.state,
-            testCases: testCases.state,
-            bugs: bugs.state,
-            recordings: recordings.state,
-            sprints: sprints.state,
-            subscription: subscription.state,
-            team: team.state,
-            automation: automation.state,
-            ui: ui.state,
-            ai: ai.state,
-            reports: reports.state,
-            theme: theme.state,
-        },
-        actions: {
-            auth: {
-                ...auth.actions,
-                logout,
-                initializeAuth,
-                refreshUserProfile,
-                reports: reports.actions
+    const value = useMemo(
+        () => ({
+            state: getAppState(slices),
+            actions: {
+                auth: { ...slices.auth.actions, logout, initializeAuth, refreshUserProfile, reports: slices.reports.actions },
+                suites: slices.suites.actions,
+                testCases: { 
+                    ...slices.testCases.actions, 
+                    createTestCase: wrappedCreateTestCase, 
+                    updateTestCase: wrappedUpdateTestCase, 
+                    deleteTestCase: wrappedDeleteTestCase 
+                },
+                bugs: slices.bugs.actions,
+                recordings: { ...slices.recordings.actions, saveRecording, linkRecordingToBug },
+                sprints: slices.sprints.actions,
+                subscription: slices.subscription.actions,
+                team: slices.team.actions,
+                automation: slices.automation.actions,
+                ui: slices.ui.actions,
+                ai: { ...slices.ai.actions, generateTestCasesWithAI, getAIAnalytics, updateAISettings },
+                theme: { ...slices.theme.actions, setTheme, toggleTheme },
+                linkTestCasesToBug,
+                unlinkTestCaseFromBug,
+                linkBugsToTestCase,
+                unlinkBugFromTestCase,
+                addTestCasesToSprint,
+                addBugsToSprint,
+                clearState,
             },
-            suites: suites.actions,
-            testCases: {
-                ...testCases.actions,
-                createTestCase: wrappedCreateTestCase,
-                updateTestCase: wrappedUpdateTestCase,
-                deleteTestCase: wrappedDeleteTestCase,
-            },
-            bugs: bugs.actions,
-            recordings: {
-                ...recordings.actions,
-                saveRecording,
-                linkRecordingToBug,
-            },
-            sprints: sprints.actions,
-            subscription: subscription.actions,
-            team: team.actions,
-            automation: automation.actions,
-            ui: ui.actions,
-            ai: {
-                ...ai.actions,
-                generateTestCasesWithAI,
-                getAIAnalytics,
-                updateAISettings,
-            },
-            theme: {
-                ...theme.actions,
-                setTheme,
-                toggleTheme,
-            },
-            registration: {
-                completePendingRegistration,
-                completeOrganizationSetup,
-            },
+            isAuthenticated: slices.auth.state.isAuthenticated,
+            currentUser: slices.auth.state.currentUser,
+            activeSuite: slices.suites.state.activeSuite,
+            hasCreatedSuite: slices.suites.state.hasCreatedSuite,
+            suiteCreationBlocked: slices.suites.state.suiteCreationBlocked,
+            isTrialActive: slices.subscription.state.isTrialActive,
+            planLimits: slices.subscription.state.planLimits,
+            aiAvailable: slices.ai.state.isInitialized && !slices.ai.state.error,
+            aiGenerating: slices.ai.state.isGenerating,
+            isDarkMode: slices.theme.state.isDark,
+            isLightMode: slices.theme.state.isLight,
+            isSystemTheme: slices.theme.state.isSystem,
+            currentTheme: slices.theme.state.actualTheme,
+            selectedTheme: slices.theme.state.selectedTheme,
+            systemTheme: slices.theme.state.systemTheme,
+            themeLoading: slices.theme.state.isLoading,
+            isLoading:
+                slices.auth.state.loading ||
+                slices.suites.state.loading ||
+                slices.testCases.state.loading ||
+                slices.bugs.state.loading ||
+                slices.recordings.state.loading ||
+                slices.sprints.state.loading ||
+                slices.subscription.state.loading ||
+                slices.team.state.loading ||
+                slices.automation.state.loading ||
+                slices.ui.state.loading ||
+                slices.ai.state.loading ||
+                slices.theme.state.isLoading ||
+                !suitesLoaded,
+        }),
+        [
+            slices,
+            wrappedCreateTestCase,
+            wrappedUpdateTestCase,
+            wrappedDeleteTestCase,
+            saveRecording,
+            linkRecordingToBug,
+            generateTestCasesWithAI,
+            getAIAnalytics,
+            updateAISettings,
+            setTheme,
+            toggleTheme,
             linkTestCasesToBug,
             unlinkTestCaseFromBug,
             linkBugsToTestCase,
@@ -1301,55 +570,13 @@ export const AppProvider = ({ children }) => {
             addTestCasesToSprint,
             addBugsToSprint,
             clearState,
-        },
-        isAuthenticated: auth.state.isAuthenticated,
-        currentUser: auth.state.currentUser,
-        activeSuite: suites.state.activeSuite,
-        hasCreatedSuite: suites.state.hasCreatedSuite,
-        suiteCreationBlocked: suites.state.suiteCreationBlocked,
-        isTrialActive: subscription.state.isTrialActive,
-        planLimits: subscription.state.planLimits,
-        aiAvailable: ai.state.isInitialized && !ai.state.error,
-        aiGenerating: ai.state.isGenerating,
-        registrationState,
-        pendingRegistrationData,
-        needsRegistration: registrationState !== 'completed',
-        needsOrgSetup: registrationState === 'org-setup',
-        isDarkMode: theme.state.isDark,
-        isLightMode: theme.state.isLight,
-        isSystemTheme: theme.state.isSystem,
-        currentTheme: theme.state.actualTheme,
-        selectedTheme: theme.state.selectedTheme,
-        systemTheme: theme.state.systemTheme,
-        themeLoading: theme.state.isLoading,
-        isLoading:
-            auth.state.loading ||
-            suites.state.loading ||
-            testCases.state.loading ||
-            bugs.state.loading ||
-            recordings.state.loading ||
-            sprints.state.loading ||
-            subscription.state.loading ||
-            team.state.loading ||
-            automation.state.loading ||
-            ui.state.loading ||
-            ai.state.loading ||
-            theme.state.isLoading ||
-            !suitesLoaded,
-    }), [
-        auth.state, suites.state, testCases.state, bugs.state, recordings.state,
-        sprints.state, subscription.state, team.state, automation.state,
-        ui.state, ai.state, reports.state, theme.state,
-        auth.actions, suites.actions, testCases.actions, bugs.actions, recordings.actions,
-        sprints.actions, subscription.actions, team.actions, automation.actions,
-        ui.actions, ai.actions, theme.actions,
-        wrappedCreateTestCase, wrappedUpdateTestCase, wrappedDeleteTestCase,
-        saveRecording, linkRecordingToBug, generateTestCasesWithAI, getAIAnalytics, updateAISettings,
-        setTheme, toggleTheme, completePendingRegistration, completeOrganizationSetup,
-        linkTestCasesToBug, unlinkTestCaseFromBug, linkBugsToTestCase, unlinkBugFromTestCase,
-        addTestCasesToSprint, addBugsToSprint, clearState, logout, initializeAuth, refreshUserProfile,
-        suitesLoaded, aiInitialized, registrationState, pendingRegistrationData,
-    ]);
+            logout,
+            initializeAuth,
+            refreshUserProfile,
+            suitesLoaded,
+            aiInitialized,
+        ]
+    );
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
