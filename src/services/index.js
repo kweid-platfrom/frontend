@@ -1,4 +1,4 @@
-// services/index.js
+// services/index.js - FIXED VERSION
 import { UserService } from './userService';
 import { OrganizationService } from './OrganizationService';
 import { TestSuiteService } from './TestSuiteService';
@@ -132,7 +132,7 @@ class FirestoreService {
         }
 
         try {
-            console.log('🔄 Starting atomic registration transaction...');
+            console.log('🔄 Starting atomic registration transaction...', { userId, accountType });
 
             const batch = writeBatch(this.db);
             const timestamp = serverTimestamp();
@@ -288,17 +288,23 @@ class FirestoreService {
                 batch.set(individualRef, individualData);
             }
 
-            // 5. Create initial activity log
+            // 5. Create initial activity log - FIXED: Only include defined values
             const activityRef = this.createDocRef('activityLogs', userId, 'logs', 'registration');
+            const activityMetadata = {
+                account_type: accountType
+            };
+
+            // Only add organization fields if it's an organization account
+            if (accountType === 'organization' && organizationId && organizationName) {
+                activityMetadata.organization_id = organizationId;
+                activityMetadata.organization_name = organizationName;
+            }
+
             const activityData = {
                 user_id: userId,
                 action: 'user_registered',
                 description: `User registered with ${accountType} account`,
-                metadata: {
-                    account_type: accountType,
-                    organization_id: organizationId,
-                    organization_name: organizationName
-                },
+                metadata: activityMetadata,
                 timestamp: timestamp
             };
             batch.set(activityRef, activityData);
