@@ -1,3 +1,4 @@
+// services/firestoreService.js
 import {
     doc,
     getDoc,
@@ -13,18 +14,345 @@ import {
     onSnapshot,
     serverTimestamp,
     writeBatch,
-    arrayUnion,
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
-class FirestoreService {
+export class BaseFirestoreService {
     constructor() {
         this.db = db;
         this.auth = auth;
         this.unsubscribes = new Map();
+
+        // Suite state management
+        this._currentSuiteId = null;
+        this._suiteStateCallbacks = new Set();
     }
 
+    /**
+     * Complete user registration with atomic transaction
+     * Handles both individual and organization account types
+     */
+    async completeUserRegistration(registrationData) {
+        const {
+            userId,
+            email,
+            displayName,
+            firstName,
+            lastName,
+            accountType,
+            preferences,
+            organizationName,
+            organizationIndustry,
+            organizationSize
+        } = registrationData;
+
+        if (!userId) {
+            return { success: false, error: { message: 'User ID is required' } };
+        }
+
+        try {
+            console.log('🔄 Starting atomic registration transaction...');
+
+            const batch = writeBatch(this.db);
+            const timestamp = serverTimestamp();
+            const now = new Date(); // Use regular Date for array fields
+
+            // 1. Create user profile document
+            const userRef = this.createDocRef('users', userId);
+            const userProfileData = {
+                user_id: userId,
+                email: email,
+                display_name: displayName,
+                first_name: firstName,
+                last_name: lastName,
+                account_type: accountType,
+                role: accountType === 'organization' ? 'Admin' : 'member',
+                preferences: preferences || {},
+                contact_info: {
+                    email: email,
+                    phone: null
+                },
+                profile_picture: null,
+                account_memberships: [], // Initialize as empty array, populate below if needed
+                registrationCompleted: true,
+                created_at: timestamp,
+                updated_at: timestamp,
+                created_by: userId,
+                updated_by: userId
+            };
+
+            let organizationId = null;
+            let organizationData = null;
+
+            // 2. Handle organization-specific setup
+            if (accountType === 'organization') {
+                // Generate organization ID
+                organizationId = this.createDocRef('organizations', 'temp').id;
+
+                // Create organization document
+                const orgRef = this.createDocRef('organizations', organizationId);
+                organizationData = {
+                    id: organizationId,
+                    name: organizationName,
+                    description: `${organizationName} organization`,
+                    industry: organizationIndustry,
+                    size: organizationSize || 'small',
+                    ownerId: userId,
+                    settings: {
+                        allowPublicJoin: false,
+                        requireEmailVerification: true,
+                        defaultRole: 'member'
+                    },
+                    created_at: timestamp,
+                    updated_at: timestamp,
+                    created_by: userId,
+                    updated_by: userId
+                };
+                batch.set(orgRef, organizationData);
+
+                // Create organization member entry
+                const memberRef = this.createDocRef('organizations', organizationId, 'members', userId);
+                const memberData = {
+                    user_id: userId,
+                    email: email,
+                    display_name: displayName,
+                    role: 'Admin',
+                    status: 'active',
+                    permissions: ['all'], // Admin has all permissions - array of strings only
+                    joined_at: timestamp,
+                    created_at: timestamp,
+                    updated_at: timestamp
+                };
+                batch.set(memberRef, memberData);
+
+                // Create user membership reference
+                const userMembershipRef = this.createDocRef('userMemberships', userId, 'organizations', organizationId);
+                const userMembershipData = {
+                    org_id: organizationId,
+                    org_name: organizationName,
+                    user_id: userId,
+                    role: 'Admin',
+                    status: 'active',
+                    joined_at: timestamp,
+                    created_at: timestamp,
+                    updated_at: timestamp
+                };
+                batch.set(userMembershipRef, userMembershipData);
+
+                // FIXED: Populate account_memberships array with regular Date objects, not serverTimestamp
+                userProfileData.organizationId = organizationId;
+                userProfileData.organizationName = organizationName;
+                userProfileData.account_memberships = [{
+                    organization_id: organizationId,
+                    organization_name: organizationName,
+                    role: 'Admin',
+                    status: 'active',
+                    joined_at: now.toISOString() // Use ISO string instead of serverTimestamp()
+                }];
+            }
+
+            // Set the user profile document
+            batch.set(userRef, userProfileData);
+
+            // 3. Create subscription document
+            const subscriptionRef = this.createDocRef('subscriptions', userId);
+            const trialEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+            const subscriptionData = {
+                user_id: userId,
+                organization_id: organizationId,
+                plan: 'trial',
+                status: 'trial_active',
+                trial_starts_at: now.toISOString(),
+                trial_ends_at: trialEndDate.toISOString(),
+                authProvider: 'email',
+                isTrialActive: true,
+                daysRemainingInTrial: 30,
+                features: {
+                    maxSuites: accountType === 'organization' ? 10 : 5,
+                    maxTestCasesPerSuite: accountType === 'organization' ? 100 : 50,
+                    canCreateTestCases: true,
+                    canUseRecordings: true,
+                    canUseAutomation: true,
+                    canInviteTeam: accountType === 'organization',
+                    canExportReports: true,
+                    canCreateOrganizations: accountType === 'organization',
+                    advancedAnalytics: accountType === 'organization',
+                    prioritySupport: false,
+                    maxTeamMembers: accountType === 'organization' ? 10 : 1
+                },
+                created_at: timestamp,
+                updated_at: timestamp,
+                created_by: userId,
+                updated_by: userId
+            };
+            batch.set(subscriptionRef, subscriptionData);
+
+            // 4. Create account-specific document
+            if (accountType === 'individual') {
+                const individualRef = this.createDocRef('individualAccounts', userId);
+                const individualData = {
+                    user_id: userId,
+                    email: email,
+                    subscription_id: userId,
+                    subscription_status: 'trial_active',
+                    personal_workspace: {
+                        name: `${firstName}'s Workspace`,
+                        description: 'Personal testing workspace',
+                        created_at: now.toISOString() // Use ISO string in nested objects
+                    },
+                    created_at: timestamp,
+                    updated_at: timestamp
+                };
+                batch.set(individualRef, individualData);
+            }
+
+            // 5. Create initial activity log
+            const activityRef = this.createDocRef('activityLogs', userId, 'logs', 'registration');
+            const activityData = {
+                user_id: userId,
+                action: 'user_registered',
+                description: `User registered with ${accountType} account`,
+                metadata: {
+                    account_type: accountType,
+                    organization_id: organizationId,
+                    organization_name: organizationName
+                },
+                timestamp: timestamp
+            };
+            batch.set(activityRef, activityData);
+
+            // 6. Commit all operations atomically
+            await batch.commit();
+            console.log('✅ Registration transaction completed successfully');
+
+            // 7. Return comprehensive result
+            return {
+                success: true,
+                data: {
+                    user: {
+                        id: userId,
+                        ...userProfileData
+                    },
+                    organization: organizationData,
+                    subscription: {
+                        id: userId,
+                        ...subscriptionData
+                    },
+                    accountType: accountType
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ Registration transaction failed:', error);
+            return this.handleFirestoreError(error, 'complete user registration');
+        }
+    }
+
+    /**
+     * Verify and activate user account after email verification
+     */
+    async activateUserAccount(userId) {
+        if (!userId) {
+            return { success: false, error: { message: 'User ID is required' } };
+        }
+
+        try {
+            const batch = writeBatch(this.db);
+            const timestamp = serverTimestamp();
+
+            // Update user profile
+            const userRef = this.createDocRef('users', userId);
+            batch.update(userRef, {
+                emailVerified: true,
+                accountStatus: 'active',
+                verifiedAt: timestamp,
+                updated_at: timestamp
+            });
+
+            // Update subscription if exists
+            const subscriptionRef = this.createDocRef('subscriptions', userId);
+            batch.update(subscriptionRef, {
+                emailVerified: true,
+                updated_at: timestamp
+            });
+
+            // Log activation
+            const activityRef = this.createDocRef('activityLogs', userId, 'logs', `activation_${Date.now()}`);
+            batch.set(activityRef, {
+                user_id: userId,
+                action: 'account_activated',
+                description: 'User account activated after email verification',
+                timestamp: timestamp
+            });
+
+            await batch.commit();
+
+            return {
+                success: true,
+                message: 'Account activated successfully'
+            };
+        } catch (error) {
+            console.error('Account activation error:', error);
+            return this.handleFirestoreError(error, 'activate user account');
+        }
+    }
+
+    async getAutomationsBySuite(suiteId) {
+        try {
+            const validSuiteId = this.validateDocId(suiteId);
+            if (!validSuiteId) {
+                return { success: false, error: { message: 'Invalid suite ID' } };
+            }
+
+            const result = await this.queryDocuments('automations', [
+                ['suiteId', '==', validSuiteId]
+            ]);
+
+            return result;
+        } catch (error) {
+            return this.handleFirestoreError(error, 'get automations by suite');
+        }
+    }
+
+    /**
+     * Clean up partial registration data if registration fails
+     */
+    async cleanupPartialRegistration(userId) {
+        if (!userId) return;
+
+        try {
+            console.log('🧹 Cleaning up partial registration for user:', userId);
+
+            const batch = writeBatch(this.db);
+
+            // List of collections to clean
+            const collectionsToClean = [
+                'users',
+                'subscriptions',
+                'individualAccounts',
+                'userMemberships'
+            ];
+
+            for (const collectionName of collectionsToClean) {
+                try {
+                    const docRef = this.createDocRef(collectionName, userId);
+                    batch.delete(docRef);
+                } catch (error) {
+                    console.warn(`Could not delete ${collectionName}/${userId}:`, error);
+                }
+            }
+
+            await batch.commit();
+            console.log('✅ Cleanup completed');
+
+        } catch (error) {
+            console.error('Cleanup failed:', error);
+        }
+    }
+
+    // =================== CORE FIRESTORE METHODS ===================
     getCurrentUserId() {
         return this.auth.currentUser?.uid || null;
     }
@@ -286,183 +614,83 @@ class FirestoreService {
         this.unsubscribes.clear();
     }
 
-    // Add missing method that was referenced in recordings.linkRecordingToBug
+    // =================== SUITE STATE MANAGEMENT ===================
     getCurrentSuiteId() {
-        // You'll need to implement this based on your app's state management
-        // This is likely stored in context, local storage, or passed as a parameter
-        return null; // Placeholder - implement based on your app structure
-    }
-
-    // Placeholder organization service methods
-    // These should be replaced with actual service implementations
-    organization = {
-        getReports: async (orgId) => {
-            return await this.queryDocuments(`organizations/${orgId}/reports`, [], 'created_at', 100);
-        },
-        saveReport: async (reportData) => {
-            return await this.createDocument(`organizations/${reportData.organizationId}/reports`, reportData);
-        },
-        deleteReport: async (reportId, orgId) => {
-            return await this.deleteDocument(`organizations/${orgId}/reports`, reportId);
-        },
-        toggleSchedule: async ({ organizationId, enabled }) => {
-            return await this.updateDocument(`organizations/${organizationId}/settings`, 'reportSchedule', { enabled });
-        },
-        subscribeToTriggers: (orgId, callback) => {
-            return this.subscribeToCollection(`organizations/${orgId}/triggers`, [], callback);
-        },
-        generatePDF: async (report) => {
-            return { success: true, data: { url: `/pdf/${report.id}` } };
-        },
-        createOrganization: async (orgData) => {
-            try {
-                console.log('OrganizationService.createOrganization called with:', orgData);
-                
-                // Validate required fields
-                if (!orgData.name) {
-                    return { success: false, error: { message: 'Organization name is required' } };
-                }
-                
-                // Create the organization document
-                const result = await this.createDocument('organizations', orgData);
-                
-                console.log('Organization creation result:', result);
-                return result;
-            } catch (error) {
-                console.error('Error in createOrganization:', error);
-                return this.handleFirestoreError(error, 'create organization');
-            }
-        },
-        cleanup: () => {
-            // Cleanup logic if needed
+        if (this._currentSuiteId) {
+            return this._currentSuiteId;
         }
-    };
 
-    // User service methods
-    user = {
-        getUserProfile: async (userId) => {
-            return await this.getDocument('users', userId);
-        },
-        createOrUpdateUserProfile: async (userData) => {
-            try {
-                console.log('UserService.createOrUpdateUserProfile called with:', userData);
-                
-                // Validate required fields
-                if (!userData.user_id) {
-                    return { success: false, error: { message: 'User ID is required' } };
-                }
-                
-                // Use setDoc to create or update the user document
-                const result = await this.createDocument('users', userData, userData.user_id);
-                
-                console.log('User profile creation result:', result);
-                return result;
-            } catch (error) {
-                console.error('Error in createOrUpdateUserProfile:', error);
-                return this.handleFirestoreError(error, 'create or update user profile');
+        // Try to get from sessionStorage first (for current session)
+        if (typeof window !== 'undefined') {
+            const sessionSuiteId = sessionStorage.getItem('currentSuiteId');
+            if (sessionSuiteId && sessionSuiteId !== 'null' && sessionSuiteId !== 'undefined') {
+                this._currentSuiteId = sessionSuiteId;
+                return sessionSuiteId;
             }
-        },
-        cleanup: () => {
-            // Cleanup logic if needed
+
+            // Fallback to localStorage for persistence across sessions
+            const localSuiteId = localStorage.getItem('currentSuiteId');
+            if (localSuiteId && localSuiteId !== 'null' && localSuiteId !== 'undefined') {
+                this._currentSuiteId = localSuiteId;
+                // Also set in session storage
+                sessionStorage.setItem('currentSuiteId', localSuiteId);
+                return localSuiteId;
+            }
         }
-    };
 
-    // Direct methods that delegate to service objects (for backward compatibility)
-    async getUserProfile(userId) {
-        return this.user.getUserProfile(userId);
+        return null;
     }
 
-    async createOrUpdateUserProfile(userData) {
-        return this.user.createOrUpdateUserProfile(userData);
+    setCurrentSuiteId(suiteId) {
+        const validSuiteId = this.validateDocId(suiteId);
+        this._currentSuiteId = validSuiteId;
+
+        if (typeof window !== 'undefined') {
+            if (validSuiteId) {
+                sessionStorage.setItem('currentSuiteId', validSuiteId);
+                localStorage.setItem('currentSuiteId', validSuiteId);
+            } else {
+                sessionStorage.removeItem('currentSuiteId');
+                localStorage.removeItem('currentSuiteId');
+            }
+        }
+
+        // Notify listeners about suite change
+        this._notifySuiteChange(validSuiteId);
+        return validSuiteId;
     }
 
-    recordings = {
-        createRecording: async (recordingData) => {
+    clearCurrentSuiteId() {
+        this._currentSuiteId = null;
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('currentSuiteId');
+            localStorage.removeItem('currentSuiteId');
+        }
+        this._notifySuiteChange(null);
+    }
+
+    onSuiteChange(callback) {
+        this._suiteStateCallbacks.add(callback);
+        // Return unsubscribe function
+        return () => {
+            this._suiteStateCallbacks.delete(callback);
+        };
+    }
+
+    _notifySuiteChange(suiteId) {
+        this._suiteStateCallbacks.forEach(callback => {
             try {
-                const suiteId = this.validateDocId(recordingData.suiteId);
-                if (!suiteId) {
-                    return { success: false, error: { message: 'Invalid suite ID' } };
-                }
-                const collectionPath = `suites/${suiteId}/recordings`;
-                const result = await this.createDocument(collectionPath, recordingData);
-                return result;
+                callback(suiteId);
             } catch (error) {
-                return this.handleFirestoreError(error, 'create recording');
+                console.error('Error in suite change callback:', error);
             }
-        },
+        });
+    }
 
-        linkRecordingToBug: async (recordingId, bugId) => {
-            try {
-                const suiteId = this.validateDocId(this.getCurrentSuiteId());
-                if (!suiteId || !recordingId || !bugId) {
-                    return { success: false, error: { message: 'Invalid IDs provided' } };
-                }
-
-                const batch = writeBatch(this.db);
-                const recordingRef = this.createDocRef(`suites/${suiteId}/recordings`, recordingId);
-                const bugRef = this.createDocRef(`suites/${suiteId}/bugs`, bugId);
-
-                batch.update(recordingRef, { bugId, updated_at: serverTimestamp() });
-                batch.update(bugRef, {
-                    recordingIds: arrayUnion(recordingId),
-                    updated_at: serverTimestamp()
-                });
-
-                await batch.commit();
-                return { success: true };
-            } catch (error) {
-                return this.handleFirestoreError(error, 'link recording to bug');
-            }
-        },
-
-        subscribeToRecordings: (suiteId, callback, errorCallback) => {
-            const collectionPath = `suites/${suiteId}/recordings`;
-            return this.subscribeToCollection(
-                collectionPath,
-                [orderBy('created_at', 'desc')],
-                callback,
-                errorCallback
-            );
-        },
-    };
-
-    reports = {
-        getReports: async (orgId) => {
-            const collectionPath = `organizations/${orgId}/reports`;
-            return await this.queryDocuments(collectionPath, [], 'created_at', 100);
-        },
-        saveReport: async (reportData) => {
-            const collectionPath = `organizations/${reportData.organizationId}/reports`;
-            return await this.createDocument(collectionPath, reportData);
-        },
-        deleteReport: async (reportId) => {
-            const orgId = this.getCurrentUser()?.organizationId;
-            const collectionPath = `organizations/${orgId}/reports`;
-            return await this.deleteDocument(collectionPath, reportId);
-        },
-        toggleSchedule: async ({ organizationId, enabled }) => {
-            return await this.updateDocument(`organizations/${organizationId}/settings`, 'reportSchedule', { enabled });
-        },
-        subscribeToTriggers: (orgId, callback) => {
-            const collectionPath = `organizations/${orgId}/triggers`;
-            return this.subscribeToCollection(collectionPath, [], callback);
-        },
-        generatePDF: async (report) => {
-            // Placeholder for PDF generation logic
-            return { success: true, data: { url: `/pdf/${report.id}` } };
-        },
-    };
-
+    // =================== CLEANUP ===================
     cleanup() {
         this.unsubscribeAll();
-        this.user?.cleanup?.();
-        this.organization?.cleanup?.();
+        this._suiteStateCallbacks.clear();
+        this._currentSuiteId = null;
     }
 }
-
-// Create and export a default instance
-const firestoreService = new FirestoreService();
-export default firestoreService;
-
-// Also export the class for direct instantiation if needed
-export { FirestoreService };

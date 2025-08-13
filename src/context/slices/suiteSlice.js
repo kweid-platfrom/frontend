@@ -1,6 +1,9 @@
 import { useReducer } from 'react';
-import { FirestoreService } from '../../services/firestoreService';
+import { BaseFirestoreService } from '../../services/firestoreService';
 import { handleFirebaseOperation } from '../../utils/firebaseErrorHandler';
+
+// Create a service instance
+const firestoreService = new BaseFirestoreService();
 
 const initialState = {
     testSuites: [],
@@ -32,7 +35,7 @@ const suitesReducer = (state, action) => {
             return {
                 ...state,
                 testSuites: [...state.testSuites, action.payload],
-                activeSuite: action.payload, // Automatically activate the newly created suite
+                activeSuite: action.payload,
                 hasCreatedSuite: true,
                 loading: false,
                 error: null,
@@ -83,6 +86,11 @@ export const useSuites = () => {
                     throw new Error('Suite name is required');
                 }
 
+                // Check if createTestSuite method exists
+                if (typeof firestoreService.createTestSuite !== 'function') {
+                    throw new Error('Test suite creation service is not available');
+                }
+
                 // Prepare suite data
                 const suiteToCreate = {
                     name: suiteData.name.trim(),
@@ -93,14 +101,14 @@ export const useSuites = () => {
                     status: 'active',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                    ...suiteData, // Allow override of any other fields
+                    ...suiteData,
                 };
 
                 console.log('🏢 Suite data to create:', suiteToCreate);
 
-                // Create the suite using FirestoreService
+                // Use the service instance to create the suite
                 const result = await handleFirebaseOperation(
-                    () => FirestoreService.createTestSuite(suiteToCreate),
+                    () => firestoreService.createTestSuite(suiteToCreate),
                     'Suite created successfully',
                     (errorMessage) => {
                         console.error('Suite creation failed:', errorMessage);
@@ -111,7 +119,7 @@ export const useSuites = () => {
                 if (result.success) {
                     console.log('✅ Suite created successfully:', result.data);
                     dispatch({ type: 'CREATE_SUITE_SUCCESS', payload: result.data });
-                    
+
                     // Show success notification if UI actions are available
                     if (uiActions?.showNotification) {
                         uiActions.showNotification({
@@ -130,7 +138,17 @@ export const useSuites = () => {
                 console.error('❌ Error creating suite:', error);
                 const errorMessage = error.message || 'An unexpected error occurred while creating the suite';
                 dispatch({ type: 'CREATE_SUITE_ERROR', payload: errorMessage });
-                
+
+                // Enhanced error handling for UI feedback
+                if (uiActions?.showNotification) {
+                    uiActions.showNotification({
+                        id: 'suite-creation-error',
+                        type: 'error',
+                        message: errorMessage,
+                        duration: 5000,
+                    });
+                }
+
                 return { 
                     success: false, 
                     error: { message: errorMessage }

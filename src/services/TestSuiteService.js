@@ -1,8 +1,8 @@
-import { FirestoreService } from './firestoreService';
+import { BaseFirestoreService } from './firestoreService'; // Fixed import
 import { query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
-export class TestSuiteService extends FirestoreService {
+export class TestSuiteService extends BaseFirestoreService {
     constructor(organizationService) {
         super();
         this.organizationService = organizationService;

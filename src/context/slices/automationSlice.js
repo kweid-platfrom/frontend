@@ -1,6 +1,9 @@
 import { useReducer } from 'react';
-import { FirestoreService } from '../../services/firestoreService';
+import { BaseFirestoreService } from '../../services/firestoreService';
 import { toast } from 'sonner';
+
+// Create a service instance
+const firestoreService = new BaseFirestoreService();
 
 const initialState = {
     automations: [],
@@ -34,7 +37,8 @@ export const useAutomation = () => {
         loadAutomations: async (suiteId) => {
             dispatch({ type: 'AUTOMATIONS_LOADING' });
             try {
-                const result = await FirestoreService.getAutomationsBySuite(suiteId);
+                // Use the service instance with the getAutomationsBySuite method
+                const result = await firestoreService.getAutomationsBySuite(suiteId);
                 if (result.success) {
                     dispatch({ type: 'AUTOMATIONS_LOADED', payload: result.data });
                 } else {

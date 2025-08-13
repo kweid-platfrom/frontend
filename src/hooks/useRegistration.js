@@ -1,15 +1,17 @@
+// hooks/useRegistration.js - FIXED VERSION with proper atomic transaction
 import { useState } from 'react';
 import {
     createUserWithEmailAndPassword,
     sendEmailVerification,
-    signOut
+    signOut,
+    signInWithCredential,
+    GoogleAuthProvider
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import firestoreService from '../services/firestoreService';
+import firestoreService from '../services';
 import { 
     isValidEmail,
-    isCommonEmailProvider,
-    generateOrgNameSuggestions 
+    isCommonEmailProvider 
 } from '../utils/domainValidation';
 
 export const useRegistration = () => {
@@ -27,9 +29,9 @@ export const useRegistration = () => {
             errors.email = 'Organization accounts require a custom domain email';
         }
 
-        if (!data.password) {
+        if (!data.password && !data.googleId) {
             errors.password = 'Password is required';
-        } else if (data.password.length < 6) {
+        } else if (!data.googleId && data.password && data.password.length < 6) {
             errors.password = 'Password must be at least 6 characters';
         }
 
@@ -62,77 +64,105 @@ export const useRegistration = () => {
         return { firstName, lastName };
     };
 
-    const createPendingRegistration = async (userData) => {
-        try {
-            const userId = auth.currentUser?.uid;
-            if (!userId) throw new Error('No authenticated user found');
-
-            const accountType = userData.accountType || 'individual';
-            
-            const orgSuggestions = accountType === 'organization' 
-                ? generateOrgNameSuggestions(userData.email)
-                : [];
-
-            const pendingData = {
-                email: userData.email,
-                displayName: userData.displayName,
-                accountType,
-                organizationName: userData.organizationName || '',
-                organizationIndustry: userData.organizationIndustry || '',
-                orgSuggestions,
-                authProvider: 'email',
-                createdAt: new Date().toISOString(),
-                ttl: 48 // hours
-            };
-
-            const result = await firestoreService.createDocument(
-                'pendingRegistrations',
-                pendingData,
-                userId
-            );
-
-            if (!result.success) {
-                throw new Error(result.error?.message || 'Failed to store registration data');
-            }
-
-            return result;
-        } catch (error) {
-            console.error('Error creating pending registration:', error);
-            throw error;
-        }
-    };
-
+    /**
+     * FIXED: Use atomic registration service instead of separate calls
+     */
     const registerWithEmail = async (userData) => {
         setLoading(true);
         setError(null);
 
         try {
+            console.log('Starting complete registration with data:', userData);
+            
             const validation = validateRegistrationData(userData);
             if (!validation.isValid) {
                 throw new Error(Object.values(validation.errors)[0]);
             }
 
+            // Step 1: Create Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 userData.email,
                 userData.password
             );
 
-            await createPendingRegistration({
-                ...userData,
-                authProvider: 'email'
-            });
+            const userId = userCredential.user.uid;
+            const currentUser = userCredential.user;
+            console.log('✅ Firebase user created:', userId);
 
-            await sendEmailVerification(userCredential.user);
-            await signOut(auth);
+            try {
+                // Step 2: Parse name components
+                const { firstName, lastName } = parseDisplayName(userData.displayName);
 
-            return {
-                success: true,
-                needsVerification: true,
-                message: 'Registration successful! Please check your email to verify your account, then sign in to continue.'
-            };
+                // Step 3: FIXED - Use atomic registration service
+                const registrationData = {
+                    userId: userId,
+                    email: currentUser.email,
+                    displayName: userData.displayName,
+                    firstName: firstName,
+                    lastName: lastName,
+                    accountType: userData.accountType,
+                    preferences: userData.preferences || {},
+                    ...(userData.accountType === 'organization' && {
+                        organizationName: userData.organizationName,
+                        organizationIndustry: userData.organizationIndustry,
+                        organizationSize: userData.organizationSize || 'small'
+                    })
+                };
+
+                console.log('📋 Using atomic registration with data:', registrationData);
+
+                // FIXED: Single atomic transaction for everything
+                const registrationResult = await firestoreService.completeUserRegistration(registrationData);
+
+                if (!registrationResult.success) {
+                    throw new Error(`Registration failed: ${registrationResult.error?.message}`);
+                }
+
+                console.log('✅ Atomic registration completed successfully');
+
+                // Step 4: Send verification email
+                await sendEmailVerification(userCredential.user);
+                console.log('✅ Verification email sent');
+
+                // Step 5: Sign out user (they need to verify email)
+                await signOut(auth);
+                console.log('✅ User signed out for email verification');
+
+                return {
+                    success: true,
+                    needsVerification: true,
+                    accountType: userData.accountType,
+                    message: `Registration successful! Please check your email to verify your account, then sign in to ${userData.accountType === 'organization' ? 'access your organization' : 'continue'}.`,
+                    data: registrationResult.data
+                };
+
+            } catch (registrationError) {
+                // Clean up Firebase Auth user if Firestore operations failed
+                console.log('Cleaning up Firebase Auth user due to registration failure...');
+                try {
+                    await currentUser.delete();
+                    console.log('✅ Firebase Auth user cleaned up');
+                } catch (cleanupError) {
+                    console.error('Failed to cleanup Firebase Auth user:', cleanupError);
+                }
+                
+                // Also clean up any partial Firestore data
+                try {
+                    await firestoreService.cleanupPartialRegistration(userId);
+                } catch (cleanupError) {
+                    console.error('Failed to cleanup partial registration:', cleanupError);
+                }
+                
+                throw registrationError;
+            }
+
         } catch (error) {
-            console.error('Email registration error:', error);
+            console.error('Registration error:', {
+                message: error.message,
+                code: error.code,
+                stack: error.stack
+            });
             
             let errorMessage = 'Registration failed. Please try again.';
             
@@ -149,6 +179,9 @@ export const useRegistration = () => {
                 case 'auth/network-request-failed':
                     errorMessage = 'Network error. Please check your connection and try again.';
                     break;
+                case 'permission-denied':
+                    errorMessage = 'Permission denied. Please check your account permissions and try again.';
+                    break;
                 default:
                     errorMessage = error.message || errorMessage;
             }
@@ -163,202 +196,113 @@ export const useRegistration = () => {
         }
     };
 
-    const completeUserRegistration = async (organizationData = null) => {
+    const registerWithGoogle = async (userData, credential) => {
         setLoading(true);
         setError(null);
 
         try {
-            const userId = auth.currentUser?.uid;
-            if (!userId) {
-                throw new Error('No authenticated user found');
-            }
+            console.log('Starting Google registration with data:', userData);
+            
+            // Step 1: Sign in with Google credential
+            const googleCredential = GoogleAuthProvider.credential(credential);
+            const userCredential = await signInWithCredential(auth, googleCredential);
+            const userId = userCredential.user.uid;
+            const currentUser = userCredential.user;
+            
+            console.log('✅ Google user authenticated:', userId);
 
-            const pendingResult = await firestoreService.getDocument('pendingRegistrations', userId);
-            if (!pendingResult.success) {
-                throw new Error('No pending registration found');
-            }
+            try {
+                // Step 2: Parse name components
+                const { firstName, lastName } = parseDisplayName(userData.displayName);
 
-            const pendingData = pendingResult.data;
-            if (!pendingData.accountType || !['individual', 'organization'].includes(pendingData.accountType)) {
-                throw new Error('Invalid accountType in pendingRegistrations');
-            }
-
-            const currentUser = auth.currentUser;
-            const { firstName, lastName } = parseDisplayName(pendingData.displayName);
-
-            const userData = {
-                user_id: userId,
-                email: currentUser.email,
-                display_name: pendingData.displayName,
-                first_name: firstName,
-                last_name: lastName,
-                account_type: pendingData.accountType,
-                role: pendingData.accountType === 'organization' ? 'Admin' : 'member',
-                preferences: {},
-                contact_info: {
+                // Step 3: FIXED - Use atomic registration service
+                const registrationData = {
+                    userId: userId,
                     email: currentUser.email,
-                    phone: null
-                },
-                profile_picture: currentUser.photoURL || null,
-                account_memberships: [],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                created_by: userId,
-                updated_by: userId,
-                registrationCompleted: pendingData.accountType === 'organization' ? false : true
-            };
-
-            if (pendingData.accountType === 'organization' && isCommonEmailProvider(currentUser.email)) {
-                throw new Error('Organization accounts require a custom domain email');
-            }
-
-            const userResult = await firestoreService.createOrUpdateUserProfile(userData);
-            if (!userResult.success) {
-                throw new Error(`Failed to create user profile: ${userResult.error?.message}`);
-            }
-
-            // Verify user document
-            const verifyUser = await firestoreService.user.getUserProfile(userId);
-            if (!verifyUser.success || verifyUser.data.account_type !== pendingData.accountType || 
-                (pendingData.accountType === 'organization' && verifyUser.data.role !== 'Admin')) {
-                throw new Error(`User profile verification failed: expected account_type ${pendingData.accountType} and role 'Admin', got ${verifyUser.data?.account_type} and ${verifyUser.data?.role}`);
-            }
-
-            let orgResult = null;
-
-            if (pendingData.accountType === 'organization') {
-                const orgDataToUse = organizationData || {
-                    name: pendingData.organizationName,
-                    industry: pendingData.organizationIndustry
+                    displayName: userData.displayName,
+                    firstName: firstName,
+                    lastName: lastName,
+                    accountType: userData.accountType,
+                    preferences: userData.preferences || {},
+                    ...(userData.accountType === 'organization' && {
+                        organizationName: userData.organizationName,
+                        organizationIndustry: userData.organizationIndustry,
+                        organizationSize: userData.organizationSize || 'small'
+                    })
                 };
 
-                if (!orgDataToUse?.name || !orgDataToUse?.industry) {
-                    return {
-                        success: true,
-                        needsOrganizationInfo: true,
-                        accountType: pendingData.accountType,
-                        orgSuggestions: pendingData.orgSuggestions || []
-                    };
+                console.log('👤 Using atomic Google registration with data:', registrationData);
+
+                // FIXED: Single atomic transaction for everything
+                const registrationResult = await firestoreService.completeUserRegistration(registrationData);
+
+                if (!registrationResult.success) {
+                    throw new Error(`Google registration failed: ${registrationResult.error?.message}`);
                 }
 
-                const enhancedOrgData = {
-                    name: orgDataToUse.name,
-                    description: orgDataToUse.description || `${orgDataToUse.name} organization`,
-                    industry: orgDataToUse.industry || 'technology',
-                    settings: orgDataToUse.settings || {},
-                    ownerId: userId,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    created_by: userId,
-                    updated_by: userId
+                console.log('✅ Atomic Google registration completed successfully');
+
+                return {
+                    success: true,
+                    needsVerification: false, // Google users are already verified
+                    accountType: userData.accountType,
+                    message: `Welcome! Your ${userData.accountType === 'organization' ? 'organization' : 'account'} has been set up successfully.`,
+                    data: registrationResult.data
                 };
+
+            } catch (registrationError) {
+                // Clean up Firebase Auth user if Firestore operations failed
+                console.log('Cleaning up Firebase Auth user due to Google registration failure...');
+                try {
+                    await currentUser.delete();
+                    console.log('Firebase Auth user cleaned up');
+                } catch (cleanupError) {
+                    console.error('Failed to cleanup Firebase Auth user:', cleanupError);
+                }
                 
-                orgResult = await firestoreService.organization.createOrganization(enhancedOrgData);
-                if (!orgResult.success) {
-                    throw new Error(`Failed to create organization: ${orgResult.error?.message}`);
+                // Also clean up any partial Firestore data
+                try {
+                    await firestoreService.cleanupPartialRegistration(userId);
+                } catch (cleanupError) {
+                    console.error('Failed to cleanup partial Google registration:', cleanupError);
                 }
-
-                // Create membership document for the admin
-                const membershipData = {
-                    user_id: userId,
-                    role: 'Admin',
-                    status: 'active',
-                    joined_at: new Date().toISOString(),
-                    created_by: userId,
-                    updated_by: userId
-                };
-
-                const membershipResult = await firestoreService.createDocument(
-                    `organizations/${orgResult.data.id}/members`,
-                    membershipData,
-                    userId
-                );
-                if (!membershipResult.success) {
-                    throw new Error(`Failed to create membership: ${membershipResult.error?.message}`);
-                }
-
-                // Update user profile with organization details
-                userData.account_memberships = [{
-                    organization_id: orgResult.data.id,
-                    role: 'Admin',
-                    joined_at: new Date().toISOString()
-                }];
-                userData.organizationId = orgResult.data.id;
-                userData.organizationName = orgResult.data.name;
-                userData.registrationCompleted = true;
-
-                const updateResult = await firestoreService.createOrUpdateUserProfile(userData);
-                if (!updateResult.success) {
-                    throw new Error(`Failed to update user profile with org data: ${updateResult.error?.message}`);
-                }
-            } else {
-                const individualData = {
-                    user_id: userId,
-                    subscription: {
-                        plan: 'trial',
-                        status: 'trial_active',
-                        trial_starts_at: new Date().toISOString(),
-                        trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                        features: {
-                            maxSuites: 5,
-                            maxTestCasesPerSuite: 50,
-                            canCreateTestCases: true,
-                            canUseRecordings: true,
-                            canUseAutomation: true,
-                            canInviteTeam: true,
-                            canExportReports: true,
-                            canCreateOrganizations: true,
-                            advancedAnalytics: true,
-                            prioritySupport: false
-                        }
-                    }
-                };
-
-                await firestoreService.createDocument('individualAccounts', individualData, userId);
+                
+                throw registrationError;
             }
 
-            const subscriptionData = {
-                user_id: userId,
-                plan: 'trial',
-                status: 'trial_active',
-                trial_starts_at: new Date().toISOString(),
-                trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                authProvider: pendingData.authProvider,
-                isTrialActive: true,
-                daysRemainingInTrial: 30,
-                features: {
-                    maxSuites: 5,
-                    maxTestCasesPerSuite: 50,
-                    canCreateTestCases: true,
-                    canUseRecordings: true,
-                    canUseAutomation: true,
-                    canInviteTeam: true,
-                    canExportReports: true,
-                    canCreateOrganizations: true,
-                    advancedAnalytics: true,
-                    prioritySupport: false
-                }
-            };
-
-            await firestoreService.createDocument('subscriptions', subscriptionData, userId);
-            await firestoreService.deleteDocument('pendingRegistrations', userId);
-
-            return {
-                success: true,
-                registrationComplete: true,
-                accountType: pendingData.accountType,
-                data: {
-                    user: userResult.data,
-                    organization: orgResult?.data,
-                    subscription: subscriptionData
-                }
-            };
         } catch (error) {
-            console.error('Registration completion error:', error);
-            setError(error.message);
+            console.error('Google registration error:', {
+                message: error.message,
+                code: error.code,
+                stack: error.stack
+            });
+            
+            let errorMessage = 'Google registration failed. Please try again.';
+            
+            switch (error.code) {
+                case 'auth/account-exists-with-different-credential':
+                    errorMessage = 'An account with this email already exists with a different sign-in method. Please try signing in with your email and password.';
+                    break;
+                case 'auth/invalid-credential':
+                    errorMessage = 'Invalid Google credential. Please try again.';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage = 'Network error. Please check your connection and try again.';
+                    break;
+                case 'auth/popup-closed-by-user':
+                    errorMessage = 'Sign-in was cancelled. Please try again.';
+                    break;
+                case 'permission-denied':
+                    errorMessage = 'Permission denied. Please check your account permissions and try again.';
+                    break;
+                default:
+                    errorMessage = error.message || errorMessage;
+            }
+            
+            setError(errorMessage);
             return {
                 success: false,
-                error: error.message
+                error: errorMessage
             };
         } finally {
             setLoading(false);
@@ -395,7 +339,7 @@ export const useRegistration = () => {
         loading,
         error,
         registerWithEmail,
-        completeUserRegistration,
+        registerWithGoogle,
         resendVerificationEmail,
         clearError,
         validateRegistrationData
