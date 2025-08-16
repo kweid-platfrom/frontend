@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, ArrowLeft, User, Building, ChevronDown, CheckCircle } from 'lucide-react';
 import { useRegistration } from '../hooks/useRegistration';
 import { isCustomDomain, isCommonEmailProvider } from '../utils/domainValidation';
-import { toast } from 'sonner';
+import { toast } from 'sonner'; // Make sure <Toaster /> is added to your App component
 import DomainSuggestion from './DomainSuggestion';
 import GoogleSSO from './GoogleSSO';
 
@@ -397,10 +397,11 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
             }
 
             if (result?.success) {
-                toast.success('Registration successful! Please check your email for a confirmation link to verify your account.');
+                const successMessage = result.data?.message || 'Registration successful! Please check your email for a confirmation link to verify your account.';
+                toast.success(successMessage);
                 onSuccess(result);
             } else {
-                const errorMsg = result?.error || 'Registration failed';
+                const errorMsg = result?.error?.message || result?.error || 'Registration failed';
                 toast.error(errorMsg);
                 setErrors({ submit: errorMsg });
             }

@@ -57,7 +57,6 @@ const Register = ({ onSwitchToLogin }) => {
                         <ul className="list-disc list-inside space-y-1">
                             <li>Check your email inbox for a verification link</li>
                             <li>Click the verification link to activate your account</li>
-                            <li>Return here to sign in with your new account</li>
                         </ul>
                     </div>
                 </div>

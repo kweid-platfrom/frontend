@@ -3,15 +3,15 @@ import { useState } from 'react';
 import { auth } from '../config/firebase';
 import { sendEmailVerification } from 'firebase/auth';
 import RegistrationService, { RegistrationFlowHelpers } from '../services/RegistrationService';
-import { 
-    isCommonEmailProvider 
+import {
+    isCommonEmailProvider
 } from '../utils/domainValidation';
 
 export const useRegistration = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [registrationState, setRegistrationState] = useState(null);
-    
+
     // Initialize service
     const registrationService = new RegistrationService();
 
@@ -65,7 +65,7 @@ export const useRegistration = () => {
                 ...userData,
                 accountType: 'individual'
             }, 1);
-            
+
             if (!validation.isValid) {
                 throw new Error(Object.values(validation.errors)[0]);
             }
@@ -93,7 +93,7 @@ export const useRegistration = () => {
             console.error('Individual registration start error:', error);
             const errorMessage = error.message || 'Registration failed. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -145,12 +145,21 @@ export const useRegistration = () => {
 
             if (result.success) {
                 setRegistrationState(result.data);
+                let message;
+                const needsVerification = !profileData.googleCredential;
+
+                if (needsVerification) {
+                    message = 'Account created! Please check your email to verify your account before signing in.';
+                } else {
+                    message = 'Your account has been created successfully!';
+                }
+
                 return {
                     success: true,
                     completed: true,
                     registrationState: result.data,
-                    message: result.data.message,
-                    needsVerification: !profileData.googleCredential
+                    message: message,
+                    needsVerification: needsVerification
                 };
             } else {
                 throw new Error(result.error.message);
@@ -160,7 +169,7 @@ export const useRegistration = () => {
             console.error('Individual registration completion error:', error);
             const errorMessage = error.message || 'Failed to complete registration. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -183,7 +192,7 @@ export const useRegistration = () => {
                 ...userData,
                 accountType: 'organization'
             }, 1);
-            
+
             if (!validation.isValid) {
                 throw new Error(Object.values(validation.errors)[0]);
             }
@@ -211,7 +220,7 @@ export const useRegistration = () => {
             console.error('Organization registration start error:', error);
             const errorMessage = error.message || 'Registration failed. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -258,7 +267,7 @@ export const useRegistration = () => {
             console.error('Organization creation error:', error);
             const errorMessage = error.message || 'Failed to create organization. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -294,7 +303,7 @@ export const useRegistration = () => {
             console.error('User linking error:', error);
             const errorMessage = error.message || 'Failed to link account. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -346,12 +355,21 @@ export const useRegistration = () => {
 
             if (result.success) {
                 setRegistrationState(result.data);
+                let message;
+                const needsVerification = !profileData.googleCredential;
+                
+                if (needsVerification) {
+                    message = 'Account created! Please check your email to verify your account before signing in.';
+                } else {
+                    message = 'Organization created successfully!';
+                }
+                
                 return {
                     success: true,
                     completed: true,
                     registrationState: result.data,
-                    message: result.data.message,
-                    needsVerification: !profileData.googleCredential
+                    message: message,
+                    needsVerification: needsVerification
                 };
             } else {
                 throw new Error(result.error.message);
@@ -361,7 +379,7 @@ export const useRegistration = () => {
             console.error('Organization registration completion error:', error);
             const errorMessage = error.message || 'Failed to complete registration. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -379,11 +397,11 @@ export const useRegistration = () => {
             const result = await registrationService.getRegistrationState(userId);
             if (result.success) {
                 setRegistrationState(result.data);
-                
+
                 // Create state manager for additional context
                 const stateManager = registrationService.createRegistrationStateManager(userId);
                 await stateManager.loadState();
-                
+
                 return {
                     ...result.data,
                     progress: stateManager.getProgressPercentage(),
@@ -447,7 +465,7 @@ export const useRegistration = () => {
             console.error('Registration continuation error:', error);
             const errorMessage = error.message || 'Failed to continue registration. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -466,7 +484,7 @@ export const useRegistration = () => {
 
         try {
             const result = await registrationService.handleGoogleSignIn();
-            
+
             if (result.success) {
                 return {
                     success: true,
@@ -484,7 +502,7 @@ export const useRegistration = () => {
             console.error('Google Sign-In error:', error);
             const errorMessage = error.message || 'Google Sign-In failed. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -503,11 +521,11 @@ export const useRegistration = () => {
 
         try {
             const result = await registrationService.resetRegistrationToStep(userId, targetStep);
-            
+
             if (result.success) {
                 // Refresh registration state
                 await getRegistrationState(userId);
-                
+
                 return {
                     success: true,
                     message: result.data.message
@@ -520,7 +538,7 @@ export const useRegistration = () => {
             console.error('Registration reset error:', error);
             const errorMessage = error.message || 'Failed to reset registration. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -548,8 +566,8 @@ export const useRegistration = () => {
             }
 
             await sendEmailVerification(user);
-            
-            return { 
+
+            return {
                 success: true,
                 message: 'Verification email sent successfully. Please check your inbox.'
             };
@@ -557,7 +575,7 @@ export const useRegistration = () => {
             console.error('Resend verification error:', error);
             const errorMessage = error.message || 'Failed to send verification email. Please try again.';
             setError(errorMessage);
-            
+
             return {
                 success: false,
                 error: errorMessage
@@ -573,7 +591,7 @@ export const useRegistration = () => {
      */
     const registerWithEmail = async (userData) => {
         console.warn('registerWithEmail is deprecated. Use startIndividualRegistration/startOrganizationRegistration instead.');
-        
+
         // Determine flow based on account type
         if (userData.accountType === 'individual') {
             // Step 1: Start individual registration
@@ -643,7 +661,7 @@ export const useRegistration = () => {
      */
     const registerWithGoogle = async (userData, credential) => {
         console.warn('registerWithGoogle is deprecated. Use handleGoogleSignIn with start/complete methods instead.');
-        
+
         return await registerWithEmail({
             ...userData,
             googleCredential: credential
@@ -660,22 +678,22 @@ export const useRegistration = () => {
         createOrganization,
         linkUserToOrganization,
         completeOrganizationRegistration,
-        
+
         // State management
         getRegistrationState,
         continueRegistration,
         resetRegistrationToStep,
-        
+
         // Google authentication
         handleGoogleSignIn,
-        
+
         // Utility methods
         resendVerificationEmail,
-        
+
         // Legacy methods (deprecated)
         registerWithEmail,
         registerWithGoogle,
-        
+
         // State and utilities
         loading,
         error,
