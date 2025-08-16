@@ -61,7 +61,6 @@ export const AppProvider = ({ children }) => {
                 throw new Error('No authenticated user');
             }
 
-            // Use FirestoreService to get user profile
             const profileResult = await FirestoreService.getUserProfile(slices.auth.state.currentUser.uid);
             console.log('📋 Profile fetched:', profileResult);
 
@@ -93,7 +92,7 @@ export const AppProvider = ({ children }) => {
                     uid: slices.auth.state.currentUser.uid,
                     email: slices.auth.state.currentUser.email || '',
                     displayName: slices.auth.state.currentUser.displayName || '',
-                    accountType: 'individual', // Default to individual, not organization
+                    accountType: 'individual',
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     created_by: slices.auth.state.currentUser.uid,
@@ -242,7 +241,6 @@ export const AppProvider = ({ children }) => {
                                     uid: currentUser?.uid,
                                 });
 
-                                // Use FirestoreService.subscribeToUserTestSuites
                                 const subscriptionMethod = FirestoreService.subscribeToUserTestSuites(
                                     (fetchedSuites) => {
                                         const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
@@ -286,9 +284,30 @@ export const AppProvider = ({ children }) => {
                             setSuiteSubscriptionActive(true);
                             retryCount = 0;
 
+                            // Fixed suite activation logic - respects user's stored selection
                             if (result.data.length > 0 && !slices.suites.state.activeSuite) {
-                                console.log('Auto-activating first suite:', result.data[0].name);
-                                slices.suites.actions.activateSuite(result.data[0]);
+                                const userId = slices.auth.state.currentUser?.uid;
+                                const storedSuiteId = userId ? localStorage.getItem(`selectedSuite_${userId}`) : null;
+                                
+                                let suiteToActivate = null;
+                                
+                                if (storedSuiteId) {
+                                    suiteToActivate = result.data.find(suite => suite.id === storedSuiteId);
+                                    console.log('Found stored suite:', storedSuiteId, suiteToActivate ? 'EXISTS' : 'NOT FOUND');
+                                }
+                                
+                                if (!suiteToActivate) {
+                                    suiteToActivate = result.data[0];
+                                    console.log('Using first suite as fallback:', suiteToActivate.name);
+                                }
+                                
+                                console.log('Auto-activating suite:', suiteToActivate.name);
+                                slices.suites.actions.activateSuite(suiteToActivate);
+                                
+                                // Save the selection
+                                if (userId) {
+                                    localStorage.setItem(`selectedSuite_${userId}`, suiteToActivate.id);
+                                }
                             }
                         } else if (slices.suites.state.testSuites.length === 0 && retryCount < maxRetries) {
                             retryCount++;

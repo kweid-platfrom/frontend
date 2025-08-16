@@ -1,106 +1,125 @@
-// services/index.js - FIXED VERSION
+import { BaseFirestoreService } from './firestoreService';
 import { UserService } from './userService';
 import { OrganizationService } from './OrganizationService';
 import { TestSuiteService } from './TestSuiteService';
 import { AssetService } from './AssetService';
-import {
-    doc,
-    getDoc,
-    getDocs,
-    setDoc,
-    updateDoc,
-    deleteDoc,
-    addDoc,
-    collection,
-    query,
-    orderBy,
-    limit,
-    onSnapshot,
-    serverTimestamp,
-    writeBatch,
-} from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
-import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
-class FirestoreService {
+class FirestoreService extends BaseFirestoreService {
     constructor() {
-        this.db = db;
-        this.auth = auth;
-        this.unsubscribes = new Map();
-        
-        // Suite state management
-        this._currentSuiteId = null;
-        this._suiteStateCallbacks = new Set();
-        
-        // Initialize service instances
+        super();
+
         this.organization = new OrganizationService();
         this.testSuite = new TestSuiteService(this.organization);
         this.assets = new AssetService(this.testSuite);
-        
-        // Initialize UserService - this was missing proper initialization
         this.user = new UserService();
-        
-        // Initialize recordings methods
+
         this.recordings = {
             createRecording: (recordingData) => {
                 return this.assets.createRecording(recordingData.suiteId, recordingData);
             },
-            
             linkRecordingToBug: async (recordingId, bugId) => {
                 return { success: true, data: { recordingId, bugId } };
             },
-            
             subscribeToRecordings: (suiteId, callback, errorCallback) => {
                 return this.assets.subscribeToRecordings(suiteId, callback, errorCallback);
             }
         };
 
-        // Initialize reports methods
         this.reports = {
             getReports: async (orgId) => {
                 try {
+                    const hasAccess = await this.organization.validateOrganizationAccess(orgId, 'member');
+                    if (!hasAccess) {
+                        return {
+                            success: false,
+                            error: { message: 'Access denied. You are not a member of this organization.' }
+                        };
+                    }
                     return await this.organization.getReports?.(orgId) || { success: true, data: [] };
                 } catch (error) {
                     return { success: false, error: { message: error.message } };
                 }
             },
-            
             saveReport: async (reportData) => {
                 try {
+                    if (reportData.organizationId) {
+                        const hasAccess = await this.organization.validateOrganizationAccess(
+                            reportData.organizationId,
+                            'manager'
+                        );
+                        if (!hasAccess) {
+                            return {
+                                success: false,
+                                error: { message: 'Access denied. Manager role required to save reports.' }
+                            };
+                        }
+                    }
                     return await this.organization.saveReport?.(reportData) || { success: true, data: reportData };
                 } catch (error) {
                     return { success: false, error: { message: error.message } };
                 }
             },
-            
-            deleteReport: async (reportId) => {
+            deleteReport: async (reportId, organizationId) => {
                 try {
+                    if (organizationId) {
+                        const hasAccess = await this.organization.validateOrganizationAccess(
+                            organizationId,
+                            'admin'
+                        );
+                        if (!hasAccess) {
+                            return {
+                                success: false,
+                                error: { message: 'Access denied. Admin role required to delete reports.' }
+                            };
+                        }
+                    }
                     return await this.organization.deleteReport?.(reportId) || { success: true };
                 } catch (error) {
                     return { success: false, error: { message: error.message } };
                 }
             },
-            
             toggleSchedule: async ({ organizationId, enabled }) => {
                 try {
-                    return await this.organization.toggleSchedule?.({ organizationId, enabled }) || { success: true, data: { enabled } };
+                    const hasAccess = await this.organization.validateOrganizationAccess(
+                        organizationId,
+                        'admin'
+                    );
+                    if (!hasAccess) {
+                        return {
+                            success: false,
+                            error: { message: 'Access denied. Admin role required to manage report schedules.' }
+                        };
+                    }
+                    return await this.organization.toggleSchedule?.({ organizationId, enabled }) ||
+                        { success: true, data: { enabled } };
                 } catch (error) {
                     return { success: false, error: { message: error.message } };
                 }
             },
-            
             subscribeToTriggers: (orgId, callback) => {
                 try {
-                    return this.organization.subscribeToTriggers?.(orgId, callback) || (() => {});
+                    return this.organization.subscribeToTriggers?.(orgId, callback) || (() => { });
                 } catch (error) {
                     console.error('Error subscribing to triggers:', error);
-                    return () => {};
+                    return () => { };
                 }
             },
-            
             generatePDF: async (report) => {
                 try {
-                    return await this.organization.generatePDF?.(report) || { success: true, data: { url: `/pdf/${report.id}` } };
+                    if (report.organizationId) {
+                        const hasAccess = await this.organization.validateOrganizationAccess(
+                            report.organizationId,
+                            'member'
+                        );
+                        if (!hasAccess) {
+                            return {
+                                success: false,
+                                error: { message: 'Access denied. Organization membership required to generate PDFs.' }
+                            };
+                        }
+                    }
+                    return await this.organization.generatePDF?.(report) ||
+                        { success: true, data: { url: `/pdf/${report.id}` } };
                 } catch (error) {
                     return { success: false, error: { message: error.message } };
                 }
@@ -108,794 +127,356 @@ class FirestoreService {
         };
     }
 
-    // =================== REGISTRATION METHODS ===================
-    /**
-     * Complete user registration with atomic transaction
-     * Handles both individual and organization account types
-     */
-    async completeUserRegistration(registrationData) {
-        const {
-            userId,
-            email,
-            displayName,
-            firstName,
-            lastName,
-            accountType,
-            preferences,
-            organizationName,
-            organizationIndustry,
-            organizationSize
-        } = registrationData;
-
-        if (!userId) {
-            return { success: false, error: { message: 'User ID is required' } };
+    async createOrganization(orgData, userId = null) {
+        const currentUserId = userId || this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
         }
+        return await this.organization.createOrganization(orgData, currentUserId);
+    }
 
-        try {
-            console.log('🔄 Starting atomic registration transaction...', { userId, accountType });
-
-            const batch = writeBatch(this.db);
-            const timestamp = serverTimestamp();
-            const now = new Date(); // Use regular Date for array fields
-
-            // 1. Create user profile document
-            const userRef = this.createDocRef('users', userId);
-            const userProfileData = {
-                user_id: userId,
-                email: email,
-                display_name: displayName,
-                first_name: firstName,
-                last_name: lastName,
-                account_type: accountType,
-                role: accountType === 'organization' ? 'Admin' : 'member',
-                preferences: preferences || {},
-                contact_info: {
-                    email: email,
-                    phone: null
-                },
-                profile_picture: null,
-                account_memberships: [], // Initialize as empty array, populate below if needed
-                registrationCompleted: true,
-                created_at: timestamp,
-                updated_at: timestamp,
-                created_by: userId,
-                updated_by: userId
-            };
-
-            let organizationId = null;
-            let organizationData = null;
-
-            // 2. Handle organization-specific setup
-            if (accountType === 'organization') {
-                // Generate organization ID
-                organizationId = this.createDocRef('organizations', 'temp').id;
-
-                // Create organization document
-                const orgRef = this.createDocRef('organizations', organizationId);
-                organizationData = {
-                    id: organizationId,
-                    name: organizationName,
-                    description: `${organizationName} organization`,
-                    industry: organizationIndustry,
-                    size: organizationSize || 'small',
-                    ownerId: userId,
-                    settings: {
-                        allowPublicJoin: false,
-                        requireEmailVerification: true,
-                        defaultRole: 'member'
-                    },
-                    created_at: timestamp,
-                    updated_at: timestamp,
-                    created_by: userId,
-                    updated_by: userId
-                };
-                batch.set(orgRef, organizationData);
-
-                // Create organization member entry
-                const memberRef = this.createDocRef('organizations', organizationId, 'members', userId);
-                const memberData = {
-                    user_id: userId,
-                    email: email,
-                    display_name: displayName,
-                    role: 'Admin',
-                    status: 'active',
-                    permissions: ['all'], // Admin has all permissions - array of strings only
-                    joined_at: timestamp,
-                    created_at: timestamp,
-                    updated_at: timestamp
-                };
-                batch.set(memberRef, memberData);
-
-                // Create user membership reference
-                const userMembershipRef = this.createDocRef('userMemberships', userId, 'organizations', organizationId);
-                const userMembershipData = {
-                    org_id: organizationId,
-                    org_name: organizationName,
-                    user_id: userId,
-                    role: 'Admin',
-                    status: 'active',
-                    joined_at: timestamp,
-                    created_at: timestamp,
-                    updated_at: timestamp
-                };
-                batch.set(userMembershipRef, userMembershipData);
-
-                // FIXED: Populate account_memberships array with regular Date objects, not serverTimestamp
-                userProfileData.organizationId = organizationId;
-                userProfileData.organizationName = organizationName;
-                userProfileData.account_memberships = [{
-                    organization_id: organizationId,
-                    organization_name: organizationName,
-                    role: 'Admin',
-                    status: 'active',
-                    joined_at: now.toISOString() // Use ISO string instead of serverTimestamp()
-                }];
-            }
-
-            // Set the user profile document
-            batch.set(userRef, userProfileData);
-
-            // 3. Create subscription document
-            const subscriptionRef = this.createDocRef('subscriptions', userId);
-            const trialEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-            const subscriptionData = {
-                user_id: userId,
-                organization_id: organizationId,
-                plan: 'trial',
-                status: 'trial_active',
-                trial_starts_at: now.toISOString(),
-                trial_ends_at: trialEndDate.toISOString(),
-                authProvider: 'email',
-                isTrialActive: true,
-                daysRemainingInTrial: 30,
-                features: {
-                    maxSuites: accountType === 'organization' ? 10 : 5,
-                    maxTestCasesPerSuite: accountType === 'organization' ? 100 : 50,
-                    canCreateTestCases: true,
-                    canUseRecordings: true,
-                    canUseAutomation: true,
-                    canInviteTeam: accountType === 'organization',
-                    canExportReports: true,
-                    canCreateOrganizations: accountType === 'organization',
-                    advancedAnalytics: accountType === 'organization',
-                    prioritySupport: false,
-                    maxTeamMembers: accountType === 'organization' ? 10 : 1
-                },
-                created_at: timestamp,
-                updated_at: timestamp,
-                created_by: userId,
-                updated_by: userId
-            };
-            batch.set(subscriptionRef, subscriptionData);
-
-            // 4. Create account-specific document
-            if (accountType === 'individual') {
-                const individualRef = this.createDocRef('individualAccounts', userId);
-                const individualData = {
-                    user_id: userId,
-                    email: email,
-                    subscription_id: userId,
-                    subscription_status: 'trial_active',
-                    personal_workspace: {
-                        name: `${firstName}'s Workspace`,
-                        description: 'Personal testing workspace',
-                        created_at: now.toISOString() // Use ISO string in nested objects
-                    },
-                    created_at: timestamp,
-                    updated_at: timestamp
-                };
-                batch.set(individualRef, individualData);
-            }
-
-            // 5. Create initial activity log - FIXED: Only include defined values
-            const activityRef = this.createDocRef('activityLogs', userId, 'logs', 'registration');
-            const activityMetadata = {
-                account_type: accountType
-            };
-
-            // Only add organization fields if it's an organization account
-            if (accountType === 'organization' && organizationId && organizationName) {
-                activityMetadata.organization_id = organizationId;
-                activityMetadata.organization_name = organizationName;
-            }
-
-            const activityData = {
-                user_id: userId,
-                action: 'user_registered',
-                description: `User registered with ${accountType} account`,
-                metadata: activityMetadata,
-                timestamp: timestamp
-            };
-            batch.set(activityRef, activityData);
-
-            // 6. Commit all operations atomically
-            await batch.commit();
-            console.log('✅ Registration transaction completed successfully');
-
-            // 7. Return comprehensive result
-            return {
-                success: true,
-                data: {
-                    user: {
-                        id: userId,
-                        ...userProfileData
-                    },
-                    organization: organizationData,
-                    subscription: {
-                        id: userId,
-                        ...subscriptionData
-                    },
-                    accountType: accountType
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ Registration transaction failed:', error);
-            return this.handleFirestoreError(error, 'complete user registration');
+    async getOrganization(orgId) {
+        if (!orgId) {
+            return { success: false, error: { message: 'Organization ID is required' } };
         }
+        return await this.organization.getOrganization(orgId);
     }
 
-    /**
-     * Verify and activate user account after email verification
-     */
-    async activateUserAccount(userId) {
-        if (!userId) {
-            return { success: false, error: { message: 'User ID is required' } };
+    async updateOrganization(orgId, updateData) {
+        if (!orgId) {
+            return { success: false, error: { message: 'Organization ID is required' } };
         }
+        return await this.organization.updateOrganization(orgId, updateData);
+    }
 
-        try {
-            const batch = writeBatch(this.db);
-            const timestamp = serverTimestamp();
-
-            // Update user profile
-            const userRef = this.createDocRef('users', userId);
-            batch.update(userRef, {
-                emailVerified: true,
-                accountStatus: 'active',
-                verifiedAt: timestamp,
-                updated_at: timestamp
-            });
-
-            // Update subscription if exists
-            const subscriptionRef = this.createDocRef('subscriptions', userId);
-            batch.update(subscriptionRef, {
-                emailVerified: true,
-                updated_at: timestamp
-            });
-
-            // Log activation
-            const activityRef = this.createDocRef('activityLogs', userId, 'logs', `activation_${Date.now()}`);
-            batch.set(activityRef, {
-                user_id: userId,
-                action: 'account_activated',
-                description: 'User account activated after email verification',
-                timestamp: timestamp
-            });
-
-            await batch.commit();
-
-            return {
-                success: true,
-                message: 'Account activated successfully'
-            };
-        } catch (error) {
-            console.error('Account activation error:', error);
-            return this.handleFirestoreError(error, 'activate user account');
+    async deleteOrganization(orgId) {
+        if (!orgId) {
+            return { success: false, error: { message: 'Organization ID is required' } };
         }
+        return await this.organization.deleteOrganization(orgId);
     }
 
-    /**
-     * Clean up partial registration data if registration fails
-     */
-    async cleanupPartialRegistration(userId) {
-        if (!userId) return;
+    async getUserOrganizations(userId = null) {
+        return await this.organization.getUserOrganizations(userId);
+    }
 
-        try {
-            console.log('🧹 Cleaning up partial registration for user:', userId);
-
-            const batch = writeBatch(this.db);
-
-            // List of collections to clean
-            const collectionsToClean = [
-                'users',
-                'subscriptions',
-                'individualAccounts',
-                'userMemberships'
-            ];
-
-            for (const collectionName of collectionsToClean) {
-                try {
-                    const docRef = this.createDocRef(collectionName, userId);
-                    batch.delete(docRef);
-                } catch (error) {
-                    console.warn(`Could not delete ${collectionName}/${userId}:`, error);
-                }
-            }
-
-            await batch.commit();
-            console.log('✅ Cleanup completed');
-
-        } catch (error) {
-            console.error('Cleanup failed:', error);
+    async addOrganizationMember(orgId, memberData) {
+        if (!orgId || !memberData) {
+            return { success: false, error: { message: 'Organization ID and member data are required' } };
         }
+        return await this.organization.addOrganizationMember(orgId, memberData);
     }
 
-    // =================== BASE FIRESTORE METHODS ===================
-    getCurrentUserId() {
-        return this.auth.currentUser?.uid || null;
-    }
-
-    getCurrentUser() {
-        return this.auth.currentUser || null;
-    }
-
-    validateDocId(docId) {
-        if (!docId || docId === null || docId === undefined) {
-            return null;
+    async removeOrganizationMember(orgId, memberId) {
+        if (!orgId || !memberId) {
+            return { success: false, error: { message: 'Organization ID and member ID are required' } };
         }
-        const stringId = String(docId).trim();
-        if (stringId === '' || stringId === 'null' || stringId === 'undefined') {
-            return null;
+        return await this.organization.removeOrganizationMember(orgId, memberId);
+    }
+
+    async getOrganizationMembers(orgId) {
+        if (!orgId) {
+            return { success: false, error: { message: 'Organization ID is required' } };
         }
-        return stringId;
+        return await this.organization.getOrganizationMembers(orgId);
     }
 
-    createDocRef(collectionPath, ...pathSegments) {
-        const validSegments = pathSegments
-            .filter(segment => segment !== null && segment !== undefined && segment !== '')
-            .map(segment => {
-                const stringSegment = String(segment).trim();
-                if (stringSegment === '' || stringSegment === 'null' || stringSegment === 'undefined') {
-                    throw new Error(`Invalid path segment: ${segment}`);
-                }
-                return stringSegment;
-            });
-
-        if (validSegments.length === 0) {
-            throw new Error('Document ID is required');
-        }
-
-        return doc(this.db, collectionPath, ...validSegments);
-    }
-
-    createCollectionRef(collectionPath) {
-        if (!collectionPath || typeof collectionPath !== 'string') {
-            throw new Error('Collection path must be a non-empty string');
-        }
-        return collection(this.db, collectionPath);
-    }
-
-    handleFirestoreError(error, operation = 'operation') {
-        console.error(`Firestore ${operation} error:`, error);
-        const userMessage = getFirebaseErrorMessage(error);
-        return {
-            success: false,
-            error: {
-                code: error.code || 'unknown',
-                message: userMessage,
-                originalError: error
-            }
-        };
-    }
-
-    addCommonFields(data, isUpdate = false) {
-        const userId = this.getCurrentUserId();
-        const cleanData = JSON.parse(JSON.stringify(data, (key, value) => {
-            if (value === null || value === undefined) return undefined;
-            return value;
-        }));
-
-        const commonFields = {
-            updated_at: serverTimestamp(),
-            ...(userId && { updated_by: userId })
-        };
-
-        if (!isUpdate) {
-            commonFields.created_at = serverTimestamp();
-            if (userId) {
-                commonFields.created_by = userId;
-            }
-        }
-
-        return { ...cleanData, ...commonFields };
-    }
-
-    async createDocument(collectionPath, data, customDocId = null) {
-        try {
-            const collectionRef = this.createCollectionRef(collectionPath);
-            let docRef;
-            const validatedData = this.addCommonFields(data);
-
-            if (customDocId) {
-                const validDocId = this.validateDocId(customDocId);
-                if (!validDocId) {
-                    return { success: false, error: { message: 'Invalid custom document ID provided' } };
-                }
-                docRef = doc(collectionRef, validDocId);
-                await setDoc(docRef, validatedData);
-            } else {
-                docRef = await addDoc(collectionRef, validatedData);
-            }
-
-            return { success: true, data: { id: docRef.id, ...validatedData }, docId: docRef.id };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'create document');
-        }
-    }
-
-    async getDocument(collectionPath, docId) {
-        try {
-            const validDocId = this.validateDocId(docId);
-            if (!validDocId) {
-                return { success: false, error: { message: 'Invalid or missing document ID' } };
-            }
-            const docRef = this.createDocRef(collectionPath, validDocId);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists()) {
-                return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
-            }
-            return { success: false, error: { message: 'Document not found' } };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'get document');
-        }
-    }
-
-    async updateDocument(collectionPath, docId, data) {
-        try {
-            const validDocId = this.validateDocId(docId);
-            if (!validDocId) {
-                return { success: false, error: { message: 'Invalid or missing document ID' } };
-            }
-            const docRef = this.createDocRef(collectionPath, validDocId);
-            const updateData = this.addCommonFields(data, true);
-            await updateDoc(docRef, updateData);
-            return { success: true, data: updateData };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'update document');
-        }
-    }
-
-    async deleteDocument(collectionPath, docId) {
-        try {
-            const validDocId = this.validateDocId(docId);
-            if (!validDocId) {
-                return { success: false, error: { message: 'Invalid or missing document ID' } };
-            }
-            const docRef = this.createDocRef(collectionPath, validDocId);
-            await deleteDoc(docRef);
-            return { success: true };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'delete document');
-        }
-    }
-
-    async queryDocuments(collectionPath, constraints = [], orderByField = null, limitCount = null) {
-        try {
-            const colRef = this.createCollectionRef(collectionPath);
-            let q = colRef;
-
-            if (constraints.length > 0) {
-                q = query(q, ...constraints);
-            }
-            if (orderByField) {
-                q = query(q, orderBy(orderByField));
-            }
-            if (limitCount) {
-                q = query(q, limit(limitCount));
-            }
-
-            const querySnapshot = await getDocs(q);
-            const documents = [];
-            querySnapshot.forEach((doc) => {
-                documents.push({ id: doc.id, ...doc.data() });
-            });
-
-            return { success: true, data: documents };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'query documents');
-        }
-    }
-
-    subscribeToDocument(collectionPath, docId, callback, errorCallback = null) {
-        const validDocId = this.validateDocId(docId);
-        if (!validDocId) {
-            errorCallback?.({ success: false, error: { message: 'Invalid or missing document ID' } });
-            return () => { };
-        }
-
-        const docRef = this.createDocRef(collectionPath, validDocId);
-        const unsubscribe = onSnapshot(
-            docRef,
-            (doc) => {
-                if (doc.exists()) {
-                    callback({ id: doc.id, ...doc.data() });
-                } else {
-                    callback(null);
-                }
-            },
-            (error) => {
-                errorCallback?.(this.handleFirestoreError(error, 'subscribe to document'));
-            }
-        );
-
-        const subscriptionKey = `${collectionPath}/${validDocId}`;
-        this.unsubscribes.set(subscriptionKey, unsubscribe);
-        return unsubscribe;
-    }
-
-    subscribeToCollection(collectionPath, constraints = [], callback, errorCallback = null) {
-        const colRef = this.createCollectionRef(collectionPath);
-        let q = colRef;
-
-        if (constraints.length > 0) {
-            q = query(q, ...constraints);
-        }
-
-        const unsubscribe = onSnapshot(
-            q,
-            (querySnapshot) => {
-                const documents = [];
-                querySnapshot.forEach((doc) => {
-                    documents.push({ id: doc.id, ...doc.data() });
-                });
-                callback(documents);
-            },
-            (error) => {
-                errorCallback?.(this.handleFirestoreError(error, 'subscribe to collection'));
-            }
-        );
-
-        const subscriptionKey = `${collectionPath}_collection`;
-        this.unsubscribes.set(subscriptionKey, unsubscribe);
-        return unsubscribe;
-    }
-
-    async executeBatch(operations) {
-        try {
-            const batch = writeBatch(this.db);
-            operations.forEach(operation => {
-                const { type, ref, data } = operation;
-                switch (type) {
-                    case 'set':
-                        batch.set(ref, this.addCommonFields(data));
-                        break;
-                    case 'update':
-                        batch.update(ref, this.addCommonFields(data, true));
-                        break;
-                    case 'delete':
-                        batch.delete(ref);
-                        break;
-                }
-            });
-            await batch.commit();
-            return { success: true };
-        } catch (error) {
-            return this.handleFirestoreError(error, 'execute batch operations');
-        }
-    }
-
-    async getAutomationsBySuite(suiteId) {
-        try {
-            const validSuiteId = this.validateDocId(suiteId);
-            if (!validSuiteId) {
-                return { success: false, error: { message: 'Invalid suite ID' } };
-            }
-
-            const result = await this.queryDocuments('automations', [
-                ['suiteId', '==', validSuiteId]
-            ]);
-
-            return result;
-        } catch (error) {
-            return this.handleFirestoreError(error, 'get automations by suite');
-        }
-    }
-
-    // =================== SUITE STATE MANAGEMENT ===================
-    getCurrentSuiteId() {
-        if (this._currentSuiteId) {
-            return this._currentSuiteId;
-        }
-
-        // Try to get from sessionStorage first (for current session)
-        if (typeof window !== 'undefined') {
-            const sessionSuiteId = sessionStorage.getItem('currentSuiteId');
-            if (sessionSuiteId && sessionSuiteId !== 'null' && sessionSuiteId !== 'undefined') {
-                this._currentSuiteId = sessionSuiteId;
-                return sessionSuiteId;
-            }
-
-            // Fallback to localStorage for persistence across sessions
-            const localSuiteId = localStorage.getItem('currentSuiteId');
-            if (localSuiteId && localSuiteId !== 'null' && localSuiteId !== 'undefined') {
-                this._currentSuiteId = localSuiteId;
-                // Also set in session storage
-                sessionStorage.setItem('currentSuiteId', localSuiteId);
-                return localSuiteId;
-            }
-        }
-
-        return null;
-    }
-
-    setCurrentSuiteId(suiteId) {
-        const validSuiteId = this.validateDocId(suiteId);
-        this._currentSuiteId = validSuiteId;
-
-        if (typeof window !== 'undefined') {
-            if (validSuiteId) {
-                sessionStorage.setItem('currentSuiteId', validSuiteId);
-                localStorage.setItem('currentSuiteId', validSuiteId);
-            } else {
-                sessionStorage.removeItem('currentSuiteId');
-                localStorage.removeItem('currentSuiteId');
-            }
-        }
-
-        // Notify listeners about suite change
-        this._notifySuiteChange(validSuiteId);
-        return validSuiteId;
-    }
-
-    clearCurrentSuiteId() {
-        this._currentSuiteId = null;
-        if (typeof window !== 'undefined') {
-            sessionStorage.removeItem('currentSuiteId');
-            localStorage.removeItem('currentSuiteId');
-        }
-        this._notifySuiteChange(null);
-    }
-
-    onSuiteChange(callback) {
-        this._suiteStateCallbacks.add(callback);
-        // Return unsubscribe function
-        return () => {
-            this._suiteStateCallbacks.delete(callback);
-        };
-    }
-
-    _notifySuiteChange(suiteId) {
-        this._suiteStateCallbacks.forEach(callback => {
-            try {
-                callback(suiteId);
-            } catch (error) {
-                console.error('Error in suite change callback:', error);
-            }
-        });
-    }
-
-    // =================== USER SERVICE METHODS ===================
-    // Properly expose UserService methods
     getUserProfile(userId) {
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
+        }
         return this.user.getUserProfile(userId);
     }
 
     createOrUpdateUserProfile(userData) {
-        return this.user.createOrUpdateUserProfile(userData);
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
+        }
+        if (userData.user_id && userData.user_id !== currentUserId) {
+            return { success: false, error: { message: 'Cannot update another user\'s profile' } };
+        }
+        return this.user.createOrUpdateUserProfile({
+            ...userData,
+            user_id: currentUserId
+        });
     }
 
-    updateOrganizationMembership(userId, organizationId, role) {
+    async updateOrganizationMembership(userId, organizationId, role) {
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
+        }
+        const hasAccess = await this.organization.validateOrganizationAccess(organizationId, 'admin');
+        if (!hasAccess) {
+            return {
+                success: false,
+                error: { message: 'Access denied. Admin role required to update memberships.' }
+            };
+        }
         return this.user.updateOrganizationMembership(userId, organizationId, role);
     }
 
-    hasOrganizationRole(userId, organizationId, requiredRole) {
+    async hasOrganizationRole(userId, organizationId, requiredRole) {
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return false;
+        }
+        if (userId === currentUserId) {
+            return this.user.hasOrganizationRole(userId, organizationId, requiredRole);
+        }
+        const hasAccess = await this.organization.validateOrganizationAccess(organizationId, 'admin');
+        if (!hasAccess) {
+            return false;
+        }
         return this.user.hasOrganizationRole(userId, organizationId, requiredRole);
     }
 
-    // =================== TEST SUITE SERVICE METHODS ===================
     subscribeToUserTestSuites(onSuccess, onError) {
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            onError?.({ success: false, error: { message: 'Authentication required' } });
+            return () => { };
+        }
         return this.testSuite.subscribeToUserTestSuites(onSuccess, onError);
     }
 
-    createTestSuite(suiteData) {
-        return this.testSuite.createTestSuite(suiteData);
+    async createTestSuite(suiteData) {
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
+        }
+        if (!suiteData.name || suiteData.name.trim().length < 2 || suiteData.name.trim().length > 100) {
+            return {
+                success: false,
+                error: { message: 'Test suite name must be between 2 and 100 characters' }
+            };
+        }
+        if (!suiteData.ownerType || !['individual', 'organization'].includes(suiteData.ownerType)) {
+            return {
+                success: false,
+                error: { message: 'Owner type must be either "individual" or "organization"' }
+            };
+        }
+        if (suiteData.ownerType === 'organization') {
+            if (!suiteData.ownerId) {
+                return {
+                    success: false,
+                    error: { message: 'Organization ID is required for organization test suites' }
+                };
+            }
+            const hasAccess = await this.organization.validateOrganizationAccess(
+                suiteData.ownerId,
+                'manager'
+            );
+            if (!hasAccess) {
+                return {
+                    success: false,
+                    error: { message: 'Access denied. Manager role required to create organization test suites.' }
+                };
+            }
+        } else if (suiteData.ownerType === 'individual') {
+            if (suiteData.ownerId !== currentUserId) {
+                return {
+                    success: false,
+                    error: { message: 'Cannot create test suite for another user' }
+                };
+            }
+        }
+        const alignedSuiteData = {
+            ...suiteData,
+            name: suiteData.name.trim(),
+            created_by: currentUserId,
+            access_control: {
+                ownerType: suiteData.ownerType,
+                ownerId: suiteData.ownerId
+            },
+            admins: [currentUserId],
+            members: [currentUserId]
+        };
+        return this.testSuite.createTestSuite(alignedSuiteData);
     }
 
-    // =================== ASSET SERVICE METHODS ===================
-    // Asset creation methods
-    createBug(suiteId, bugData, sprintId = null) {
+    async validateSuiteAccess(suiteId, requiredPermission = 'read') {
+        if (!suiteId) {
+            return { success: false, error: { message: 'Suite ID is required' } };
+        }
+        try {
+            const suiteDoc = await this.getDocument('testSuites', suiteId);
+            if (!suiteDoc.success) {
+                return { success: false, error: { message: 'Test suite not found' } };
+            }
+            const suiteData = suiteDoc.data;
+            const currentUserId = this.getCurrentUserId();
+            if (suiteData.ownerType === 'individual' && suiteData.ownerId === currentUserId) {
+                return { success: true };
+            }
+            if (suiteData.ownerType === 'organization') {
+                const requiredRole = requiredPermission === 'write' ? 'manager' : 'member';
+                const hasAccess = await this.organization.validateOrganizationAccess(
+                    suiteData.ownerId,
+                    requiredRole
+                );
+                if (hasAccess) {
+                    return { success: true };
+                }
+            }
+            if (suiteData.members && suiteData.members.includes(currentUserId)) {
+                return { success: true };
+            }
+            if (suiteData.admins && suiteData.admins.includes(currentUserId)) {
+                return { success: true };
+            }
+            return {
+                success: false,
+                error: { message: 'Access denied. You do not have permission to access this test suite.' }
+            };
+        } catch (error) {
+            return { success: false, error: { message: `Failed to validate suite access: ${error.message}` } };
+        }
+    }
+
+    async createBug(suiteId, bugData, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.createBug(suiteId, bugData, sprintId);
     }
 
-    createTestCase(suiteId, testCaseData, sprintId = null) {
+    async createTestCase(suiteId, testCaseData, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.createTestCase(suiteId, testCaseData, sprintId);
     }
 
-    createRecording(suiteId, recordingData, sprintId = null) {
+    async createRecording(suiteId, recordingData, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.createRecording(suiteId, recordingData, sprintId);
     }
 
-    createSprint(suiteId, sprintData) {
+    async createSprint(suiteId, sprintData) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.createSprint(suiteId, sprintData);
     }
 
-    // Asset update methods
-    updateBug(bugId, updates, suiteId = null, sprintId = null) {
+    async updateBug(bugId, updates, suiteId = null, sprintId = null) {
+        if (suiteId) {
+            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+            if (!accessCheck.success) return accessCheck;
+        }
         return this.assets.updateBug(bugId, updates, suiteId, sprintId);
     }
 
-    updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
+    async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
+        if (suiteId) {
+            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+            if (!accessCheck.success) return accessCheck;
+        }
         return this.assets.updateTestCase(testCaseId, updates, suiteId, sprintId);
     }
 
-    updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
+    async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
+        if (suiteId) {
+            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+            if (!accessCheck.success) return accessCheck;
+        }
         return this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
     }
 
-    updateSprint(sprintId, updates, suiteId = null) {
+    async updateSprint(sprintId, updates, suiteId = null) {
+        if (suiteId) {
+            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+            if (!accessCheck.success) return accessCheck;
+        }
         return this.assets.updateSprint(sprintId, updates, suiteId);
     }
 
-    // Asset deletion methods
-    deleteBug(bugId, suiteId, sprintId = null) {
+    async deleteBug(bugId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.deleteBug(bugId, suiteId, sprintId);
     }
 
-    deleteTestCase(testCaseId, suiteId, sprintId = null) {
+    async deleteTestCase(testCaseId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.deleteTestCase(testCaseId, suiteId, sprintId);
     }
 
-    deleteRecording(recordingId, suiteId, sprintId = null) {
+    async deleteRecording(recordingId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.deleteRecording(recordingId, suiteId, sprintId);
     }
 
-    deleteSprint(sprintId, suiteId) {
+    async deleteSprint(sprintId, suiteId) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.deleteSprint(sprintId, suiteId);
     }
 
-    // Asset retrieval methods
-    getBug(bugId, suiteId, sprintId = null) {
+    async getBug(bugId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.getBug(bugId, suiteId, sprintId);
     }
 
-    getTestCase(testCaseId, suiteId, sprintId = null) {
+    async getTestCase(testCaseId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.getTestCase(testCaseId, suiteId, sprintId);
     }
 
-    getRecording(recordingId, suiteId, sprintId = null) {
+    async getRecording(recordingId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.getRecording(recordingId, suiteId, sprintId);
     }
 
-    getSprint(sprintId, suiteId) {
+    async getSprint(sprintId, suiteId) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.getSprint(sprintId, suiteId);
     }
 
-    getTestCases(suiteId, sprintId = null) {
+    async getTestCases(suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.getTestCases(suiteId, sprintId);
     }
 
-    getBugs(suiteId, sprintId = null) {
+    async getBugs(suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
         return this.assets.getBugs(suiteId, sprintId);
     }
 
-    // Batch operations
-    batchLinkTestCasesToBug(bugId, testCaseIds) {
+    async batchLinkTestCasesToBug(bugId, testCaseIds) {
         return this.assets.batchLinkTestCasesToBug(bugId, testCaseIds);
     }
 
-    batchUnlinkTestCaseFromBug(bugId, testCaseId) {
+    async batchUnlinkTestCaseFromBug(bugId, testCaseId) {
         return this.assets.batchUnlinkTestCaseFromBug(bugId, testCaseId);
     }
 
-    batchLinkBugsToTestCase(testCaseId, bugIds) {
+    async batchLinkBugsToTestCase(testCaseId, bugIds) {
         return this.assets.batchLinkBugsToTestCase(testCaseId, bugIds);
     }
 
-    batchUnlinkBugFromTestCase(testCaseId, bugId) {
+    async batchUnlinkBugFromTestCase(testCaseId, bugId) {
         return this.assets.batchUnlinkBugFromTestCase(testCaseId, bugId);
     }
 
-    addTestCasesToSprint(sprintId, testCaseIds) {
+    async addTestCasesToSprint(sprintId, testCaseIds) {
         return this.assets.addTestCasesToSprint(sprintId, testCaseIds);
     }
 
-    addBugsToSprint(sprintId, bugIds) {
+    async addBugsToSprint(sprintId, bugIds) {
         return this.assets.addBugsToSprint(sprintId, bugIds);
     }
 
-    // Subscription methods
     subscribeToTestCases(suiteId, onSuccess, onError) {
         return this.assets.subscribeToTestCases(suiteId, onSuccess, onError);
     }
@@ -912,22 +493,12 @@ class FirestoreService {
         return this.assets.subscribeToSprints(suiteId, onSuccess, onError);
     }
 
-    unsubscribeAll() {
-        this.unsubscribes.forEach((unsubscribe) => {
-            unsubscribe();
-        });
-        this.unsubscribes.clear();
-    }
-
-    // =================== CLEANUP ===================
     cleanup() {
+        super.cleanup();
         this.user?.cleanup?.();
         this.organization?.cleanup?.();
         this.testSuite?.cleanup?.();
         this.assets?.cleanup?.();
-        this.unsubscribeAll();
-        this._suiteStateCallbacks.clear();
-        this._currentSuiteId = null;
     }
 }
 
