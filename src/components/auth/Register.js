@@ -52,7 +52,7 @@ const Register = ({ onSwitchToLogin }) => {
             {/* Additional info for verification if needed */}
             {successMessage.includes('verify') && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
-                    <div className="text-sm text-blue-800">
+                    <div className="text-sm text-teal-700">
                         <p className="font-medium mb-2">Next steps:</p>
                         <ul className="list-disc list-inside space-y-1">
                             <li>Check your email inbox for a verification link</li>
