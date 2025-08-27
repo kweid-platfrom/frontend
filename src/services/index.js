@@ -233,6 +233,15 @@ class FirestoreService extends BaseFirestoreService {
         return this.user.hasOrganizationRole(userId, organizationId, requiredRole);
     }
 
+    // FIXED: Aligned with TestSuiteService methods
+    async getUserTestSuites() {
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
+        }
+        return await this.testSuite.getUserTestSuites();
+    }
+
     subscribeToUserTestSuites(onSuccess, onError) {
         const currentUserId = this.getCurrentUserId();
         if (!currentUserId) {
@@ -247,6 +256,8 @@ class FirestoreService extends BaseFirestoreService {
         if (!currentUserId) {
             return { success: false, error: { message: 'Authentication required' } };
         }
+        
+        // Basic validation
         if (!suiteData.name || suiteData.name.trim().length < 2 || suiteData.name.trim().length > 100) {
             return {
                 success: false,
@@ -259,6 +270,8 @@ class FirestoreService extends BaseFirestoreService {
                 error: { message: 'Owner type must be either "individual" or "organization"' }
             };
         }
+
+        // Organization-specific validation
         if (suiteData.ownerType === 'organization') {
             if (!suiteData.ownerId) {
                 return {
@@ -284,54 +297,47 @@ class FirestoreService extends BaseFirestoreService {
                 };
             }
         }
-        const alignedSuiteData = {
+
+        // Prepare suite data and delegate to TestSuiteService
+        const preparedSuiteData = {
             ...suiteData,
             name: suiteData.name.trim(),
-            created_by: currentUserId,
+            // Ensure these fields are set for TestSuiteService
             access_control: {
                 ownerType: suiteData.ownerType,
-                ownerId: suiteData.ownerId
+                ownerId: suiteData.ownerId,
+                admins: suiteData.access_control?.admins || [currentUserId],
+                members: suiteData.access_control?.members || [currentUserId],
+                permissions_matrix: suiteData.access_control?.permissions_matrix || {}
             },
-            admins: [currentUserId],
-            members: [currentUserId]
+            admins: suiteData.admins?.includes(currentUserId) ? suiteData.admins : [...(suiteData.admins || []), currentUserId],
+            members: suiteData.members?.includes(currentUserId) ? suiteData.members : [...(suiteData.members || []), currentUserId]
         };
-        return this.testSuite.createTestSuite(alignedSuiteData);
+
+        return await this.testSuite.createTestSuite(preparedSuiteData);
     }
 
+    // FIXED: Use TestSuiteService's validation method instead of custom logic
     async validateSuiteAccess(suiteId, requiredPermission = 'read') {
         if (!suiteId) {
             return { success: false, error: { message: 'Suite ID is required' } };
         }
+
+        const currentUserId = this.getCurrentUserId();
+        if (!currentUserId) {
+            return { success: false, error: { message: 'Authentication required' } };
+        }
+
         try {
-            const suiteDoc = await this.getDocument('testSuites', suiteId);
-            if (!suiteDoc.success) {
-                return { success: false, error: { message: 'Test suite not found' } };
-            }
-            const suiteData = suiteDoc.data;
-            const currentUserId = this.getCurrentUserId();
-            if (suiteData.ownerType === 'individual' && suiteData.ownerId === currentUserId) {
+            const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, requiredPermission);
+            if (hasAccess) {
                 return { success: true };
+            } else {
+                return {
+                    success: false,
+                    error: { message: 'Access denied. You do not have permission to access this test suite.' }
+                };
             }
-            if (suiteData.ownerType === 'organization') {
-                const requiredRole = requiredPermission === 'write' ? 'manager' : 'member';
-                const hasAccess = await this.organization.validateOrganizationAccess(
-                    suiteData.ownerId,
-                    requiredRole
-                );
-                if (hasAccess) {
-                    return { success: true };
-                }
-            }
-            if (suiteData.members && suiteData.members.includes(currentUserId)) {
-                return { success: true };
-            }
-            if (suiteData.admins && suiteData.admins.includes(currentUserId)) {
-                return { success: true };
-            }
-            return {
-                success: false,
-                error: { message: 'Access denied. You do not have permission to access this test suite.' }
-            };
         } catch (error) {
             return { success: false, error: { message: `Failed to validate suite access: ${error.message}` } };
         }

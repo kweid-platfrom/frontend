@@ -229,109 +229,99 @@ export const AppProvider = ({ children }) => {
                 const retryDelay = 2000;
 
                 const setupSuiteSubscription = () => {
-                    handleFirebaseOperation(
-                        () =>
-                            new Promise((resolve, reject) => {
-                                console.log(`Setting up suite subscription (attempt ${retryCount + 1}/${maxRetries + 1})`);
-                                const currentUser = slices.auth.state.currentUser;
-                                const accountType = slices.auth.state.accountType || currentUser?.accountType;
-                                console.log('Subscription setup details:', {
+                    console.log(`Setting up suite subscription (attempt ${retryCount + 1}/${maxRetries + 1})`);
+                    const currentUser = slices.auth.state.currentUser;
+                    const accountType = slices.auth.state.accountType || currentUser?.accountType;
+                    console.log('Subscription setup details:', {
+                        accountType,
+                        organizationId: currentUser?.organizationId,
+                        uid: currentUser?.uid,
+                    });
+
+                    // FIXED: Proper error handling and subscription setup
+                    try {
+                        const unsubscribe = FirestoreService.subscribeToUserTestSuites(
+                            (fetchedSuites) => {
+                                console.log('Suite subscription callback triggered');
+                                const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
+                                console.log('Suites fetched successfully:', {
+                                    count: safeSuites.length,
                                     accountType,
-                                    organizationId: currentUser?.organizationId,
-                                    uid: currentUser?.uid,
+                                    suites: safeSuites.map((s) => ({
+                                        id: s.id,
+                                        name: s.name,
+                                        ownerType: s.ownerType,
+                                        ownerId: s.ownerId,
+                                        organizationId: s.organizationId,
+                                    })),
                                 });
 
-                                const subscriptionMethod = FirestoreService.subscribeToUserTestSuites(
-                                    (fetchedSuites) => {
-                                        const safeSuites = Array.isArray(fetchedSuites) ? fetchedSuites : [];
-                                        console.log('Suites fetched successfully:', {
-                                            count: safeSuites.length,
-                                            accountType,
-                                            suites: safeSuites.map((s) => ({
-                                                id: s.id,
-                                                name: s.name,
-                                                ownerType: s.ownerType,
-                                                ownerId: s.ownerId,
-                                                organizationId: s.organizationId,
-                                            })),
+                                // Update state with fetched suites
+                                slices.suites.actions.loadSuitesSuccess(safeSuites);
+                                setSuitesLoaded(true);
+                                setSuiteSubscriptionActive(true);
+                                retryCount = 0; // Reset retry count on success
+
+                                // Auto-activate first suite if none is active
+                                if (safeSuites.length > 0 && !slices.suites.state.activeSuite) {
+                                    console.log('Auto-activating first suite:', safeSuites[0].name);
+                                    slices.suites.actions.activateSuite(safeSuites[0]);
+                                }
+                            },
+                            (error) => {
+                                console.error('Suite subscription error:', error);
+                                const errorMessage = getFirebaseErrorMessage(error);
+                                
+                                // FIXED: Better error handling - don't retry on auth errors
+                                if (error?.code === 'permission-denied' || error?.code === 'unauthenticated') {
+                                    console.log('Authentication/permission error, not retrying');
+                                    slices.suites.actions.loadSuitesSuccess([]);
+                                    setSuitesLoaded(true);
+                                    setSuiteSubscriptionActive(false);
+                                    return;
+                                }
+
+                                // Retry on other errors
+                                if (retryCount < maxRetries) {
+                                    retryCount++;
+                                    console.log(`Retrying suite subscription in ${retryDelay * retryCount}ms (attempt ${retryCount}/${maxRetries})`);
+                                    retryTimeoutRef.current = setTimeout(setupSuiteSubscription, retryDelay * retryCount);
+                                } else {
+                                    console.error('Max retries exceeded for suite subscription');
+                                    slices.suites.actions.loadSuitesSuccess([]);
+                                    setSuitesLoaded(true);
+                                    setSuiteSubscriptionActive(false);
+                                    
+                                    if (slices.suites.state.testSuites.length === 0) {
+                                        slices.ui.actions.showNotification?.({
+                                            id: 'suite-subscription-error',
+                                            type: 'error',
+                                            message: `Failed to load test suites: ${errorMessage}`,
+                                            duration: 5000,
                                         });
-                                        resolve(safeSuites);
-                                    },
-                                    (error) => reject(error)
-                                );
-                                unsubscribeSuitesRef.current = subscriptionMethod;
-                            }),
-                        'Suites loaded successfully',
-                        (errorMessage) => {
-                            if (
-                                slices.suites.state.testSuites.length === 0 &&
-                                errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })
-                            ) {
-                                slices.ui.actions.showNotification?.({
-                                    id: 'suite-subscription-error',
-                                    type: 'error',
-                                    message: errorMessage,
-                                    duration: 5000,
-                                });
-                            } else {
-                                console.debug('Ignoring error as suites are already loaded or permission denied:', errorMessage);
+                                    }
+                                }
                             }
-                        }
-                    ).then((result) => {
-                        if (result.success) {
-                            slices.suites.actions.loadSuitesSuccess(result.data);
-                            setSuitesLoaded(true);
-                            setSuiteSubscriptionActive(true);
-                            retryCount = 0;
+                        );
 
-                            // Fixed suite activation logic - respects user's stored selection
-                            if (result.data.length > 0 && !slices.suites.state.activeSuite) {
-                                const userId = slices.auth.state.currentUser?.uid;
-                                const storedSuiteId = userId ? localStorage.getItem(`selectedSuite_${userId}`) : null;
-                                
-                                let suiteToActivate = null;
-                                
-                                if (storedSuiteId) {
-                                    suiteToActivate = result.data.find(suite => suite.id === storedSuiteId);
-                                    console.log('Found stored suite:', storedSuiteId, suiteToActivate ? 'EXISTS' : 'NOT FOUND');
-                                }
-                                
-                                if (!suiteToActivate) {
-                                    suiteToActivate = result.data[0];
-                                    console.log('Using first suite as fallback:', suiteToActivate.name);
-                                }
-                                
-                                console.log('Auto-activating suite:', suiteToActivate.name);
-                                slices.suites.actions.activateSuite(suiteToActivate);
-                                
-                                // Save the selection
-                                if (userId) {
-                                    localStorage.setItem(`selectedSuite_${userId}`, suiteToActivate.id);
-                                }
-                            }
-                        } else if (slices.suites.state.testSuites.length === 0 && retryCount < maxRetries) {
-                            retryCount++;
-                            console.log(`Retrying suite subscription in ${retryDelay * retryCount}ms (attempt ${retryCount}/${maxRetries})`);
-                            retryTimeoutRef.current = setTimeout(setupSuiteSubscription, retryDelay * retryCount);
-                        } else {
-                            slices.suites.actions.loadSuitesSuccess([]);
-                            setSuitesLoaded(true);
-                            setSuiteSubscriptionActive(false);
-                        }
-                    }).catch((error) => {
-                        console.error('Unexpected error setting up suite subscription:', error);
+                        // Store unsubscribe function
+                        unsubscribeSuitesRef.current = unsubscribe;
+
+                    } catch (error) {
+                        console.error('Error setting up suite subscription:', error);
                         slices.suites.actions.loadSuitesSuccess([]);
                         setSuitesLoaded(true);
                         setSuiteSubscriptionActive(false);
                         slices.ui.actions.showNotification?.({
-                            id: 'suite-subscription-unexpected-error',
+                            id: 'suite-subscription-setup-error',
                             type: 'error',
-                            message: getFirebaseErrorMessage(error),
+                            message: `Failed to set up suite subscription: ${getFirebaseErrorMessage(error)}`,
                             duration: 5000,
                         });
-                    });
+                    }
                 };
 
+                // FIXED: Check subscription status properly
                 if (slices.subscription.state.isTrialActive || slices.subscription.state.isSubscriptionActive) {
                     setupSuiteSubscription();
                 } else {
@@ -422,41 +412,44 @@ export const AppProvider = ({ children }) => {
         });
         assetUnsubscribersRef.current = {};
 
+        // FIXED: Align with FirestoreService method names
         const subscribeAsset = (type, loadSuccess) => {
-            return handleFirebaseOperation(
-                () =>
-                    new Promise((resolve, reject) => {
-                        assetUnsubscribersRef.current[type] = FirestoreService[`subscribeTo${type}`](
-                            suiteId,
-                            (assets) => {
-                                const safeAssets = Array.isArray(assets) ? assets : [];
-                                console.log(`${type} loaded:`, safeAssets.length);
-                                resolve(safeAssets);
-                            },
-                            (error) => reject(error)
-                        );
-                    }),
-                `${type} loaded successfully`,
-                (errorMessage) => {
-                    if (errorMessage !== getFirebaseErrorMessage({ code: 'permission-denied' })) {
-                        slices.ui.actions.showNotification?.({
-                            id: `${type.toLowerCase()}-subscription-error`,
-                            type: 'error',
-                            message: `Failed to load ${type.toLowerCase()}: ${errorMessage}`,
-                            duration: 5000,
-                        });
-                    }
-                }
-            ).then((result) => {
-                if (result.success) {
-                    loadSuccess(result.data);
-                } else {
+            try {
+                const methodName = `subscribeTo${type}`;
+                if (typeof FirestoreService[methodName] !== 'function') {
+                    console.error(`FirestoreService.${methodName} is not a function`);
                     loadSuccess([]);
+                    return;
                 }
-            }).catch((error) => {
-                console.error(`Error setting up ${type.toLowerCase()} subscription:`, error);
+
+                assetUnsubscribersRef.current[type] = FirestoreService[methodName](
+                    suiteId,
+                    (assets) => {
+                        const safeAssets = Array.isArray(assets) ? assets : [];
+                        console.log(`${type} loaded:`, safeAssets.length);
+                        loadSuccess(safeAssets);
+                    },
+                    (error) => {
+                        console.error(`Error loading ${type}:`, error);
+                        const errorMessage = getFirebaseErrorMessage(error);
+                        
+                        // Only show error notifications for non-permission errors
+                        if (error?.code !== 'permission-denied') {
+                            slices.ui.actions.showNotification?.({
+                                id: `${type.toLowerCase()}-subscription-error`,
+                                type: 'error',
+                                message: `Failed to load ${type.toLowerCase()}: ${errorMessage}`,
+                                duration: 5000,
+                            });
+                        }
+                        
+                        loadSuccess([]); // Load empty array on error
+                    }
+                );
+            } catch (error) {
+                console.error(`Error setting up ${type} subscription:`, error);
                 loadSuccess([]);
-            });
+            }
         };
 
         subscribeAsset('TestCases', slices.testCases.actions.loadTestCasesSuccess);
