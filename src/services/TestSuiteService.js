@@ -1,4 +1,4 @@
-import { BaseFirestoreService } from './firestoreService'; // Fixed import
+import { BaseFirestoreService } from './firestoreService';
 import { query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
@@ -24,15 +24,18 @@ export class TestSuiteService extends BaseFirestoreService {
 
             const suiteData = suiteDoc.data;
 
+            // Individual ownership
             if (suiteData.ownerType === 'individual' && suiteData.ownerId === userId) {
                 return true;
             }
 
+            // Organization ownership - check organization membership
             if (suiteData.ownerType === 'organization') {
                 const hasOrgAccess = await this.organizationService.validateOrganizationAccess(suiteData.ownerId, 'member');
                 if (hasOrgAccess) return true;
             }
 
+            // Direct suite membership (fallback)
             if (suiteData.admins?.includes(userId)) return true;
             if (accessType === 'read' && suiteData.members?.includes(userId)) return true;
 
@@ -70,8 +73,9 @@ export class TestSuiteService extends BaseFirestoreService {
                 isPublic: suiteData.isPublic || false,
                 settings: suiteData.settings || {},
                 tags: suiteData.tags || [],
-                admins: suiteData.admins || [userId],
-                members: suiteData.members || [userId]
+                // Ensure user is in both admins and members arrays as required by security rules
+                admins: suiteData.admins?.includes(userId) ? suiteData.admins : [...(suiteData.admins || []), userId],
+                members: suiteData.members?.includes(userId) ? suiteData.members : [...(suiteData.members || []), userId]
             });
 
             return await this.createDocument('testSuites', testSuiteData, suiteData.id);
@@ -88,30 +92,50 @@ export class TestSuiteService extends BaseFirestoreService {
         }
 
         try {
-            const individualSuitesQuery = query(
-                this.createCollectionRef('testSuites'),
-                where('ownerType', '==', 'individual'),
-                where('ownerId', '==', userId),
-                orderBy('created_at', 'desc')
-            );
+            // Get user's organizations first to query for organization suites
+            const userOrganizations = await this.organizationService.getUserOrganizations();
+            const userOrgIds = userOrganizations.success ? userOrganizations.data.map(org => org.id) : [];
 
-            const memberSuitesQuery = query(
-                this.createCollectionRef('testSuites'),
-                where('members', 'array-contains', userId),
-                orderBy('created_at', 'desc')
-            );
+            const queries = [
+                // 1. Individual suites owned by user
+                query(
+                    this.createCollectionRef('testSuites'),
+                    where('ownerType', '==', 'individual'),
+                    where('ownerId', '==', userId),
+                    orderBy('created_at', 'desc')
+                ),
+                // 2. Suites where user is explicitly a member
+                query(
+                    this.createCollectionRef('testSuites'),
+                    where('members', 'array-contains', userId),
+                    orderBy('created_at', 'desc')
+                ),
+                // 3. Suites where user is explicitly an admin
+                query(
+                    this.createCollectionRef('testSuites'),
+                    where('admins', 'array-contains', userId),
+                    orderBy('created_at', 'desc')
+                )
+            ];
 
-            const adminSuitesQuery = query(
-                this.createCollectionRef('testSuites'),
-                where('admins', 'array-contains', userId),
-                orderBy('created_at', 'desc')
-            );
+            // 4. Add organization suite queries if user belongs to organizations
+            if (userOrgIds.length > 0) {
+                // Note: Firestore has a limit of 10 items in 'in' queries
+                const orgChunks = this.chunkArray(userOrgIds, 10);
+                
+                orgChunks.forEach(orgChunk => {
+                    queries.push(
+                        query(
+                            this.createCollectionRef('testSuites'),
+                            where('ownerType', '==', 'organization'),
+                            where('ownerId', 'in', orgChunk),
+                            orderBy('created_at', 'desc')
+                        )
+                    );
+                });
+            }
 
-            const results = await Promise.allSettled([
-                getDocs(individualSuitesQuery),
-                getDocs(memberSuitesQuery),
-                getDocs(adminSuitesQuery)
-            ]);
+            const results = await Promise.allSettled(queries.map(q => getDocs(q)));
 
             const suiteMap = new Map();
             let errorCount = 0;
@@ -122,7 +146,8 @@ export class TestSuiteService extends BaseFirestoreService {
                         suiteMap.set(doc.id, { id: doc.id, ...doc.data() });
                     });
                 } else if (result.reason.code !== 'permission-denied') {
-                    throw result.reason;
+                    console.warn('Query failed:', result.reason);
+                    errorCount++;
                 } else {
                     errorCount++;
                 }
@@ -153,7 +178,8 @@ export class TestSuiteService extends BaseFirestoreService {
             return () => {};
         }
 
-        const queries = [
+        // Start with basic queries
+        let queries = [
             query(this.createCollectionRef('testSuites'), where('ownerType', '==', 'individual'), where('ownerId', '==', userId), orderBy('created_at', 'desc')),
             query(this.createCollectionRef('testSuites'), where('members', 'array-contains', userId), orderBy('created_at', 'desc')),
             query(this.createCollectionRef('testSuites'), where('admins', 'array-contains', userId), orderBy('created_at', 'desc'))
@@ -162,33 +188,90 @@ export class TestSuiteService extends BaseFirestoreService {
         const suiteMap = new Map();
         const unsubscribes = [];
 
-        queries.forEach((q) => {
-            const unsubscribe = onSnapshot(
-                q,
-                (snapshot) => {
-                    snapshot.docChanges().forEach((change) => {
-                        if (change.type === 'removed') {
-                            suiteMap.delete(change.doc.id);
-                        } else {
-                            suiteMap.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+        // Get user organizations and add org suite queries
+        this.organizationService.getUserOrganizations().then(userOrgsResult => {
+            if (userOrgsResult.success && userOrgsResult.data.length > 0) {
+                const userOrgIds = userOrgsResult.data.map(org => org.id);
+                const orgChunks = this.chunkArray(userOrgIds, 10);
+                
+                orgChunks.forEach(orgChunk => {
+                    const orgQuery = query(
+                        this.createCollectionRef('testSuites'),
+                        where('ownerType', '==', 'organization'),
+                        where('ownerId', 'in', orgChunk),
+                        orderBy('created_at', 'desc')
+                    );
+                    queries.push(orgQuery);
+                });
+            }
+
+            // Set up all subscriptions
+            queries.forEach((q) => {
+                const unsubscribe = onSnapshot(
+                    q,
+                    (snapshot) => {
+                        snapshot.docChanges().forEach((change) => {
+                            if (change.type === 'removed') {
+                                suiteMap.delete(change.doc.id);
+                            } else {
+                                suiteMap.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+                            }
+                        });
+                        const sortedSuites = Array.from(suiteMap.values()).sort((a, b) => {
+                            const aTime = a.created_at?.toMillis?.() || 0;
+                            const bTime = b.created_at?.toMillis?.() || 0;
+                            return bTime - aTime;
+                        });
+                        onSuccess(sortedSuites);
+                    },
+                    (error) => {
+                        if (error.code !== 'permission-denied') {
+                            onError?.(this.handleFirestoreError(error, 'subscribe to user test suites'));
                         }
-                    });
-                    const sortedSuites = Array.from(suiteMap.values()).sort((a, b) => {
-                        const aTime = a.created_at?.toMillis?.() || 0;
-                        const bTime = b.created_at?.toMillis?.() || 0;
-                        return bTime - aTime;
-                    });
-                    onSuccess(sortedSuites);
-                },
-                (error) => {
-                    if (error.code !== 'permission-denied') {
-                        onError?.(this.handleFirestoreError(error, 'subscribe to user test suites'));
                     }
-                }
-            );
-            unsubscribes.push(unsubscribe);
+                );
+                unsubscribes.push(unsubscribe);
+            });
+        }).catch(error => {
+            console.error('Error getting user organizations for suite subscription:', error);
+            // Proceed with basic queries only
+            queries.forEach((q) => {
+                const unsubscribe = onSnapshot(
+                    q,
+                    (snapshot) => {
+                        snapshot.docChanges().forEach((change) => {
+                            if (change.type === 'removed') {
+                                suiteMap.delete(change.doc.id);
+                            } else {
+                                suiteMap.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+                            }
+                        });
+                        const sortedSuites = Array.from(suiteMap.values()).sort((a, b) => {
+                            const aTime = a.created_at?.toMillis?.() || 0;
+                            const bTime = b.created_at?.toMillis?.() || 0;
+                            return bTime - aTime;
+                        });
+                        onSuccess(sortedSuites);
+                    },
+                    (error) => {
+                        if (error.code !== 'permission-denied') {
+                            onError?.(this.handleFirestoreError(error, 'subscribe to user test suites'));
+                        }
+                    }
+                );
+                unsubscribes.push(unsubscribe);
+            });
         });
 
         return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+    }
+
+    // Helper method to chunk arrays for Firestore 'in' query limits
+    chunkArray(array, size) {
+        const chunks = [];
+        for (let i = 0; i < array.length; i += size) {
+            chunks.push(array.slice(i, i + size));
+        }
+        return chunks;
     }
 }
