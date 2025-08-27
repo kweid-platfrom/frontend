@@ -61,7 +61,6 @@ export const AppProvider = ({ children }) => {
                 throw new Error('No authenticated user');
             }
 
-            // Use FirestoreService to get user profile
             const profileResult = await FirestoreService.getUserProfile(slices.auth.state.currentUser.uid);
             console.log('📋 Profile fetched:', profileResult);
 
@@ -93,7 +92,7 @@ export const AppProvider = ({ children }) => {
                     uid: slices.auth.state.currentUser.uid,
                     email: slices.auth.state.currentUser.email || '',
                     displayName: slices.auth.state.currentUser.displayName || '',
-                    accountType: 'individual', // Default to individual, not organization
+                    accountType: 'individual',
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     created_by: slices.auth.state.currentUser.uid,

@@ -171,11 +171,11 @@ export class TestSuiteService extends BaseFirestoreService {
         }
     }
 
-    subscribeToUserTestSuites(onSuccess, onError) {
+    async subscribeToUserTestSuites(onSuccess, onError) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             onError?.({ success: false, error: { message: 'User not authenticated' } });
-            return () => {};
+            return () => { };
         }
 
         // Start with basic queries
@@ -185,8 +185,9 @@ export class TestSuiteService extends BaseFirestoreService {
             query(this.createCollectionRef('testSuites'), where('admins', 'array-contains', userId), orderBy('created_at', 'desc'))
         ];
 
-        const suiteMap = new Map();
-        const unsubscribes = [];
+            const suiteMap = new Map();
+            const unsubscribes = [];
+            let successfulSubscriptions = 0;
 
         // Get user organizations and add org suite queries
         this.organizationService.getUserOrganizations().then(userOrgsResult => {

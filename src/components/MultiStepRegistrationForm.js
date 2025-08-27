@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ArrowRight, ArrowLeft, User, Building, ChevronDown, CheckCircle, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, User, Building, ChevronDown, CheckCircle } from 'lucide-react';
 import { useRegistration } from '../hooks/useRegistration';
 import { isCustomDomain, isCommonEmailProvider } from '../utils/domainValidation';
-import { toast } from 'sonner';
+import { toast } from 'sonner'; // Make sure <Toaster /> is added to your App component
 import DomainSuggestion from './DomainSuggestion';
 import GoogleSSO from './GoogleSSO';
 
@@ -10,14 +10,17 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     const {
         loading,
         error,
-        registerWithEmail,
-        registerWithGoogle,
-        clearError,
-        validateRegistrationData,
-    } = useRegistration();
+        startIndividualRegistration,
+        completeIndividualRegistration,
+        startOrganizationRegistration,
+        createOrganization,
+        linkUserToOrganization,
+        completeOrganizationRegistration,
+        clearError    } = useRegistration();
 
     const [currentStep, setCurrentStep] = useState(1);
-
+    const [registrationState, setRegistrationState] = useState(null);
+    
     const [formData, setFormData] = useState({
         accountType: '',
         email: '',
@@ -37,6 +40,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     const [emailError, setEmailError] = useState('');
     const [showDomainSuggestion, setShowDomainSuggestion] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [stepLoading, setStepLoading] = useState(false);
 
     React.useEffect(() => {
         if (error) {
@@ -76,38 +80,71 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
         try {
             setGoogleLoading(true);
             
-            // If user hasn't selected account type yet, we might need to prompt them
-            // or automatically detect based on email domain
+            // Auto-detect account type based on email domain if not selected
             let accountType = formData.accountType;
-            
             if (!accountType) {
-                // Auto-detect account type based on email domain
                 accountType = isCustomDomain(googleUserData.email) ? 'organization' : 'individual';
             }
 
-            const googleRegistrationData = {
-                ...formData,
-                email: googleUserData.email,
-                displayName: googleUserData.name,
-                accountType: accountType,
-                googleId: googleUserData.googleId,
-                picture: googleUserData.picture,
-                emailVerified: googleUserData.emailVerified
-            };
+            // Start registration flow based on account type
+            let result;
+            if (accountType === 'individual') {
+                result = await startIndividualRegistration({
+                    email: googleUserData.email,
+                    name: googleUserData.name,
+                    googleCredential: credential
+                });
 
-            const result = await registerWithGoogle(googleRegistrationData, credential);
-
-            if (result.success) {
-                toast.success(result.message || 'Account created successfully!');
-                onSuccess(result);
+                if (result.success) {
+                    // Complete individual registration immediately for Google users
+                    const completeResult = await completeIndividualRegistration(
+                        result.registrationState.userId,
+                        {
+                            firstName: googleUserData.name.split(' ')[0] || '',
+                            lastName: googleUserData.name.split(' ').slice(1).join(' ') || '',
+                            displayName: googleUserData.name,
+                            preferences: formData.preferences || {},
+                            agreedToTerms: true
+                        }
+                    );
+                    result = completeResult;
+                }
             } else {
-                toast.error(result.error || 'Google registration failed');
-                setErrors({ submit: result.error || 'Google registration failed' });
+                result = await startOrganizationRegistration({
+                    email: googleUserData.email,
+                    name: googleUserData.name,
+                    googleCredential: credential
+                });
+
+                if (result.success) {
+                    setRegistrationState(result.registrationState);
+                    setFormData(prev => ({
+                        ...prev,
+                        email: googleUserData.email,
+                        displayName: googleUserData.name,
+                        accountType: 'organization'
+                    }));
+                    setCurrentStep(3); // Skip to organization setup
+                }
+            }
+
+            if (result?.success) {
+                if (result.completed) {
+                    toast.success('Registration successful! Please check your email for a confirmation link to verify your account.');
+                    onSuccess(result);
+                } else {
+                    toast.success(result.message);
+                }
+            } else {
+                const errorMsg = result?.error || 'Google registration failed';
+                toast.error(errorMsg);
+                setErrors({ submit: errorMsg });
             }
         } catch (error) {
             console.error('Google auth error:', error);
-            toast.error(error.message || 'Google authentication failed. Please try again.');
-            setErrors({ submit: error.message || 'Google authentication failed' });
+            const errorMsg = error.message || 'Google authentication failed. Please try again.';
+            toast.error(errorMsg);
+            setErrors({ submit: errorMsg });
         } finally {
             setGoogleLoading(false);
         }
@@ -163,7 +200,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
             }));
         }
 
-        // Clear general error from useRegistration hook
+        // Clear general error
         if (error) {
             clearError();
         }
@@ -205,13 +242,16 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                     newErrors.email = 'Organization accounts require a custom domain email';
                 }
 
-                // Use emailError state as well for real-time validation
                 if (emailError) {
                     newErrors.email = emailError;
                 }
 
                 if (!formData.displayName) {
                     newErrors.displayName = 'Full name is required';
+                } else if (formData.displayName.trim().length < 2) {
+                    newErrors.displayName = 'Full name must be at least 2 characters';
+                } else if (formData.displayName.trim().length > 100) {
+                    newErrors.displayName = 'Full name must be less than 100 characters';
                 }
                 break;
 
@@ -219,7 +259,12 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                 if (formData.accountType === 'organization') {
                     if (!formData.organizationName) {
                         newErrors.organizationName = 'Organization name is required';
+                    } else if (formData.organizationName.trim().length < 2) {
+                        newErrors.organizationName = 'Organization name must be at least 2 characters';
+                    } else if (formData.organizationName.trim().length > 100) {
+                        newErrors.organizationName = 'Organization name must be less than 100 characters';
                     }
+
                     if (!formData.organizationIndustry) {
                         newErrors.organizationIndustry = 'Industry is required';
                     }
@@ -229,8 +274,8 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
             case 4: // Password & Terms
                 if (!formData.password) {
                     newErrors.password = 'Password is required';
-                } else if (formData.password.length < 6) {
-                    newErrors.password = 'Password must be at least 6 characters';
+                } else if (formData.password.length < 8) {
+                    newErrors.password = 'Password must be at least 8 characters';
                 }
 
                 if (!formData.agreeToTerms) {
@@ -243,14 +288,45 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const nextStep = () => {
-        if (validateStep(currentStep)) {
+    const nextStep = async () => {
+        if (!validateStep(currentStep)) return;
+
+        setStepLoading(true);
+        try {
+            // Handle registration steps
+            if (currentStep === 2 && !registrationState) {
+                // Start registration after basic info is collected
+                let result;
+                
+                if (formData.accountType === 'individual') {
+                    result = await startIndividualRegistration({
+                        email: formData.email,
+                        name: formData.displayName
+                    });
+                } else {
+                    result = await startOrganizationRegistration({
+                        email: formData.email,
+                        name: formData.displayName
+                    });
+                }
+
+                if (result.success) {
+                    setRegistrationState(result.registrationState);
+                    toast.success(result.message);
+                } else {
+                    toast.error(result.error);
+                    return;
+                }
+            }
+
             // Skip organization step for individual accounts
             if (currentStep === 2 && formData.accountType === 'individual') {
                 setCurrentStep(4);
             } else {
                 setCurrentStep(currentStep + 1);
             }
+        } finally {
+            setStepLoading(false);
         }
     };
 
@@ -264,52 +340,78 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     };
 
     const handleSubmit = async () => {
-        if (!validateStep(4)) return;
+        if (!validateStep(currentStep)) return;
 
-        console.log('📝 Form submission started with data:', formData);
-
-        // Validate organization email requirement
-        if (formData.accountType === 'organization' && isCommonEmailProvider(formData.email)) {
-            toast.error('Organization accounts require a custom domain email');
-            return;
-        }
-
-        // Validate organization fields
-        if (formData.accountType === 'organization') {
-            if (!formData.organizationName) {
-                toast.error('Organization name is required');
-                return;
-            }
-            if (!formData.organizationIndustry) {
-                toast.error('Industry selection is required');
-                return;
-            }
-        }
-
-        // Final validation using the registration hook
-        const validation = validateRegistrationData(formData);
-        if (!validation.isValid) {
-            const firstError = Object.values(validation.errors)[0];
-            toast.error(firstError);
-            return;
-        }
-
+        setStepLoading(true);
         try {
-            const result = await registerWithEmail(formData);
+            let result;
 
-            console.log('📧 Registration result:', result);
+            if (currentStep === 3 && formData.accountType === 'organization') {
+                // Create organization step
+                result = await createOrganization(registrationState.userId, {
+                    name: formData.organizationName,
+                    industry: formData.organizationIndustry,
+                    size: formData.organizationSize
+                });
 
-            if (result.success) {
-                toast.success(result.message);
+                if (result.success) {
+                    setRegistrationState(result.registrationState);
+                    toast.success(result.message);
+                    
+                    // Link user to organization
+                    const linkResult = await linkUserToOrganization(
+                        registrationState.userId,
+                        result.registrationState.organizationId
+                    );
+                    
+                    if (linkResult.success) {
+                        setRegistrationState(linkResult.registrationState);
+                        setCurrentStep(4);
+                    } else {
+                        toast.error(linkResult.error);
+                    }
+                }
+                return;
+            }
+
+            // Final step - complete registration
+            const profileData = {
+                firstName: formData.displayName.split(' ')[0] || '',
+                lastName: formData.displayName.split(' ').slice(1).join(' ') || '',
+                displayName: formData.displayName,
+                finalPassword: formData.password,
+                preferences: formData.preferences || {},
+                agreedToTerms: formData.agreeToTerms
+            };
+
+            if (formData.accountType === 'individual') {
+                result = await completeIndividualRegistration(
+                    registrationState.userId,
+                    profileData
+                );
+            } else {
+                result = await completeOrganizationRegistration(
+                    registrationState.userId,
+                    profileData
+                );
+            }
+
+            if (result?.success) {
+                const successMessage = result.data?.message || 'Registration successful! Please check your email for a confirmation link to verify your account.';
+                toast.success(successMessage);
                 onSuccess(result);
             } else {
-                toast.error(result.error || 'Registration failed');
-                setErrors({ submit: result.error || 'Registration failed' });
+                const errorMsg = result?.error?.message || result?.error || 'Registration failed';
+                toast.error(errorMsg);
+                setErrors({ submit: errorMsg });
             }
         } catch (error) {
-            console.error('❌ Registration error:', error);
-            toast.error(error.message || 'Registration failed. Please try again.');
-            setErrors({ submit: error.message || 'Registration failed' });
+            console.error('Registration error:', error);
+            const errorMsg = error.message || 'Registration failed. Please try again.';
+            toast.error(errorMsg);
+            setErrors({ submit: errorMsg });
+        } finally {
+            setStepLoading(false);
         }
     };
 
@@ -319,7 +421,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
 
     const getCurrentStepForDisplay = () => {
         if (formData.accountType === 'individual' && currentStep === 4) {
-            return 3; // Display as step 3 for individuals
+            return 3;
         }
         return currentStep;
     };
@@ -561,9 +663,9 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                             value={formData.password}
                             onChange={(e) => handleInputChange('password', e.target.value)}
                             className={`w-full px-4 py-3 pr-12 border ${errors.password ? 'border-red-500' : 'border-slate-200'} rounded-lg text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10`}
-                            placeholder="At least 6 characters"
+                            placeholder="At least 8 characters"
                             required
-                            minLength={6}
+                            minLength={8}
                         />
                         <button
                             type="button"
@@ -602,18 +704,6 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                     <p className="text-sm text-red-500">{errors.agreeToTerms}</p>
                 )}
 
-                {formData.accountType === 'organization' && (
-                    <div className="p-4 border border-teal-200 rounded-lg bg-teal-50/50">
-                        <div className="flex items-start gap-3">
-                            <Building className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
-                            <div className="text-sm text-teal-800">
-                                <p className="font-medium mb-1">Organization Account</p>
-                                <p>Your organization will be set up after email verification and sign-in.</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {errors.submit && (
                     <div className="p-4 border border-red-200 rounded-lg bg-red-50">
                         <p className="text-sm text-red-700">{errors.submit}</p>
@@ -638,52 +728,68 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
         }
     };
 
+    const isCurrentStepSubmit = () => {
+        if (currentStep === 3 && formData.accountType === 'organization') {
+            return true; // Organization setup step
+        }
+        return currentStep === (formData.accountType === 'individual' ? 4 : 4); // Final step
+    };
+
+    const getButtonText = () => {
+        if (isCurrentStepSubmit()) {
+            if (currentStep === 3 && formData.accountType === 'organization') {
+                return 'Continue';
+            }
+            return 'Sign Up';
+        }
+        return 'Continue';
+    };
+
     return (
         <div className="w-full max-w-md mx-auto">
-            {/* Current Step Content */}
-            {renderCurrentStep()}
-
-            {/* Navigation Buttons */}
-            <div className="flex gap-4 mt-8">
+            {/* Header with Back Button */}
+            <div className="relative mb-6">
                 {currentStep > 1 && (
                     <button
                         type="button"
                         onClick={prevStep}
-                        disabled={loading || googleLoading}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg px-6 py-3 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={loading || googleLoading || stepLoading}
+                        className="absolute left-0 top-0 p-2 bg-white border border-slate-200 rounded-lg shadow-md hover:shadow-lg hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <ArrowLeft size={18} />
-                        Back
                     </button>
                 )}
+            </div>
 
-                {currentStep < (formData.accountType === 'individual' ? 4 : 4) ? (
+            {/* Current Step Content */}
+            {renderCurrentStep()}
+
+            {/* Main Action Button */}
+            <div className="mt-8">
+                <div className="relative flex justify-center">
                     <button
                         type="button"
-                        onClick={nextStep}
-                        disabled={loading || googleLoading}
-                        className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white font-medium rounded-lg px-6 py-3 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        onClick={isCurrentStepSubmit() ? handleSubmit : nextStep}
+                        disabled={loading || googleLoading || stepLoading || Object.values(errors).some(error => error)}
+                        className={`
+                            transition-all duration-300 ease-in-out
+                            ${stepLoading 
+                                ? 'w-12 h-12 rounded-full bg-[#00897B] shadow-md flex items-center justify-center' 
+                                : 'w-full bg-[#00897B] hover:bg-[#00796B] text-white font-medium rounded-lg px-6 py-3 shadow-md hover:-translate-y-0.5'
+                            }
+                            disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+                        `}
                     >
-                        Next
-                        <ArrowRight size={18} />
-                    </button>
-                ) : (
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={loading || googleLoading || Object.values(errors).some(error => error)}
-                        className="flex-1 bg-[#00897B] hover:bg-[#00796B] text-white font-medium rounded-lg px-6 py-3 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 className="animate-spin h-5 w-5" />
-                                Creating Account...
-                            </>
+                        {stepLoading ? (
+                            <div className="w-6 h-6 relative">
+                                <div className="absolute inset-0 rounded-full border-2 border-white/20"></div>
+                                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white animate-spin"></div>
+                            </div>
                         ) : (
-                            'Create Account'
+                            getButtonText()
                         )}
                     </button>
-                )}
+                </div>
             </div>
 
             {/* Step Progress Indicators */}

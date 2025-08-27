@@ -1,192 +1,99 @@
-// hooks/useRegistration.js - FIXED VERSION with proper atomic transaction
+// hooks/useRegistration.js - REFACTORED TO USE MULTI-STEP SERVICE
 import { useState } from 'react';
-import {
-    createUserWithEmailAndPassword,
-    sendEmailVerification,
-    signOut,
-    signInWithCredential,
-    GoogleAuthProvider
-} from 'firebase/auth';
 import { auth } from '../config/firebase';
-import firestoreService from '../services';
-import { 
-    isValidEmail,
-    isCommonEmailProvider 
+import { sendEmailVerification } from 'firebase/auth';
+import RegistrationService, { RegistrationFlowHelpers } from '../services/RegistrationService';
+import {
+    isCommonEmailProvider
 } from '../utils/domainValidation';
 
 export const useRegistration = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [registrationState, setRegistrationState] = useState(null);
 
-    const validateRegistrationData = (data) => {
+    // Initialize service
+    const registrationService = new RegistrationService();
+
+    /**
+     * Client-side validation before calling service
+     */
+    const validateRegistrationData = (data, step = 1) => {
         const errors = {};
 
-        if (!data.email) {
-            errors.email = 'Email is required';
-        } else if (!isValidEmail(data.email)) {
-            errors.email = 'Please enter a valid email address';
-        } else if (data.accountType === 'organization' && isCommonEmailProvider(data.email)) {
-            errors.email = 'Organization accounts require a custom domain email';
-        }
-
-        if (!data.password && !data.googleId) {
-            errors.password = 'Password is required';
-        } else if (!data.googleId && data.password && data.password.length < 6) {
-            errors.password = 'Password must be at least 6 characters';
-        }
-
-        if (!data.displayName) {
-            errors.displayName = 'Full name is required';
-        }
-
-        if (data.accountType === 'organization') {
-            if (!data.organizationIndustry) {
-                errors.organizationIndustry = 'Industry is required for organization accounts';
+        // Step 1 validation (basic account creation)
+        if (step === 1) {
+            // Email validation
+            if (!data.email) {
+                errors.email = 'Email is required';
+            } else if (!RegistrationFlowHelpers.validateEmail(data.email)) {
+                errors.email = 'Please enter a valid email address';
+            } else if (data.accountType === 'organization' && isCommonEmailProvider(data.email)) {
+                errors.email = 'Organization accounts require a custom domain email';
             }
-            if (!data.organizationName) {
-                errors.organizationName = 'Organization name is required';
+
+            // Display name validation
+            if (!data.name || data.name.trim().length < 2) {
+                errors.name = 'Full name is required (minimum 2 characters)';
+            } else if (data.name.trim().length > 100) {
+                errors.name = 'Full name must be less than 100 characters';
+            }
+
+            // Account type validation
+            if (!data.accountType || !['individual', 'organization'].includes(data.accountType)) {
+                errors.accountType = 'Account type must be either "individual" or "organization"';
             }
         }
 
+        // Step 2+ validation handled by RegistrationStateManager
         return {
             isValid: Object.keys(errors).length === 0,
             errors
         };
     };
 
-    const parseDisplayName = (displayName) => {
-        if (!displayName) return { firstName: '', lastName: '' };
-        
-        const nameParts = displayName.trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-        
-        return { firstName, lastName };
-    };
-
     /**
-     * FIXED: Use atomic registration service instead of separate calls
+     * Start individual registration (Step 1)
      */
-    const registerWithEmail = async (userData) => {
+    const startIndividualRegistration = async (userData) => {
         setLoading(true);
         setError(null);
 
         try {
-            console.log('Starting complete registration with data:', userData);
-            
-            const validation = validateRegistrationData(userData);
+            // Client-side validation
+            const validation = validateRegistrationData({
+                ...userData,
+                accountType: 'individual'
+            }, 1);
+
             if (!validation.isValid) {
                 throw new Error(Object.values(validation.errors)[0]);
             }
 
-            // Step 1: Create Firebase Auth user
-            const userCredential = await createUserWithEmailAndPassword(
-                auth,
-                userData.email,
-                userData.password
-            );
+            const result = await registrationService.createIndividualStep1({
+                email: userData.email,
+                name: userData.name,
+                provider: userData.googleCredential ? 'google' : 'email',
+                googleCredential: userData.googleCredential
+            });
 
-            const userId = userCredential.user.uid;
-            const currentUser = userCredential.user;
-            console.log('✅ Firebase user created:', userId);
-
-            try {
-                // Step 2: Parse name components
-                const { firstName, lastName } = parseDisplayName(userData.displayName);
-
-                // Step 3: FIXED - Use atomic registration service
-                const registrationData = {
-                    userId: userId,
-                    email: currentUser.email,
-                    displayName: userData.displayName,
-                    firstName: firstName,
-                    lastName: lastName,
-                    accountType: userData.accountType,
-                    preferences: userData.preferences || {},
-                    ...(userData.accountType === 'organization' && {
-                        organizationName: userData.organizationName,
-                        organizationIndustry: userData.organizationIndustry,
-                        organizationSize: userData.organizationSize || 'small'
-                    })
-                };
-
-                console.log('📋 Using atomic registration with data:', registrationData);
-
-                // FIXED: Single atomic transaction for everything
-                const registrationResult = await firestoreService.completeUserRegistration(registrationData);
-
-                if (!registrationResult.success) {
-                    throw new Error(`Registration failed: ${registrationResult.error?.message}`);
-                }
-
-                console.log('✅ Atomic registration completed successfully');
-
-                // Step 4: Send verification email
-                await sendEmailVerification(userCredential.user);
-                console.log('✅ Verification email sent');
-
-                // Step 5: Sign out user (they need to verify email)
-                await signOut(auth);
-                console.log('✅ User signed out for email verification');
-
+            if (result.success) {
+                setRegistrationState(result.data);
                 return {
                     success: true,
-                    needsVerification: true,
-                    accountType: userData.accountType,
-                    message: `Registration successful! Please check your email to verify your account, then sign in to ${userData.accountType === 'organization' ? 'access your organization' : 'continue'}.`,
-                    data: registrationResult.data
+                    needsCompletion: true,
+                    registrationState: result.data,
+                    message: 'Account created! Please complete your profile.'
                 };
-
-            } catch (registrationError) {
-                // Clean up Firebase Auth user if Firestore operations failed
-                console.log('Cleaning up Firebase Auth user due to registration failure...');
-                try {
-                    await currentUser.delete();
-                    console.log('✅ Firebase Auth user cleaned up');
-                } catch (cleanupError) {
-                    console.error('Failed to cleanup Firebase Auth user:', cleanupError);
-                }
-                
-                // Also clean up any partial Firestore data
-                try {
-                    await firestoreService.cleanupPartialRegistration(userId);
-                } catch (cleanupError) {
-                    console.error('Failed to cleanup partial registration:', cleanupError);
-                }
-                
-                throw registrationError;
+            } else {
+                throw new Error(result.error.message);
             }
 
         } catch (error) {
-            console.error('Registration error:', {
-                message: error.message,
-                code: error.code,
-                stack: error.stack
-            });
-            
-            let errorMessage = 'Registration failed. Please try again.';
-            
-            switch (error.code) {
-                case 'auth/email-already-in-use':
-                    errorMessage = 'An account with this email already exists. Please sign in instead.';
-                    break;
-                case 'auth/weak-password':
-                    errorMessage = 'Password is too weak. Please choose a stronger password.';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage = 'Please enter a valid email address.';
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage = 'Network error. Please check your connection and try again.';
-                    break;
-                case 'permission-denied':
-                    errorMessage = 'Permission denied. Please check your account permissions and try again.';
-                    break;
-                default:
-                    errorMessage = error.message || errorMessage;
-            }
-            
+            console.error('Individual registration start error:', error);
+            const errorMessage = error.message || 'Registration failed. Please try again.';
             setError(errorMessage);
+
             return {
                 success: false,
                 error: errorMessage
@@ -196,110 +103,73 @@ export const useRegistration = () => {
         }
     };
 
-    const registerWithGoogle = async (userData, credential) => {
+    /**
+     * Complete individual registration (Step 2)
+     */
+    const completeIndividualRegistration = async (userId, profileData) => {
         setLoading(true);
         setError(null);
 
         try {
-            console.log('Starting Google registration with data:', userData);
-            
-            // Step 1: Sign in with Google credential
-            const googleCredential = GoogleAuthProvider.credential(credential);
-            const userCredential = await signInWithCredential(auth, googleCredential);
-            const userId = userCredential.user.uid;
-            const currentUser = userCredential.user;
-            
-            console.log('✅ Google user authenticated:', userId);
+            // Validate required fields
+            const validation = RegistrationFlowHelpers.validatePersonalName(profileData.firstName, 'First name');
+            if (!validation.valid) {
+                throw new Error(validation.errors[0]);
+            }
 
-            try {
-                // Step 2: Parse name components
-                const { firstName, lastName } = parseDisplayName(userData.displayName);
+            const lastNameValidation = RegistrationFlowHelpers.validatePersonalName(profileData.lastName, 'Last name');
+            if (!lastNameValidation.valid) {
+                throw new Error(lastNameValidation.errors[0]);
+            }
 
-                // Step 3: FIXED - Use atomic registration service
-                const registrationData = {
-                    userId: userId,
-                    email: currentUser.email,
-                    displayName: userData.displayName,
-                    firstName: firstName,
-                    lastName: lastName,
-                    accountType: userData.accountType,
-                    preferences: userData.preferences || {},
-                    ...(userData.accountType === 'organization' && {
-                        organizationName: userData.organizationName,
-                        organizationIndustry: userData.organizationIndustry,
-                        organizationSize: userData.organizationSize || 'small'
-                    })
-                };
+            if (!profileData.agreedToTerms) {
+                throw new Error('You must agree to the terms of service');
+            }
 
-                console.log('👤 Using atomic Google registration with data:', registrationData);
-
-                // FIXED: Single atomic transaction for everything
-                const registrationResult = await firestoreService.completeUserRegistration(registrationData);
-
-                if (!registrationResult.success) {
-                    throw new Error(`Google registration failed: ${registrationResult.error?.message}`);
+            // Validate password if provided
+            if (profileData.finalPassword) {
+                const passwordValidation = RegistrationFlowHelpers.validatePassword(profileData.finalPassword);
+                if (!passwordValidation.valid) {
+                    throw new Error(passwordValidation.errors[0]);
                 }
+            }
 
-                console.log('✅ Atomic Google registration completed successfully');
+            const result = await registrationService.completeIndividualStep2(userId, {
+                firstName: profileData.firstName,
+                lastName: profileData.lastName,
+                displayName: profileData.displayName || RegistrationFlowHelpers.generateDisplayName(profileData.firstName, profileData.lastName),
+                finalPassword: profileData.finalPassword,
+                preferences: profileData.preferences || {},
+                agreedToTerms: profileData.agreedToTerms
+            });
+
+            if (result.success) {
+                setRegistrationState(result.data);
+                let message;
+                const needsVerification = !profileData.googleCredential;
+
+                if (needsVerification) {
+                    message = 'Account created! Please check your email to verify your account before signing in.';
+                } else {
+                    message = 'Your account has been created successfully!';
+                }
 
                 return {
                     success: true,
-                    needsVerification: false, // Google users are already verified
-                    accountType: userData.accountType,
-                    message: `Welcome! Your ${userData.accountType === 'organization' ? 'organization' : 'account'} has been set up successfully.`,
-                    data: registrationResult.data
+                    completed: true,
+                    registrationState: result.data,
+                    message: message,
+                    needsVerification: needsVerification
                 };
-
-            } catch (registrationError) {
-                // Clean up Firebase Auth user if Firestore operations failed
-                console.log('Cleaning up Firebase Auth user due to Google registration failure...');
-                try {
-                    await currentUser.delete();
-                    console.log('Firebase Auth user cleaned up');
-                } catch (cleanupError) {
-                    console.error('Failed to cleanup Firebase Auth user:', cleanupError);
-                }
-                
-                // Also clean up any partial Firestore data
-                try {
-                    await firestoreService.cleanupPartialRegistration(userId);
-                } catch (cleanupError) {
-                    console.error('Failed to cleanup partial Google registration:', cleanupError);
-                }
-                
-                throw registrationError;
+            } else {
+                throw new Error(result.error.message);
             }
 
         } catch (error) {
-            console.error('Google registration error:', {
-                message: error.message,
-                code: error.code,
-                stack: error.stack
-            });
-            
-            let errorMessage = 'Google registration failed. Please try again.';
-            
-            switch (error.code) {
-                case 'auth/account-exists-with-different-credential':
-                    errorMessage = 'An account with this email already exists with a different sign-in method. Please try signing in with your email and password.';
-                    break;
-                case 'auth/invalid-credential':
-                    errorMessage = 'Invalid Google credential. Please try again.';
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage = 'Network error. Please check your connection and try again.';
-                    break;
-                case 'auth/popup-closed-by-user':
-                    errorMessage = 'Sign-in was cancelled. Please try again.';
-                    break;
-                case 'permission-denied':
-                    errorMessage = 'Permission denied. Please check your account permissions and try again.';
-                    break;
-                default:
-                    errorMessage = error.message || errorMessage;
-            }
-            
+            console.error('Individual registration completion error:', error);
+            const errorMessage = error.message || 'Failed to complete registration. Please try again.';
             setError(errorMessage);
+
             return {
                 success: false,
                 error: errorMessage
@@ -309,6 +179,378 @@ export const useRegistration = () => {
         }
     };
 
+    /**
+     * Start organization registration (Step 1)
+     */
+    const startOrganizationRegistration = async (userData) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            // Client-side validation
+            const validation = validateRegistrationData({
+                ...userData,
+                accountType: 'organization'
+            }, 1);
+
+            if (!validation.isValid) {
+                throw new Error(Object.values(validation.errors)[0]);
+            }
+
+            const result = await registrationService.createOrganizationStep1({
+                email: userData.email,
+                name: userData.name,
+                provider: userData.googleCredential ? 'google' : 'email',
+                googleCredential: userData.googleCredential
+            });
+
+            if (result.success) {
+                setRegistrationState(result.data);
+                return {
+                    success: true,
+                    needsCompletion: true,
+                    registrationState: result.data,
+                    message: 'Admin account created! Please create your organization.'
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('Organization registration start error:', error);
+            const errorMessage = error.message || 'Registration failed. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Create organization (Step 2)
+     */
+    const createOrganization = async (userId, organizationData) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            // Validate organization data
+            const validation = RegistrationFlowHelpers.validateOrganizationName(organizationData.name);
+            if (!validation.valid) {
+                throw new Error(validation.errors[0]);
+            }
+
+            const result = await registrationService.createOrganizationStep2(userId, {
+                name: organizationData.name,
+                industry: organizationData.industry || 'other',
+                size: organizationData.size || 'small',
+                description: organizationData.description || ''
+            });
+
+            if (result.success) {
+                setRegistrationState(result.data);
+                return {
+                    success: true,
+                    needsCompletion: true,
+                    registrationState: result.data,
+                    message: 'Organization created! Linking your account...'
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('Organization creation error:', error);
+            const errorMessage = error.message || 'Failed to create organization. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Link user to organization (Step 3)
+     */
+    const linkUserToOrganization = async (userId, organizationId) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const result = await registrationService.linkUserToOrganizationStep3(userId, organizationId);
+
+            if (result.success) {
+                setRegistrationState(result.data);
+                return {
+                    success: true,
+                    needsCompletion: true,
+                    registrationState: result.data,
+                    message: 'Account linked! Please complete your profile.'
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('User linking error:', error);
+            const errorMessage = error.message || 'Failed to link account. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Complete organization registration (Step 4)
+     */
+    const completeOrganizationRegistration = async (userId, profileData) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            // Validate required fields
+            const validation = RegistrationFlowHelpers.validatePersonalName(profileData.firstName, 'First name');
+            if (!validation.valid) {
+                throw new Error(validation.errors[0]);
+            }
+
+            const lastNameValidation = RegistrationFlowHelpers.validatePersonalName(profileData.lastName, 'Last name');
+            if (!lastNameValidation.valid) {
+                throw new Error(lastNameValidation.errors[0]);
+            }
+
+            if (!profileData.agreedToTerms) {
+                throw new Error('You must agree to the terms of service');
+            }
+
+            // Validate password if provided
+            if (profileData.finalPassword) {
+                const passwordValidation = RegistrationFlowHelpers.validatePassword(profileData.finalPassword);
+                if (!passwordValidation.valid) {
+                    throw new Error(passwordValidation.errors[0]);
+                }
+            }
+
+            const result = await registrationService.completeOrganizationStep4(userId, {
+                firstName: profileData.firstName,
+                lastName: profileData.lastName,
+                displayName: profileData.displayName || RegistrationFlowHelpers.generateDisplayName(profileData.firstName, profileData.lastName),
+                finalPassword: profileData.finalPassword,
+                preferences: profileData.preferences || {},
+                agreedToTerms: profileData.agreedToTerms
+            });
+
+            if (result.success) {
+                setRegistrationState(result.data);
+                let message;
+                const needsVerification = !profileData.googleCredential;
+                
+                if (needsVerification) {
+                    message = 'Account created! Please check your email to verify your account before signing in.';
+                } else {
+                    message = 'Organization created successfully!';
+                }
+                
+                return {
+                    success: true,
+                    completed: true,
+                    registrationState: result.data,
+                    message: message,
+                    needsVerification: needsVerification
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('Organization registration completion error:', error);
+            const errorMessage = error.message || 'Failed to complete registration. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Get registration state for a user with state manager
+     */
+    const getRegistrationState = async (userId) => {
+        try {
+            const result = await registrationService.getRegistrationState(userId);
+            if (result.success) {
+                setRegistrationState(result.data);
+
+                // Create state manager for additional context
+                const stateManager = registrationService.createRegistrationStateManager(userId);
+                await stateManager.loadState();
+
+                return {
+                    ...result.data,
+                    progress: stateManager.getProgressPercentage(),
+                    statusMessage: stateManager.getStatusMessage(),
+                    nextStep: stateManager.getNextStep(),
+                    isCompleted: stateManager.isCompleted()
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to get registration state:', error);
+            return null;
+        }
+    };
+
+    /**
+     * Continue registration using state manager
+     */
+    const continueRegistration = async (userId, stepData) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const stateManager = registrationService.createRegistrationStateManager(userId);
+            await stateManager.loadState();
+
+            if (stateManager.isCompleted()) {
+                return {
+                    success: true,
+                    completed: true,
+                    message: 'Registration already completed!'
+                };
+            }
+
+            // Validate step data
+            const validation = stateManager.validateStepData(stepData);
+            if (!validation.valid) {
+                throw new Error(validation.errors[0]);
+            }
+
+            // Execute next step
+            const result = await stateManager.executeNextStep(stepData);
+
+            if (result.success) {
+                const updatedState = stateManager.getCurrentState();
+                setRegistrationState(updatedState);
+
+                return {
+                    success: true,
+                    completed: stateManager.isCompleted(),
+                    registrationState: updatedState,
+                    message: stateManager.getStatusMessage(),
+                    progress: stateManager.getProgressPercentage(),
+                    nextStep: stateManager.getNextStep()
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('Registration continuation error:', error);
+            const errorMessage = error.message || 'Failed to continue registration. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Handle Google Sign-In for registration
+     */
+    const handleGoogleSignIn = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const result = await registrationService.handleGoogleSignIn();
+
+            if (result.success) {
+                return {
+                    success: true,
+                    credential: result.data.credential,
+                    user: result.data.user,
+                    email: result.data.email,
+                    name: result.data.name,
+                    provider: 'google'
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('Google Sign-In error:', error);
+            const errorMessage = error.message || 'Google Sign-In failed. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Reset registration to a specific step
+     */
+    const resetRegistrationToStep = async (userId, targetStep) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const result = await registrationService.resetRegistrationToStep(userId, targetStep);
+
+            if (result.success) {
+                // Refresh registration state
+                await getRegistrationState(userId);
+
+                return {
+                    success: true,
+                    message: result.data.message
+                };
+            } else {
+                throw new Error(result.error.message);
+            }
+
+        } catch (error) {
+            console.error('Registration reset error:', error);
+            const errorMessage = error.message || 'Failed to reset registration. Please try again.';
+            setError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Resend verification email
+     */
     const resendVerificationEmail = async () => {
         setLoading(true);
         setError(null);
@@ -316,31 +558,146 @@ export const useRegistration = () => {
         try {
             const user = auth.currentUser;
             if (!user) {
-                throw new Error('No authenticated user found');
+                throw new Error('No authenticated user found. Please sign in first.');
+            }
+
+            if (user.emailVerified) {
+                throw new Error('Your email is already verified. You can sign in normally.');
             }
 
             await sendEmailVerification(user);
-            return { success: true };
+
+            return {
+                success: true,
+                message: 'Verification email sent successfully. Please check your inbox.'
+            };
         } catch (error) {
             console.error('Resend verification error:', error);
-            setError(error.message);
+            const errorMessage = error.message || 'Failed to send verification email. Please try again.';
+            setError(errorMessage);
+
             return {
                 success: false,
-                error: error.message
+                error: errorMessage
             };
         } finally {
             setLoading(false);
         }
     };
 
+    /**
+     * Legacy method - for backward compatibility
+     * Converts old single-step registration to new multi-step flow
+     */
+    const registerWithEmail = async (userData) => {
+        console.warn('registerWithEmail is deprecated. Use startIndividualRegistration/startOrganizationRegistration instead.');
+
+        // Determine flow based on account type
+        if (userData.accountType === 'individual') {
+            // Step 1: Start individual registration
+            const step1Result = await startIndividualRegistration({
+                email: userData.email,
+                name: userData.displayName
+            });
+
+            if (!step1Result.success) {
+                return step1Result;
+            }
+
+            // Step 2: Complete individual registration
+            return await completeIndividualRegistration(step1Result.registrationState.userId, {
+                firstName: userData.firstName || userData.displayName.split(' ')[0],
+                lastName: userData.lastName || userData.displayName.split(' ').slice(1).join(' '),
+                displayName: userData.displayName,
+                finalPassword: userData.password,
+                preferences: userData.preferences || {},
+                agreedToTerms: true
+            });
+        } else {
+            // Multi-step organization flow
+            const step1Result = await startOrganizationRegistration({
+                email: userData.email,
+                name: userData.displayName
+            });
+
+            if (!step1Result.success) {
+                return step1Result;
+            }
+
+            const userId = step1Result.registrationState.userId;
+
+            // Step 2: Create organization
+            const step2Result = await createOrganization(userId, {
+                name: userData.organizationName,
+                industry: userData.organizationIndustry,
+                size: userData.organizationSize || 'small'
+            });
+
+            if (!step2Result.success) {
+                return step2Result;
+            }
+
+            // Step 3: Link user to organization
+            const step3Result = await linkUserToOrganization(userId, step2Result.registrationState.organizationId);
+
+            if (!step3Result.success) {
+                return step3Result;
+            }
+
+            // Step 4: Complete profile
+            return await completeOrganizationRegistration(userId, {
+                firstName: userData.firstName || userData.displayName.split(' ')[0],
+                lastName: userData.lastName || userData.displayName.split(' ').slice(1).join(' '),
+                displayName: userData.displayName,
+                finalPassword: userData.password,
+                preferences: userData.preferences || {},
+                agreedToTerms: true
+            });
+        }
+    };
+
+    /**
+     * Legacy method - Google registration
+     */
+    const registerWithGoogle = async (userData, credential) => {
+        console.warn('registerWithGoogle is deprecated. Use handleGoogleSignIn with start/complete methods instead.');
+
+        return await registerWithEmail({
+            ...userData,
+            googleCredential: credential
+        });
+    };
+
     const clearError = () => setError(null);
 
     return {
-        loading,
-        error,
+        // New multi-step methods
+        startIndividualRegistration,
+        completeIndividualRegistration,
+        startOrganizationRegistration,
+        createOrganization,
+        linkUserToOrganization,
+        completeOrganizationRegistration,
+
+        // State management
+        getRegistrationState,
+        continueRegistration,
+        resetRegistrationToStep,
+
+        // Google authentication
+        handleGoogleSignIn,
+
+        // Utility methods
+        resendVerificationEmail,
+
+        // Legacy methods (deprecated)
         registerWithEmail,
         registerWithGoogle,
-        resendVerificationEmail,
+
+        // State and utilities
+        loading,
+        error,
+        registrationState,
         clearError,
         validateRegistrationData
     };
