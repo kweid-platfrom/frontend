@@ -164,14 +164,14 @@ const Login = () => {
     };
 
     const VerificationHelper = () => (
-        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="mt-6 p-4 bg-warning/10 border border-warning rounded-lg">
             <div className="flex items-start space-x-3">
                 <div className="flex-shrink-0">
-                    <Mail className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <Mail className="w-5 h-5 text-warning mt-0.5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-amber-800 mb-1">Email Verification Required</h3>
-                    <p className="text-sm text-amber-700 mb-3">
+                    <h3 className="text-sm font-medium text-foreground mb-1">Email Verification Required</h3>
+                    <p className="text-sm text-muted-foreground mb-3">
                         Your account exists but your email address hasn&apos;t been verified yet.
                         Please check your inbox for the verification link, or we can send you a new one.
                     </p>
@@ -179,7 +179,7 @@ const Login = () => {
                         <button
                             onClick={handleResendVerification}
                             disabled={loadingResendVerification}
-                            className="flex items-center justify-center gap-2 bg-amber-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="flex items-center justify-center gap-2 bg-warning text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             {loadingResendVerification ? (
                                 <>
@@ -198,7 +198,7 @@ const Login = () => {
                                 setShowVerificationHelper(false);
                                 setUnverifiedUser(null);
                             }}
-                            className="text-amber-600 text-sm px-4 py-2 rounded-lg border border-amber-600 hover:bg-amber-50 transition-colors"
+                            className="text-warning text-sm px-4 py-2 rounded-lg border border-warning hover:bg-warning/10 transition-colors"
                         >
                             Cancel
                         </button>
@@ -210,39 +210,42 @@ const Login = () => {
 
     if (auth.currentUser?.emailVerified && hasNavigated.current) {
         return (
-            <div className="min-h-screen flex justify-center items-center bg-gray-50">
+            <div className="min-h-screen flex justify-center items-center bg-background">
                 <div className="text-center">
-                    <Loader2 className="animate-spin h-8 w-8 text-teal-600 mx-auto mb-4" />
-                    <p className="text-gray-600">Signing you in...</p>
+                    <Loader2 className="animate-spin h-8 w-8 text-primary mx-auto mb-4" />
+                    <p className="text-muted-foreground">Signing you in...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 relative overflow-hidden">
+        <div className="min-h-screen bg-gradient-to-br from-background via-card to-teal-50 relative overflow-hidden">
             <BackgroundDecorations />
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
                     <div className="text-center mb-8">
                         <div className="inline-block">
-                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                                QAID
+                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-primary to-teal-500 bg-clip-text text-transparent">
+                                Assura
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
+                    <div className="bg-card rounded-xl shadow-theme-xl border border-border p-8 relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-teal-500/10 rounded-2xl blur-xl -z-10"></div>
                         <div className="text-center mb-8">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Welcome back</h1>
-                            <p className="text-base sm:text-lg text-slate-600">Your testing hub awaits</p>
+                            <h1 className="text-2xl sm:text-3xl font-bold text-card-foreground mb-2">Welcome back</h1>
+                            <p className="text-base sm:text-lg text-muted-foreground">Your testing hub awaits</p>
                         </div>
                         <form className="space-y-6" onSubmit={handleLogin} noValidate>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-700 block">Email address</label>
+                                <label className="text-sm font-medium text-card-foreground block">Email address</label>
                                 <input
-                                    className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${errors.email ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
-                                        } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                                    className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${
+                                        errors.email 
+                                            ? "border-destructive focus:border-destructive focus:ring-destructive/20" 
+                                            : "border-input focus:border-primary focus:ring-ring/20"
+                                    } focus:outline-none focus:ring-2`}
                                     type="email"
                                     placeholder="name@company.com"
                                     value={email}
@@ -252,15 +255,18 @@ const Login = () => {
                                     }}
                                 />
                                 {errors.email && (
-                                    <p className="text-red-600 text-xs font-medium mt-2">{errors.email}</p>
+                                    <p className="text-destructive text-xs font-medium mt-2">{errors.email}</p>
                                 )}
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-700 block">Password</label>
+                                <label className="text-sm font-medium text-card-foreground block">Password</label>
                                 <div className="relative">
                                     <input
-                                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded text-slate-900 placeholder-slate-400 transition-all duration-200 text-sm sm:text-base ${errors.password ? "border-red-300 focus:border-red-500" : "border-slate-200 focus:border-teal-500"
-                                            } focus:outline-none focus:ring focus:ring-teal-500/10`}
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${
+                                            errors.password 
+                                                ? "border-destructive focus:border-destructive focus:ring-destructive/20" 
+                                                : "border-input focus:border-primary focus:ring-ring/20"
+                                        } focus:outline-none focus:ring-2`}
                                         type={showPassword ? "text" : "password"}
                                         placeholder="Enter your password"
                                         value={password}
@@ -271,27 +277,27 @@ const Login = () => {
                                     />
                                     <button
                                         type="button"
-                                        className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                        className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                                         onClick={() => setShowPassword(!showPassword)}
                                     >
                                         {showPassword ? <EyeOff size={18} className="sm:w-5 sm:h-5" /> : <Eye size={18} className="sm:w-5 sm:h-5" />}
                                     </button>
                                 </div>
                                 {errors.password && (
-                                    <p className="text-red-600 text-xs font-medium mt-2">{errors.password}</p>
+                                    <p className="text-destructive text-xs font-medium mt-2">{errors.password}</p>
                                 )}
                             </div>
                             <div className="flex justify-end">
                                 <button
                                     type="button"
                                     onClick={handleForgotPassword}
-                                    className="text-teal-600 text-xs sm:text-sm font-medium hover:text-teal-700 hover:underline transition-colors"
+                                    className="text-primary text-xs sm:text-sm font-medium hover:text-primary/80 hover:underline transition-colors"
                                 >
                                     Forgot password?
                                 </button>
                             </div>
                             <button
-                                className="w-full bg-[#00897B] hover:bg-[#00796B] text-white font-medium sm:font-semibold rounded px-4 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg text-sm sm:text-base"
+                                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium sm:font-semibold rounded px-4 sm:px-6 py-2.5 sm:py-3 transition-all duration-200 flex justify-center items-center gap-2 shadow-theme-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
                                 type="submit"
                                 disabled={loadingEmailLogin}
                             >
@@ -301,23 +307,23 @@ const Login = () => {
                         </form>
                         {showVerificationHelper && <VerificationHelper />}
                         <div className="flex items-center my-8">
-                            <div className="flex-grow border-t border-slate-300"></div>
-                            <span className="px-4 text-sm text-slate-500 font-medium bg-white">or continue with</span>
-                            <div className="flex-grow border-t border-slate-300"></div>
+                            <div className="flex-grow border-t border-border"></div>
+                            <span className="px-4 text-sm text-muted-foreground font-medium bg-card">or continue with</span>
+                            <div className="flex-grow border-t border-border"></div>
                         </div>
                         <button
                             type="button"
                             onClick={handleGoogleLogin}
-                            className="w-full bg-white/80 backdrop-blur-sm hover:bg-slate-50/80 text-slate-700 font-medium sm:font-semibold border-2 border-slate-200 rounded px-3 sm:px-6 py-2.5 sm:py-2 transition-all duration-200 flex justify-center items-center gap-2 sm:gap-3 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                            className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium sm:font-semibold border-2 border-border rounded px-3 sm:px-6 py-2.5 sm:py-3 transition-all duration-200 flex justify-center items-center gap-2 sm:gap-3 shadow-theme-sm hover:shadow-theme disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                             disabled={loadingGoogleLogin}
                         >
                             <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                             <span className="truncate">Google</span>
                             {loadingGoogleLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
                         </button>
-                        <p className="text-center text-slate-600 mt-4 sm:mt-6 text-xs sm:text-sm">
+                        <p className="text-center text-muted-foreground mt-4 sm:mt-6 text-xs sm:text-sm">
                             Don&apos;t have an account?{" "}
-                            <Link href="/register" className="text-teal-600 font-medium sm:font-semibold hover:text-teal-700 hover:underline transition-colors">
+                            <Link href="/register" className="text-primary font-medium sm:font-semibold hover:text-primary/80 hover:underline transition-colors">
                                 Sign Up
                             </Link>
                         </p>
@@ -325,7 +331,12 @@ const Login = () => {
                 </div>
             </div>
             {toast.message && (
-                <div className={`fixed bottom-4 right-4 p-4 rounded-lg text-white ${toast.type === "success" ? "bg-green-600" : toast.type === "error" ? "bg-red-600" : "bg-yellow-600"}`}>
+                <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-theme-lg text-white ${
+                    toast.type === "success" ? "bg-success" : 
+                    toast.type === "error" ? "bg-error" : 
+                    toast.type === "warning" ? "bg-warning" :
+                    "bg-info"
+                }`}>
                     {toast.message}
                 </div>
             )}

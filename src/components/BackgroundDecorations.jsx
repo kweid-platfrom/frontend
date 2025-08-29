@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const BubbleBackground = () => {
+const BackgroundDecorations = () => {
     const [bubbles, setBubbles] = useState([]);
 
     useEffect(() => {
@@ -27,16 +27,16 @@ const BubbleBackground = () => {
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {/* Gradient Background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-50/30 via-teal-50/20 to-cyan-50/30"></div>
+            {/* Gradient Background using theme colors */}
+            <div className="absolute inset-0 bg-gradient-to-br from-muted/30 via-teal-50/20 to-teal-100/30"></div>
 
-            {/* Floating Bubbles */}
+            {/* Floating Bubbles using theme colors */}
             {bubbles.map((bubble) => (
                 <div
                     key={bubble.id}
                     className={`absolute rounded-full ${bubble.color === 'teal'
-                        ? 'bg-gradient-to-br from-teal-200/30 to-teal-400/20 border border-teal-300/40'
-                        : 'bg-gradient-to-br from-cyan-200/30 to-cyan-400/20 border border-cyan-300/40'
+                        ? 'bg-gradient-to-br from-teal-100/30 to-teal-300/20 border border-teal-300/40'
+                        : 'bg-gradient-to-br from-teal-50/30 to-teal-300/20 border border-teal-300/40'
                         } backdrop-blur-sm`}
                     style={{
                         width: `${bubble.size}px`,
@@ -49,26 +49,26 @@ const BubbleBackground = () => {
                         transform: 'translate(-50%, -50%)'
                     }}
                 >
-                    {/* Inner glow effect */}
+                    {/* Inner glow effect using theme colors */}
                     <div
                         className={`absolute inset-2 rounded-full ${bubble.color === 'teal'
-                            ? 'bg-gradient-to-br from-teal-100/50 to-transparent'
-                            : 'bg-gradient-to-br from-cyan-100/50 to-transparent'
+                            ? 'bg-gradient-to-br from-teal-50/50 to-transparent'
+                            : 'bg-gradient-to-br from-teal-50/50 to-transparent'
                             }`}
                     ></div>
 
-                    {/* Shine effect */}
+                    {/* Shine effect using theme-aware white */}
                     <div
-                        className="absolute top-2 left-2 w-1/3 h-1/3 rounded-full bg-white/40"
+                        className="absolute top-2 left-2 w-1/3 h-1/3 rounded-full bg-background/40"
                         style={{ filter: 'blur(2px)' }}
                     ></div>
                 </div>
             ))}
 
-            {/* Animated Gradient Waves */}
+            {/* Animated Gradient Waves using theme colors */}
             <div className="absolute inset-0">
                 <div
-                    className="absolute bottom-0 left-0 w-full h-1/3 bg-gradient-to-t from-teal-100/20 to-transparent"
+                    className="absolute bottom-0 left-0 w-full h-1/3 bg-gradient-to-t from-teal-50/20 to-transparent"
                     style={{
                         animation: 'wave 12s ease-in-out infinite',
                         clipPath: 'polygon(0 100%, 100% 100%, 100% 70%, 80% 60%, 60% 70%, 40% 60%, 20% 70%, 0 60%)'
@@ -76,7 +76,7 @@ const BubbleBackground = () => {
                 ></div>
 
                 <div
-                    className="absolute bottom-0 left-0 w-full h-1/4 bg-gradient-to-t from-cyan-100/15 to-transparent"
+                    className="absolute bottom-0 left-0 w-full h-1/4 bg-gradient-to-t from-teal-100/15 to-transparent"
                     style={{
                         animation: 'wave 8s ease-in-out infinite reverse',
                         animationDelay: '2s',
@@ -85,7 +85,7 @@ const BubbleBackground = () => {
                 ></div>
             </div>
 
-            {/* Subtle Particle Effects */}
+            {/* Subtle Particle Effects using theme colors */}
             <div className="absolute inset-0">
                 {[...Array(15)].map((_, i) => (
                     <div
@@ -142,4 +142,4 @@ const BubbleBackground = () => {
     );
 };
 
-export default BubbleBackground;
+export default BackgroundDecorations;
