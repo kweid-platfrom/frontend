@@ -187,7 +187,6 @@ export class TestSuiteService extends BaseFirestoreService {
 
             const suiteMap = new Map();
             const unsubscribes = [];
-            let successfulSubscriptions = 0;
 
         // Get user organizations and add org suite queries
         this.organizationService.getUserOrganizations().then(userOrgsResult => {

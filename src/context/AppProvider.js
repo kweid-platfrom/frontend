@@ -8,7 +8,7 @@ import { useTestCases } from './hooks/useTestCases';
 import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
 import { useRecording } from './hooks/useRecording';
-import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
+import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
 
 const AppContext = createContext();
