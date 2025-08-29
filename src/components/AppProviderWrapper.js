@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '../context/AppProvider';
 import LoadingScreen from './common/LoadingScreen';
@@ -12,341 +12,332 @@ import CreateSuiteModal from './modals/createSuiteModal';
 import TipsMode from './TipsMode';
 import { toast } from 'sonner';
 
+// Persistent storage for tracking user interactions
+const STORAGE_KEY = 'userAppInteractions';
+const INTERACTION_THRESHOLD = 2; // Number of interactions needed to disable TipsMode
+
 const AppProviderWrapper = ({ children }) => {
-    const pathname = usePathname();
+  const pathname = usePathname();
+  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+  const isPublicRoute = publicRoutes.includes(pathname);
 
-    const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
-    const isPublicRoute = publicRoutes.includes(pathname);
+  if (isPublicRoute) {
+    return <div className="public-route">{children}</div>;
+  }
 
-    // For public routes: NO AppProvider wrapping, no PageLayout
-    if (isPublicRoute) {
-        return (
-            <div className="public-route">
-                {children}
-            </div>
-        );
-    }
-
-    // For protected routes: wrap with AppProvider and include PageLayout
-    return (
-        <AppProvider>
-            <ProtectedRouteContent>{children}</ProtectedRouteContent>
-        </AppProvider>
-    );
+  return (
+    <AppProvider>
+      <ProtectedRouteContent>{children}</ProtectedRouteContent>
+    </AppProvider>
+  );
 };
 
-// This component runs INSIDE AppProvider, so it can use useApp
 const ProtectedRouteContent = ({ children }) => {
-    const router = useRouter();
-    const pathname = usePathname();
-    const { 
-        state, 
-        actions, 
-        isAuthenticated, 
-        isLoading
-    } = useApp();
-    const [appReady, setAppReady] = useState(false);
-    const [authMode, setAuthMode] = useState('login');
-    const [showCreateSuiteModal, setShowCreateSuiteModal] = useState(false);
-    const [showTipsMode, setShowTipsMode] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { state, actions, isAuthenticated, isLoading } = useApp();
+  const [appReady, setAppReady] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [showCreateSuiteModal, setShowCreateSuiteModal] = useState(false);
+  const [showTipsMode, setShowTipsMode] = useState(false);
+  const [interactionCount, setInteractionCount] = useState(() => {
+    // Load interaction count from localStorage
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? parseInt(stored, 10) : 0;
+    }
+    return 0;
+  });
 
-    // Routes that should bypass tips mode and show normal content
-    const bypassTipsModeRoutes = ['/documents', '/documents/create'];
-    const shouldBypassTipsMode = bypassTipsModeRoutes.some(route => pathname.startsWith(route));
+  const bypassTipsModeRoutes = ['/documents', '/documents/create'];
+  const interactiveRoutes = ['/test-cases', '/bugs', '/sprints', '/dashboard'];
+  const shouldBypassTipsMode = bypassTipsModeRoutes.some((route) => pathname.startsWith(route));
 
-    // Helper functions
-    const needsEmailVerification = () => {
-        return state.auth.currentUser?.uid &&
-            state.auth.currentUser?.emailVerified === false &&
-            state.auth.isInitialized;
-    };
+  // Track user interactions
+  const trackInteraction = useCallback(() => {
+    setInteractionCount((prev) => {
+      const newCount = prev + 1;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, newCount.toString());
+      }
+      return newCount;
+    });
+  }, []);
 
-    const isFullyAuthenticated = () => {
-        return isAuthenticated &&
-            state.auth.currentUser?.uid &&
-            state.auth.currentUser?.emailVerified === true;
-    };
+  // Monitor page navigation for interactions
+  useEffect(() => {
+    if (interactiveRoutes.some((route) => pathname.startsWith(route))) {
+      trackInteraction();
+    }
+  }, [pathname, trackInteraction]);
 
-    const shouldShowAuthUI = () => {
-        return state.auth.isInitialized &&
-            !isAuthenticated &&
-            !state.auth.currentUser?.uid;
-    };
+  // Memoized helper functions
+  const needsEmailVerification = useCallback(
+    () =>
+      state.auth.currentUser?.uid &&
+      state.auth.currentUser?.emailVerified === false &&
+      state.auth.isInitialized,
+    [state.auth.currentUser?.uid, state.auth.currentUser?.emailVerified, state.auth.isInitialized]
+  );
 
-    const needsTestSuite = () => {
-        return isFullyAuthenticated() &&
-            state.auth.profileLoaded &&
-            (!state.suites.testSuites || state.suites.testSuites.length === 0) &&
-            !state.suites.loading;
-    };
+  const isFullyAuthenticated = useCallback(
+    () => isAuthenticated && state.auth.currentUser?.uid && state.auth.currentUser?.emailVerified === true,
+    [isAuthenticated, state.auth.currentUser?.uid, state.auth.currentUser?.emailVerified]
+  );
 
-    const shouldShowDashboard = () => {
-        return isFullyAuthenticated() &&
-            state.suites.testSuites &&
-            state.suites.testSuites.length > 0 &&
-            state.suites.activeSuite;
-    };
+  const shouldShowAuthUI = useCallback(
+    () => state.auth.isInitialized && !isAuthenticated && !state.auth.currentUser?.uid,
+    [state.auth.isInitialized, isAuthenticated, state.auth.currentUser?.uid]
+  );
 
-    // Main authentication and app readiness logic
-    useEffect(() => {
-        // Wait for auth initialization
-        if (!state.auth.isInitialized) {
-            setAppReady(false);
-            return;
+  const needsTestSuite = useCallback(
+    () =>
+      isFullyAuthenticated() &&
+      state.auth.profileLoaded &&
+      (!state.suites.testSuites || state.suites.testSuites.length === 0) &&
+      !state.suites.loading,
+    [isFullyAuthenticated, state.auth.profileLoaded, state.suites.testSuites, state.suites.loading]
+  );
+
+  const shouldShowDashboard = useCallback(
+    () =>
+      isFullyAuthenticated() &&
+      state.suites.testSuites?.length > 0 &&
+      state.suites.activeSuite,
+    [isFullyAuthenticated, state.suites.testSuites, state.suites.activeSuite]
+  );
+
+  // Handle suite creation
+  const handleSuiteCreated = useCallback(
+    async (suiteData) => {
+      try {
+        console.log('Suite created:', suiteData);
+        await actions.suites.loadTestSuites();
+        if (suiteData?.id) {
+          await actions.suites.activateSuite(suiteData);
+          trackInteraction(); // Count suite creation as an interaction
         }
-
-        // If user needs email verification, redirect
-        if (needsEmailVerification()) {
-            actions.ui.closeModal('createSuite');
-            actions.suites.clearSuites();
-            router.push('/verify-email');
-            setAppReady(false);
-            return;
-        }
-
-        // If not authenticated, show auth UI
-        if (shouldShowAuthUI()) {
-            setAppReady(false);
-            return;
-        }
-
-        // If authenticated but no profile data, fetch it
-        if (isAuthenticated && state.auth.currentUser?.uid && !state.auth.profileLoaded) {
-            console.log('Fetching user profile data...');
-            actions.auth.refreshUserProfile()
-                .then(() => {
-                    console.log('User profile loaded successfully');
-                })
-                .catch((error) => {
-                    console.error('Failed to load user profile:', error);
-                    // Don't block the app if profile fetch fails
-                });
-        }
-
-        // Wait for app data to load
-        if (state.auth.loading || state.subscription.loading || state.suites.loading) {
-            setAppReady(false);
-            return;
-        }
-
-        // Check trial expiry
-        if (state.subscription.isTrialActive &&
-            state.subscription.trialEndsAt &&
-            new Date() > new Date(state.subscription.trialEndsAt)) {
-            actions.subscription.handleTrialExpiry(state.suites, actions.suites, actions.ui)
-                .catch((error) => {
-                    console.error('Error handling trial expiry:', error);
-                    toast.error(error.message || 'Error updating subscription. Please contact support.');
-                });
-            setAppReady(false);
-            return;
-        }
-
-        // Check if user needs to create their first test suite
-        if (needsTestSuite()) {
-            console.log('User needs to create first test suite');
-            setShowCreateSuiteModal(true);
-            setShowTipsMode(false);
-            setAppReady(false);
-            return;
-        }
-
-        // Dashboard access logic
-        if (isFullyAuthenticated()) {
-            const hasAnySuites = state.suites.testSuites && state.suites.testSuites.length > 0;
-            const hasActiveSuite = state.suites.activeSuite;
-
-            console.log('Dashboard readiness check:', {
-                isFullyAuthenticated: isFullyAuthenticated(),
-                hasAnySuites,
-                hasActiveSuite,
-                pathname,
-                shouldBypassTipsMode
-            });
-
-            // If user has suites but no active suite, activate the first one
-            if (hasAnySuites && !hasActiveSuite) {
-                console.log('Activating first available suite:', state.suites.testSuites[0]);
-                actions.suites.activateSuite(state.suites.testSuites[0]);
-            }
-
-            // Check if we should show tips mode (has suites but no substantial content)
-            // BUT only if we're not on a route that should bypass tips mode
-            if (hasAnySuites && hasActiveSuite) {
-                if (shouldBypassTipsMode) {
-                    // User is on documents page or create page - show normal content
-                    setShowTipsMode(false);
-                    setAppReady(true);
-                    setShowCreateSuiteModal(false);
-                } else {
-                    // User has substantial content - show normal dashboard
-                    setShowTipsMode(false);
-                    setAppReady(true);
-                    setShowCreateSuiteModal(false);
-                }
-            } else {
-                // App is ready - user can access dashboard
-                setAppReady(true);
-                setShowTipsMode(false);
-                setShowCreateSuiteModal(false);
-            }
-        }
-    }, [
-        state.auth.isInitialized,
-        state.auth.loading,
-        state.auth.profileLoaded,
-        isAuthenticated,
-        state.auth.currentUser?.uid,
-        state.auth.currentUser?.emailVerified,
-        state.subscription.loading,
-        state.suites.loading,
-        state.suites.testSuites?.length,
-        state.suites.activeSuite?.id,
-        state.subscription.isTrialActive,
-        state.subscription.trialEndsAt,
-        pathname,
-        shouldBypassTipsMode
-    ]);
-
-    const handleLoginComplete = () => {
-        // Auth state will update automatically, no special handling needed
-        console.log('Login completed, auth state will update automatically');
-    };
-
-    const handleSuiteCreated = async (suiteData) => {
-        console.log('Suite created successfully:', suiteData);
         toast.success('Test suite created successfully!', { duration: 5000 });
-        
-        // Reload suites to ensure we have the latest data
-        try {
-            await actions.suites.loadTestSuites();
-            
-            // Activate the newly created suite
-            if (suiteData && suiteData.id) {
-                await actions.suites.activateSuite(suiteData);
-            }
-            
-            // Close the modal and show tips mode
-            setShowCreateSuiteModal(false);
-            setShowTipsMode(true);
-            setAppReady(true);
-        } catch (error) {
-            console.error('Error after suite creation:', error);
-            toast.error('Suite created but failed to reload. Please refresh the page.');
-            setShowCreateSuiteModal(false);
-            setAppReady(true);
-        }
-    };
-
-    const handleSuiteModalCancel = () => {
-        // For first-time users, they can't cancel creating a suite
-        // The modal should handle this by not showing cancel option when required
-        if (needsTestSuite()) {
-            return; // Don't allow cancel if they need a suite
-        }
         setShowCreateSuiteModal(false);
-    };
+        setShowTipsMode(interactionCount < INTERACTION_THRESHOLD && !shouldBypassTipsMode);
+        setAppReady(true);
+      } catch (error) {
+        console.error('Error after suite creation:', error);
+        toast.error('Suite created but failed to reload. Please refresh.');
+        setShowCreateSuiteModal(false);
+        setAppReady(true);
+      }
+    },
+    [actions.suites, interactionCount, shouldBypassTipsMode, trackInteraction]
+  );
 
-    const handleTipsSuiteCreated = async (newSuite) => {
-        // Handle suite creation from tips mode
-        try {
-            await actions.suites.loadTestSuites();
-            if (newSuite && newSuite.id) {
-                await actions.suites.activateSuite(newSuite);
-            }
-            toast.success('Test suite created successfully!', { duration: 5000 });
-        } catch (error) {
-            console.error('Error after tips suite creation:', error);
-            toast.error('Suite created but failed to reload. Please refresh the page.');
+  const handleTipsSuiteCreated = useCallback(
+    async (newSuite) => {
+      try {
+        await actions.suites.loadTestSuites();
+        if (newSuite?.id) {
+          await actions.suites.activateSuite(newSuite);
+          trackInteraction(); // Count suite creation as an interaction
         }
+        toast.success('Test suite created successfully!', { duration: 5000 });
+        setShowTipsMode(interactionCount < INTERACTION_THRESHOLD && !shouldBypassTipsMode);
+        setAppReady(true);
+      } catch (error) {
+        console.error('Error after tips suite creation:', error);
+        toast.error('Suite created but failed to reload. Please refresh.');
+      }
+    },
+    [actions.suites, interactionCount, shouldBypassTipsMode, trackInteraction]
+  );
+
+  // Main effect for authentication and suite handling
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeApp = async () => {
+      if (!state.auth.isInitialized) {
+        setAppReady(false);
+        return;
+      }
+
+      if (needsEmailVerification()) {
+        actions.ui.closeModal('createSuite');
+        actions.suites.clearSuites();
+        router.push('/verify-email');
+        setAppReady(false);
+        return;
+      }
+
+      if (shouldShowAuthUI()) {
+        setAppReady(false);
+        return;
+      }
+
+      if (isFullyAuthenticated() && !state.auth.profileLoaded) {
+        console.log('Fetching user profile...');
+        try {
+          await actions.auth.refreshUserProfile();
+          console.log('User profile loaded');
+        } catch (error) {
+          console.error('Failed to load profile:', error);
+        }
+      }
+
+      if (state.auth.loading || state.subscription.loading || state.suites.loading) {
+        setAppReady(false);
+        return;
+      }
+
+      if (
+        state.subscription.isTrialActive &&
+        state.subscription.trialEndsAt &&
+        new Date() > new Date(state.subscription.trialEndsAt)
+      ) {
+        try {
+          await actions.subscription.handleTrialExpiry(state.suites, actions.suites, actions.ui);
+        } catch (error) {
+          console.error('Error handling trial expiry:', error);
+          toast.error(error.message || 'Error updating subscription.');
+        }
+        setAppReady(false);
+        return;
+      }
+
+      if (needsTestSuite() && mounted) {
+        setShowCreateSuiteModal(true);
+        setShowTipsMode(false);
+        setAppReady(false);
+        return;
+      }
+
+      if (isFullyAuthenticated()) {
+        const hasAnySuites = state.suites.testSuites?.length > 0;
+        const hasActiveSuite = !!state.suites.activeSuite;
+
+        if (hasAnySuites && !hasActiveSuite && mounted) {
+          console.log('Activating first suite:', state.suites.testSuites[0]);
+          actions.suites.activateSuite(state.suites.testSuites[0]);
+        }
+
+        if (hasAnySuites && hasActiveSuite && mounted) {
+          setShowTipsMode(interactionCount < INTERACTION_THRESHOLD && !shouldBypassTipsMode);
+          setAppReady(true);
+          setShowCreateSuiteModal(false);
+        }
+      }
     };
 
-    const getLoadingMessage = () => {
-        if (!state.auth.isInitialized) return "Initializing application...";
-        if (state.auth.loading) return "Authenticating...";
-        if (needsEmailVerification()) return "Redirecting to email verification...";
-        if (state.subscription.loading) return "Loading subscription info...";
-        if (state.suites.loading) return "Loading workspaces...";
-        if (isLoading) return "Preparing your workspace...";
-        return "Loading...";
+    initializeApp();
+
+    return () => {
+      mounted = false;
     };
+  }, [
+    state.auth.isInitialized,
+    state.auth.loading,
+    state.auth.profileLoaded,
+    isAuthenticated,
+    state.auth.currentUser?.uid,
+    state.auth.currentUser?.emailVerified,
+    state.subscription.loading,
+    state.suites.loading,
+    state.suites.testSuites?.length,
+    state.suites.activeSuite?.id,
+    state.subscription.isTrialActive,
+    state.subscription.trialEndsAt,
+    pathname,
+    shouldBypassTipsMode,
+    actions.suites,
+    actions.ui,
+    actions.auth,
+    actions.subscription,
+    interactionCount,
+  ]);
 
-    // Show loading when necessary
-    if (!state.auth.isInitialized ||
-        (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))) {
-        return <LoadingScreen message={getLoadingMessage()} />;
-    }
+  const getLoadingMessage = useCallback(() => {
+    if (!state.auth.isInitialized) return 'Initializing application...';
+    if (state.auth.loading) return 'Authenticating...';
+    if (needsEmailVerification()) return 'Redirecting to email verification...';
+    if (state.subscription.loading) return 'Loading subscription info...';
+    if (state.suites.loading) return 'Loading workspaces...';
+    if (isLoading) return 'Preparing your workspace...';
+    return 'Loading...';
+  }, [
+    state.auth.isInitialized,
+    state.auth.loading,
+    needsEmailVerification,
+    state.subscription.loading,
+    state.suites.loading,
+    isLoading,
+  ]);
 
-    // Show authentication UI
-    if (shouldShowAuthUI()) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50">
-                {authMode === 'register' ? (
-                    <Register
-                        onSwitchToLogin={() => setAuthMode('login')}
-                    />
-                ) : (
-                    <Login
-                        onLoginComplete={handleLoginComplete}
-                        onSwitchToRegister={() => setAuthMode('register')}
-                    />
-                )}
-                <div id="modal-root" />
-                <div id="toast-root" />
-            </div>
-        );
-    }
+  if (
+    !state.auth.isInitialized ||
+    (isFullyAuthenticated() && (state.auth.loading || isLoading || state.subscription.loading || state.suites.loading))
+  ) {
+    return <LoadingScreen message={getLoadingMessage()} />;
+  }
 
-    // Show create suite modal if user needs to create their first suite
-    if (showCreateSuiteModal && needsTestSuite()) {
-        return (
-            <PageLayout>
-                <CreateSuiteModal
-                    isOpen={true}
-                    onSuiteCreated={handleSuiteCreated}
-                    onCancel={handleSuiteModalCancel}
-                    isRequired={true} // This prevents cancel and shows appropriate messaging
-                    accountType={state.auth.currentUser?.account_type || state.auth.currentUser?.accountType}
-                />
-                <div id="modal-root" />
-                <div id="toast-root" />
-            </PageLayout>
-        );
-    }
-
-    // Show loading if app not ready
-    if (!appReady) {
-        return <LoadingScreen message="Preparing your workspace..." />;
-    }
-
-    // Show tips mode if user has suites but dashboard would be empty
-    // BUT NOT if user is on a route that should bypass tips mode
-    if (showTipsMode && shouldShowDashboard() && !shouldBypassTipsMode) {
-        return (
-            <PageLayout title="Dashboard">
-                <TipsMode 
-                    isTrialActive={state.subscription.isTrialActive}
-                    trialDaysRemaining={state.subscription.trialDaysRemaining}
-                    isOrganizationAccount={
-                        state.auth.currentUser?.account_type === 'organization' || 
-                        state.auth.currentUser?.accountType === 'organization'
-                    }
-                    onSuiteCreated={handleTipsSuiteCreated}
-                />
-                <div id="modal-root" />
-                <div id="toast-root" />
-            </PageLayout>
-        );
-    }
-
-    // Render protected content with PageLayout
+  if (shouldShowAuthUI()) {
     return (
-        <PageLayout>
-            {children}
-            <div id="modal-root" />
-            <div id="toast-root" />
-        </PageLayout>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50">
+        {authMode === 'register' ? (
+          <Register onSwitchToLogin={() => setAuthMode('login')} />
+        ) : (
+          <Login
+            onLoginComplete={() => console.log('Login completed')}
+            onSwitchToRegister={() => setAuthMode('register')}
+          />
+        )}
+        <div id="modal-root" />
+        <div id="toast-root" />
+      </div>
     );
+  }
+
+  if (showCreateSuiteModal && needsTestSuite()) {
+    return (
+      <PageLayout>
+        <CreateSuiteModal
+          isOpen={true}
+          onSuiteCreated={handleSuiteCreated}
+          onCancel={() => needsTestSuite() ? null : setShowCreateSuiteModal(false)}
+          isRequired={true}
+          accountType={state.auth.currentUser?.accountType || 'individual'}
+        />
+        <div id="modal-root" />
+        <div id="toast-root" />
+      </PageLayout>
+    );
+  }
+
+  if (!appReady) {
+    return <LoadingScreen message="Preparing your workspace..." />;
+  }
+
+  if (showTipsMode && shouldShowDashboard() && !shouldBypassTipsMode) {
+    return (
+      <PageLayout title="Dashboard">
+        <TipsMode
+          isTrialActive={state.subscription.isTrialActive}
+          trialDaysRemaining={state.subscription.trialDaysRemaining}
+          isOrganizationAccount={state.auth.currentUser?.accountType === 'organization'}
+          onSuiteCreated={handleTipsSuiteCreated}
+          onInteraction={trackInteraction} // Pass interaction handler for TipsMode actions
+        />
+        <div id="modal-root" />
+        <div id="toast-root" />
+      </PageLayout>
+    );
+  }
+
+  return (
+    <PageLayout>
+      {children}
+      <div id="modal-root" />
+      <div id="toast-root" />
+    </PageLayout>
+  );
 };
 
 export default AppProviderWrapper;
