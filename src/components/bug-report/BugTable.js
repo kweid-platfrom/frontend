@@ -34,7 +34,7 @@ const BugTable = ({
 }) => {
     const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
-    
+
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -108,7 +108,7 @@ const BugTable = ({
     const getPageNumbers = useMemo(() => {
         const pages = [];
         const maxVisiblePages = 5;
-        
+
         if (totalPages <= maxVisiblePages) {
             for (let i = 1; i <= totalPages; i++) {
                 pages.push(i);
@@ -116,12 +116,12 @@ const BugTable = ({
         } else {
             const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
             const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-            
+
             for (let i = startPage; i <= endPage; i++) {
                 pages.push(i);
             }
         }
-        
+
         return pages;
     }, [currentPage, totalPages]);
 
@@ -238,32 +238,78 @@ const BugTable = ({
     }, []);
 
     const formatEvidence = useCallback((evidence) => {
+        // Handle null, undefined, or empty values
         if (!evidence) return 'None';
 
+        // Handle string values
         if (typeof evidence === 'string') {
             return evidence.length > 50 ? evidence.slice(0, 50) + '...' : evidence;
         }
 
+        // Handle array values
         if (Array.isArray(evidence)) {
             return evidence.length ? `${evidence.length} item(s)` : 'None';
         }
 
-        if (typeof evidence === 'object') {
+        // Handle object values (this is the critical part for AI-generated bugs)
+        if (typeof evidence === 'object' && evidence !== null) {
             try {
                 const parts = [];
+
+                // Check for common evidence properties
                 if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
-                if (evidence.browserVersion || evidence.version) parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
+                if (evidence.browserVersion || evidence.version) {
+                    parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
+                }
                 if (evidence.os) parts.push(`OS: ${evidence.os}`);
                 if (evidence.device) parts.push(`Device: ${evidence.device}`);
-                if (evidence.url) parts.push(`URL: ${new URL(evidence.url).hostname}`);
+                if (evidence.url) {
+                    try {
+                        const hostname = new URL(evidence.url).hostname;
+                        parts.push(`URL: ${hostname}`);
+                    } catch {
+                        // If URL parsing fails, just use the raw URL
+                        parts.push(`URL: ${evidence.url}`);
+                    }
+                }
 
-                return parts.length ? parts.join(' | ') : 'Evidence data';
-            } catch {
+                // If we found standard properties, format them nicely
+                if (parts.length > 0) {
+                    const result = parts.join(' | ');
+                    return result.length > 50 ? result.slice(0, 50) + '...' : result;
+                }
+
+                // If no standard properties, try to create a summary from all properties
+                const allKeys = Object.keys(evidence);
+                if (allKeys.length > 0) {
+                    const summary = allKeys.map(key => {
+                        const value = evidence[key];
+                        if (typeof value === 'string' && value.length > 0) {
+                            return `${key}: ${value.length > 20 ? value.slice(0, 20) + '...' : value}`;
+                        }
+                        return `${key}: ${String(value)}`;
+                    }).join(' | ');
+
+                    return summary.length > 50 ? summary.slice(0, 50) + '...' : summary;
+                }
+
+                // Fallback if object exists but has no meaningful properties
                 return 'Evidence data';
+
+            } catch (error) {
+                console.error('Error formatting evidence object:', error);
+                return 'Evidence data (format error)';
             }
         }
 
-        return String(evidence);
+        // Handle any other data types by converting to string safely
+        try {
+            const stringValue = String(evidence);
+            return stringValue.length > 50 ? stringValue.slice(0, 50) + '...' : stringValue;
+        } catch (error) {
+            console.error('Error converting evidence to string:', error);
+            return 'Invalid evidence';
+        }
     }, []);
 
     const formatReporter = useCallback((bug) => {
@@ -612,8 +658,8 @@ const BugTable = ({
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-600 truncate max-w-[120px]">
-                                                {String(formatEvidence(bug.evidence))}
+                                            <div className="text-xs text-gray-600 truncate max-w-[120px]" title={formatEvidence(bug.evidence)}>
+                                                {formatEvidence(bug.evidence)}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-48 relative">
@@ -653,7 +699,7 @@ const BugTable = ({
                             <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
                             <span className="font-medium">{totalItems}</span> results
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                             <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
                                 Rows per page:
@@ -685,11 +731,10 @@ const BugTable = ({
                         <button
                             onClick={() => handlePageChange(1)}
                             disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === 1
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
                             title="First page"
                         >
                             <ChevronsLeft className="h-4 w-4" />
@@ -699,11 +744,10 @@ const BugTable = ({
                         <button
                             onClick={() => handlePageChange(currentPage - 1)}
                             disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === 1
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
                             title="Previous page"
                         >
                             <ChevronLeft className="h-4 w-4" />
@@ -715,11 +759,10 @@ const BugTable = ({
                                 <button
                                     key={pageNumber}
                                     onClick={() => handlePageChange(pageNumber)}
-                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${
-                                        currentPage === pageNumber
-                                            ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
-                                            : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
-                                    }`}
+                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${currentPage === pageNumber
+                                        ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
+                                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
+                                        }`}
                                 >
                                     {pageNumber}
                                 </button>
@@ -745,11 +788,10 @@ const BugTable = ({
                         <button
                             onClick={() => handlePageChange(currentPage + 1)}
                             disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === totalPages
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
                             title="Next page"
                         >
                             <ChevronRight className="h-4 w-4" />
@@ -759,11 +801,10 @@ const BugTable = ({
                         <button
                             onClick={() => handlePageChange(totalPages)}
                             disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === totalPages
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
                             title="Last page"
                         >
                             <ChevronsRight className="h-4 w-4" />

@@ -205,12 +205,14 @@ const Home = () => {
             <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-slate-100 z-50">
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="flex justify-between items-center h-16">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-teal-600 rounded-2xl flex items-center justify-center">
-                                <span className="text-white font-bold text-sm">Q</span>
+                         <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 flex items-center justify-center bg-primary/90 rounded-xl p-1">
+                                    {/* Inline SVG Logo */}
+                                    <img src="logo.svg" alt="FixMate Logo" className="w-12 h-12" />
+                                </div>
+                                <span className="text-xl font-bold text-slate-900">FixMate</span>
                             </div>
-                            <span className="text-xl font-bold text-slate-900">QAID</span>
-                        </div>
+
 
                         <div className="hidden md:flex items-center space-x-8">
                             {[
@@ -538,11 +540,12 @@ const Home = () => {
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                         <div className="col-span-1 md:col-span-2">
-                            <div className="flex items-center space-x-2 mb-4">
-                                <div className="w-6 h-6 bg-teal-600 rounded-2xl flex items-center justify-center">
-                                    <span className="text-white font-bold text-xs">Q</span>
+                            <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 flex items-center bg-primary/90 rounded-xl p-1 justify-center">
+                                    {/* Inline SVG Logo */}
+                                    <img src="logo.svg" alt="FixMate Logo" className="w-12 h-12" />
                                 </div>
-                                <span className="text-lg font-bold text-slate-900">QAID</span>
+                                <span className="text-xl font-bold text-slate-900">FixMate</span>
                             </div>
                             <p className="text-slate-600 mb-6 max-w-md">
                                 Empowering teams to deliver exceptional software through intelligent quality assurance and testing automation.

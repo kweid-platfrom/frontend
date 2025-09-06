@@ -10,18 +10,37 @@ const InlineEditCell = React.memo(({
     disabled = false,
     noSearch = false 
 }) => {
+    // Fix: Convert object values to strings safely
+    const safeValue = useMemo(() => {
+        if (!value) return '';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object' && value !== null) {
+            // If it's an evidence object (browser, os, device), return empty string
+            if (value.browser || value.os || value.device || value.url) {
+                console.warn('Object value passed to InlineEditCell, using empty string:', value);
+                return '';
+            }
+            // Try to extract meaningful string from other objects
+            if (value.name) return String(value.name);
+            if (value.label) return String(value.label);
+            if (value.value) return String(value.value);
+            return '';
+        }
+        return String(value);
+    }, [value]);
+
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [hasError, setHasError] = useState(false);
-    const [optimisticValue, setOptimisticValue] = useState(value);
+    const [optimisticValue, setOptimisticValue] = useState(safeValue);
     const dropdownRef = useRef(null);
     const errorTimeoutRef = useRef(null);
 
     // Update optimistic value when prop changes
     useEffect(() => {
-        setOptimisticValue(value);
-    }, [value]);
+        setOptimisticValue(safeValue);
+    }, [safeValue]);
 
     // Cleanup error timeout on unmount
     useEffect(() => {
@@ -86,7 +105,7 @@ const InlineEditCell = React.memo(({
             if (result && result.success === false) {
                 console.error('Update failed:', result.error?.message);
                 // Revert optimistic update
-                setOptimisticValue(value);
+                setOptimisticValue(safeValue);
                 setHasError(true);
                 
                 // Clear error after 3 seconds
@@ -98,7 +117,7 @@ const InlineEditCell = React.memo(({
         } catch (error) {
             console.error('Error updating value:', error);
             // Revert optimistic update
-            setOptimisticValue(value);
+            setOptimisticValue(safeValue);
             setHasError(true);
             
             // Clear error after 3 seconds
@@ -108,7 +127,7 @@ const InlineEditCell = React.memo(({
         } finally {
             setIsUpdating(false);
         }
-    }, [onChange, optimisticValue, value]);
+    }, [onChange, optimisticValue, safeValue]);
 
     const toggleDropdown = useCallback((e) => {
         e.preventDefault();

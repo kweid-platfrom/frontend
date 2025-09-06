@@ -271,7 +271,7 @@ export const AppProvider = ({ children }) => {
                             (error) => {
                                 console.error('Suite subscription error:', error);
                                 const errorMessage = getFirebaseErrorMessage(error);
-                                
+
                                 // FIXED: Better error handling - don't retry on auth errors
                                 if (error?.code === 'permission-denied' || error?.code === 'unauthenticated') {
                                     console.log('Authentication/permission error, not retrying');
@@ -291,7 +291,7 @@ export const AppProvider = ({ children }) => {
                                     slices.suites.actions.loadSuitesSuccess([]);
                                     setSuitesLoaded(true);
                                     setSuiteSubscriptionActive(false);
-                                    
+
                                     if (slices.suites.state.testSuites.length === 0) {
                                         slices.ui.actions.showNotification?.({
                                             id: 'suite-subscription-error',
@@ -430,11 +430,16 @@ export const AppProvider = ({ children }) => {
                         loadSuccess(safeAssets);
                     },
                     (error) => {
-                        console.error(`Error loading ${type}:`, error);
-                        const errorMessage = getFirebaseErrorMessage(error);
-                        
+                        // Handle empty error objects and ensure we have a proper error
+                        let actualError = error;
+                        if (!error || (typeof error === 'object' && Object.keys(error).length === 0)) {
+                            actualError = new Error(`Unknown error in ${type} subscription`);
+                        }
+
+                        const errorMessage = getFirebaseErrorMessage(actualError);
+
                         // Only show error notifications for non-permission errors
-                        if (error?.code !== 'permission-denied') {
+                        if (actualError?.code !== 'permission-denied') {
                             slices.ui.actions.showNotification?.({
                                 id: `${type.toLowerCase()}-subscription-error`,
                                 type: 'error',
@@ -442,7 +447,7 @@ export const AppProvider = ({ children }) => {
                                 duration: 5000,
                             });
                         }
-                        
+
                         loadSuccess([]); // Load empty array on error
                     }
                 );
@@ -509,11 +514,11 @@ export const AppProvider = ({ children }) => {
             actions: {
                 auth: { ...slices.auth.actions, logout, initializeAuth, refreshUserProfile, reports: slices.reports.actions },
                 suites: slices.suites.actions,
-                testCases: { 
-                    ...slices.testCases.actions, 
-                    createTestCase: wrappedCreateTestCase, 
-                    updateTestCase: wrappedUpdateTestCase, 
-                    deleteTestCase: wrappedDeleteTestCase 
+                testCases: {
+                    ...slices.testCases.actions,
+                    createTestCase: wrappedCreateTestCase,
+                    updateTestCase: wrappedUpdateTestCase,
+                    deleteTestCase: wrappedDeleteTestCase
                 },
                 bugs: slices.bugs.actions,
                 recordings: { ...slices.recordings.actions, saveRecording, linkRecordingToBug },

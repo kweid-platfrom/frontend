@@ -116,4 +116,134 @@ export class AssetService extends BaseFirestoreService {
     async addBugsToSprint(sprintId, bugIds) {
         return { success: true, data: { sprintId, bugIds } };
     }
+
+    // Add these methods to your AssetService class
+
+    async updateSuiteAsset(suiteId, assetType, assetId, updates, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: `Insufficient permissions to update ${assetType} in this test suite` } };
+        }
+
+        const collectionPath = sprintId
+            ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
+            : `testSuites/${suiteId}/${assetType}`;
+
+        const data = this.addCommonFields({
+            ...updates,
+            updated_at: new Date(),
+            lastActivity: new Date()
+        }, false); // false = update mode
+
+        return await this.updateDocument(`${collectionPath}/${assetId}`, data);
+    }
+
+    async deleteSuiteAsset(suiteId, assetType, assetId, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'admin');
+        if (!hasAccess) {
+            return { success: false, error: { message: `Insufficient permissions to delete ${assetType} in this test suite` } };
+        }
+
+        const collectionPath = sprintId
+            ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
+            : `testSuites/${suiteId}/${assetType}`;
+
+        return await this.deleteDocument(`${collectionPath}/${assetId}`);
+    }
+
+    async getSuiteAsset(suiteId, assetType, assetId, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'read');
+        if (!hasAccess) {
+            return { success: false, error: { message: `Insufficient permissions to access ${assetType} in this test suite` } };
+        }
+
+        const collectionPath = sprintId
+            ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
+            : `testSuites/${suiteId}/${assetType}`;
+
+        return await this.getDocument(`${collectionPath}/${assetId}`);
+    }
+
+    // Bug-specific methods
+    async updateBug(bugId, updates, suiteId = null, sprintId = null) {
+        return await this.updateSuiteAsset(suiteId, 'bugs', bugId, updates, sprintId);
+    }
+
+    async deleteBug(bugId, suiteId, sprintId = null) {
+        return await this.deleteSuiteAsset(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    async getBug(bugId, suiteId, sprintId = null) {
+        return await this.getSuiteAsset(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    // Test case-specific methods
+    async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
+        return await this.updateSuiteAsset(suiteId, 'testCases', testCaseId, updates, sprintId);
+    }
+
+    async deleteTestCase(testCaseId, suiteId, sprintId = null) {
+        return await this.deleteSuiteAsset(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    async getTestCase(testCaseId, suiteId, sprintId = null) {
+        return await this.getSuiteAsset(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    // Recording-specific methods
+    async createRecording(suiteId, recordingData, sprintId = null) {
+        return await this.createSuiteAsset(suiteId, 'recordings', recordingData, sprintId);
+    }
+
+    async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
+        return await this.updateSuiteAsset(suiteId, 'recordings', recordingId, updates, sprintId);
+    }
+
+    async deleteRecording(recordingId, suiteId, sprintId = null) {
+        return await this.deleteSuiteAsset(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async getRecording(recordingId, suiteId, sprintId = null) {
+        return await this.getSuiteAsset(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async getRecordings(suiteId, sprintId = null) {
+        return await this.getSuiteAssets(suiteId, 'recordings', sprintId);
+    }
+
+    // Sprint-specific methods
+    async createSprint(suiteId, sprintData) {
+        return await this.createSuiteAsset(suiteId, 'sprints', sprintData);
+    }
+
+    async updateSprint(sprintId, updates, suiteId = null) {
+        return await this.updateSuiteAsset(suiteId, 'sprints', sprintId, updates);
+    }
+
+    async deleteSprint(sprintId, suiteId) {
+        return await this.deleteSuiteAsset(suiteId, 'sprints', sprintId);
+    }
+
+    async getSprint(sprintId, suiteId) {
+        return await this.getSuiteAsset(suiteId, 'sprints', sprintId);
+    }
+
+    async getSprints(suiteId) {
+        return await this.getSuiteAssets(suiteId, 'sprints');
+    }
 }

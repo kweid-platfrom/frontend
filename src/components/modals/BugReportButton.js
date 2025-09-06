@@ -28,7 +28,8 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     const [mounted, setMounted] = useState(false);
     const [formData, setFormData] = useState({
         ...DEFAULT_BUG_FORM_DATA,
-        selectedSuiteId: null
+        selectedSuiteId: null,
+        creationType: 'manual' // Default to manual
     });
     const [attachments, setAttachments] = useState([]);
     const [error, setError] = useState("");
@@ -133,12 +134,18 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     }, []);
 
-    const validateForm = useCallback(() => {
+    const validateForm = useCallback((bugData) => {
         if (!formData.selectedSuiteId) {
             setError("Please select a test suite");
             return false;
         }
 
+        // For AI-generated reports, we already have the data validated
+        if (bugData?.creationType === 'ai') {
+            return true;
+        }
+
+        // For manual reports, validate the form data
         const validation = validateBugForm(formData);
         if (!validation.isValid) {
             setError(validation.errors[0]);
@@ -151,7 +158,8 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     const closeForm = useCallback(() => {
         setFormData({
             ...DEFAULT_BUG_FORM_DATA,
-            selectedSuiteId: null
+            selectedSuiteId: null,
+            creationType: 'manual'
         });
         setAttachments([]);
         setError("");
@@ -173,7 +181,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 closeForm();
             }
         };
-        
+
         document.addEventListener('keydown', handleEscape);
         return () => document.removeEventListener('keydown', handleEscape);
     }, [showBugForm, closeForm]);
@@ -186,12 +194,8 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         return String(value).toLowerCase();
     };
 
-    const handleSubmit = async (event) => {
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
+    // Generic submit handler that works for both manual and AI reports
+    const handleSubmit = async (bugDataOverride) => {
         if (!canCreateBugs) {
             setError("Bug creation is not available with your current plan. Please upgrade.");
             actions.ui.showNotification({
@@ -212,14 +216,18 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             return;
         }
 
-        if (!validateForm()) return;
+        // Determine if this is an AI-generated report or manual report
+        const isAIReport = bugDataOverride?.creationType === 'ai';
+        const sourceData = isAIReport ? bugDataOverride : formData;
+
+        if (!validateForm(bugDataOverride)) return;
 
         setIsSubmitting(true);
         setError("");
 
         try {
             const hasAttachments = attachments.length > 0;
-            const priority = getPriorityFromSeverity(formData.severity);
+            const priority = getPriorityFromSeverity(sourceData.severity);
             const currentTimestamp = Timestamp.fromDate(new Date());
 
             if (!currentUser?.uid) {
@@ -227,27 +235,28 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             }
 
             const bugData = {
-                title: formData.title.trim(),
-                description: formData.description.trim(),
-                actualBehavior: formData.actualBehavior.trim(),
-                stepsToReproduce: formData.stepsToReproduce.trim() || "",
-                expectedBehavior: formData.expectedBehavior.trim() || "",
-                workaround: formData.workaround.trim() || "",
-                assignedTo: formData.assignedTo || null,
-                assigned_to: formData.assignedTo || null,
+                title: sourceData.title.trim(),
+                description: sourceData.description.trim(),
+                actualBehavior: sourceData.actualBehavior.trim(),
+                stepsToReproduce: sourceData.stepsToReproduce.trim() || "",
+                expectedBehavior: sourceData.expectedBehavior.trim() || "",
+                workaround: sourceData.workaround.trim() || "",
+                assignedTo: sourceData.assignedTo || null,
+                assigned_to: sourceData.assignedTo || null,
                 status: "New",
                 priority: priority,
-                severity: formData.severity,
-                category: formData.category,
-                tags: [safeToLowerCase(formData.category).replace(/\s+/g, '_')],
-                source: formData.source || "Manual",
-                environment: formData.environment || "Production",
-                frequency: formData.frequency || "Once",
+                severity: sourceData.severity,
+                category: sourceData.category,
+                tags: [safeToLowerCase(sourceData.category).replace(/\s+/g, '_')],
+                source: isAIReport ? "AI Generated" : "Manual",
+                creationType: isAIReport ? "ai" : "manual", // Track creation type
+                environment: sourceData.environment || "Production",
+                frequency: sourceData.frequency || "Once",
                 browserInfo: formData.browserInfo || getBrowserInfo(),
                 deviceInfo: formData.deviceInfo || getDeviceInfo(),
                 userAgent: formData.userAgent || navigator.userAgent,
-                hasConsoleLogs: formData.hasConsoleLogs || false,
-                hasNetworkLogs: formData.hasNetworkLogs || false,
+                hasConsoleLogs: sourceData.hasConsoleLogs || false,
+                hasNetworkLogs: sourceData.hasNetworkLogs || false,
                 hasAttachments,
                 attachments: attachments.map(att => ({
                     name: att.name,
@@ -275,21 +284,22 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 updatedByName: userDisplayName(),
                 version: 1,
                 searchTerms: [
-                    safeToLowerCase(formData.title),
-                    safeToLowerCase(formData.description),
-                    safeToLowerCase(formData.category),
-                    safeToLowerCase(formData.severity),
+                    safeToLowerCase(sourceData.title),
+                    safeToLowerCase(sourceData.description),
+                    safeToLowerCase(sourceData.category),
+                    safeToLowerCase(sourceData.severity),
                     "new",
-                    safeToLowerCase(formData.source),
-                    safeToLowerCase(formData.environment)
+                    isAIReport ? "ai_generated" : "manual",
+                    safeToLowerCase(sourceData.environment)
                 ].filter(Boolean)
             };
 
             console.log('Submitting bug with user UID:', currentUser.uid);
+            console.log('Bug creation type:', bugData.creationType);
             console.log('Bug data keys:', Object.keys(bugData));
 
             const result = await actions.bugs.createBug(bugData);
-            
+
             await new Promise(resolve => setTimeout(resolve, 100));
 
             if (onCreateBug && typeof onCreateBug === 'function') {
@@ -300,10 +310,11 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 }
             }
 
+            const reportTypeDisplay = isAIReport ? 'AI-generated' : 'Manual';
             actions.ui.showNotification({
                 type: 'success',
                 title: 'Bug Created Successfully',
-                message: `Bug "${formData.title.trim()}" has been created and assigned.`
+                message: `${reportTypeDisplay} bug "${sourceData.title.trim()}" has been created and assigned.`
             });
 
             closeForm();
@@ -322,6 +333,11 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             setIsSubmitting(false);
         }
     };
+
+    // Manual form submit handler
+    const handleManualSubmit = useCallback(() => {
+        handleSubmit();
+    }, [handleSubmit]);
 
     const handleButtonClick = useCallback((event) => {
         if (event) {
@@ -377,29 +393,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
 
     return (
         <>
-            <style jsx global>{`
-                .bug-report-modal textarea,
-                .bug-report-modal input,
-                .bug-report-modal select {
-                    background-color: rgb(var(--color-background)) !important;
-                    color: rgb(var(--color-foreground)) !important;
-                    border: 1px solid rgb(var(--color-border)) !important;
-                }
-                .bug-report-modal textarea:focus,
-                .bug-report-modal input:focus,
-                .bug-report-modal select:focus {
-                    outline: none !important;
-                    border-color: rgb(var(--color-primary)) !important;
-                    box-shadow: 0 0 0 2px rgb(var(--color-primary)) !important;
-                }
-                .bug-report-modal textarea::placeholder,
-                .bug-report-modal input::placeholder {
-                    color: rgb(var(--color-muted-foreground)) !important;
-                }
-                .bug-report-modal label {
-                    color: rgb(var(--color-foreground)) !important;
-                }
-            `}</style>
             <button
                 type="button"
                 className={`group px-3 py-2 text-sm bg-primary text-primary-foreground border border-border hover:bg-primary/80 hover:border-border/80 hover:shadow-md rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
@@ -409,14 +402,12 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 <BugAntIcon className="h-4 w-4 text-primary-foreground transition-transform group-hover:scale-110" />
                 <span className="hidden sm:inline font-medium">Report Bug</span>
             </button>
-
             {showBugForm && createPortal(
-                <div 
-                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-black/50"
                     onClick={handleBackdropClick}
                 >
-                    <div className="relative bg-card rounded-lg shadow-theme-xl w-full max-w-2xl max-h-[95vh] overflow-hidden flex flex-col z-[10000] bug-report-modal">
+                    <div className="relative bg-card rounded-lg shadow-theme-xl w-[95vw] max-w-4xl min-w-[300px] max-h-[90vh] sm:max-h-[95vh] flex flex-col">
                         <div className="flex-shrink-0 border-b border-border px-4 sm:px-6 py-4">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -449,26 +440,26 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                                 </button>
                             </div>
                         </div>
-                        
-                        <div className="flex-1 overflow-y-auto">
-                            <div className="p-4 sm:p-6">
-                                <BugReportForm
-                                    formData={formData}
-                                    updateFormData={updateFormData}
-                                    attachments={attachments}
-                                    setAttachments={setAttachments}
-                                    teamMembers={teamMembers}
-                                    error={error}
-                                    setError={setError}
-                                    isSubmitting={isSubmitting}
-                                    onSubmit={handleSubmit}
-                                    onClose={closeForm}
-                                    suites={suites}
-                                    activeSuite={activeSuite}
-                                    userProfile={userProfile}
-                                    showSuiteSelector={true}
-                                />
-                            </div>
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                            <BugReportForm
+                                formData={formData}
+                                updateFormData={updateFormData}
+                                attachments={attachments}
+                                setAttachments={setAttachments}
+                                teamMembers={teamMembers}
+                                error={error}
+                                setError={setError}
+                                isSubmitting={isSubmitting}
+                                onSubmit={handleManualSubmit}
+                                onAISubmit={handleSubmit}
+                                onClose={closeForm}
+                                suites={suites}
+                                activeSuite={activeSuite}
+                                userProfile={userProfile}
+                                userDisplayName={userDisplayName}
+                                currentUser={currentUser}
+                                showSuiteSelector={true}
+                            />
                         </div>
                     </div>
                 </div>,

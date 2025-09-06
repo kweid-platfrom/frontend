@@ -224,10 +224,13 @@ const Login = () => {
             <BackgroundDecorations />
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
-                    <div className="text-center mb-8">
+                    <div className="text-center mb-4">
                         <div className="inline-block">
-                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                                QAID
+                             <div className="flex items-center space-x-2 mb-2">
+                                <div className="w-16 h-16 flex items-center justify-center">
+                                    <img src="/logo.png" alt="Assura Logo" className="w-16 h-16 object-contain" />
+                                </div>
+                                <span className="text-2xl font-bold text-slate-900">Assura</span>
                             </div>
                         </div>
                     </div>

@@ -16,7 +16,7 @@ import {
     XCircle,
     Shield,
     Clock,
-    ChevronLeft,
+    ChevronLeft,    
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,

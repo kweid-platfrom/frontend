@@ -1,0 +1,522 @@
+'use client';
+
+import { useState, useCallback, useMemo } from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import { useApp } from '@/context/AppProvider';
+import {
+    CheckSquare,
+    Square,
+    ChevronUp,
+    ChevronDown,
+    Bug,
+    Clock,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    Code,
+    Terminal,
+    FileText,
+} from 'lucide-react';
+import InlineEditCell from './InlineEditCell';
+import BulkActionsBar from './BulkActionsBar';
+
+const MinimalBugTable = ({
+    bugs = [],
+    loading,
+    onBulkAction,
+    onView,
+    selectedBugs,
+    onSelectBugs,
+    onUpdateBug,
+}) => {
+    const { actions: { ui: { showNotification } } } = useApp();
+    const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
+    
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(15);
+
+    const [expandedLogs, setExpandedLogs] = useState(new Set());
+
+    const handleSelectAll = useCallback((checked) => {
+        if (checked) {
+            onSelectBugs(bugs.map((bug) => bug.id));
+        } else {
+            onSelectBugs([]);
+        }
+    }, [bugs, onSelectBugs]);
+
+    const handleSelectItem = useCallback((id, checked) => {
+        if (checked) {
+            onSelectBugs([...selectedBugs, id]);
+        } else {
+            onSelectBugs(selectedBugs.filter((selectedId) => selectedId !== id));
+        }
+    }, [selectedBugs, onSelectBugs]);
+
+    const handleSort = useCallback((key) => {
+        setSortConfig((prev) => ({
+            key,
+            direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+        }));
+        setCurrentPage(1);
+    }, []);
+
+    const toggleLogExpansion = useCallback((bugId) => {
+        setExpandedLogs(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(bugId)) {
+                newSet.delete(bugId);
+            } else {
+                newSet.add(bugId);
+            }
+            return newSet;
+        });
+    }, []);
+
+    const sortedBugs = useMemo(() => {
+        return [...bugs].sort((a, b) => {
+            if (sortConfig.key) {
+                const aValue = a[sortConfig.key];
+                const bValue = b[sortConfig.key];
+                if (['updated_at', 'created_at'].includes(sortConfig.key)) {
+                    const aDate = aValue instanceof Date ? aValue : new Date(aValue);
+                    const bDate = bValue instanceof Date ? bValue : new Date(bValue);
+                    if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
+                    if (isNaN(aDate.getTime())) return 1;
+                    if (isNaN(bDate.getTime())) return -1;
+                    return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
+                }
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'asc' ? 1 : -1;
+                }
+            }
+            return 0;
+        });
+    }, [bugs, sortConfig]);
+
+    // Pagination calculations
+    const totalItems = sortedBugs.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedBugs = sortedBugs.slice(startIndex, endIndex);
+
+    const handlePageChange = useCallback((page) => {
+        setCurrentPage(page);
+    }, []);
+
+    const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
+        setItemsPerPage(newItemsPerPage);
+        setCurrentPage(1);
+    }, []);
+
+    const getPageNumbers = useMemo(() => {
+        const pages = [];
+        const maxVisiblePages = 5;
+        
+        if (totalPages <= maxVisiblePages) {
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                pages.push(i);
+            }
+        }
+        
+        return pages;
+    }, [currentPage, totalPages]);
+
+    const handleUpdateBug = useCallback(async (bugId, updates) => {
+        if (typeof onUpdateBug === 'function') {
+            try {
+                const result = await onUpdateBug(bugId, updates);
+
+                if (result && !result.success) {
+                    console.warn('Update failed:', result.error?.message || 'Unknown error');
+                    return result;
+                }
+
+                return result;
+            } catch (error) {
+                console.error('Error in MinimalBugTable handleUpdateBug:', error);
+
+                showNotification({
+                    type: 'error',
+                    title: 'Update Failed',
+                    message: error.message || 'Failed to update bug. Please try again.',
+                });
+
+                return { success: false, error: { message: error.message } };
+            }
+        } else {
+            console.warn('onUpdateBug is not a function', { bugId, updates });
+            showNotification({
+                type: 'error',
+                title: 'Configuration Error',
+                message: 'Update function not available. Please refresh the page.',
+                persistent: true,
+            });
+            return { success: false, error: { message: 'Update function not available' } };
+        }
+    }, [onUpdateBug, showNotification]);
+
+    const getStatusBadge = useCallback((status) => {
+        const statusConfig = {
+            open: 'bg-red-100 text-red-800 border-red-200',
+            'in-progress': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+            resolved: 'bg-green-100 text-green-800 border-green-200',
+            closed: 'bg-gray-100 text-gray-800 border-gray-200',
+            duplicate: 'bg-purple-100 text-purple-800 border-purple-200',
+            'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200',
+        };
+        return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    }, []);
+
+    const getSortIcon = useCallback((columnKey) => {
+        if (sortConfig.key !== columnKey) {
+            return <ChevronUp className="w-3 h-3 text-gray-400" />;
+        }
+        return sortConfig.direction === 'asc' ? (
+            <ChevronUp className="w-3 h-3 text-gray-600" />
+        ) : (
+            <ChevronDown className="w-3 h-3 text-gray-600" />
+        );
+    }, [sortConfig]);
+
+    const isValidDate = useCallback((date) => {
+        return date instanceof Date && !isNaN(date.getTime());
+    }, []);
+
+    const formatConsoleLog = useCallback((log) => {
+        if (!log) return 'No console log available';
+        
+        if (typeof log === 'string') {
+            return log;
+        }
+        
+        if (typeof log === 'object') {
+            try {
+                return JSON.stringify(log, null, 2);
+            } catch {
+                return String(log);
+            }
+        }
+        
+        return String(log);
+    }, []);
+
+    const getModuleInfo = useCallback((bug) => {
+        return bug.module || bug.feature || bug.component || 'General';
+    }, []);
+
+    const statusOptions = useMemo(() => [
+        { value: 'open', label: 'Open' },
+        { value: 'in-progress', label: 'In Progress' },
+        { value: 'resolved', label: 'Resolved' },
+        { value: 'closed', label: 'Closed' },
+        { value: 'duplicate', label: 'Duplicate' },
+        { value: 'won\'t-fix', label: 'Won\'t Fix' },
+    ], []);
+
+    const isAllSelected = selectedBugs.length === bugs.length && bugs.length > 0;
+
+    if (loading) {
+        return (
+            <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+                <div className="px-6 py-12 text-center">
+                    <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-teal-600"></div>
+                    <p className="mt-2 text-sm text-gray-500">Loading minimal bug reports...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+            <BulkActionsBar selectedBugs={selectedBugs} onBulkAction={onBulkAction} />
+            
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                    <Terminal className="w-5 h-5 text-gray-600" />
+                    <h3 className="text-lg font-medium text-gray-900">Minimal Bug Reports</h3>
+                    <span className="text-sm text-gray-500">
+                        - Focused view for quick developer action
+                    </span>
+                </div>
+            </div>
+
+            <div className="relative overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-20">
+                        <tr>
+                            <th className="px-6 py-3 text-left border-r border-gray-200 w-12 sticky left-0 bg-gray-50 z-30">
+                                <div className="flex items-center">
+                                    {isAllSelected ? (
+                                        <CheckSquare
+                                            className="w-4 h-4 text-teal-600 cursor-pointer"
+                                            onClick={() => handleSelectAll(false)}
+                                        />
+                                    ) : (
+                                        <Square
+                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                            onClick={() => handleSelectAll(true)}
+                                        />
+                                    )}
+                                </div>
+                            </th>
+                            <th
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('module')}
+                            >
+                                <div className="flex items-center gap-1">
+                                    Module/Feature
+                                    {getSortIcon('module')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                onClick={() => handleSort('title')}
+                            >
+                                <div className="flex items-center gap-1">
+                                    Title & Description
+                                    {getSortIcon('title')}
+                                </div>
+                            </th>
+                            <th
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                onClick={() => handleSort('status')}
+                            >
+                                <div className="flex items-center gap-1">
+                                    Status
+                                    {getSortIcon('status')}
+                                </div>
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                                Console Log
+                            </th>
+                            <th
+                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-32"
+                                onClick={() => handleSort('updated_at')}
+                            >
+                                <div className="flex items-center gap-1">
+                                    Last Updated
+                                    {getSortIcon('updated_at')}
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {paginatedBugs.length === 0 ? (
+                            <tr>
+                                <td colSpan="6" className="px-6 py-12 text-center text-sm text-gray-500">
+                                    <div className="flex flex-col items-center">
+                                        <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                                        <p>No bugs found</p>
+                                        <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : (
+                            paginatedBugs.map((bug) => {
+                                const isSelected = selectedBugs.includes(bug.id);
+                                const isLogExpanded = expandedLogs.has(bug.id);
+                                const consoleLog = formatConsoleLog(bug.console_log || bug.log || bug.error_log);
+
+                                return (
+                                    <tr key={bug.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-teal-50' : ''}`}>
+                                        <td className="px-6 py-4 border-r border-gray-200 w-12 sticky left-0 bg-white z-30">
+                                            <div className="flex items-center">
+                                                {isSelected ? (
+                                                    <CheckSquare
+                                                        className="w-4 h-4 text-teal-600 cursor-pointer"
+                                                        onClick={() => handleSelectItem(bug.id, false)}
+                                                    />
+                                                ) : (
+                                                    <Square
+                                                        className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                        onClick={() => handleSelectItem(bug.id, true)}
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                            <div className="flex items-center gap-2">
+                                                <FileText className="w-4 h-4 text-gray-400" />
+                                                <span className="text-sm font-medium text-gray-900">
+                                                    {getModuleInfo(bug)}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 border-r border-gray-200">
+                                            <div className="max-w-md">
+                                                <div className="text-sm font-medium text-gray-900 mb-1">
+                                                    {bug.title || 'Untitled Bug'}
+                                                </div>
+                                                <div className="text-xs text-gray-600 line-clamp-2">
+                                                    {bug.description || 'No description provided'}
+                                                </div>
+                                                <button
+                                                    onClick={() => onView(bug)}
+                                                    className="mt-2 text-xs text-teal-600 hover:text-teal-800 hover:underline"
+                                                >
+                                                    View full details →
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                            <InlineEditCell
+                                                value={bug.status}
+                                                options={statusOptions}
+                                                onChange={(value) => handleUpdateBug(bug.id, { status: value })}
+                                                className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getStatusBadge(bug.status)}`}
+                                                noSearch
+                                            />
+                                        </td>
+                                        <td className="px-6 py-4 border-r border-gray-200">
+                                            <div className="max-w-lg">
+                                                <div className="flex items-start gap-2">
+                                                    <Code className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className={`text-xs font-mono bg-gray-900 text-green-400 p-3 rounded border ${isLogExpanded ? '' : 'max-h-20 overflow-hidden'}`}>
+                                                            <pre className="whitespace-pre-wrap break-words">
+                                                                {consoleLog}
+                                                            </pre>
+                                                        </div>
+                                                        {consoleLog.length > 200 && (
+                                                            <button
+                                                                onClick={() => toggleLogExpansion(bug.id)}
+                                                                className="mt-2 text-xs text-teal-600 hover:text-teal-800 hover:underline"
+                                                            >
+                                                                {isLogExpanded ? 'Show less' : 'Show more'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 w-32">
+                                            <div className="flex items-center text-xs text-gray-500">
+                                                <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
+                                                {bug.updated_at && isValidDate(new Date(bug.updated_at))
+                                                    ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
+                                                    : 'Unknown'}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Pagination Component */}
+            {!loading && totalItems > 0 && (
+                <div className="bg-white px-6 py-4 border-t border-gray-200 flex items-center justify-between rounded-b-lg">
+                    <div className="flex items-center gap-6">
+                        <div className="text-sm text-gray-600">
+                            <span className="font-medium">{startIndex + 1}</span> to{' '}
+                            <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
+                            <span className="font-medium">{totalItems}</span> results
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
+                                Rows per page:
+                            </label>
+                            <select
+                                id="itemsPerPage"
+                                value={itemsPerPage}
+                                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                                className="border border-gray-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
+                            >
+                                <option value={10}>10</option>
+                                <option value={15}>15</option>
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => handlePageChange(1)}
+                            disabled={currentPage === 1}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
+                                currentPage === 1
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                        >
+                            <ChevronsLeft className="h-4 w-4" />
+                        </button>
+
+                        <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
+                                currentPage === 1
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                            {getPageNumbers.map((pageNumber) => (
+                                <button
+                                    key={pageNumber}
+                                    onClick={() => handlePageChange(pageNumber)}
+                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${
+                                        currentPage === pageNumber
+                                            ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
+                                            : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
+                                    }`}
+                                >
+                                    {pageNumber}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
+                                currentPage === totalPages
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+
+                        <button
+                            onClick={() => handlePageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
+                                currentPage === totalPages
+                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                            }`}
+                        >
+                            <ChevronsRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default MinimalBugTable;
