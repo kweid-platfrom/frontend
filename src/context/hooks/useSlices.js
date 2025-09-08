@@ -11,6 +11,7 @@ import { useUI } from '../slices/uiSlice';
 import { useAI } from '../slices/aiSlice';
 import { useTheme } from '../slices/themeSlice';
 import { useReports } from '../slices/reportSlice';
+import { useRecommendations } from '../slices/recommendationsSlice'; // Add this import
 
 export const useSlices = () => ({
     auth: useAuthSlice(),
@@ -26,6 +27,7 @@ export const useSlices = () => ({
     ai: useAI(),
     reports: useReports(),
     theme: useTheme(),
+    recommendations: useRecommendations(), // Add this line
 });
 
 export const getAppState = (slices) => ({
@@ -42,6 +44,7 @@ export const getAppState = (slices) => ({
     ai: slices.ai.state,
     reports: slices.reports.state,
     theme: slices.theme.state,
+    recommendations: slices.recommendations.state, // Add this line
 });
 
 export const getAppActions = (slices) => ({
@@ -58,4 +61,5 @@ export const getAppActions = (slices) => ({
     ai: slices.ai.actions,
     reports: slices.reports.actions,
     theme: slices.theme.actions,
+    recommendations: slices.recommendations.actions, // Add this line
 });

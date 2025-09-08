@@ -61,64 +61,84 @@ export class AssetService extends BaseFirestoreService {
         );
     }
 
+    // Test Cases
     async createTestCase(suiteId, testCaseData, sprintId = null) {
         return await this.createSuiteAsset(suiteId, 'testCases', testCaseData, sprintId);
-    }
-
-    async createBug(suiteId, bugData, sprintId = null) {
-        return await this.createSuiteAsset(suiteId, 'bugs', bugData, sprintId);
     }
 
     async getTestCases(suiteId, sprintId = null) {
         return await this.getSuiteAssets(suiteId, 'testCases', sprintId);
     }
 
-    async getBugs(suiteId, sprintId = null) {
-        return await this.getSuiteAssets(suiteId, 'bugs', sprintId);
-    }
-
     subscribeToTestCases(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.subscribeToSuiteAssets(suiteId, 'testCases', callback, errorCallback, sprintId);
+    }
+
+    // Bugs
+    async createBug(suiteId, bugData, sprintId = null) {
+        return await this.createSuiteAsset(suiteId, 'bugs', bugData, sprintId);
+    }
+
+    async getBugs(suiteId, sprintId = null) {
+        return await this.getSuiteAssets(suiteId, 'bugs', sprintId);
     }
 
     subscribeToBugs(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.subscribeToSuiteAssets(suiteId, 'bugs', callback, errorCallback, sprintId);
     }
 
+    // Recommendations - NEW METHODS
+    async createRecommendation(suiteId, recommendationData, sprintId = null) {
+        return await this.createSuiteAsset(suiteId, 'recommendations', recommendationData, sprintId);
+    }
+
+    async getRecommendations(suiteId, sprintId = null) {
+        return await this.getSuiteAssets(suiteId, 'recommendations', sprintId);
+    }
+
+    subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
+        return this.subscribeToSuiteAssets(suiteId, 'recommendations', callback, errorCallback, sprintId);
+    }
+
+    async updateRecommendation(recommendationId, updates, suiteId, sprintId = null) {
+        return await this.updateSuiteAsset(suiteId, 'recommendations', recommendationId, updates, sprintId);
+    }
+
+    async deleteRecommendation(recommendationId, suiteId, sprintId = null) {
+        return await this.deleteSuiteAsset(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    async getRecommendation(recommendationId, suiteId, sprintId = null) {
+        return await this.getSuiteAsset(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    // Recordings
+    async createRecording(suiteId, recordingData, sprintId = null) {
+        return await this.createSuiteAsset(suiteId, 'recordings', recordingData, sprintId);
+    }
+
+    async getRecordings(suiteId, sprintId = null) {
+        return await this.getSuiteAssets(suiteId, 'recordings', sprintId);
+    }
+
     subscribeToRecordings(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.subscribeToSuiteAssets(suiteId, 'recordings', callback, errorCallback, sprintId);
+    }
+
+    // Sprints
+    async createSprint(suiteId, sprintData) {
+        return await this.createSuiteAsset(suiteId, 'sprints', sprintData);
+    }
+
+    async getSprints(suiteId) {
+        return await this.getSuiteAssets(suiteId, 'sprints');
     }
 
     subscribeToSprints(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.subscribeToSuiteAssets(suiteId, 'sprints', callback, errorCallback, sprintId);
     }
 
-    async batchLinkTestCasesToBug(bugId, testCaseIds) {
-        return { success: true, data: { bugId, testCaseIds } };
-    }
-
-    async batchUnlinkTestCaseFromBug(bugId, testCaseId) {
-        return { success: true, data: { bugId, testCaseId } };
-    }
-
-    async batchLinkBugsToTestCase(testCaseId, bugIds) {
-        return { success: true, data: { testCaseId, bugIds } };
-    }
-
-    async batchUnlinkBugFromTestCase(testCaseId, bugId) {
-        return { success: true, data: { testCaseId, bugId } };
-    }
-
-    async addTestCasesToSprint(sprintId, testCaseIds) {
-        return { success: true, data: { sprintId, testCaseIds } };
-    }
-
-    async addBugsToSprint(sprintId, bugIds) {
-        return { success: true, data: { sprintId, bugIds } };
-    }
-
-    // Add these methods to your AssetService class
-
+    // Generic CRUD operations
     async updateSuiteAsset(suiteId, assetType, assetId, updates, sprintId = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -179,7 +199,7 @@ export class AssetService extends BaseFirestoreService {
         return await this.getDocument(`${collectionPath}/${assetId}`);
     }
 
-    // Bug-specific methods
+    // Specific asset methods
     async updateBug(bugId, updates, suiteId = null, sprintId = null) {
         return await this.updateSuiteAsset(suiteId, 'bugs', bugId, updates, sprintId);
     }
@@ -192,7 +212,6 @@ export class AssetService extends BaseFirestoreService {
         return await this.getSuiteAsset(suiteId, 'bugs', bugId, sprintId);
     }
 
-    // Test case-specific methods
     async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
         return await this.updateSuiteAsset(suiteId, 'testCases', testCaseId, updates, sprintId);
     }
@@ -203,11 +222,6 @@ export class AssetService extends BaseFirestoreService {
 
     async getTestCase(testCaseId, suiteId, sprintId = null) {
         return await this.getSuiteAsset(suiteId, 'testCases', testCaseId, sprintId);
-    }
-
-    // Recording-specific methods
-    async createRecording(suiteId, recordingData, sprintId = null) {
-        return await this.createSuiteAsset(suiteId, 'recordings', recordingData, sprintId);
     }
 
     async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
@@ -222,15 +236,6 @@ export class AssetService extends BaseFirestoreService {
         return await this.getSuiteAsset(suiteId, 'recordings', recordingId, sprintId);
     }
 
-    async getRecordings(suiteId, sprintId = null) {
-        return await this.getSuiteAssets(suiteId, 'recordings', sprintId);
-    }
-
-    // Sprint-specific methods
-    async createSprint(suiteId, sprintData) {
-        return await this.createSuiteAsset(suiteId, 'sprints', sprintData);
-    }
-
     async updateSprint(sprintId, updates, suiteId = null) {
         return await this.updateSuiteAsset(suiteId, 'sprints', sprintId, updates);
     }
@@ -243,7 +248,28 @@ export class AssetService extends BaseFirestoreService {
         return await this.getSuiteAsset(suiteId, 'sprints', sprintId);
     }
 
-    async getSprints(suiteId) {
-        return await this.getSuiteAssets(suiteId, 'sprints');
+    // Legacy batch methods (placeholder implementations)
+    async batchLinkTestCasesToBug(bugId, testCaseIds) {
+        return { success: true, data: { bugId, testCaseIds } };
+    }
+
+    async batchUnlinkTestCaseFromBug(bugId, testCaseId) {
+        return { success: true, data: { bugId, testCaseId } };
+    }
+
+    async batchLinkBugsToTestCase(testCaseId, bugIds) {
+        return { success: true, data: { testCaseId, bugIds } };
+    }
+
+    async batchUnlinkBugFromTestCase(testCaseId, bugId) {
+        return { success: true, data: { testCaseId, bugId } };
+    }
+
+    async addTestCasesToSprint(sprintId, testCaseIds) {
+        return { success: true, data: { sprintId, testCaseIds } };
+    }
+
+    async addBugsToSprint(sprintId, bugIds) {
+        return { success: true, data: { sprintId, bugIds } };
     }
 }

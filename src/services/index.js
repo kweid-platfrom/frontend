@@ -3,15 +3,24 @@ import { UserService } from './userService';
 import { OrganizationService } from './OrganizationService';
 import { TestSuiteService } from './TestSuiteService';
 import { AssetService } from './AssetService';
+import { BugService } from './bugService';
+import { ArchiveTrashService } from './archiveTrashService';
 
 class FirestoreService extends BaseFirestoreService {
     constructor() {
         super();
 
+        // Initialize services in dependency order
         this.organization = new OrganizationService();
         this.testSuite = new TestSuiteService(this.organization);
         this.assets = new AssetService(this.testSuite);
         this.user = new UserService();
+
+        // Initialize BugService after AssetService is ready
+        this.bugs = new BugService(this.assets, this.testSuite);
+
+        // Initialize ArchiveTrashService
+        this.archiveTrash = new ArchiveTrashService(this.testSuite);
 
         this.recordings = {
             createRecording: (recordingData) => {
@@ -127,6 +136,10 @@ class FirestoreService extends BaseFirestoreService {
         };
     }
 
+    // ========================
+    // ORGANIZATION METHODS
+    // ========================
+
     async createOrganization(orgData, userId = null) {
         const currentUserId = userId || this.getCurrentUserId();
         if (!currentUserId) {
@@ -181,6 +194,10 @@ class FirestoreService extends BaseFirestoreService {
         return await this.organization.getOrganizationMembers(orgId);
     }
 
+    // ========================
+    // USER METHODS
+    // ========================
+
     getUserProfile(userId) {
         const currentUserId = this.getCurrentUserId();
         if (!currentUserId) {
@@ -233,7 +250,10 @@ class FirestoreService extends BaseFirestoreService {
         return this.user.hasOrganizationRole(userId, organizationId, requiredRole);
     }
 
-    // FIXED: Aligned with TestSuiteService methods
+    // ========================
+    // TEST SUITE METHODS
+    // ========================
+
     async getUserTestSuites() {
         const currentUserId = this.getCurrentUserId();
         if (!currentUserId) {
@@ -256,7 +276,7 @@ class FirestoreService extends BaseFirestoreService {
         if (!currentUserId) {
             return { success: false, error: { message: 'Authentication required' } };
         }
-        
+
         // Basic validation
         if (!suiteData.name || suiteData.name.trim().length < 2 || suiteData.name.trim().length > 100) {
             return {
@@ -317,7 +337,6 @@ class FirestoreService extends BaseFirestoreService {
         return await this.testSuite.createTestSuite(preparedSuiteData);
     }
 
-    // FIXED: Use TestSuiteService's validation method instead of custom logic
     async validateSuiteAccess(suiteId, requiredPermission = 'read') {
         if (!suiteId) {
             return { success: false, error: { message: 'Suite ID is required' } };
@@ -343,36 +362,111 @@ class FirestoreService extends BaseFirestoreService {
         }
     }
 
+    // ========================
+    // BUG METHODS (delegated to BugService)
+    // ========================
+
     async createBug(suiteId, bugData, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.createBug(suiteId, bugData, sprintId);
+        return await this.bugs.createBug(suiteId, bugData, sprintId);
     }
+
+    async updateBug(bugId, updates, suiteId = null, sprintId = null) {
+        return await this.bugs.updateBug(bugId, updates, suiteId, sprintId);
+    }
+
+    async getBug(bugId, suiteId, sprintId = null) {
+        return await this.bugs.getBug(bugId, suiteId, sprintId);
+    }
+
+    async getBugs(suiteId, sprintId = null) {
+        // Only return active (non-archived, non-deleted) bugs by default
+        return await this.bugs.getBugs(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
+    }
+
+    async getAllBugs(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+        return await this.bugs.getBugs(suiteId, sprintId, { includeStatus });
+    }
+
+    subscribeToBugs(suiteId, onSuccess, onError) {
+        return this.bugs.subscribeToBugs(suiteId, onSuccess, onError);
+    }
+
+    // ========================
+    // RECOMMENDATION METHODS (delegated to BugService)
+    // ========================
+
+    async createRecommendation(suiteId, recommendationData, sprintId = null) {
+        return await this.bugs.createRecommendation(suiteId, recommendationData, sprintId);
+    }
+
+    async updateRecommendation(recommendationId, updates, suiteId = null, sprintId = null) {
+        return await this.bugs.updateRecommendation(recommendationId, updates, suiteId, sprintId);
+    }
+
+    async deleteRecommendation(recommendationId, suiteId, sprintId = null) {
+        return await this.bugs.deleteRecommendation(recommendationId, suiteId, sprintId);
+    }
+
+    async getRecommendation(recommendationId, suiteId, sprintId = null) {
+        return await this.bugs.getRecommendation(recommendationId, suiteId, sprintId);
+    }
+
+    async getRecommendations(suiteId, sprintId = null) {
+        return await this.bugs.getRecommendations(suiteId, sprintId);
+    }
+
+    subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
+        return this.bugs.subscribeToRecommendations(suiteId, callback, errorCallback, sprintId);
+    }
+
+    // ========================
+    // LINKING METHODS (delegated to BugService)
+    // ========================
+
+    async linkTestCasesToBug(suiteId, bugId, testCaseIds, sprintId = null) {
+        return await this.bugs.linkTestCasesToBug(suiteId, bugId, testCaseIds, sprintId);
+    }
+
+    async unlinkTestCasesFromBug(suiteId, bugId, testCaseIds, sprintId = null) {
+        return await this.bugs.unlinkTestCasesFromBug(suiteId, bugId, testCaseIds, sprintId);
+    }
+
+    async linkBugsToTestCase(suiteId, testCaseId, bugIds, sprintId = null) {
+        return await this.bugs.linkBugsToTestCase(suiteId, testCaseId, bugIds, sprintId);
+    }
+
+    async getLinkedTestCasesForBug(suiteId, bugId, sprintId = null) {
+        return await this.bugs.getLinkedTestCasesForBug(suiteId, bugId, sprintId);
+    }
+
+    async getLinkedBugsForTestCase(suiteId, testCaseId, sprintId = null) {
+        return await this.bugs.getLinkedBugsForTestCase(suiteId, testCaseId, sprintId);
+    }
+
+    async getAvailableTestCasesForLinking(suiteId, bugId, sprintId = null) {
+        return await this.bugs.getAvailableTestCasesForLinking(suiteId, bugId, sprintId);
+    }
+
+    async getAvailableBugsForLinking(suiteId, testCaseId, sprintId = null) {
+        return await this.bugs.getAvailableBugsForLinking(suiteId, testCaseId, sprintId);
+    }
+
+    async bulkLinkTestCasesToBugs(suiteId, bugIds, testCaseIds, sprintId = null) {
+        return await this.bugs.bulkLinkTestCasesToBugs(suiteId, bugIds, testCaseIds, sprintId);
+    }
+
+    async bulkLinkBugsToTestCases(suiteId, testCaseIds, bugIds, sprintId = null) {
+        return await this.bugs.bulkLinkBugsToTestCases(suiteId, testCaseIds, bugIds, sprintId);
+    }
+
+    // ========================
+    // TEST CASE METHODS (delegated to AssetService)
+    // ========================
 
     async createTestCase(suiteId, testCaseData, sprintId = null) {
         const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
         if (!accessCheck.success) return accessCheck;
         return this.assets.createTestCase(suiteId, testCaseData, sprintId);
-    }
-
-    async createRecording(suiteId, recordingData, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.createRecording(suiteId, recordingData, sprintId);
-    }
-
-    async createSprint(suiteId, sprintData) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.createSprint(suiteId, sprintData);
-    }
-
-    async updateBug(bugId, updates, suiteId = null, sprintId = null) {
-        if (suiteId) {
-            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-            if (!accessCheck.success) return accessCheck;
-        }
-        return this.assets.updateBug(bugId, updates, suiteId, sprintId);
     }
 
     async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
@@ -383,12 +477,78 @@ class FirestoreService extends BaseFirestoreService {
         return this.assets.updateTestCase(testCaseId, updates, suiteId, sprintId);
     }
 
+    async getTestCase(testCaseId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        return this.assets.getTestCase(testCaseId, suiteId, sprintId);
+    }
+
+    async getTestCases(suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        // Only return active (non-archived, non-deleted) test cases by default
+        return this.assets.getTestCases(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
+    }
+
+    async getAllTestCases(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        return this.assets.getTestCases(suiteId, sprintId, { includeStatus });
+    }
+
+    subscribeToTestCases(suiteId, onSuccess, onError) {
+        return this.assets.subscribeToTestCases(suiteId, onSuccess, onError);
+    }
+
+    // ========================
+    // RECORDING METHODS (delegated to AssetService)
+    // ========================
+
+    async createRecording(suiteId, recordingData, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
+        return this.assets.createRecording(suiteId, recordingData, sprintId);
+    }
+
     async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
         if (suiteId) {
             const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
             if (!accessCheck.success) return accessCheck;
         }
         return this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
+    }
+
+    async getRecording(recordingId, suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        return this.assets.getRecording(recordingId, suiteId, sprintId);
+    }
+
+    async getRecordings(suiteId, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        // Only return active (non-archived, non-deleted) recordings by default
+        return this.assets.getRecordings(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
+    }
+
+    async getAllRecordings(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        return this.assets.getRecordings(suiteId, sprintId, { includeStatus });
+    }
+
+    subscribeToRecordings(suiteId, onSuccess, onError) {
+        return this.assets.subscribeToRecordings(suiteId, onSuccess, onError);
+    }
+
+    // ========================
+    // SPRINT METHODS (delegated to AssetService)
+    // ========================
+
+    async createSprint(suiteId, sprintData) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
+        return this.assets.createSprint(suiteId, sprintData);
     }
 
     async updateSprint(sprintId, updates, suiteId = null) {
@@ -399,65 +559,32 @@ class FirestoreService extends BaseFirestoreService {
         return this.assets.updateSprint(sprintId, updates, suiteId);
     }
 
-    async deleteBug(bugId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.deleteBug(bugId, suiteId, sprintId);
-    }
-
-    async deleteTestCase(testCaseId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.deleteTestCase(testCaseId, suiteId, sprintId);
-    }
-
-    async deleteRecording(recordingId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.deleteRecording(recordingId, suiteId, sprintId);
-    }
-
-    async deleteSprint(sprintId, suiteId) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.deleteSprint(sprintId, suiteId);
-    }
-
-    async getBug(bugId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getBug(bugId, suiteId, sprintId);
-    }
-
-    async getTestCase(testCaseId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getTestCase(testCaseId, suiteId, sprintId);
-    }
-
-    async getRecording(recordingId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getRecording(recordingId, suiteId, sprintId);
-    }
-
     async getSprint(sprintId, suiteId) {
         const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
         if (!accessCheck.success) return accessCheck;
         return this.assets.getSprint(sprintId, suiteId);
     }
 
-    async getTestCases(suiteId, sprintId = null) {
+    async getSprints(suiteId) {
         const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
         if (!accessCheck.success) return accessCheck;
-        return this.assets.getTestCases(suiteId, sprintId);
+        // Only return active (non-archived, non-deleted) sprints by default
+        return this.assets.getSprints(suiteId, { excludeStatus: ['archived', 'deleted'] });
     }
 
-    async getBugs(suiteId, sprintId = null) {
+    async getAllSprints(suiteId, includeStatus = ['active', 'archived', 'deleted']) {
         const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
         if (!accessCheck.success) return accessCheck;
-        return this.assets.getBugs(suiteId, sprintId);
+        return this.assets.getSprints(suiteId, { includeStatus });
     }
+
+    subscribeToSprints(suiteId, onSuccess, onError) {
+        return this.assets.subscribeToSprints(suiteId, onSuccess, onError);
+    }
+
+    // ========================
+    // LEGACY BATCH METHODS (keep for compatibility)
+    // ========================
 
     async batchLinkTestCasesToBug(bugId, testCaseIds) {
         return this.assets.batchLinkTestCasesToBug(bugId, testCaseIds);
@@ -483,21 +610,242 @@ class FirestoreService extends BaseFirestoreService {
         return this.assets.addBugsToSprint(sprintId, bugIds);
     }
 
-    subscribeToTestCases(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToTestCases(suiteId, onSuccess, onError);
+    // ========================
+    // ARCHIVE OPERATIONS
+    // ========================
+
+    async archiveTestCase(suiteId, testCaseId, sprintId = null, reason = null) {
+        return await this.archiveTrash.archiveAsset(suiteId, 'testCases', testCaseId, sprintId, reason);
     }
 
-    subscribeToBugs(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToBugs(suiteId, onSuccess, onError);
+    async archiveBug(suiteId, bugId, sprintId = null, reason = null) {
+        return await this.archiveTrash.archiveAsset(suiteId, 'bugs', bugId, sprintId, reason);
     }
 
-    subscribeToRecordings(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToRecordings(suiteId, onSuccess, onError);
+    async archiveRecording(suiteId, recordingId, sprintId = null, reason = null) {
+        return await this.archiveTrash.archiveAsset(suiteId, 'recordings', recordingId, sprintId, reason);
     }
 
-    subscribeToSprints(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToSprints(suiteId, onSuccess, onError);
+    async archiveSprint(suiteId, sprintId, reason = null) {
+        return await this.archiveTrash.archiveAsset(suiteId, 'sprints', sprintId, null, reason);
     }
+
+    async archiveRecommendation(suiteId, recommendationId, sprintId = null, reason = null) {
+        return await this.archiveTrash.archiveAsset(suiteId, 'recommendations', recommendationId, sprintId, reason);
+    }
+
+    // ========================
+    // UNARCHIVE OPERATIONS
+    // ========================
+
+    async unarchiveTestCase(suiteId, testCaseId, sprintId = null) {
+        return await this.archiveTrash.unarchiveAsset(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    async unarchiveBug(suiteId, bugId, sprintId = null) {
+        return await this.archiveTrash.unarchiveAsset(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    async unarchiveRecording(suiteId, recordingId, sprintId = null) {
+        return await this.archiveTrash.unarchiveAsset(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async unarchiveSprint(suiteId, sprintId) {
+        return await this.archiveTrash.unarchiveAsset(suiteId, 'sprints', sprintId, null);
+    }
+
+    async unarchiveRecommendation(suiteId, recommendationId, sprintId = null) {
+        return await this.archiveTrash.unarchiveAsset(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    // ========================
+    // TRASH OPERATIONS (Soft Delete)
+    // ========================
+
+    async moveTestCaseToTrash(suiteId, testCaseId, sprintId = null, reason = null) {
+        return await this.archiveTrash.softDeleteAsset(suiteId, 'testCases', testCaseId, sprintId, reason);
+    }
+
+    async moveBugToTrash(suiteId, bugId, sprintId = null, reason = null) {
+        return await this.archiveTrash.softDeleteAsset(suiteId, 'bugs', bugId, sprintId, reason);
+    }
+
+    async moveRecordingToTrash(suiteId, recordingId, sprintId = null, reason = null) {
+        return await this.archiveTrash.softDeleteAsset(suiteId, 'recordings', recordingId, sprintId, reason);
+    }
+
+    async moveSprintToTrash(suiteId, sprintId, reason = null) {
+        return await this.archiveTrash.softDeleteAsset(suiteId, 'sprints', sprintId, null, reason);
+    }
+
+    async moveRecommendationToTrash(suiteId, recommendationId, sprintId = null, reason = null) {
+        return await this.archiveTrash.softDeleteAsset(suiteId, 'recommendations', recommendationId, sprintId, reason);
+    }
+
+    // ========================
+    // RESTORE FROM TRASH OPERATIONS
+    // ========================
+
+    async restoreTestCaseFromTrash(suiteId, testCaseId, sprintId = null) {
+        return await this.archiveTrash.restoreFromTrash(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    async restoreBugFromTrash(suiteId, bugId, sprintId = null) {
+        return await this.archiveTrash.restoreFromTrash(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    async restoreRecordingFromTrash(suiteId, recordingId, sprintId = null) {
+        return await this.archiveTrash.restoreFromTrash(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async restoreSprintFromTrash(suiteId, sprintId) {
+        return await this.archiveTrash.restoreFromTrash(suiteId, 'sprints', sprintId, null);
+    }
+
+    async restoreRecommendationFromTrash(suiteId, recommendationId, sprintId = null) {
+        return await this.archiveTrash.restoreFromTrash(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    // ========================
+    // PERMANENT DELETE OPERATIONS
+    // ========================
+
+    async permanentlyDeleteTestCase(suiteId, testCaseId, sprintId = null) {
+        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    async permanentlyDeleteBug(suiteId, bugId, sprintId = null) {
+        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    async permanentlyDeleteRecording(suiteId, recordingId, sprintId = null) {
+        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async permanentlyDeleteSprint(suiteId, sprintId) {
+        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'sprints', sprintId, null);
+    }
+
+    async permanentlyDeleteRecommendation(suiteId, recommendationId, sprintId = null) {
+        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    // ========================
+    // BULK OPERATIONS
+    // ========================
+
+    async bulkArchive(suiteId, assetType, assetIds, sprintId = null, reason = null) {
+        return await this.archiveTrash.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
+    }
+
+    async bulkRestore(suiteId, assetType, assetIds, sprintId = null, fromTrash = false) {
+        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, fromTrash);
+    }
+
+    async bulkPermanentDelete(suiteId, assetType, assetIds, sprintId = null) {
+        return await this.archiveTrash.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
+    }
+
+    // ========================
+    // QUERY METHODS
+    // ========================
+
+    async getArchivedItems(suiteId, assetType, sprintId = null) {
+        return await this.archiveTrash.getArchivedAssets(suiteId, assetType, sprintId);
+    }
+
+    async getTrashedItems(suiteId, assetType, sprintId = null) {
+        return await this.archiveTrash.getTrashedAssets(suiteId, assetType, sprintId);
+    }
+
+    async getExpiredItems(suiteId, assetType, sprintId = null) {
+        return await this.archiveTrash.getExpiredItems(suiteId, assetType, sprintId);
+    }
+
+    // ========================
+    // CLEANUP OPERATIONS
+    // ========================
+
+    async cleanupExpiredItems(suiteId, assetType, sprintId = null, dryRun = false) {
+        return await this.archiveTrash.cleanupExpiredItems(suiteId, assetType, sprintId, dryRun);
+    }
+
+    // ========================
+    // ARCHIVE AND TRASH MANAGEMENT
+    // ========================
+
+    async getAssetCounts(suiteId) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+        return await this.archiveTrash.getAssetCounts(suiteId);
+    }
+
+    async cleanupExpiredAssets(suiteId, assetType, sprintId = null, dryRun = true) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
+        return await this.archiveTrash.cleanupExpiredItems(suiteId, assetType, sprintId, dryRun);
+    }
+
+    // ========================
+    // BATCH ARCHIVE/RESTORE OPERATIONS
+    // ========================
+
+    async batchArchiveAssets(suiteId, assetType, assetIds, sprintId = null, reason = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
+        return await this.archiveTrash.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
+    }
+
+    async batchRestoreFromArchive(suiteId, assetType, assetIds, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
+        if (!accessCheck.success) return accessCheck;
+        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, false);
+    }
+
+    async batchRestoreFromTrash(suiteId, assetType, assetIds, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
+        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, true);
+    }
+
+    async batchPermanentDeleteAssets(suiteId, assetType, assetIds, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
+        if (!accessCheck.success) return accessCheck;
+        return await this.archiveTrash.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
+    }
+
+    // ========================
+    // MODIFIED EXISTING DELETE METHODS TO USE SOFT DELETE
+    // ========================
+
+    async deleteTestCase(testCaseId, suiteId, sprintId = null) {
+        // Use soft delete (move to trash) instead of permanent delete
+        return await this.moveTestCaseToTrash(suiteId, testCaseId, sprintId, 'User deletion');
+    }
+
+    async deleteBug(bugId, suiteId, sprintId = null) {
+        // Use soft delete (move to trash) instead of permanent delete
+        return await this.moveBugToTrash(suiteId, bugId, sprintId, 'User deletion');
+    }
+
+    async deleteRecording(recordingId, suiteId, sprintId = null) {
+        // Use soft delete (move to trash) instead of permanent delete
+        return await this.moveRecordingToTrash(suiteId, recordingId, sprintId, 'User deletion');
+    }
+
+    async deleteSprint(sprintId, suiteId) {
+        // Use soft delete (move to trash) instead of permanent delete
+        return await this.moveSprintToTrash(suiteId, sprintId, 'User deletion');
+    }
+
+    async deleteRecommendation(recommendationId, suiteId, sprintId = null) {
+        // Use soft delete (move to trash) instead of permanent delete
+        return await this.moveRecommendationToTrash(suiteId, recommendationId, sprintId, 'User deletion');
+    }
+
+    // ========================
+    // CLEANUP
+    // ========================
 
     cleanup() {
         super.cleanup();
@@ -505,6 +853,8 @@ class FirestoreService extends BaseFirestoreService {
         this.organization?.cleanup?.();
         this.testSuite?.cleanup?.();
         this.assets?.cleanup?.();
+        this.bugs?.cleanup?.();
+        this.archiveTrash?.cleanup?.();
     }
 }
 

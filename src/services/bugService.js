@@ -1,5 +1,5 @@
-import { AssetService } from './assetService';
-import { doc, runTransaction, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { doc, runTransaction, arrayUnion, arrayRemove, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export class BugService {
@@ -54,11 +54,18 @@ export class BugService {
             ...recommendationData,
             linkedTestCases: [],
             linkedBugs: [],
-            status: recommendationData.status || 'open',
+            status: recommendationData.status || 'under-review',
             priority: recommendationData.priority || 'medium',
             impact: recommendationData.impact || 'medium',
+            effort: recommendationData.effort || 'medium',
             type: 'recommendation',
-            category: recommendationData.category || 'improvement'
+            category: recommendationData.category || 'improvement',
+            // Initialize voting fields
+            upvotes: 0,
+            downvotes: 0,
+            userVotes: {}, // { userId: 'up' | 'down' }
+            comments: [],
+            tags: recommendationData.tags || []
         };
         return await this.assetService.createRecommendation(suiteId, enhancedRecommendationData, sprintId);
     }
@@ -84,7 +91,249 @@ export class BugService {
     }
 
     // ========================
-    // LINKING OPERATIONS - BUGS TO TEST CASES
+    // VOTING SYSTEM FOR RECOMMENDATIONS
+    // ========================
+
+    async voteOnRecommendation(suiteId, recommendationId, voteType, userId, sprintId = null) {
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        // Validate access
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to vote on recommendations' } };
+        }
+
+        if (!['up', 'down'].includes(voteType)) {
+            return { success: false, error: { message: 'Vote type must be "up" or "down"' } };
+        }
+
+        try {
+            const result = await runTransaction(db, async (transaction) => {
+                const recommendationPath = sprintId
+                    ? `testSuites/${suiteId}/sprints/${sprintId}/recommendations/${recommendationId}`
+                    : `testSuites/${suiteId}/recommendations/${recommendationId}`;
+                
+                const recommendationRef = doc(db, recommendationPath);
+                const recommendationDoc = await transaction.get(recommendationRef);
+                
+                if (!recommendationDoc.exists()) {
+                    throw new Error('Recommendation not found');
+                }
+
+                const recommendationData = recommendationDoc.data();
+                const currentUserVotes = recommendationData.userVotes || {};
+                const currentVote = currentUserVotes[userId];
+
+                let upvoteChange = 0;
+                let downvoteChange = 0;
+
+                if (currentVote === voteType) {
+                    // User is removing their vote
+                    delete currentUserVotes[userId];
+                    if (voteType === 'up') {
+                        upvoteChange = -1;
+                    } else {
+                        downvoteChange = -1;
+                    }
+                } else {
+                    // User is changing their vote or voting for the first time
+                    if (currentVote === 'up') {
+                        upvoteChange = -1;
+                    } else if (currentVote === 'down') {
+                        downvoteChange = -1;
+                    }
+
+                    currentUserVotes[userId] = voteType;
+                    if (voteType === 'up') {
+                        upvoteChange += 1;
+                    } else {
+                        downvoteChange += 1;
+                    }
+                }
+
+                // Update the recommendation
+                const updates = {
+                    userVotes: currentUserVotes,
+                    updated_at: serverTimestamp(),
+                    updated_by: userId
+                };
+
+                if (upvoteChange !== 0) {
+                    updates.upvotes = increment(upvoteChange);
+                }
+                if (downvoteChange !== 0) {
+                    updates.downvotes = increment(downvoteChange);
+                }
+
+                transaction.update(recommendationRef, updates);
+
+                return {
+                    success: true,
+                    voteType: currentUserVotes[userId] || null, // null if vote was removed
+                    upvoteChange,
+                    downvoteChange
+                };
+            });
+
+            return {
+                success: true,
+                message: result.voteType 
+                    ? `Vote ${result.voteType === 'up' ? 'up' : 'down'} recorded` 
+                    : 'Vote removed',
+                voteType: result.voteType,
+                changes: {
+                    upvotes: result.upvoteChange,
+                    downvotes: result.downvoteChange
+                }
+            };
+        } catch (error) {
+            console.error('voteOnRecommendation error:', {
+                suiteId,
+                recommendationId,
+                voteType,
+                userId,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to record vote' } };
+        }
+    }
+
+    // ========================
+    // COMMENT SYSTEM FOR RECOMMENDATIONS
+    // ========================
+
+    async addCommentToRecommendation(suiteId, recommendationId, commentData, userId, sprintId = null) {
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to comment on recommendations' } };
+        }
+
+        if (!commentData.text || commentData.text.trim().length === 0) {
+            return { success: false, error: { message: 'Comment text is required' } };
+        }
+
+        try {
+            const result = await runTransaction(db, async (transaction) => {
+                const recommendationPath = sprintId
+                    ? `testSuites/${suiteId}/sprints/${sprintId}/recommendations/${recommendationId}`
+                    : `testSuites/${suiteId}/recommendations/${recommendationId}`;
+                
+                const recommendationRef = doc(db, recommendationPath);
+                const recommendationDoc = await transaction.get(recommendationRef);
+                
+                if (!recommendationDoc.exists()) {
+                    throw new Error('Recommendation not found');
+                }
+
+                const comment = {
+                    id: Date.now().toString(), // Simple ID generation
+                    text: commentData.text.trim(),
+                    author_id: userId,
+                    author_name: commentData.author_name || 'Unknown User',
+                    created_at: new Date(),
+                    updated_at: new Date()
+                };
+
+                transaction.update(recommendationRef, {
+                    comments: arrayUnion(comment),
+                    updated_at: serverTimestamp(),
+                    updated_by: userId
+                });
+
+                return { success: true, comment };
+            });
+
+            return {
+                success: true,
+                message: 'Comment added successfully',
+                comment: result.comment
+            };
+        } catch (error) {
+            console.error('addCommentToRecommendation error:', {
+                suiteId,
+                recommendationId,
+                userId,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to add comment' } };
+        }
+    }
+
+    async removeCommentFromRecommendation(suiteId, recommendationId, commentId, userId, sprintId = null) {
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to remove comments' } };
+        }
+
+        try {
+            const result = await runTransaction(db, async (transaction) => {
+                const recommendationPath = sprintId
+                    ? `testSuites/${suiteId}/sprints/${sprintId}/recommendations/${recommendationId}`
+                    : `testSuites/${suiteId}/recommendations/${recommendationId}`;
+                
+                const recommendationRef = doc(db, recommendationPath);
+                const recommendationDoc = await transaction.get(recommendationRef);
+                
+                if (!recommendationDoc.exists()) {
+                    throw new Error('Recommendation not found');
+                }
+
+                const recommendationData = recommendationDoc.data();
+                const comments = recommendationData.comments || [];
+                const commentToRemove = comments.find(c => c.id === commentId);
+
+                if (!commentToRemove) {
+                    throw new Error('Comment not found');
+                }
+
+                // Check if user can remove this comment (author or admin)
+                const isAuthor = commentToRemove.author_id === userId;
+                const isAdmin = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'admin');
+                
+                if (!isAuthor && !isAdmin) {
+                    throw new Error('You can only remove your own comments');
+                }
+
+                transaction.update(recommendationRef, {
+                    comments: arrayRemove(commentToRemove),
+                    updated_at: serverTimestamp(),
+                    updated_by: userId
+                });
+
+                return { success: true };
+            });
+
+            return {
+                success: true,
+                message: 'Comment removed successfully'
+            };
+        } catch (error) {
+            console.error('removeCommentFromRecommendation error:', {
+                suiteId,
+                recommendationId,
+                commentId,
+                userId,
+                errorCode: error.code,
+                errorMessage: error.message,
+            });
+            return { success: false, error: { message: error.message || 'Failed to remove comment' } };
+        }
+    }
+
+    // ========================
+    // LINKING OPERATIONS - BUGS TO TEST CASES (unchanged)
     // ========================
 
     async linkTestCasesToBug(suiteId, bugId, testCaseIds, sprintId = null) {
@@ -617,6 +866,6 @@ export class BugService {
             }
         };
     }
-};
+}
 
-export default bugService;
+export default BugService;
