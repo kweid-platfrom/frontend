@@ -92,8 +92,8 @@ export class AssetService extends BaseFirestoreService {
         return await this.createSuiteAsset(suiteId, 'recommendations', recommendationData, sprintId);
     }
 
-    async getRecommendations(suiteId, sprintId = null) {
-        return await this.getSuiteAssets(suiteId, 'recommendations', sprintId);
+    async getRecommendations(suiteId, sprintId = null, options = {}) {
+        return await this.getSuiteAssets(suiteId, 'recommendations', sprintId, options);
     }
 
     subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
@@ -130,8 +130,8 @@ export class AssetService extends BaseFirestoreService {
         return await this.createSuiteAsset(suiteId, 'sprints', sprintData);
     }
 
-    async getSprints(suiteId) {
-        return await this.getSuiteAssets(suiteId, 'sprints');
+    async getSprints(suiteId, options = {}) {
+        return await this.getSuiteAssets(suiteId, 'sprints', null, options);
     }
 
     subscribeToSprints(suiteId, callback, errorCallback = null, sprintId = null) {
@@ -181,7 +181,7 @@ export class AssetService extends BaseFirestoreService {
         return await this.deleteDocument(`${collectionPath}/${assetId}`);
     }
 
-    async getSuiteAsset(suiteId, assetType, assetId, sprintId = null) {
+    async getSuiteAssets(suiteId, assetType, sprintId = null, options = {}) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
@@ -196,7 +196,30 @@ export class AssetService extends BaseFirestoreService {
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
 
-        return await this.getDocument(`${collectionPath}/${assetId}`);
+        // Build constraints based on options
+        const constraints = [];
+
+        if (options.excludeStatus && options.excludeStatus.length > 0) {
+            // Add constraint to exclude documents with certain status values
+            // Note: Firestore doesn't support 'not-in' with arrays, so you might need to handle this differently
+            // For now, we'll filter after retrieval
+        }
+
+        if (options.includeStatus && options.includeStatus.length > 0) {
+            // Add constraint to include only documents with certain status values
+            constraints.push(['status', 'in', options.includeStatus]);
+        }
+
+        const result = await this.queryDocuments(collectionPath, constraints, 'created_at', null);
+
+        // If we need to exclude certain statuses and couldn't do it in the query, filter here
+        if (result.success && options.excludeStatus && options.excludeStatus.length > 0) {
+            result.data = result.data.filter(item =>
+                !options.excludeStatus.includes(item.status)
+            );
+        }
+
+        return result;
     }
 
     // Specific asset methods
@@ -208,8 +231,8 @@ export class AssetService extends BaseFirestoreService {
         return await this.deleteSuiteAsset(suiteId, 'bugs', bugId, sprintId);
     }
 
-    async getBug(bugId, suiteId, sprintId = null) {
-        return await this.getSuiteAsset(suiteId, 'bugs', bugId, sprintId);
+    async getBugs(suiteId, sprintId = null, options = {}) {
+        return await this.getSuiteAssets(suiteId, 'bugs', sprintId, options);
     }
 
     async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
@@ -220,12 +243,12 @@ export class AssetService extends BaseFirestoreService {
         return await this.deleteSuiteAsset(suiteId, 'testCases', testCaseId, sprintId);
     }
 
-    async getTestCase(testCaseId, suiteId, sprintId = null) {
-        return await this.getSuiteAsset(suiteId, 'testCases', testCaseId, sprintId);
+    async getTestCases(suiteId, sprintId = null, options = {}) {
+        return await this.getSuiteAssets(suiteId, 'testCases', sprintId, options);
     }
 
-    async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
-        return await this.updateSuiteAsset(suiteId, 'recordings', recordingId, updates, sprintId);
+    async getRecordings(suiteId, sprintId = null, options = {}) {
+        return await this.getSuiteAssets(suiteId, 'recordings', sprintId, options);
     }
 
     async deleteRecording(recordingId, suiteId, sprintId = null) {

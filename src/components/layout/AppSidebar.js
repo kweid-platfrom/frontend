@@ -16,7 +16,8 @@ import {
     Database,
     ChevronLeft,
     ChevronRight,
-    FileText
+    FileText,
+    Target
 } from 'lucide-react';
 import {
     HomeIcon,
@@ -85,6 +86,12 @@ const AppSidebar = ({
             icon: BeakerIcon,
             path: '/testcases',
             module: 'testcases'
+        },
+        {
+            name: 'Sprints',
+            icon: Target,
+            path: '/sprints',
+            module: 'sprints'
         },
         {
             name: 'Recordings',
@@ -181,11 +188,10 @@ const AppSidebar = ({
                 w-64 sm:w-72 md:w-64 flex flex-col min-w-[64px] max-h-screen overflow-hidden
             `}>
                 {/* Sidebar Header */}
-                <div className="flex items-center h-14 sm:h-16 px-3 sm:px-4 border-b border-border bg-nav flex-shrink-0">
+                <div className="flex items-center h-14 sm:h-16 px-3 sm:px-4 border-b border-border bg-nav flex-shrink-0 relative">
                     <div className="flex items-center min-w-0 flex-1">
                         <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
                             <img src="/logo.png" alt="Assura Logo" className="w-12 h-12 object-contain" />
-
                         </div>
                         <div className={`ml-2 sm:ml-3 overflow-hidden text-left transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
                             <span className="text-lg sm:text-xl font-bold text-foreground whitespace-nowrap bg-gradient-to-r from-purple-600 to-teal-700 bg-clip-text">
@@ -195,20 +201,6 @@ const AppSidebar = ({
                     </div>
 
                     <div className="flex items-center gap-1 flex-shrink-0">
-                        {/* Desktop collapse button */}
-                        <button
-                            onClick={toggleCollapse}
-                            className="hidden lg:flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all duration-200 hover:scale-105"
-                            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        >
-                            <div className="transition-all duration-300">
-                                {isCollapsed ?
-                                    <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" /> :
-                                    <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
-                                }
-                            </div>
-                        </button>
-
                         {/* Mobile close button */}
                         <button
                             onClick={onClose}
@@ -218,6 +210,34 @@ const AppSidebar = ({
                         </button>
                     </div>
                 </div>
+
+                {/* Floating Collapse/Expand Button - Desktop Only */}
+                <button
+                    onClick={toggleCollapse}
+                    className={`
+                        hidden lg:flex items-center justify-center
+                        absolute top-12 z-[60] w-8 h-8 rounded-full
+                        hover:from-orange-600 hover:to-teal-700
+                        text-teal shadow-lg hover:shadow-xl
+                        transition-all duration-300 ease-in-out
+                        hover:scale-110 active:scale-95
+                        border-2 border-teal
+                        ${isCollapsed ? '-right-3' : '-right-3'}
+                        group/toggle
+                    `}
+                    aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                    <div className="relative transition-all duration-300 ease-in-out group-hover/toggle:rotate-180">
+                        {isCollapsed ? (
+                            <ChevronRight className="h-4 w-4 transition-transform duration-300" />
+                        ) : (
+                            <ChevronLeft className="h-4 w-4 transition-transform duration-300" />
+                        )}
+                    </div>
+                    
+                    {/* Pulse animation ring */}
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-500 to-teal-600 opacity-0 group-hover/toggle:opacity-20 animate-ping"></div>
+                </button>
 
                 {/* Account Section */}
                 <div className={`

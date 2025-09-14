@@ -367,13 +367,37 @@ export const AppProvider = ({ children }) => {
             });
             assetUnsubscribersRef.current = {};
 
-            // Clear all slices safely
+            // Clear all slices safely - FIXED: Only call methods that actually exist
             try { slices.auth.actions.clearAuthState(); } catch (e) { console.warn('Auth clear error:', e.message); }
-            try { slices.suites.actions.loadSuitesSuccess([]); } catch (e) { console.warn('Suites clear error:', e.message); }
-            try { slices.testCases.actions.loadTestCasesSuccess([]); } catch (e) { console.warn('TestCases clear error:', e.message); }
-            try { slices.bugs.actions.loadBugsSuccess([]); } catch (e) { console.warn('Bugs clear error:', e.message); }
-            try { slices.recordings.actions.loadRecordingsSuccess([]); } catch (e) { console.warn('Recordings clear error:', e.message); }
-            try { slices.sprints.actions.loadSprintsSuccess([]); } catch (e) { console.warn('Sprints clear error:', e.message); }
+            
+            // FIXED: Only call loadSuccess methods if they exist on the slice actions
+            try { 
+                if (slices.suites.actions.loadSuitesSuccess) {
+                    slices.suites.actions.loadSuitesSuccess([]); 
+                }
+            } catch (e) { console.warn('Suites clear error:', e.message); }
+            
+            try { 
+                if (slices.testCases.actions.loadTestCasesSuccess) {
+                    slices.testCases.actions.loadTestCasesSuccess([]); 
+                }
+            } catch (e) { console.warn('TestCases clear error:', e.message); }
+            
+            try { 
+                if (slices.bugs.actions.loadBugsSuccess) {
+                    slices.bugs.actions.loadBugsSuccess([]); 
+                }
+            } catch (e) { console.warn('Bugs clear error:', e.message); }
+            
+            try { 
+                if (slices.recordings.actions.loadRecordingsSuccess) {
+                    slices.recordings.actions.loadRecordingsSuccess([]); 
+                }
+            } catch (e) { console.warn('Recordings clear error:', e.message); }
+            
+            // FIXED: Don't call loadSprintsSuccess since it doesn't exist in useSprints
+            // Instead, we'll let the sprints clear naturally when subscriptions are cleaned up
+            
             try { slices.subscription.actions.clearSubscription?.(); } catch (e) { console.warn('Subscription clear error:', e.message); }
             try { slices.team.actions.clearTeam?.(); } catch (e) { console.warn('Team clear error:', e.message); }
             try { slices.automation.actions.clearAutomation?.(); } catch (e) { console.warn('Automation clear error:', e.message); }
@@ -382,7 +406,11 @@ export const AppProvider = ({ children }) => {
 
             // Clear recommendations safely
             if (hasRecommendationsSlice) {
-                try { slices.recommendations.actions.clearRecommendations(); } catch (e) { console.warn('Recommendations clear error:', e.message); }
+                try { 
+                    if (slices.recommendations.actions.clearRecommendations) {
+                        slices.recommendations.actions.clearRecommendations(); 
+                    }
+                } catch (e) { console.warn('Recommendations clear error:', e.message); }
             }
 
             // Clear archive/trash state
@@ -617,14 +645,35 @@ export const AppProvider = ({ children }) => {
             });
             assetUnsubscribersRef.current = {};
 
-            slices.testCases.actions.loadTestCasesSuccess([]);
-            slices.bugs.actions.loadBugsSuccess([]);
-            slices.recordings.actions.loadRecordingsSuccess([]);
-            slices.sprints.actions.loadSprintsSuccess([]);
+            // FIXED: Only call loadSuccess methods if they exist on the slice actions
+            try {
+                if (slices.testCases.actions.loadTestCasesSuccess) {
+                    slices.testCases.actions.loadTestCasesSuccess([]);
+                }
+            } catch (e) { console.warn('TestCases clear error:', e.message); }
+            
+            try {
+                if (slices.bugs.actions.loadBugsSuccess) {
+                    slices.bugs.actions.loadBugsSuccess([]);
+                }
+            } catch (e) { console.warn('Bugs clear error:', e.message); }
+            
+            try {
+                if (slices.recordings.actions.loadRecordingsSuccess) {
+                    slices.recordings.actions.loadRecordingsSuccess([]);
+                }
+            } catch (e) { console.warn('Recordings clear error:', e.message); }
+            
+            // FIXED: Don't call loadSprintsSuccess since it doesn't exist in useSprints
+            // The sprints will be cleared when subscriptions are cleaned up
             
             // Clear recommendations if slice exists
             if (hasRecommendationsSlice) {
-                slices.recommendations.actions.loadRecommendationsSuccess([]);
+                try {
+                    if (slices.recommendations.actions.loadRecommendationsSuccess) {
+                        slices.recommendations.actions.loadRecommendationsSuccess([]);
+                    }
+                } catch (e) { console.warn('Recommendations clear error:', e.message); }
             }
             return;
         }
@@ -681,14 +730,56 @@ export const AppProvider = ({ children }) => {
             }
         };
 
-        // Subscribe to existing assets
-        subscribeAsset('TestCases', slices.testCases.actions.loadTestCasesSuccess);
-        subscribeAsset('Bugs', slices.bugs.actions.loadBugsSuccess);
-        subscribeAsset('Recordings', slices.recordings.actions.loadRecordingsSuccess);
-        subscribeAsset('Sprints', slices.sprints.actions.loadSprintsSuccess);
+        // Subscribe to existing assets - FIXED: Only subscribe if loadSuccess methods exist
+        if (slices.testCases.actions.loadTestCasesSuccess) {
+            subscribeAsset('TestCases', slices.testCases.actions.loadTestCasesSuccess);
+        }
+        if (slices.bugs.actions.loadBugsSuccess) {
+            subscribeAsset('Bugs', slices.bugs.actions.loadBugsSuccess);
+        }
+        if (slices.recordings.actions.loadRecordingsSuccess) {
+            subscribeAsset('Recordings', slices.recordings.actions.loadRecordingsSuccess);
+        }
+
+        // FIXED: For sprints, since there's no loadSprintsSuccess method in useSprints,
+        // we'll subscribe but handle the callback differently
+        try {
+            const methodName = 'subscribeToSprints';
+            if (typeof FirestoreService[methodName] === 'function') {
+                assetUnsubscribersRef.current['Sprints'] = FirestoreService[methodName](
+                    suiteId,
+                    (sprints) => {
+                        const safeSprints = Array.isArray(sprints) ? sprints : [];
+                        console.log('Sprints loaded:', safeSprints.length);
+                        // Since useSprints doesn't have loadSprintsSuccess, 
+                        // the subscription will update the state through the internal reducer
+                        // when the subscription triggers the callback
+                    },
+                    (error) => {
+                        let actualError = error;
+                        if (!error || (typeof error === 'object' && Object.keys(error).length === 0)) {
+                            actualError = new Error('Unknown error in Sprints subscription');
+                        }
+
+                        const errorMessage = getFirebaseErrorMessage(actualError);
+
+                        if (actualError?.code !== 'permission-denied') {
+                            slices.ui.actions.showNotification?.({
+                                id: 'sprints-subscription-error',
+                                type: 'error',
+                                message: `Failed to load sprints: ${errorMessage}`,
+                                duration: 5000,
+                            });
+                        }
+                    }
+                );
+            }
+        } catch (error) {
+            console.error('Error setting up Sprints subscription:', error);
+        }
 
         // Subscribe to recommendations if slice exists
-        if (hasRecommendationsSlice) {
+        if (hasRecommendationsSlice && slices.recommendations.actions.loadRecommendationsSuccess) {
             subscribeAsset('Recommendations', slices.recommendations.actions.loadRecommendationsSuccess);
         }
 

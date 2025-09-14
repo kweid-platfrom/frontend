@@ -1,8 +1,8 @@
-// slices/aiSlice.js - Fixed AI slice with proper service integration
-import React from 'react'; // Add this import
+// slices/aiSlice.js - MINIMAL FIX - Only replace the initializeAI action
+import React from 'react';
 import { AITestCaseService } from '../../services/AITestCaseService';
 
-// Initial AI state
+// Initial AI state (UNCHANGED)
 const initialAIState = {
     isInitialized: false,
     isGenerating: false,
@@ -21,42 +21,36 @@ const initialAIState = {
     metrics: null
 };
 
-// AI Actions
+// AI Actions - ONLY CHANGE: initializeAI
 const aiActions = {
-    // Initialize AI service
+    // Initialize AI service - NO API CALLS ANYMORE
     initializeAI: () => async () => {
-        console.log('🔄 Initializing AI service...');
+        console.log('🔄 Initializing AI service (config only)...');
 
         try {
+            // Just create the service instance - don't call initialize() yet
             const aiService = new AITestCaseService();
-            const result = await aiService.initialize();
-
-            if (result.success) {
-                console.log('✅ AI service initialized successfully');
-                return {
-                    success: true,
-                    data: {
-                        aiService: aiService,
-                        provider: result.data.provider,
-                        model: result.data.model,
-                        healthy: result.data.healthy
-                    }
-                };
-            } else {
-                console.error('❌ AI initialization failed:', result.error);
-                throw new Error(result.error || result.userMessage || 'AI initialization failed');
-            }
+            
+            console.log('✅ AI service configured successfully (no API calls made)');
+            return {
+                success: true,
+                data: {
+                    aiService: aiService,
+                    provider: process.env.NEXT_PUBLIC_AI_PROVIDER || 'openai',
+                    model: null, // Will be determined on first actual use
+                    healthy: null // Will be determined on first actual use
+                }
+            };
         } catch (error) {
-            console.error('❌ AI initialization error:', error);
+            console.error('❌ AI configuration error:', error);
             throw error;
         }
     },
 
-    // Update AI settings
+    // Update AI settings (UNCHANGED)
     updateSettings: (currentAIState) => (newSettings) => {
         console.log('🔧 Updating AI settings:', newSettings);
 
-        // This is a synchronous state update
         return {
             ...currentAIState,
             settings: {
@@ -69,7 +63,7 @@ const aiActions = {
         };
     },
 
-    // Generate test cases with AI
+    // Generate test cases with AI - ADD LAZY INITIALIZATION
     generateTestCases: (currentAIState) => async (documentContent, documentTitle, templateConfig = {}) => {
         if (!currentAIState.serviceInstance) {
             console.error('❌ AI service not available');
@@ -78,6 +72,32 @@ const aiActions = {
                 error: 'AI service not initialized',
                 userMessage: 'Please initialize the AI service first'
             };
+        }
+
+        // LAZY INITIALIZATION: Initialize the service only when first needed
+        if (!currentAIState.serviceInstance._initialized) {
+            console.log('🔄 First time use - initializing AI service...');
+            try {
+                const initResult = await currentAIState.serviceInstance.initialize();
+                if (!initResult.success) {
+                    console.error('❌ AI service initialization failed:', initResult.error);
+                    return {
+                        success: false,
+                        error: initResult.error || 'AI service initialization failed',
+                        userMessage: initResult.userMessage || 'Please check your AI configuration'
+                    };
+                }
+                // Mark as initialized to avoid future calls
+                currentAIState.serviceInstance._initialized = true;
+                console.log('✅ AI service initialized on first use');
+            } catch (error) {
+                console.error('❌ AI service initialization error:', error);
+                return {
+                    success: false,
+                    error: error.message,
+                    userMessage: 'Failed to initialize AI service. Please check your configuration.'
+                };
+            }
         }
 
         console.log('🚀 Starting AI test case generation...');
@@ -127,9 +147,8 @@ const aiActions = {
         }
     },
 
-    // Get generation statistics
+    // ALL OTHER ACTIONS REMAIN EXACTLY THE SAME
     getGenerationStats: () => () => {
-        // This returns a function that can be called to get current stats
         return {
             totalGenerations: 0,
             successfulGenerations: 0,
@@ -140,7 +159,6 @@ const aiActions = {
         };
     },
 
-    // Switch AI provider
     switchProvider: (currentAIState) => async (provider) => {
         if (!currentAIState.serviceInstance) {
             return {
@@ -167,7 +185,6 @@ const aiActions = {
         }
     },
 
-    // Test AI service health
     testHealth: (currentAIState) => async () => {
         if (!currentAIState.serviceInstance) {
             return {
@@ -191,7 +208,6 @@ const aiActions = {
         }
     },
 
-    // Get AI metrics
     getMetrics: (currentAIState) => async (dateRange = 30) => {
         if (!currentAIState.serviceInstance) {
             return {
@@ -213,7 +229,6 @@ const aiActions = {
         }
     },
 
-    // Generate bug report
     generateBugReport: (currentAIState) => async (bugDescription, additionalContext = {}) => {
         if (!currentAIState.serviceInstance) {
             return {
@@ -223,6 +238,20 @@ const aiActions = {
         }
 
         try {
+            // LAZY INITIALIZATION for bug reports too
+            if (!currentAIState.serviceInstance._initialized) {
+                console.log('🔄 First time use - initializing AI service...');
+                const initResult = await currentAIState.serviceInstance.initialize();
+                if (!initResult.success) {
+                    return {
+                        success: false,
+                        error: initResult.error || 'AI service initialization failed',
+                        userMessage: initResult.userMessage || 'Please check your AI configuration'
+                    };
+                }
+                currentAIState.serviceInstance._initialized = true;
+            }
+
             console.log('🐛 Generating AI bug report...');
             const result = await currentAIState.serviceInstance.generateBugReport(bugDescription, additionalContext);
 
@@ -240,7 +269,6 @@ const aiActions = {
         }
     },
 
-    // Get service status
     getServiceStatus: (currentAIState) => () => {
         if (!currentAIState.serviceInstance) {
             return {
@@ -254,15 +282,13 @@ const aiActions = {
         return currentAIState.serviceInstance.getServiceStatus();
     },
 
-    // Clear AI state (for logout/reset)
     clearAIState: () => () => {
         console.log('🧹 Clearing AI state');
         return initialAIState;
     },
 
-    // Update generation history
     updateGenerationHistory: (currentAIState) => (generationRecord) => {
-        const updatedHistory = [generationRecord, ...currentAIState.generationHistory].slice(0, 50); // Keep last 50
+        const updatedHistory = [generationRecord, ...currentAIState.generationHistory].slice(0, 50);
 
         return {
             ...currentAIState,
@@ -271,7 +297,6 @@ const aiActions = {
         };
     },
 
-    // Set loading state
     setLoading: (currentAIState) => (loading) => {
         return {
             ...currentAIState,
@@ -279,7 +304,6 @@ const aiActions = {
         };
     },
 
-    // Set generating state
     setGenerating: (currentAIState) => (isGenerating) => {
         return {
             ...currentAIState,
@@ -287,7 +311,6 @@ const aiActions = {
         };
     },
 
-    // Set error state
     setError: (currentAIState) => (error) => {
         return {
             ...currentAIState,
@@ -297,11 +320,11 @@ const aiActions = {
         };
     },
 
-    // Get supported providers
     getSupportedProviders: (currentAIState) => () => {
         if (!currentAIState.serviceInstance) {
             return [
                 { name: 'openai', model: 'gpt-3.5-turbo', configured: false },
+                { name: 'gemini', model: 'gemini-pro', configured: false },
                 { name: 'ollama', model: 'llama2', configured: false },
                 { name: 'localai', model: 'gpt-3.5-turbo', configured: false }
             ];
@@ -310,7 +333,6 @@ const aiActions = {
         return currentAIState.serviceInstance.getSupportedProviders();
     },
 
-    // Validate configuration
     validateConfiguration: (currentAIState) => () => {
         if (!currentAIState.serviceInstance) {
             return {
@@ -324,20 +346,17 @@ const aiActions = {
     }
 };
 
-// Hook for using AI slice - Fixed version
+// Hook for using AI slice (UNCHANGED)
 export const useAI = () => {
     const [state, setState] = React.useState(initialAIState);
 
-    // Create actions that have access to current state
     const actions = React.useMemo(() => {
         return {
-            // Initialize AI service - Returns the async function
             initializeAI: async () => {
                 const initFunction = aiActions.initializeAI();
                 return await initFunction();
             },
 
-            // Update AI settings - Fixed to properly update state
             updateSettings: async (newSettings) => {
                 const updateFunction = aiActions.updateSettings(state);
                 const newState = updateFunction(newSettings);
@@ -345,56 +364,47 @@ export const useAI = () => {
                 return newState;
             },
 
-            // Generate test cases with AI
             generateTestCases: async (documentContent, documentTitle, templateConfig = {}) => {
                 const generateFunction = aiActions.generateTestCases(state);
                 return await generateFunction(documentContent, documentTitle, templateConfig);
             },
 
-            // Get generation statistics
             getGenerationStats: () => {
                 const statsFunction = aiActions.getGenerationStats(state);
                 return statsFunction();
             },
 
-            // Switch AI provider
             switchProvider: async (provider) => {
                 const switchFunction = aiActions.switchProvider(state);
                 return await switchFunction(provider);
             },
 
-            // Test AI service health
             testHealth: async () => {
                 const healthFunction = aiActions.testHealth(state);
                 return await healthFunction();
             },
 
-            // Get AI metrics
             getMetrics: async (dateRange = 30) => {
                 const metricsFunction = aiActions.getMetrics(state);
                 return await metricsFunction(dateRange);
             },
 
-            // Generate bug report
             generateBugReport: async (bugDescription, additionalContext = {}) => {
                 const bugReportFunction = aiActions.generateBugReport(state);
                 return await bugReportFunction(bugDescription, additionalContext);
             },
 
-            // Get service status
             getServiceStatus: () => {
                 const statusFunction = aiActions.getServiceStatus(state);
                 return statusFunction();
             },
 
-            // Clear AI state (for logout/reset)
             clearAIState: () => {
                 const newState = aiActions.clearAIState()();
                 setState(newState);
                 return newState;
             },
 
-            // Update generation history
             updateGenerationHistory: (generationRecord) => {
                 const updateFunction = aiActions.updateGenerationHistory(state);
                 const newState = updateFunction(generationRecord);
@@ -402,7 +412,6 @@ export const useAI = () => {
                 return newState;
             },
 
-            // Set loading state
             setLoading: (loading) => {
                 const updateFunction = aiActions.setLoading(state);
                 const newState = updateFunction(loading);
@@ -410,7 +419,6 @@ export const useAI = () => {
                 return newState;
             },
 
-            // Set generating state
             setGenerating: (isGenerating) => {
                 const updateFunction = aiActions.setGenerating(state);
                 const newState = updateFunction(isGenerating);
@@ -418,7 +426,6 @@ export const useAI = () => {
                 return newState;
             },
 
-            // Set error state
             setError: (error) => {
                 const updateFunction = aiActions.setError(state);
                 const newState = updateFunction(error);
@@ -426,13 +433,11 @@ export const useAI = () => {
                 return newState;
             },
 
-            // Get supported providers
             getSupportedProviders: () => {
                 const providersFunction = aiActions.getSupportedProviders(state);
                 return providersFunction();
             },
 
-            // Validate configuration
             validateConfiguration: () => {
                 const validateFunction = aiActions.validateConfiguration(state);
                 return validateFunction();

@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Archive, Trash2, Search, CheckSquare, Calendar } from 'lucide-react';
 import { useApp } from '../../context/AppProvider';
 import { ItemCard } from '../../components/archiveTrash/ItemCard';
@@ -26,12 +26,21 @@ const ArchiveTrashPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Use refs for stable references to actions
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+
   // Stable reference to suite ID to prevent infinite loops
   const suiteId = activeSuite?.id;
+  const suiteIdRef = useRef(suiteId);
+  suiteIdRef.current = suiteId;
 
-  // Load data function with proper error handling
+  // Load data function with stable dependencies
   const loadData = useCallback(async () => {
-    if (!isAuthenticated || !suiteId) {
+    const currentSuiteId = suiteIdRef.current;
+    const currentActions = actionsRef.current;
+    
+    if (!isAuthenticated || !currentSuiteId) {
       setLocalArchivedItems([]);
       setLocalTrashedItems([]);
       setDataLoaded(true);
@@ -43,7 +52,7 @@ const ArchiveTrashPage = () => {
     setDataLoaded(false);
     
     try {
-      console.log('Loading archive/trash data for suite:', suiteId);
+      console.log('Loading archive/trash data for suite:', currentSuiteId);
       
       const assetTypes = ['testCases', 'bugs', 'recordings', 'sprints'];
       const results = { archived: [], trashed: [] };
@@ -52,7 +61,7 @@ const ArchiveTrashPage = () => {
       for (const assetType of assetTypes) {
         try {
           console.log(`Loading archived ${assetType}...`);
-          const archivedResult = await actions.archive.loadArchivedItems(suiteId, assetType);
+          const archivedResult = await currentActions.archive.loadArchivedItems(currentSuiteId, assetType);
           
           if (archivedResult?.success && Array.isArray(archivedResult.data)) {
             const items = archivedResult.data.map(item => ({
@@ -67,7 +76,7 @@ const ArchiveTrashPage = () => {
           }
 
           console.log(`Loading trashed ${assetType}...`);
-          const trashedResult = await actions.archive.loadTrashedItems(suiteId, assetType);
+          const trashedResult = await currentActions.archive.loadTrashedItems(currentSuiteId, assetType);
           
           if (trashedResult?.success && Array.isArray(trashedResult.data)) {
             const items = trashedResult.data.map(item => ({
@@ -108,7 +117,7 @@ const ArchiveTrashPage = () => {
       
       // Only show notification if it's not a permission error
       if (!error.message?.includes('permission') && !error.message?.includes('access')) {
-        actions.ui?.showNotification?.({
+        currentActions.ui?.showNotification?.({
           id: 'load-archive-error',
           type: 'error',
           message: 'Failed to load archived and deleted items',
@@ -118,7 +127,7 @@ const ArchiveTrashPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, suiteId, actions.archive, actions.ui]);
+  }, [isAuthenticated]); // Only depend on isAuthenticated
 
   // Load data effect with stable dependencies
   useEffect(() => {
@@ -130,12 +139,21 @@ const ArchiveTrashPage = () => {
       }
     };
     
-    loadDataAsync();
+    // Only load if we have both authentication and suite ID
+    if (isAuthenticated && suiteId) {
+      loadDataAsync();
+    } else if (!isAuthenticated || !suiteId) {
+      // Clear data when conditions are not met
+      setLocalArchivedItems([]);
+      setLocalTrashedItems([]);
+      setDataLoaded(true);
+      setError(null);
+    }
     
     return () => {
       mounted = false;
     };
-  }, [loadData]);
+  }, [loadData, isAuthenticated, suiteId]); // Added suiteId dependency here
 
   // Reset selected items when tab changes
   useEffect(() => {
@@ -229,16 +247,19 @@ const ArchiveTrashPage = () => {
   }, [activeTab]);
 
   const handleRestore = useCallback(async (item) => {
-    if (!suiteId || !item?.id) return;
+    const currentSuiteId = suiteIdRef.current;
+    const currentActions = actionsRef.current;
+    
+    if (!currentSuiteId || !item?.id) return;
 
     try {
       const result = activeTab === 'archived'
-        ? await actions.archive.unarchiveItem(suiteId, item.type, item.id)
-        : await actions.archive.restoreFromTrash(suiteId, item.type, item.id);
+        ? await currentActions.archive.unarchiveItem(currentSuiteId, item.type, item.id)
+        : await currentActions.archive.restoreFromTrash(currentSuiteId, item.type, item.id);
       
       if (result?.success) {
         removeFromLocalState(item.id);
-        actions.ui?.showNotification?.({
+        currentActions.ui?.showNotification?.({
           id: `restore-${item.id}`,
           type: 'success',
           message: `Item restored successfully`,
@@ -247,26 +268,29 @@ const ArchiveTrashPage = () => {
       }
     } catch (error) {
       console.error('Failed to restore item:', error);
-      actions.ui?.showNotification?.({
+      actionsRef.current.ui?.showNotification?.({
         id: 'restore-error',
         type: 'error',
         message: 'Failed to restore item',
         duration: 5000,
       });
     }
-  }, [suiteId, activeTab, actions.archive, actions.ui, removeFromLocalState]);
+  }, [activeTab, removeFromLocalState]);
 
   const handlePermanentDelete = useCallback(async (item) => {
-    if (!suiteId || !item?.id) return;
+    const currentSuiteId = suiteIdRef.current;
+    const currentActions = actionsRef.current;
+    
+    if (!currentSuiteId || !item?.id) return;
 
     const itemName = item.name || item.title || `${item.type} #${item.id}`;
     if (!window.confirm(`Permanently delete "${itemName}"? This cannot be undone.`)) return;
 
     try {
-      const result = await actions.archive.permanentlyDelete(suiteId, item.type, item.id);
+      const result = await currentActions.archive.permanentlyDelete(currentSuiteId, item.type, item.id);
       if (result?.success) {
         removeFromLocalState(item.id);
-        actions.ui?.showNotification?.({
+        currentActions.ui?.showNotification?.({
           id: `delete-${item.id}`,
           type: 'success',
           message: `Item permanently deleted`,
@@ -275,17 +299,20 @@ const ArchiveTrashPage = () => {
       }
     } catch (error) {
       console.error('Failed to delete item:', error);
-      actions.ui?.showNotification?.({
+      actionsRef.current.ui?.showNotification?.({
         id: 'delete-error',
         type: 'error',
         message: 'Failed to permanently delete item',
         duration: 5000,
       });
     }
-  }, [suiteId, actions.archive, actions.ui, removeFromLocalState]);
+  }, [removeFromLocalState]);
 
   const handleBulkRestore = useCallback(async () => {
-    if (!suiteId || selectedItems.length === 0) return;
+    const currentSuiteId = suiteIdRef.current;
+    const currentActions = actionsRef.current;
+    
+    if (!currentSuiteId || selectedItems.length === 0) return;
 
     try {
       const selectedValidItems = filteredItems.filter(item => selectedItems.includes(item.id));
@@ -296,8 +323,8 @@ const ArchiveTrashPage = () => {
       }, {});
 
       for (const [assetType, assetIds] of Object.entries(itemsByType)) {
-        await actions.archive.bulkRestore(
-          suiteId, 
+        await currentActions.archive.bulkRestore(
+          currentSuiteId, 
           assetType, 
           assetIds, 
           null, 
@@ -306,7 +333,7 @@ const ArchiveTrashPage = () => {
       }
       
       removeMultipleFromLocalState(selectedItems);
-      actions.ui?.showNotification?.({
+      currentActions.ui?.showNotification?.({
         id: 'bulk-restore',
         type: 'success',
         message: `Restored ${selectedItems.length} items`,
@@ -314,17 +341,20 @@ const ArchiveTrashPage = () => {
       });
     } catch (error) {
       console.error('Failed to bulk restore:', error);
-      actions.ui?.showNotification?.({
+      actionsRef.current.ui?.showNotification?.({
         id: 'bulk-restore-error',
         type: 'error',
         message: 'Failed to restore selected items',
         duration: 5000,
       });
     }
-  }, [suiteId, selectedItems, filteredItems, activeTab, actions.archive, actions.ui, removeMultipleFromLocalState]);
+  }, [selectedItems, filteredItems, activeTab, removeMultipleFromLocalState]);
 
   const handleBulkDelete = useCallback(async () => {
-    if (!suiteId || selectedItems.length === 0) return;
+    const currentSuiteId = suiteIdRef.current;
+    const currentActions = actionsRef.current;
+    
+    if (!currentSuiteId || selectedItems.length === 0) return;
 
     if (!window.confirm(`Permanently delete ${selectedItems.length} items? This cannot be undone.`)) return;
 
@@ -337,11 +367,11 @@ const ArchiveTrashPage = () => {
       }, {});
 
       for (const [assetType, assetIds] of Object.entries(itemsByType)) {
-        await actions.archive.bulkPermanentDelete(suiteId, assetType, assetIds);
+        await currentActions.archive.bulkPermanentDelete(currentSuiteId, assetType, assetIds);
       }
       
       removeMultipleFromLocalState(selectedItems);
-      actions.ui?.showNotification?.({
+      currentActions.ui?.showNotification?.({
         id: 'bulk-delete',
         type: 'success',
         message: `Permanently deleted ${selectedItems.length} items`,
@@ -349,14 +379,14 @@ const ArchiveTrashPage = () => {
       });
     } catch (error) {
       console.error('Failed to bulk delete:', error);
-      actions.ui?.showNotification?.({
+      actionsRef.current.ui?.showNotification?.({
         id: 'bulk-delete-error',
         type: 'error',
         message: 'Failed to delete selected items',
         duration: 5000,
       });
     }
-  }, [suiteId, selectedItems, filteredItems, actions.archive, actions.ui, removeMultipleFromLocalState]);
+  }, [selectedItems, filteredItems, removeMultipleFromLocalState]);
 
   // Show loading state
   if (!isAuthenticated) {
