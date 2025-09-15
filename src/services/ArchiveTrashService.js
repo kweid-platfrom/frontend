@@ -1,22 +1,95 @@
+// services/archiveTrashService.js - FIXED to match working patterns
 import { BaseFirestoreService } from './firestoreService';
-import { collection, doc, runTransaction, serverTimestamp, query, where, orderBy, getDocs, limit } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { serverTimestamp } from 'firebase/firestore';
 
 export class ArchiveTrashService extends BaseFirestoreService {
     constructor(testSuiteService) {
         super();
         this.testSuiteService = testSuiteService;
-        
-        // Default retention periods (in days)
-        this.DEFAULT_ARCHIVE_RETENTION = 365; // 1 year
-        this.DEFAULT_TRASH_RETENTION = 30;    // 30 days
     }
 
-    // ========================
-    // ARCHIVE OPERATIONS
-    // ========================
+    // =================== CORE DELETE METHOD (matches working pattern) ===================
+    
+    async deleteAsset(suiteId, assetType, assetId, sprintId = null, reason = null) {
+        console.log('ArchiveTrashService.deleteAsset called:', {
+            suiteId, assetType, assetId, sprintId, reason
+        });
 
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        // Validate parameters
+        if (!suiteId || typeof suiteId !== 'string') {
+            return { success: false, error: { message: 'Invalid suite ID provided' } };
+        }
+
+        if (!assetId || typeof assetId !== 'string') {
+            return { success: false, error: { message: 'Invalid asset ID provided' } };
+        }
+
+        // Check access using the same method that works for updates
+        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { 
+                success: false, 
+                error: { message: `Insufficient permissions to delete ${assetType} in this test suite` }
+            };
+        }
+
+        try {
+            // Construct collection path exactly like AssetService does
+            let collectionPath;
+            if (sprintId && typeof sprintId === 'string') {
+                collectionPath = `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`;
+            } else {
+                collectionPath = `testSuites/${suiteId}/${assetType}`;
+            }
+
+            console.log('Delete paths:', { collectionPath, assetId });
+
+            // Use the same update pattern that works in AssetService
+            const updateData = {
+                status: 'deleted',
+                deleted_at: serverTimestamp(),
+                deleted_by: userId,
+                expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+                ...(reason && { delete_reason: reason })
+            };
+
+            // Use the base class updateDocument method (same as working operations)
+            const result = await this.updateDocument(collectionPath, assetId, updateData);
+            
+            if (result.success) {
+                console.log('Asset deleted successfully');
+                return { 
+                    success: true, 
+                    data: { 
+                        id: assetId, 
+                        status: 'deleted',
+                        deleted_at: new Date(),
+                        deleted_by: userId
+                    }
+                };
+            } else {
+                console.error('Failed to delete asset:', result.error);
+                return result;
+            }
+
+        } catch (error) {
+            console.error('ArchiveTrashService.deleteAsset error:', error);
+            return this.handleFirestoreError(error, 'delete asset');
+        }
+    }
+
+    // =================== ARCHIVE METHOD ===================
+    
     async archiveAsset(suiteId, assetType, assetId, sprintId = null, reason = null) {
+        console.log('ArchiveTrashService.archiveAsset called:', {
+            suiteId, assetType, assetId, sprintId, reason
+        });
+
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
@@ -24,81 +97,64 @@ export class ArchiveTrashService extends BaseFirestoreService {
 
         const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to archive items' } };
+            return { 
+                success: false, 
+                error: { message: `Insufficient permissions to archive ${assetType} in this test suite` }
+            };
         }
 
         try {
-            const result = await runTransaction(db, async (transaction) => {
-                // Get the original asset data
-                const assetPath = sprintId
-                    ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}/${assetId}`
-                    : `testSuites/${suiteId}/${assetType}/${assetId}`;
+            let collectionPath;
+            if (sprintId && typeof sprintId === 'string') {
+                collectionPath = `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`;
+            } else {
+                collectionPath = `testSuites/${suiteId}/${assetType}`;
+            }
 
-                const assetRef = doc(db, assetPath);
-                const assetDoc = await transaction.get(assetRef);
-
-                if (!assetDoc.exists()) {
-                    throw new Error(`${assetType.slice(0, -1)} not found`);
-                }
-
-                const assetData = assetDoc.data();
-
-                // Create archive record - following Firestore rules structure
-                const archiveRef = doc(collection(db, `testSuites/${suiteId}/archive`));
-                const archiveData = {
-                    id: archiveRef.id,
-                    original_id: assetId,
-                    asset_type: assetType,
-                    sprint_id: sprintId,
-                    suite_id: suiteId, // Required by Firestore rules
-                    asset_id: assetId,  // Required by Firestore rules
-                    original_data: assetData,
-                    archived_at: serverTimestamp(),
-                    archived_by: userId,
-                    archive_reason: reason || 'Manual archive',
-                    archive_retention_until: new Date(Date.now() + (this.DEFAULT_ARCHIVE_RETENTION * 24 * 60 * 60 * 1000)),
-                    created_at: serverTimestamp(),
-                    updated_at: serverTimestamp()
-                };
-
-                transaction.set(archiveRef, archiveData);
-
-                // Update original asset with archived status instead of deleting
-                const archivedAssetData = {
-                    ...assetData,
-                    status: 'archived',
-                    archived_at: serverTimestamp(),
-                    archived_by: userId,
-                    archive_reason: reason || 'Manual archive',
-                    archive_record_id: archiveRef.id,
-                    updated_at: serverTimestamp(),
-                    updated_by: userId
-                };
-
-                transaction.set(assetRef, archivedAssetData);
-
-                return {
-                    success: true,
-                    archivedId: assetId,
-                    archiveRecordId: archiveRef.id,
-                    archivedAt: new Date(),
-                    retentionUntil: archiveData.archive_retention_until
-                };
-            });
-
-            return {
-                success: true,
-                message: 'Item archived successfully',
-                ...result
+            const updateData = {
+                status: 'archived',
+                archived_at: serverTimestamp(),
+                archived_by: userId,
+                ...(reason && { archive_reason: reason })
             };
 
+            const result = await this.updateDocument(collectionPath, assetId, updateData);
+            
+            if (result.success) {
+                console.log('Asset archived successfully');
+                return { 
+                    success: true, 
+                    data: { 
+                        id: assetId, 
+                        status: 'archived',
+                        archived_at: new Date(),
+                        archived_by: userId
+                    }
+                };
+            }
+            return result;
+
         } catch (error) {
-            console.error('archiveAsset error:', error);
-            return { success: false, error: { message: error.message || 'Failed to archive item' } };
+            console.error('ArchiveTrashService.archiveAsset error:', error);
+            return this.handleFirestoreError(error, 'archive asset');
         }
+    }
+
+    // =================== RESTORE METHODS ===================
+    
+    async restoreFromTrash(suiteId, assetType, assetId, sprintId = null) {
+        return await this.restoreAsset(suiteId, assetType, assetId, sprintId, 'active');
     }
 
     async unarchiveAsset(suiteId, assetType, assetId, sprintId = null) {
+        return await this.restoreAsset(suiteId, assetType, assetId, sprintId, 'active');
+    }
+
+    async restoreAsset(suiteId, assetType, assetId, sprintId = null, newStatus = 'active') {
+        console.log('ArchiveTrashService.restoreAsset called:', {
+            suiteId, assetType, assetId, sprintId, newStatus
+        });
+
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
@@ -106,231 +162,62 @@ export class ArchiveTrashService extends BaseFirestoreService {
 
         const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore items' } };
+            return { 
+                success: false, 
+                error: { message: `Insufficient permissions to restore ${assetType} in this test suite` }
+            };
         }
 
         try {
-            const result = await runTransaction(db, async (transaction) => {
-                // Get the current archived asset
-                const assetPath = sprintId
-                    ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}/${assetId}`
-                    : `testSuites/${suiteId}/${assetType}/${assetId}`;
+            let collectionPath;
+            if (sprintId && typeof sprintId === 'string') {
+                collectionPath = `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`;
+            } else {
+                collectionPath = `testSuites/${suiteId}/${assetType}`;
+            }
 
-                const assetRef = doc(db, assetPath);
-                const assetDoc = await transaction.get(assetRef);
-
-                if (!assetDoc.exists() || assetDoc.data().status !== 'archived') {
-                    throw new Error('Archived item not found');
-                }
-
-                const assetData = assetDoc.data();
-                const archiveRecordId = assetData.archive_record_id;
-
-                // Remove archived status and metadata
-                const {
-                    status: _status,
-                    archived_at: _archived_at,
-                    archived_by: _archived_by,
-                    archive_reason: _archive_reason,
-                    archive_record_id: _archive_record_id,
-                    ...restoredData
-                } = assetData;
-
-                const finalRestoredData = {
-                    ...restoredData,
-                    restored_at: serverTimestamp(),
-                    restored_by: userId,
-                    updated_at: serverTimestamp(),
-                    updated_by: userId
-                };
-
-                transaction.set(assetRef, finalRestoredData);
-
-                // Delete archive record if it exists
-                if (archiveRecordId) {
-                    const archiveRef = doc(db, `testSuites/${suiteId}/archive/${archiveRecordId}`);
-                    transaction.delete(archiveRef);
-                }
-
-                return {
-                    success: true,
-                    restoredId: assetId
-                };
-            });
-
-            return {
-                success: true,
-                message: 'Item restored from archive successfully',
-                ...result
+            const updateData = {
+                status: newStatus,
+                restored_at: serverTimestamp(),
+                restored_by: userId,
+                // Clear previous state fields
+                deleted_at: null,
+                deleted_by: null,
+                delete_reason: null,
+                expires_at: null,
+                archived_at: null,
+                archived_by: null,
+                archive_reason: null
             };
 
+            const result = await this.updateDocument(collectionPath, assetId, updateData);
+            
+            if (result.success) {
+                return { 
+                    success: true, 
+                    data: { 
+                        id: assetId, 
+                        status: newStatus,
+                        restored_at: new Date(),
+                        restored_by: userId
+                    }
+                };
+            }
+            return result;
+
         } catch (error) {
-            console.error('unarchiveAsset error:', error);
-            return { success: false, error: { message: error.message || 'Failed to restore item' } };
+            console.error('ArchiveTrashService.restoreAsset error:', error);
+            return this.handleFirestoreError(error, 'restore asset');
         }
     }
 
-    // ========================
-    // TRASH OPERATIONS (Soft Delete)
-    // ========================
-
-    async softDeleteAsset(suiteId, assetType, assetId, sprintId = null, reason = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete items' } };
-        }
-
-        try {
-            const result = await runTransaction(db, async (transaction) => {
-                // Get the original asset data
-                const assetPath = sprintId
-                    ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}/${assetId}`
-                    : `testSuites/${suiteId}/${assetType}/${assetId}`;
-
-                const assetRef = doc(db, assetPath);
-                const assetDoc = await transaction.get(assetRef);
-
-                if (!assetDoc.exists()) {
-                    throw new Error(`${assetType.slice(0, -1)} not found`);
-                }
-
-                const assetData = assetDoc.data();
-                const expiresAt = new Date(Date.now() + (this.DEFAULT_TRASH_RETENTION * 24 * 60 * 60 * 1000));
-
-                // Create trash record - following Firestore rules structure
-                const trashRef = doc(collection(db, `testSuites/${suiteId}/trash`));
-                const trashData = {
-                    id: trashRef.id,
-                    original_id: assetId,
-                    asset_type: assetType,
-                    sprint_id: sprintId,
-                    suite_id: suiteId,     // Required by Firestore rules
-                    asset_id: assetId,     // Required by Firestore rules
-                    original_data: assetData,
-                    deleted_at: serverTimestamp(),
-                    deleted_by: userId,
-                    delete_reason: reason || 'Manual deletion',
-                    expires_at: expiresAt, // Required by Firestore rules
-                    delete_retention_until: expiresAt,
-                    created_at: serverTimestamp(),
-                    updated_at: serverTimestamp()
-                };
-
-                transaction.set(trashRef, trashData);
-
-                // Update original asset with deleted status instead of deleting
-                const deletedAssetData = {
-                    ...assetData,
-                    status: 'deleted',
-                    deleted_at: serverTimestamp(),
-                    deleted_by: userId,
-                    delete_reason: reason || 'Manual deletion',
-                    trash_record_id: trashRef.id,
-                    expires_at: expiresAt,
-                    updated_at: serverTimestamp(),
-                    updated_by: userId
-                };
-
-                transaction.set(assetRef, deletedAssetData);
-
-                return {
-                    success: true,
-                    deletedId: assetId,
-                    trashRecordId: trashRef.id,
-                    deletedAt: new Date(),
-                    expiresAt: expiresAt
-                };
-            });
-
-            return {
-                success: true,
-                message: 'Item moved to trash successfully',
-                ...result
-            };
-
-        } catch (error) {
-            console.error('softDeleteAsset error:', error);
-            return { success: false, error: { message: error.message || 'Failed to delete item' } };
-        }
-    }
-
-    async restoreFromTrash(suiteId, assetType, assetId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore items' } };
-        }
-
-        try {
-            const result = await runTransaction(db, async (transaction) => {
-                // Get the current deleted asset
-                const assetPath = sprintId
-                    ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}/${assetId}`
-                    : `testSuites/${suiteId}/${assetType}/${assetId}`;
-
-                const assetRef = doc(db, assetPath);
-                const assetDoc = await transaction.get(assetRef);
-
-                if (!assetDoc.exists() || assetDoc.data().status !== 'deleted') {
-                    throw new Error('Deleted item not found');
-                }
-
-                const assetData = assetDoc.data();
-                const trashRecordId = assetData.trash_record_id;
-
-                // Remove deleted status and metadata
-                const restoredData = { ...assetData };
-                delete restoredData.status;
-                delete restoredData.deleted_at;
-                delete restoredData.deleted_by;
-                delete restoredData.delete_reason;
-                delete restoredData.trash_record_id;
-                delete restoredData.expires_at;
-
-                const finalRestoredData = {
-                    ...restoredData,
-                    restored_at: serverTimestamp(),
-                    restored_by: userId,
-                    updated_at: serverTimestamp(),
-                    updated_by: userId
-                };
-
-                transaction.set(assetRef, finalRestoredData);
-
-                // Delete trash record if it exists
-                if (trashRecordId) {
-                    const trashRef = doc(db, `testSuites/${suiteId}/trash/${trashRecordId}`);
-                    transaction.delete(trashRef);
-                }
-
-                return {
-                    success: true,
-                    restoredId: assetId
-                };
-            });
-
-            return {
-                success: true,
-                message: 'Item restored from trash successfully',
-                ...result
-            };
-
-        } catch (error) {
-            console.error('restoreFromTrash error:', error);
-            return { success: false, error: { message: error.message || 'Failed to restore item' } };
-        }
-    }
-
+    // =================== PERMANENT DELETE ===================
+    
     async permanentlyDeleteAsset(suiteId, assetType, assetId, sprintId = null) {
+        console.log('ArchiveTrashService.permanentlyDeleteAsset called:', {
+            suiteId, assetType, assetId, sprintId
+        });
+
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
@@ -338,143 +225,230 @@ export class ArchiveTrashService extends BaseFirestoreService {
 
         const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'admin');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to permanently delete items' } };
+            return { 
+                success: false, 
+                error: { message: `Admin permissions required to permanently delete ${assetType}` }
+            };
         }
 
         try {
-            const result = await runTransaction(db, async (transaction) => {
-                // Delete the actual asset
-                const assetPath = sprintId
-                    ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}/${assetId}`
-                    : `testSuites/${suiteId}/${assetType}/${assetId}`;
+            let collectionPath;
+            if (sprintId && typeof sprintId === 'string') {
+                collectionPath = `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`;
+            } else {
+                collectionPath = `testSuites/${suiteId}/${assetType}`;
+            }
 
-                const assetRef = doc(db, assetPath);
-                const assetDoc = await transaction.get(assetRef);
-
-                if (!assetDoc.exists()) {
-                    throw new Error('Asset not found');
-                }
-
-                const assetData = assetDoc.data();
-                
-                // Delete the asset
-                transaction.delete(assetRef);
-
-                // Delete trash record if it exists
-                if (assetData.trash_record_id) {
-                    const trashRef = doc(db, `testSuites/${suiteId}/trash/${assetData.trash_record_id}`);
-                    transaction.delete(trashRef);
-                }
-
-                return {
-                    success: true,
-                    deletedId: assetId
-                };
-            });
-
-            return {
-                success: true,
-                message: 'Item permanently deleted',
-                ...result
-            };
+            const result = await this.deleteDocument(collectionPath, assetId);
+            return result;
 
         } catch (error) {
-            console.error('permanentlyDeleteAsset error:', error);
-            return { success: false, error: { message: error.message || 'Failed to permanently delete item' } };
+            console.error('ArchiveTrashService.permanentlyDeleteAsset error:', error);
+            return this.handleFirestoreError(error, 'permanently delete asset');
         }
     }
 
-    // ========================
-    // BULK OPERATIONS
-    // ========================
+    // =================== SPECIFIC ASSET METHODS ===================
+
+    // Test Cases
+    async deleteTestCase(suiteId, testCaseId, sprintId = null, reason = null) {
+        return await this.deleteAsset(suiteId, 'testCases', testCaseId, sprintId, reason);
+    }
+
+    async archiveTestCase(suiteId, testCaseId, sprintId = null, reason = null) {
+        return await this.archiveAsset(suiteId, 'testCases', testCaseId, sprintId, reason);
+    }
+
+    async restoreTestCase(suiteId, testCaseId, sprintId = null) {
+        return await this.restoreFromTrash(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    async unarchiveTestCase(suiteId, testCaseId, sprintId = null) {
+        return await this.unarchiveAsset(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    async permanentlyDeleteTestCase(suiteId, testCaseId, sprintId = null) {
+        return await this.permanentlyDeleteAsset(suiteId, 'testCases', testCaseId, sprintId);
+    }
+
+    // Bugs
+    async deleteBug(suiteId, bugId, sprintId = null, reason = null) {
+        return await this.deleteAsset(suiteId, 'bugs', bugId, sprintId, reason);
+    }
+
+    async archiveBug(suiteId, bugId, sprintId = null, reason = null) {
+        return await this.archiveAsset(suiteId, 'bugs', bugId, sprintId, reason);
+    }
+
+    async restoreBug(suiteId, bugId, sprintId = null) {
+        return await this.restoreFromTrash(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    async unarchiveBug(suiteId, bugId, sprintId = null) {
+        return await this.unarchiveAsset(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    async permanentlyDeleteBug(suiteId, bugId, sprintId = null) {
+        return await this.permanentlyDeleteAsset(suiteId, 'bugs', bugId, sprintId);
+    }
+
+    // Recommendations
+    async deleteRecommendation(suiteId, recommendationId, sprintId = null, reason = null) {
+        return await this.deleteAsset(suiteId, 'recommendations', recommendationId, sprintId, reason);
+    }
+
+    async archiveRecommendation(suiteId, recommendationId, sprintId = null, reason = null) {
+        return await this.archiveAsset(suiteId, 'recommendations', recommendationId, sprintId, reason);
+    }
+
+    async restoreRecommendation(suiteId, recommendationId, sprintId = null) {
+        return await this.restoreFromTrash(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    async unarchiveRecommendation(suiteId, recommendationId, sprintId = null) {
+        return await this.unarchiveAsset(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    async permanentlyDeleteRecommendation(suiteId, recommendationId, sprintId = null) {
+        return await this.permanentlyDeleteAsset(suiteId, 'recommendations', recommendationId, sprintId);
+    }
+
+    // Recordings
+    async deleteRecording(suiteId, recordingId, sprintId = null, reason = null) {
+        return await this.deleteAsset(suiteId, 'recordings', recordingId, sprintId, reason);
+    }
+
+    async archiveRecording(suiteId, recordingId, sprintId = null, reason = null) {
+        return await this.archiveAsset(suiteId, 'recordings', recordingId, sprintId, reason);
+    }
+
+    async restoreRecording(suiteId, recordingId, sprintId = null) {
+        return await this.restoreFromTrash(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async unarchiveRecording(suiteId, recordingId, sprintId = null) {
+        return await this.unarchiveAsset(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    async permanentlyDeleteRecording(suiteId, recordingId, sprintId = null) {
+        return await this.permanentlyDeleteAsset(suiteId, 'recordings', recordingId, sprintId);
+    }
+
+    // Sprints
+    async deleteSprint(suiteId, sprintId, reason = null) {
+        return await this.deleteAsset(suiteId, 'sprints', sprintId, null, reason);
+    }
+
+    async archiveSprint(suiteId, sprintId, reason = null) {
+        return await this.archiveAsset(suiteId, 'sprints', sprintId, null, reason);
+    }
+
+    async restoreSprint(suiteId, sprintId) {
+        return await this.restoreFromTrash(suiteId, 'sprints', sprintId, null);
+    }
+
+    async unarchiveSprint(suiteId, sprintId) {
+        return await this.unarchiveAsset(suiteId, 'sprints', sprintId, null);
+    }
+
+    async permanentlyDeleteSprint(suiteId, sprintId) {
+        return await this.permanentlyDeleteAsset(suiteId, 'sprints', sprintId, null);
+    }
+
+    // =================== BULK OPERATIONS ===================
+    
+    async bulkDelete(suiteId, assetType, assetIds, sprintId = null, reason = null) {
+        const results = [];
+        
+        for (const assetId of assetIds) {
+            const result = await this.deleteAsset(suiteId, assetType, assetId, sprintId, reason);
+            results.push({ assetId, ...result });
+        }
+
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
+        return {
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
+        };
+    }
 
     async bulkArchive(suiteId, assetType, assetIds, sprintId = null, reason = null) {
         const results = [];
-        let successCount = 0;
-        let failureCount = 0;
-
+        
         for (const assetId of assetIds) {
-            try {
-                const result = await this.archiveAsset(suiteId, assetType, assetId, sprintId, reason);
-                results.push({ assetId, result });
-                if (result.success) {
-                    successCount++;
-                } else {
-                    failureCount++;
-                }
-            } catch (error) {
-                results.push({ assetId, result: { success: false, error: { message: error.message } } });
-                failureCount++;
-            }
+            const result = await this.archiveAsset(suiteId, assetType, assetId, sprintId, reason);
+            results.push({ assetId, ...result });
         }
 
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
         return {
-            success: successCount > 0,
-            results,
-            summary: { successCount, failureCount, totalProcessed: assetIds.length }
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
         };
     }
 
     async bulkRestore(suiteId, assetType, assetIds, sprintId = null, fromTrash = false) {
         const results = [];
-        let successCount = 0;
-        let failureCount = 0;
-
+        
         for (const assetId of assetIds) {
-            try {
-                const result = fromTrash 
-                    ? await this.restoreFromTrash(suiteId, assetType, assetId, sprintId)
-                    : await this.unarchiveAsset(suiteId, assetType, assetId, sprintId);
-                results.push({ assetId, result });
-                if (result.success) {
-                    successCount++;
-                } else {
-                    failureCount++;
-                }
-            } catch (error) {
-                results.push({ assetId, result: { success: false, error: { message: error.message } } });
-                failureCount++;
-            }
+            const result = fromTrash 
+                ? await this.restoreFromTrash(suiteId, assetType, assetId, sprintId)
+                : await this.unarchiveAsset(suiteId, assetType, assetId, sprintId);
+            results.push({ assetId, ...result });
         }
 
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
         return {
-            success: successCount > 0,
-            results,
-            summary: { successCount, failureCount, totalProcessed: assetIds.length }
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
         };
     }
 
     async bulkPermanentDelete(suiteId, assetType, assetIds, sprintId = null) {
         const results = [];
-        let successCount = 0;
-        let failureCount = 0;
-
+        
         for (const assetId of assetIds) {
-            try {
-                const result = await this.permanentlyDeleteAsset(suiteId, assetType, assetId, sprintId);
-                results.push({ assetId, result });
-                if (result.success) {
-                    successCount++;
-                } else {
-                    failureCount++;
-                }
-            } catch (error) {
-                results.push({ assetId, result: { success: false, error: { message: error.message } } });
-                failureCount++;
-            }
+            const result = await this.permanentlyDeleteAsset(suiteId, assetType, assetId, sprintId);
+            results.push({ assetId, ...result });
         }
 
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
         return {
-            success: successCount > 0,
-            results,
-            summary: { successCount, failureCount, totalProcessed: assetIds.length }
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
         };
     }
 
-    // ========================
-    // QUERY METHODS
-    // ========================
-
+    // =================== QUERY METHODS ===================
+    
     async getArchivedAssets(suiteId, assetType, sprintId = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -483,45 +457,21 @@ export class ArchiveTrashService extends BaseFirestoreService {
 
         const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'read');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to view archived items' } };
+            return { 
+                success: false, 
+                error: { message: `Insufficient permissions to view archived ${assetType}` }
+            };
         }
 
-        try {
-            // Query assets with archived status
-            const assetCollection = sprintId 
-                ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
-                : `testSuites/${suiteId}/${assetType}`;
-
-            const archivedQuery = query(
-                collection(db, assetCollection),
-                where('status', '==', 'archived'),
-                orderBy('archived_at', 'desc'),
-                limit(100) // Prevent large queries
-            );
-
-            const snapshot = await getDocs(archivedQuery);
-            const data = snapshot.docs.map(doc => {
-                const docData = doc.data();
-                return {
-                    id: doc.id,
-                    type: assetType,
-                    name: docData.name || docData.title,
-                    title: docData.title || docData.name,
-                    archived_at: docData.archived_at,
-                    archived_by: docData.archived_by,
-                    archive_reason: docData.archive_reason,
-                    archive_retention_until: docData.archive_retention_until,
-                    sprint_id: sprintId,
-                    original_data: docData
-                };
-            });
-
-            return { success: true, data };
-
-        } catch (error) {
-            console.error('getArchivedAssets error:', error);
-            return { success: false, error: { message: error.message || 'Failed to fetch archived items' } };
+        let collectionPath;
+        if (sprintId && typeof sprintId === 'string') {
+            collectionPath = `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`;
+        } else {
+            collectionPath = `testSuites/${suiteId}/${assetType}`;
         }
+
+        const constraints = [['status', '==', 'archived']];
+        return await this.queryDocuments(collectionPath, constraints, 'archived_at');
     }
 
     async getTrashedAssets(suiteId, assetType, sprintId = null) {
@@ -532,199 +482,26 @@ export class ArchiveTrashService extends BaseFirestoreService {
 
         const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'read');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to view deleted items' } };
-        }
-
-        try {
-            // Query assets with deleted status
-            const assetCollection = sprintId 
-                ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
-                : `testSuites/${suiteId}/${assetType}`;
-
-            const trashedQuery = query(
-                collection(db, assetCollection),
-                where('status', '==', 'deleted'),
-                orderBy('deleted_at', 'desc'),
-                limit(100) // Prevent large queries
-            );
-
-            const snapshot = await getDocs(trashedQuery);
-            const data = snapshot.docs.map(doc => {
-                const docData = doc.data();
-                return {
-                    id: doc.id,
-                    type: assetType,
-                    name: docData.name || docData.title,
-                    title: docData.title || docData.name,
-                    deleted_at: docData.deleted_at,
-                    deleted_by: docData.deleted_by,
-                    delete_reason: docData.delete_reason,
-                    expires_at: docData.expires_at,
-                    sprint_id: sprintId,
-                    original_data: docData
-                };
-            });
-
-            return { success: true, data };
-
-        } catch (error) {
-            console.error('getTrashedAssets error:', error);
-            return { success: false, error: { message: error.message || 'Failed to fetch deleted items' } };
-        }
-    }
-
-    async getExpiredItems(suiteId, assetType, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to view expired items' } };
-        }
-
-        try {
-            const now = new Date();
-            
-            // Query deleted items that have expired
-            const assetCollection = sprintId 
-                ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
-                : `testSuites/${suiteId}/${assetType}`;
-
-            const expiredQuery = query(
-                collection(db, assetCollection),
-                where('status', '==', 'deleted'),
-                where('expires_at', '<', now),
-                orderBy('expires_at', 'asc'),
-                limit(50) // Limit for performance
-            );
-
-            const snapshot = await getDocs(expiredQuery);
-            const expiredItems = snapshot.docs.map(doc => ({
-                id: doc.id,
-                name: doc.data().name || doc.data().title,
-                deleted_at: doc.data().deleted_at,
-                expires_at: doc.data().expires_at
-            }));
-
-            return {
-                success: true,
-                data: {
-                    expiredDeleted: expiredItems,
-                    totalExpired: expiredItems.length
-                }
-            };
-
-        } catch (error) {
-            console.error('getExpiredItems error:', error);
-            return { success: false, error: { message: error.message || 'Failed to fetch expired items' } };
-        }
-    }
-
-    // ========================
-    // CLEANUP OPERATIONS
-    // ========================
-
-    async cleanupExpiredItems(suiteId, assetType, sprintId = null, dryRun = false) {
-        const expiredResult = await this.getExpiredItems(suiteId, assetType, sprintId);
-        
-        if (!expiredResult.success) {
-            return expiredResult;
-        }
-
-        const { expiredDeleted } = expiredResult.data;
-        let cleanupResults = [];
-
-        if (dryRun) {
-            return {
-                success: true,
-                dryRun: true,
-                itemsToCleanup: {
-                    expiredDeleted: expiredDeleted.map(item => ({ 
-                        id: item.id, 
-                        name: item.name, 
-                        deleted_at: item.deleted_at,
-                        expires_at: item.expires_at
-                    }))
-                },
-                totalItemsToCleanup: expiredDeleted.length
+            return { 
+                success: false, 
+                error: { message: `Insufficient permissions to view deleted ${assetType}` }
             };
         }
 
-        // Permanently delete expired items
-        for (const item of expiredDeleted) {
-            const result = await this.permanentlyDeleteAsset(suiteId, assetType, item.id, sprintId);
-            cleanupResults.push({
-                id: item.id,
-                name: item.name,
-                action: 'permanently_deleted',
-                result
-            });
+        let collectionPath;
+        if (sprintId && typeof sprintId === 'string') {
+            collectionPath = `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`;
+        } else {
+            collectionPath = `testSuites/${suiteId}/${assetType}`;
         }
 
-        const successCount = cleanupResults.filter(r => r.result.success).length;
-        const failureCount = cleanupResults.length - successCount;
-
-        return {
-            success: successCount > 0,
-            cleanupResults,
-            summary: { successCount, failureCount, totalProcessed: cleanupResults.length }
-        };
+        const constraints = [['status', '==', 'deleted']];
+        return await this.queryDocuments(collectionPath, constraints, 'deleted_at');
     }
 
-    // ========================
-    // UTILITY METHODS
-    // ========================
-
-    async getAssetCounts(suiteId) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'read');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions' } };
-        }
-
-        try {
-            const assetTypes = ['testCases', 'bugs', 'recommendations', 'recordings', 'sprints'];
-            const counts = {
-                active: {},
-                archived: {},
-                deleted: {},
-                total: {}
-            };
-
-            for (const assetType of assetTypes) {
-                const assetCollection = collection(db, `testSuites/${suiteId}/${assetType}`);
-                
-                // Count active assets
-                const activeQuery = query(assetCollection, where('status', '!=', 'archived'), where('status', '!=', 'deleted'));
-                const activeSnapshot = await getDocs(activeQuery);
-                counts.active[assetType] = activeSnapshot.size;
-
-                // Count archived assets
-                const archivedQuery = query(assetCollection, where('status', '==', 'archived'));
-                const archivedSnapshot = await getDocs(archivedQuery);
-                counts.archived[assetType] = archivedSnapshot.size;
-
-                // Count deleted assets
-                const deletedQuery = query(assetCollection, where('status', '==', 'deleted'));
-                const deletedSnapshot = await getDocs(deletedQuery);
-                counts.deleted[assetType] = deletedSnapshot.size;
-
-                counts.total[assetType] = counts.active[assetType] + counts.archived[assetType] + counts.deleted[assetType];
-            }
-
-            return { success: true, data: counts };
-
-        } catch (error) {
-            console.error('getAssetCounts error:', error);
-            return { success: false, error: { message: error.message || 'Failed to get asset counts' } };
-        }
+    // =================== CLEANUP ===================
+    
+    cleanup() {
+        this.unsubscribeAll();
     }
 }
-
-export default ArchiveTrashService;

@@ -611,27 +611,222 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     // ========================
-    // ARCHIVE OPERATIONS
+    // FIXED DELETE OPERATIONS - Using Direct Asset Updates
+    // ========================
+
+    async deleteTestCase(testCaseId, suiteId, sprintId = null) {
+        console.log('FirestoreService.deleteTestCase called:', { testCaseId, suiteId, sprintId });
+        
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to delete test case' } };
+        }
+
+        // Use AssetService updateTestCase method directly with delete status
+        return await this.assets.updateTestCase(testCaseId, {
+            status: 'deleted',
+            deleted_at: new Date(),
+            deleted_by: userId,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            delete_reason: 'User deletion'
+        }, suiteId, sprintId);
+    }
+
+    async deleteBug(bugId, suiteId, sprintId = null) {
+        console.log('FirestoreService.deleteBug called:', { bugId, suiteId, sprintId });
+        
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to delete bug' } };
+        }
+
+        // Use AssetService updateBug method directly with delete status
+        return await this.assets.updateBug(bugId, {
+            status: 'deleted',
+            deleted_at: new Date(),
+            deleted_by: userId,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            delete_reason: 'User deletion'
+        }, suiteId, sprintId);
+    }
+
+    async deleteRecording(recordingId, suiteId, sprintId = null) {
+        console.log('FirestoreService.deleteRecording called:', { recordingId, suiteId, sprintId });
+        
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to delete recording' } };
+        }
+
+        // Use AssetService updateRecording method directly with delete status
+        return await this.assets.updateRecording(recordingId, {
+            status: 'deleted',
+            deleted_at: new Date(),
+            deleted_by: userId,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            delete_reason: 'User deletion'
+        }, suiteId, sprintId);
+    }
+
+    async deleteSprint(sprintId, suiteId) {
+        console.log('FirestoreService.deleteSprint called:', { sprintId, suiteId });
+        
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to delete sprint' } };
+        }
+
+        // Use AssetService updateSprint method directly with delete status
+        return await this.assets.updateSprint(sprintId, {
+            status: 'deleted',
+            deleted_at: new Date(),
+            deleted_by: userId,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            delete_reason: 'User deletion'
+        }, suiteId);
+    }
+
+    // FIXED: Delete recommendation using direct asset update
+    async deleteRecommendation(recommendationId, suiteId, sprintId = null) {
+        console.log('FirestoreService.deleteRecommendation called:', { recommendationId, suiteId, sprintId });
+        
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to delete recommendation' } };
+        }
+
+        // Use AssetService updateRecommendation method directly with delete status
+        return await this.assets.updateRecommendation(recommendationId, {
+            status: 'deleted',
+            deleted_at: new Date(),
+            deleted_by: userId,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            delete_reason: 'User deletion'
+        }, suiteId, sprintId);
+    }
+
+    // ========================
+    // FIXED ARCHIVE OPERATIONS - Using Direct Asset Updates
     // ========================
 
     async archiveTestCase(suiteId, testCaseId, sprintId = null, reason = null) {
-        return await this.archiveTrash.archiveAsset(suiteId, 'testCases', testCaseId, sprintId, reason);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to archive test case' } };
+        }
+
+        return await this.assets.updateTestCase(testCaseId, {
+            status: 'archived',
+            archived_at: new Date(),
+            archived_by: userId,
+            ...(reason && { archive_reason: reason })
+        }, suiteId, sprintId);
     }
 
     async archiveBug(suiteId, bugId, sprintId = null, reason = null) {
-        return await this.archiveTrash.archiveAsset(suiteId, 'bugs', bugId, sprintId, reason);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to archive bug' } };
+        }
+
+        return await this.assets.updateBug(bugId, {
+            status: 'archived',
+            archived_at: new Date(),
+            archived_by: userId,
+            ...(reason && { archive_reason: reason })
+        }, suiteId, sprintId);
     }
 
     async archiveRecording(suiteId, recordingId, sprintId = null, reason = null) {
-        return await this.archiveTrash.archiveAsset(suiteId, 'recordings', recordingId, sprintId, reason);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to archive recording' } };
+        }
+
+        return await this.assets.updateRecording(recordingId, {
+            status: 'archived',
+            archived_at: new Date(),
+            archived_by: userId,
+            ...(reason && { archive_reason: reason })
+        }, suiteId, sprintId);
     }
 
     async archiveSprint(suiteId, sprintId, reason = null) {
-        return await this.archiveTrash.archiveAsset(suiteId, 'sprints', sprintId, null, reason);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to archive sprint' } };
+        }
+
+        return await this.assets.updateSprint(sprintId, {
+            status: 'archived',
+            archived_at: new Date(),
+            archived_by: userId,
+            ...(reason && { archive_reason: reason })
+        }, suiteId);
     }
 
     async archiveRecommendation(suiteId, recommendationId, sprintId = null, reason = null) {
-        return await this.archiveTrash.archiveAsset(suiteId, 'recommendations', recommendationId, sprintId, reason);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to archive recommendation' } };
+        }
+
+        return await this.assets.updateRecommendation(recommendationId, {
+            status: 'archived',
+            archived_at: new Date(),
+            archived_by: userId,
+            ...(reason && { archive_reason: reason })
+        }, suiteId, sprintId);
     }
 
     // ========================
@@ -639,47 +834,108 @@ class FirestoreService extends BaseFirestoreService {
     // ========================
 
     async unarchiveTestCase(suiteId, testCaseId, sprintId = null) {
-        return await this.archiveTrash.unarchiveAsset(suiteId, 'testCases', testCaseId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to unarchive test case' } };
+        }
+
+        return await this.assets.updateTestCase(testCaseId, {
+            status: 'active',
+            unarchived_at: new Date(),
+            unarchived_by: userId,
+            archived_at: null,
+            archived_by: null,
+            archive_reason: null
+        }, suiteId, sprintId);
     }
 
     async unarchiveBug(suiteId, bugId, sprintId = null) {
-        return await this.archiveTrash.unarchiveAsset(suiteId, 'bugs', bugId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to unarchive bug' } };
+        }
+
+        return await this.assets.updateBug(bugId, {
+            status: 'active',
+            unarchived_at: new Date(),
+            unarchived_by: userId,
+            archived_at: null,
+            archived_by: null,
+            archive_reason: null
+        }, suiteId, sprintId);
     }
 
     async unarchiveRecording(suiteId, recordingId, sprintId = null) {
-        return await this.archiveTrash.unarchiveAsset(suiteId, 'recordings', recordingId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to unarchive recording' } };
+        }
+
+        return await this.assets.updateRecording(recordingId, {
+            status: 'active',
+            unarchived_at: new Date(),
+            unarchived_by: userId,
+            archived_at: null,
+            archived_by: null,
+            archive_reason: null
+        }, suiteId, sprintId);
     }
 
     async unarchiveSprint(suiteId, sprintId) {
-        return await this.archiveTrash.unarchiveAsset(suiteId, 'sprints', sprintId, null);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to unarchive sprint' } };
+        }
+
+        return await this.assets.updateSprint(sprintId, {
+            status: 'active',
+            unarchived_at: new Date(),
+            unarchived_by: userId,
+            archived_at: null,
+            archived_by: null,
+            archive_reason: null
+        }, suiteId);
     }
 
     async unarchiveRecommendation(suiteId, recommendationId, sprintId = null) {
-        return await this.archiveTrash.unarchiveAsset(suiteId, 'recommendations', recommendationId, sprintId);
-    }
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
 
-    // ========================
-    // TRASH OPERATIONS (Soft Delete)
-    // ========================
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to unarchive recommendation' } };
+        }
 
-    async moveTestCaseToTrash(suiteId, testCaseId, sprintId = null, reason = null) {
-        return await this.archiveTrash.softDeleteAsset(suiteId, 'testCases', testCaseId, sprintId, reason);
-    }
-
-    async moveBugToTrash(suiteId, bugId, sprintId = null, reason = null) {
-        return await this.archiveTrash.softDeleteAsset(suiteId, 'bugs', bugId, sprintId, reason);
-    }
-
-    async moveRecordingToTrash(suiteId, recordingId, sprintId = null, reason = null) {
-        return await this.archiveTrash.softDeleteAsset(suiteId, 'recordings', recordingId, sprintId, reason);
-    }
-
-    async moveSprintToTrash(suiteId, sprintId, reason = null) {
-        return await this.archiveTrash.softDeleteAsset(suiteId, 'sprints', sprintId, null, reason);
-    }
-
-    async moveRecommendationToTrash(suiteId, recommendationId, sprintId = null, reason = null) {
-        return await this.archiveTrash.softDeleteAsset(suiteId, 'recommendations', recommendationId, sprintId, reason);
+        return await this.assets.updateRecommendation(recommendationId, {
+            status: 'active',
+            unarchived_at: new Date(),
+            unarchived_by: userId,
+            archived_at: null,
+            archived_by: null,
+            archive_reason: null
+        }, suiteId, sprintId);
     }
 
     // ========================
@@ -687,160 +943,436 @@ class FirestoreService extends BaseFirestoreService {
     // ========================
 
     async restoreTestCaseFromTrash(suiteId, testCaseId, sprintId = null) {
-        return await this.archiveTrash.restoreFromTrash(suiteId, 'testCases', testCaseId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to restore test case' } };
+        }
+
+        return await this.assets.updateTestCase(testCaseId, {
+            status: 'active',
+            restored_at: new Date(),
+            restored_by: userId,
+            deleted_at: null,
+            deleted_by: null,
+            delete_reason: null,
+            expires_at: null
+        }, suiteId, sprintId);
     }
 
     async restoreBugFromTrash(suiteId, bugId, sprintId = null) {
-        return await this.archiveTrash.restoreFromTrash(suiteId, 'bugs', bugId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to restore bug' } };
+        }
+
+        return await this.assets.updateBug(bugId, {
+            status: 'active',
+            restored_at: new Date(),
+            restored_by: userId,
+            deleted_at: null,
+            deleted_by: null,
+            delete_reason: null,
+            expires_at: null
+        }, suiteId, sprintId);
     }
 
     async restoreRecordingFromTrash(suiteId, recordingId, sprintId = null) {
-        return await this.archiveTrash.restoreFromTrash(suiteId, 'recordings', recordingId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to restore recording' } };
+        }
+
+        return await this.assets.updateRecording(recordingId, {
+            status: 'active',
+            restored_at: new Date(),
+            restored_by: userId,
+            deleted_at: null,
+            deleted_by: null,
+            delete_reason: null,
+            expires_at: null
+        }, suiteId, sprintId);
     }
 
     async restoreSprintFromTrash(suiteId, sprintId) {
-        return await this.archiveTrash.restoreFromTrash(suiteId, 'sprints', sprintId, null);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to restore sprint' } };
+        }
+
+        return await this.assets.updateSprint(sprintId, {
+            status: 'active',
+            restored_at: new Date(),
+            restored_by: userId,
+            deleted_at: null,
+            deleted_by: null,
+            delete_reason: null,
+            expires_at: null
+        }, suiteId);
     }
 
     async restoreRecommendationFromTrash(suiteId, recommendationId, sprintId = null) {
-        return await this.archiveTrash.restoreFromTrash(suiteId, 'recommendations', recommendationId, sprintId);
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to restore recommendation' } };
+        }
+
+        return await this.assets.updateRecommendation(recommendationId, {
+            status: 'active',
+            restored_at: new Date(),
+            restored_by: userId,
+            deleted_at: null,
+            deleted_by: null,
+            delete_reason: null,
+            expires_at: null
+        }, suiteId, sprintId);
     }
 
     // ========================
-    // PERMANENT DELETE OPERATIONS
+    // PERMANENT DELETE OPERATIONS (Admin only)
     // ========================
 
     async permanentlyDeleteTestCase(suiteId, testCaseId, sprintId = null) {
-        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'testCases', testCaseId, sprintId);
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
+        }
+        return await this.assets.deleteTestCase(testCaseId, suiteId, sprintId);
     }
 
     async permanentlyDeleteBug(suiteId, bugId, sprintId = null) {
-        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'bugs', bugId, sprintId);
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
+        }
+        return await this.assets.deleteBug(bugId, suiteId, sprintId);
     }
 
     async permanentlyDeleteRecording(suiteId, recordingId, sprintId = null) {
-        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'recordings', recordingId, sprintId);
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
+        }
+        return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
     }
 
     async permanentlyDeleteSprint(suiteId, sprintId) {
-        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'sprints', sprintId, null);
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
+        }
+        return await this.assets.deleteSprint(sprintId, suiteId);
     }
 
     async permanentlyDeleteRecommendation(suiteId, recommendationId, sprintId = null) {
-        return await this.archiveTrash.permanentlyDeleteAsset(suiteId, 'recommendations', recommendationId, sprintId);
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
+        }
+        return await this.assets.deleteRecommendation(recommendationId, suiteId, sprintId);
+    }
+
+    // ========================
+    // QUERY METHODS FOR ARCHIVED/DELETED ITEMS
+    // ========================
+
+    async getArchivedItems(suiteId, assetType, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+
+        const options = { includeStatus: ['archived'] };
+        
+        switch (assetType) {
+            case 'testCases':
+                return await this.assets.getSuiteAssets(suiteId, 'testCases', sprintId, options);
+            case 'bugs':
+                return await this.assets.getSuiteAssets(suiteId, 'bugs', sprintId, options);
+            case 'recordings':
+                return await this.assets.getSuiteAssets(suiteId, 'recordings', sprintId, options);
+            case 'sprints':
+                return await this.assets.getSuiteAssets(suiteId, 'sprints', null, options);
+            case 'recommendations':
+                return await this.assets.getSuiteAssets(suiteId, 'recommendations', sprintId, options);
+            default:
+                return { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+        }
+    }
+
+    async getTrashedItems(suiteId, assetType, sprintId = null) {
+        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
+        if (!accessCheck.success) return accessCheck;
+
+        const options = { includeStatus: ['deleted'] };
+        
+        switch (assetType) {
+            case 'testCases':
+                return await this.assets.getSuiteAssets(suiteId, 'testCases', sprintId, options);
+            case 'bugs':
+                return await this.assets.getSuiteAssets(suiteId, 'bugs', sprintId, options);
+            case 'recordings':
+                return await this.assets.getSuiteAssets(suiteId, 'recordings', sprintId, options);
+            case 'sprints':
+                return await this.assets.getSuiteAssets(suiteId, 'sprints', null, options);
+            case 'recommendations':
+                return await this.assets.getSuiteAssets(suiteId, 'recommendations', sprintId, options);
+            default:
+                return { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+        }
     }
 
     // ========================
     // BULK OPERATIONS
     // ========================
 
-    async bulkArchive(suiteId, assetType, assetIds, sprintId = null, reason = null) {
-        return await this.archiveTrash.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
+    async bulkDelete(suiteId, assetType, assetIds, sprintId = null, reason = 'Bulk deletion') {
+        const results = [];
+        
+        for (const assetId of assetIds) {
+            let result;
+            switch (assetType) {
+                case 'testCases':
+                    result = await this.deleteTestCase(assetId, suiteId, sprintId);
+                    break;
+                case 'bugs':
+                    result = await this.deleteBug(assetId, suiteId, sprintId);
+                    break;
+                case 'recordings':
+                    result = await this.deleteRecording(assetId, suiteId, sprintId);
+                    break;
+                case 'sprints':
+                    result = await this.deleteSprint(assetId, suiteId);
+                    break;
+                case 'recommendations':
+                    result = await this.deleteRecommendation(assetId, suiteId, sprintId);
+                    break;
+                default:
+                    result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+            }
+            results.push({ assetId, ...result });
+        }
+
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
+        return {
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
+        };
+    }
+
+    async bulkArchive(suiteId, assetType, assetIds, sprintId = null, reason = 'Bulk archive') {
+        const results = [];
+        
+        for (const assetId of assetIds) {
+            let result;
+            switch (assetType) {
+                case 'testCases':
+                    result = await this.archiveTestCase(suiteId, assetId, sprintId, reason);
+                    break;
+                case 'bugs':
+                    result = await this.archiveBug(suiteId, assetId, sprintId, reason);
+                    break;
+                case 'recordings':
+                    result = await this.archiveRecording(suiteId, assetId, sprintId, reason);
+                    break;
+                case 'sprints':
+                    result = await this.archiveSprint(suiteId, assetId, reason);
+                    break;
+                case 'recommendations':
+                    result = await this.archiveRecommendation(suiteId, assetId, sprintId, reason);
+                    break;
+                default:
+                    result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+            }
+            results.push({ assetId, ...result });
+        }
+
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
+        return {
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
+        };
     }
 
     async bulkRestore(suiteId, assetType, assetIds, sprintId = null, fromTrash = false) {
-        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, fromTrash);
+        const results = [];
+        
+        for (const assetId of assetIds) {
+            let result;
+            if (fromTrash) {
+                switch (assetType) {
+                    case 'testCases':
+                        result = await this.restoreTestCaseFromTrash(suiteId, assetId, sprintId);
+                        break;
+                    case 'bugs':
+                        result = await this.restoreBugFromTrash(suiteId, assetId, sprintId);
+                        break;
+                    case 'recordings':
+                        result = await this.restoreRecordingFromTrash(suiteId, assetId, sprintId);
+                        break;
+                    case 'sprints':
+                        result = await this.restoreSprintFromTrash(suiteId, assetId);
+                        break;
+                    case 'recommendations':
+                        result = await this.restoreRecommendationFromTrash(suiteId, assetId, sprintId);
+                        break;
+                    default:
+                        result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+                }
+            } else {
+                switch (assetType) {
+                    case 'testCases':
+                        result = await this.unarchiveTestCase(suiteId, assetId, sprintId);
+                        break;
+                    case 'bugs':
+                        result = await this.unarchiveBug(suiteId, assetId, sprintId);
+                        break;
+                    case 'recordings':
+                        result = await this.unarchiveRecording(suiteId, assetId, sprintId);
+                        break;
+                    case 'sprints':
+                        result = await this.unarchiveSprint(suiteId, assetId);
+                        break;
+                    case 'recommendations':
+                        result = await this.unarchiveRecommendation(suiteId, assetId, sprintId);
+                        break;
+                    default:
+                        result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+                }
+            }
+            results.push({ assetId, ...result });
+        }
+
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
+        return {
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
+        };
     }
 
     async bulkPermanentDelete(suiteId, assetType, assetIds, sprintId = null) {
-        return await this.archiveTrash.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
+        const results = [];
+        
+        for (const assetId of assetIds) {
+            let result;
+            switch (assetType) {
+                case 'testCases':
+                    result = await this.permanentlyDeleteTestCase(suiteId, assetId, sprintId);
+                    break;
+                case 'bugs':
+                    result = await this.permanentlyDeleteBug(suiteId, assetId, sprintId);
+                    break;
+                case 'recordings':
+                    result = await this.permanentlyDeleteRecording(suiteId, assetId, sprintId);
+                    break;
+                case 'sprints':
+                    result = await this.permanentlyDeleteSprint(suiteId, assetId);
+                    break;
+                case 'recommendations':
+                    result = await this.permanentlyDeleteRecommendation(suiteId, assetId, sprintId);
+                    break;
+                default:
+                    result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
+            }
+            results.push({ assetId, ...result });
+        }
+
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+
+        return {
+            success: failed === 0,
+            data: {
+                total: assetIds.length,
+                successful,
+                failed,
+                results
+            }
+        };
     }
 
     // ========================
-    // QUERY METHODS
+    // COMPATIBILITY ALIASES (keeping existing method names)
     // ========================
 
-    async getArchivedItems(suiteId, assetType, sprintId = null) {
-        return await this.archiveTrash.getArchivedAssets(suiteId, assetType, sprintId);
+    async moveTestCaseToTrash(suiteId, testCaseId, sprintId = null, reason = null) {
+        return await this.deleteTestCase(testCaseId, suiteId, sprintId);
     }
 
-    async getTrashedItems(suiteId, assetType, sprintId = null) {
-        return await this.archiveTrash.getTrashedAssets(suiteId, assetType, sprintId);
+    async moveBugToTrash(suiteId, bugId, sprintId = null, reason = null) {
+        return await this.deleteBug(bugId, suiteId, sprintId);
     }
 
-    async getExpiredItems(suiteId, assetType, sprintId = null) {
-        return await this.archiveTrash.getExpiredItems(suiteId, assetType, sprintId);
+    async moveRecordingToTrash(suiteId, recordingId, sprintId = null, reason = null) {
+        return await this.deleteRecording(recordingId, suiteId, sprintId);
     }
 
-    // ========================
-    // CLEANUP OPERATIONS
-    // ========================
-
-    async cleanupExpiredItems(suiteId, assetType, sprintId = null, dryRun = false) {
-        return await this.archiveTrash.cleanupExpiredItems(suiteId, assetType, sprintId, dryRun);
+    async moveSprintToTrash(suiteId, sprintId, reason = null) {
+        return await this.deleteSprint(sprintId, suiteId);
     }
 
-    // ========================
-    // ARCHIVE AND TRASH MANAGEMENT
-    // ========================
-
-    async getAssetCounts(suiteId) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return await this.archiveTrash.getAssetCounts(suiteId);
+    async moveRecommendationToTrash(suiteId, recommendationId, sprintId = null, reason = null) {
+        return await this.deleteRecommendation(recommendationId, suiteId, sprintId);
     }
 
-    async cleanupExpiredAssets(suiteId, assetType, sprintId = null, dryRun = true) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return await this.archiveTrash.cleanupExpiredItems(suiteId, assetType, sprintId, dryRun);
-    }
-
-    // ========================
-    // BATCH ARCHIVE/RESTORE OPERATIONS
-    // ========================
-
+    // Batch operation aliases
     async batchArchiveAssets(suiteId, assetType, assetIds, sprintId = null, reason = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return await this.archiveTrash.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
+        return await this.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
     }
 
     async batchRestoreFromArchive(suiteId, assetType, assetIds, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, false);
+        return await this.bulkRestore(suiteId, assetType, assetIds, sprintId, false);
     }
 
     async batchRestoreFromTrash(suiteId, assetType, assetIds, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, true);
+        return await this.bulkRestore(suiteId, assetType, assetIds, sprintId, true);
     }
 
     async batchPermanentDeleteAssets(suiteId, assetType, assetIds, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'admin');
-        if (!accessCheck.success) return accessCheck;
-        return await this.archiveTrash.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
-    }
-
-    // ========================
-    // MODIFIED EXISTING DELETE METHODS TO USE SOFT DELETE
-    // ========================
-
-    async deleteTestCase(testCaseId, suiteId, sprintId = null) {
-        // Use soft delete (move to trash) instead of permanent delete
-        return await this.moveTestCaseToTrash(suiteId, testCaseId, sprintId, 'User deletion');
-    }
-
-    async deleteBug(bugId, suiteId, sprintId = null) {
-        // Use soft delete (move to trash) instead of permanent delete
-        return await this.moveBugToTrash(suiteId, bugId, sprintId, 'User deletion');
-    }
-
-    async deleteRecording(recordingId, suiteId, sprintId = null) {
-        // Use soft delete (move to trash) instead of permanent delete
-        return await this.moveRecordingToTrash(suiteId, recordingId, sprintId, 'User deletion');
-    }
-
-    async deleteSprint(sprintId, suiteId) {
-        // Use soft delete (move to trash) instead of permanent delete
-        return await this.moveSprintToTrash(suiteId, sprintId, 'User deletion');
-    }
-
-    async deleteRecommendation(recommendationId, suiteId, sprintId = null) {
-        // Use soft delete (move to trash) instead of permanent delete
-        return await this.moveRecommendationToTrash(suiteId, recommendationId, sprintId, 'User deletion');
+        return await this.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
     }
 
     // ========================

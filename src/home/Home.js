@@ -206,11 +206,11 @@ const Home = () => {
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="flex justify-between items-center h-16">
                          <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 flex items-center justify-center bg-primary/90 rounded-xl p-1">
+                                <div className="w-12 h-12 flex items-center justify-center rounded-xl p-1">
                                     {/* Inline SVG Logo */}
                                     <img src="logo.svg" alt="FixMate Logo" className="w-12 h-12" />
                                 </div>
-                                <span className="text-xl font-bold text-slate-900">FixMate</span>
+                                <span className="text-xl font-bold text-slate-900">Assura</span>
                             </div>
 
 
@@ -541,11 +541,11 @@ const Home = () => {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                         <div className="col-span-1 md:col-span-2">
                             <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 flex items-center bg-primary/90 rounded-xl p-1 justify-center">
+                                <div className="w-12 h-12 flex items-center rounded-xl p-1 justify-center">
                                     {/* Inline SVG Logo */}
                                     <img src="logo.svg" alt="FixMate Logo" className="w-12 h-12" />
                                 </div>
-                                <span className="text-xl font-bold text-slate-900">FixMate</span>
+                                <span className="text-xl font-bold text-slate-900">Assura</span>
                             </div>
                             <p className="text-slate-600 mb-6 max-w-md">
                                 Empowering teams to deliver exceptional software through intelligent quality assurance and testing automation.

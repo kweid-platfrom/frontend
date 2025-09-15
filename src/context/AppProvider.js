@@ -2,16 +2,25 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSlices, getAppState } from './hooks/useSlices';
 import { useAI } from './hooks/useAI';
 import { useTestCases } from './hooks/useTestCases';
 import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
 import { useRecording } from './hooks/useRecording';
-import { useRecommendations } from '../hooks/useRecommendations'; // Your existing hook
+import { useRecommendations } from '../hooks/useRecommendations';
 import { useArchiveTrash } from '../hooks/useArchiveTrash';
 import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
+
+// Import bulk actions components and utilities
+import { 
+  PAGE_CONFIGS, 
+  COLOR_CLASSES, 
+  BulkActionsPortal, 
+  createBulkActionHandlers 
+} from './BulkActionsProvider';
 
 const AppContext = createContext();
 
@@ -20,6 +29,14 @@ export const AppProvider = ({ children }) => {
     const [suitesLoaded, setSuitesLoaded] = useState(false);
     const [suiteSubscriptionActive, setSuiteSubscriptionActive] = useState(false);
     const [aiInitialized, setAiInitialized] = useState(false);
+
+    // Bulk Actions State
+    const [bulkActions, setBulkActions] = useState({
+        selectedItems: [],
+        currentPageType: '',
+        portalContainer: null,
+        onBulkAction: null
+    });
 
     const unsubscribeSuitesRef = useRef(null);
     const assetUnsubscribersRef = useRef({});
@@ -250,6 +267,25 @@ export const AppProvider = ({ children }) => {
         return FirestoreService.cleanupExpiredAssets(suiteId, assetType, sprintId, dryRun);
     });
 
+    // Initialize bulk actions portal container
+    useEffect(() => {
+        let container = document.getElementById('bulk-actions-portal');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'bulk-actions-portal';
+            container.className = 'fixed bottom-0 left-0 right-0 z-50';
+            document.body.appendChild(container);
+        }
+        setBulkActions(prev => ({ ...prev, portalContainer: container }));
+
+        return () => {
+            const existingContainer = document.getElementById('bulk-actions-portal');
+            if (existingContainer && existingContainer.children.length === 0) {
+                document.body.removeChild(existingContainer);
+            }
+        };
+    }, []);
+
     const logout = async () => {
         slices.ai.actions.clearAIState();
         setAiInitialized(false);
@@ -258,6 +294,13 @@ export const AppProvider = ({ children }) => {
         } catch (error) {
             console.warn('Error cleaning up recommendations on logout:', error.message);
         }
+        // Clear bulk actions on logout
+        setBulkActions({
+            selectedItems: [],
+            currentPageType: '',
+            portalContainer: bulkActions.portalContainer,
+            onBulkAction: null
+        });
         return slices.auth.actions.signOut();
     };
 
@@ -367,10 +410,9 @@ export const AppProvider = ({ children }) => {
             });
             assetUnsubscribersRef.current = {};
 
-            // Clear all slices safely - FIXED: Only call methods that actually exist
+            // Clear all slices safely
             try { slices.auth.actions.clearAuthState(); } catch (e) { console.warn('Auth clear error:', e.message); }
             
-            // FIXED: Only call loadSuccess methods if they exist on the slice actions
             try { 
                 if (slices.suites.actions.loadSuitesSuccess) {
                     slices.suites.actions.loadSuitesSuccess([]); 
@@ -395,9 +437,6 @@ export const AppProvider = ({ children }) => {
                 }
             } catch (e) { console.warn('Recordings clear error:', e.message); }
             
-            // FIXED: Don't call loadSprintsSuccess since it doesn't exist in useSprints
-            // Instead, we'll let the sprints clear naturally when subscriptions are cleaned up
-            
             try { slices.subscription.actions.clearSubscription?.(); } catch (e) { console.warn('Subscription clear error:', e.message); }
             try { slices.team.actions.clearTeam?.(); } catch (e) { console.warn('Team clear error:', e.message); }
             try { slices.automation.actions.clearAutomation?.(); } catch (e) { console.warn('Automation clear error:', e.message); }
@@ -416,6 +455,14 @@ export const AppProvider = ({ children }) => {
             // Clear archive/trash state
             setArchivedItems({});
             setTrashedItems({});
+
+            // Clear bulk actions state
+            setBulkActions(prev => ({
+                selectedItems: [],
+                currentPageType: '',
+                portalContainer: prev.portalContainer,
+                onBulkAction: null
+            }));
 
             // Clean up recommendations hook
             try {
@@ -645,7 +692,6 @@ export const AppProvider = ({ children }) => {
             });
             assetUnsubscribersRef.current = {};
 
-            // FIXED: Only call loadSuccess methods if they exist on the slice actions
             try {
                 if (slices.testCases.actions.loadTestCasesSuccess) {
                     slices.testCases.actions.loadTestCasesSuccess([]);
@@ -664,10 +710,6 @@ export const AppProvider = ({ children }) => {
                 }
             } catch (e) { console.warn('Recordings clear error:', e.message); }
             
-            // FIXED: Don't call loadSprintsSuccess since it doesn't exist in useSprints
-            // The sprints will be cleared when subscriptions are cleaned up
-            
-            // Clear recommendations if slice exists
             if (hasRecommendationsSlice) {
                 try {
                     if (slices.recommendations.actions.loadRecommendationsSuccess) {
@@ -730,7 +772,7 @@ export const AppProvider = ({ children }) => {
             }
         };
 
-        // Subscribe to existing assets - FIXED: Only subscribe if loadSuccess methods exist
+        // Subscribe to existing assets
         if (slices.testCases.actions.loadTestCasesSuccess) {
             subscribeAsset('TestCases', slices.testCases.actions.loadTestCasesSuccess);
         }
@@ -741,8 +783,7 @@ export const AppProvider = ({ children }) => {
             subscribeAsset('Recordings', slices.recordings.actions.loadRecordingsSuccess);
         }
 
-        // FIXED: For sprints, since there's no loadSprintsSuccess method in useSprints,
-        // we'll subscribe but handle the callback differently
+        // For sprints subscription
         try {
             const methodName = 'subscribeToSprints';
             if (typeof FirestoreService[methodName] === 'function') {
@@ -751,9 +792,6 @@ export const AppProvider = ({ children }) => {
                     (sprints) => {
                         const safeSprints = Array.isArray(sprints) ? sprints : [];
                         console.log('Sprints loaded:', safeSprints.length);
-                        // Since useSprints doesn't have loadSprintsSuccess, 
-                        // the subscription will update the state through the internal reducer
-                        // when the subscription triggers the callback
                     },
                     (error) => {
                         let actualError = error;
@@ -863,7 +901,6 @@ export const AppProvider = ({ children }) => {
                     message: 'Organization created successfully',
                     duration: 3000,
                 });
-                // Refresh user profile to get updated org membership
                 await refreshUserProfile();
             }
             return result;
@@ -913,7 +950,6 @@ export const AppProvider = ({ children }) => {
                     message: 'Organization deleted successfully',
                     duration: 3000,
                 });
-                // Refresh user profile to update org membership
                 await refreshUserProfile();
             }
             return result;
@@ -1008,6 +1044,159 @@ export const AppProvider = ({ children }) => {
         }
     };
 
+
+        // Bulk actions methods
+        const bulkActionMethods = useMemo(() => {
+            // Create a reference object for the current app actions
+            const appActionsRef = {
+                get current() {
+                    return {
+                        testCases: {
+                            ...slices.testCases.actions,
+                            createTestCase: wrappedCreateTestCase,
+                            updateTestCase: wrappedUpdateTestCase,
+                            deleteTestCase: enhancedDeleteTestCase
+                        },
+                        bugs: {
+                            ...slices.bugs.actions,
+                            deleteBug: enhancedDeleteBug
+                        },
+                        recordings: { 
+                            ...slices.recordings.actions, 
+                            saveRecording, 
+                            linkRecordingToBug,
+                            deleteRecording: enhancedDeleteRecording
+                        },
+                        sprints: {
+                            ...slices.sprints.actions,
+                            deleteSprint: enhancedDeleteSprint
+                        },
+                        recommendations: {
+                            createRecommendation,
+                            updateRecommendation,
+                            deleteRecommendation: enhancedDeleteRecommendation,
+                            voteOnRecommendation,
+                            addComment,
+                            removeComment,
+                        },
+                        archive: {
+                            archiveItem,
+                            unarchiveItem,
+                            moveToTrash,
+                            restoreFromTrash,
+                            permanentlyDelete,
+                            bulkArchive,
+                            bulkRestore,
+                            bulkPermanentDelete,
+                            archiveTestCase: (suiteId, testCaseId, sprintId, reason) => 
+                                archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason),
+                            archiveBug: (suiteId, bugId, sprintId, reason) => 
+                                archiveItem(suiteId, 'bugs', bugId, sprintId, reason),
+                            archiveRecording: (suiteId, recordingId, sprintId, reason) => 
+                                archiveItem(suiteId, 'recordings', recordingId, sprintId, reason),
+                            archiveSprint: (suiteId, sprintId, reason) => 
+                                archiveItem(suiteId, 'sprints', sprintId, null, reason),
+                            archiveRecommendation: (suiteId, recommendationId, sprintId, reason) => 
+                                archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason),
+                        },
+                        reports: {
+                            getReports,
+                            saveReport,
+                            deleteReport,
+                            generatePDF,
+                        },
+                        ui: slices.ui.actions
+                    };
+                }
+            };
+    
+            return {
+                registerPageBulkActions: (pageType, onBulkAction) => {
+                    setBulkActions(prev => ({
+                        ...prev,
+                        currentPageType: pageType,
+                        onBulkAction
+                    }));
+                },
+    
+                updateBulkSelection: (items) => {
+                    setBulkActions(prev => ({
+                        ...prev,
+                        selectedItems: Array.isArray(items) ? items : []
+                    }));
+                },
+    
+                clearBulkSelection: () => {
+                    setBulkActions(prev => ({
+                        ...prev,
+                        selectedItems: []
+                    }));
+                },
+    
+                executeBulkAction: async (actionId, items) => {
+                    const { currentPageType, onBulkAction } = bulkActions;
+                    
+                    // Use custom bulk action handler if provided
+                    if (onBulkAction) {
+                        await onBulkAction(actionId, items);
+                        return;
+                    }
+    
+                    // Use default bulk action handlers
+                    const activeSuite = slices.suites.state.activeSuite;
+                    if (!activeSuite) {
+                        slices.ui.actions.showNotification?.({
+                            id: 'bulk-no-suite',
+                            type: 'error',
+                            message: 'No active suite selected',
+                            duration: 3000,
+                        });
+                        return;
+                    }
+    
+                    const bulkHandlers = createBulkActionHandlers(appActionsRef.current, activeSuite);
+                    const handler = bulkHandlers[currentPageType];
+                    
+                    if (handler) {
+                        await handler(actionId, items);
+                    } else {
+                        console.warn(`No bulk action handler for page type: ${currentPageType}`);
+                        slices.ui.actions.showNotification?.({
+                            id: 'bulk-unsupported',
+                            type: 'warning',
+                            message: `Bulk actions not supported for ${currentPageType}`,
+                            duration: 3000,
+                        });
+                    }
+                }
+            };
+        }, [
+            bulkActions,
+            slices,
+            wrappedCreateTestCase,
+            wrappedUpdateTestCase,
+            saveRecording,
+            linkRecordingToBug,
+            createRecommendation,
+            updateRecommendation,
+            voteOnRecommendation,
+            addComment,
+            removeComment,
+            archiveItem,
+            unarchiveItem,
+            moveToTrash,
+            restoreFromTrash,
+            permanentlyDelete,
+            bulkArchive,
+            bulkRestore,
+            bulkPermanentDelete,
+            getReports,
+            saveReport,
+            deleteReport,
+            generatePDF
+        ]);
+    
+
     // Asset counts functionality
     const getAssetCounts = async (suiteId) => {
         try {
@@ -1029,6 +1218,12 @@ export const AppProvider = ({ children }) => {
                 archivedItems,
                 trashedItems,
                 archiveLoading,
+                // Bulk actions state
+                bulkActions: {
+                    selectedItems: bulkActions.selectedItems,
+                    currentPageType: bulkActions.currentPageType,
+                    hasSelection: bulkActions.selectedItems.length > 0
+                }
             },
             actions: {
                 auth: { ...slices.auth.actions, logout, initializeAuth, refreshUserProfile },
@@ -1037,21 +1232,21 @@ export const AppProvider = ({ children }) => {
                     ...slices.testCases.actions,
                     createTestCase: wrappedCreateTestCase,
                     updateTestCase: wrappedUpdateTestCase,
-                    deleteTestCase: enhancedDeleteTestCase // Use enhanced version
+                    deleteTestCase: enhancedDeleteTestCase
                 },
                 bugs: {
                     ...slices.bugs.actions,
-                    deleteBug: enhancedDeleteBug // Add enhanced delete method
+                    deleteBug: enhancedDeleteBug
                 },
                 recordings: { 
                     ...slices.recordings.actions, 
                     saveRecording, 
                     linkRecordingToBug,
-                    deleteRecording: enhancedDeleteRecording // Add enhanced delete method
+                    deleteRecording: enhancedDeleteRecording
                 },
                 sprints: {
                     ...slices.sprints.actions,
-                    deleteSprint: enhancedDeleteSprint // Add enhanced delete method
+                    deleteSprint: enhancedDeleteSprint
                 },
                 subscription: slices.subscription.actions,
                 team: slices.team.actions,
@@ -1086,7 +1281,7 @@ export const AppProvider = ({ children }) => {
                 recommendations: {
                     createRecommendation,
                     updateRecommendation,
-                    deleteRecommendation: enhancedDeleteRecommendation, // Use enhanced version
+                    deleteRecommendation: enhancedDeleteRecommendation,
                     voteOnRecommendation,
                     addComment,
                     removeComment,
@@ -1134,7 +1329,6 @@ export const AppProvider = ({ children }) => {
                     unlinkBugFromTestCase,
                     addTestCasesToSprint,
                     addBugsToSprint,
-                    // Expose the new linking methods from FirestoreService
                     linkTestCasesToBugAdvanced: FirestoreService.linkTestCasesToBug.bind(FirestoreService),
                     unlinkTestCasesFromBug: FirestoreService.unlinkTestCasesFromBug.bind(FirestoreService),
                     linkBugsToTestCaseAdvanced: FirestoreService.linkBugsToTestCase.bind(FirestoreService),
@@ -1145,6 +1339,9 @@ export const AppProvider = ({ children }) => {
                     bulkLinkTestCasesToBugs: FirestoreService.bulkLinkTestCasesToBugs.bind(FirestoreService),
                     bulkLinkBugsToTestCases: FirestoreService.bulkLinkBugsToTestCases.bind(FirestoreService),
                 },
+
+                // Bulk actions
+                bulkActions: bulkActionMethods,
 
                 clearState,
             },
@@ -1172,6 +1369,11 @@ export const AppProvider = ({ children }) => {
             archivedItems,
             trashedItems,
 
+            // Bulk actions state
+            bulkSelection: bulkActions.selectedItems,
+            hasBulkSelection: bulkActions.selectedItems.length > 0,
+            currentBulkPageType: bulkActions.currentPageType,
+
             // Recommendations state (if available)
             recommendations: hasRecommendationsSlice ? slices.recommendations.state.recommendations : [],
             recommendationsLoading: hasRecommendationsSlice ? slices.recommendations.state.loading : false,
@@ -1182,7 +1384,7 @@ export const AppProvider = ({ children }) => {
                 slices.auth.state.loading ||
                 slices.suites.state.loading ||
                 slices.testCases.state.loading ||
-                slices.bugs.state.loading ||
+                (slices.bugs.state.loading && slices.bugs.state.bugs.length === 0) ||
                 slices.recordings.state.loading ||
                 slices.sprints.state.loading ||
                 slices.subscription.state.loading ||
@@ -1258,10 +1460,16 @@ export const AppProvider = ({ children }) => {
             enhancedDeleteSprint,
             enhancedDeleteRecommendation,
             getAssetCounts,
+            bulkActionMethods,
+            bulkActions,
         ]
     );
 
-    return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+    return (
+        <AppContext.Provider value={value}>
+          {children}
+        </AppContext.Provider>
+      )
 };
 
 export const useApp = () => {

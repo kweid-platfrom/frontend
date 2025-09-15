@@ -6,13 +6,13 @@ import ScreenRecorderButton from '../../buttons/ScreenRecorderButton';
 import ReportDropdown from '../../ReportDropdown';
 import TestCaseDropdown from '../../TestCaseDropdown';
 
-const HeaderButtons = ({ 
-    onCreateSprint, 
+const HeaderButtons = ({
+    onCreateSprint,
     onCreateDocument,
     setShowBugForm,
     actions,
     activeSuite,
-    disabled = false 
+    disabled = false
 }) => {
     return (
         <div className="flex items-center">
@@ -62,32 +62,33 @@ const HeaderButtons = ({
                     <span className="hidden lg:inline">Run Tests</span>
                 </Button>
 
-                {/* Bug Report Button */}
-                <BugReportButton 
-                    variant="ghost"
-                    disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
-                />
-
                 {/* Screen Recorder Button */}
-                <ScreenRecorderButton 
-                    setShowBugForm={setShowBugForm} 
-                    actions={actions} 
+                <ScreenRecorderButton
+                    setShowBugForm={setShowBugForm}
+                    actions={actions}
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50"
                 />
 
                 {/* Report Dropdown */}
-                <ReportDropdown 
+                <ReportDropdown
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50"
                 />
 
                 {/* Test Case Dropdown */}
-                <TestCaseDropdown 
+                <TestCaseDropdown
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50"
                 />
+
+                {/* Bug Report Button */}
+                <BugReportButton
+                    variant="ghost"
+                    disabled={disabled}
+                    className="text-foreground hover:bg-accent/50"
+                />
+
             </div>
         </div>
     );
