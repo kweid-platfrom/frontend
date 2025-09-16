@@ -226,11 +226,10 @@ const Login = () => {
                 <div className="w-full max-w-md">
                     <div className="text-center mb-4">
                         <div className="inline-block">
-                             <div className="flex items-center space-x-2 mb-2">
-                                <div className="w-16 h-16 flex items-center justify-center">
-                                    <img src="/logo.png" alt="Assura Logo" className="w-16 h-16 object-contain" />
+                             <div className="flex items-center mb-2">
+                                <div className="w-32 h-32 flex items-center justify-center">
+                                    <img src="/logo.svg" alt="Assura Logo" className="w-32 h-32 object-contain" />
                                 </div>
-                                <span className="text-2xl font-bold text-slate-900">Assura</span>
                             </div>
                         </div>
                     </div>

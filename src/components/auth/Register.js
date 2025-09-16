@@ -94,16 +94,19 @@ const Register = ({ onSwitchToLogin }) => {
                 <div className="w-full max-w-md">
                     <div className="text-center mb-4">
                         <div className="inline-block">
-                            <div className="flex items-center space-x-2 mb-2">
-                                <div className="w-16 h-16 flex items-center justify-center">
-                                    <img src="/logo.png" alt="Assura Logo" className="w-16 h-16 object-contain" />
+                             <div className="flex items-center mb-2">
+                                <div className="w-32 h-32 flex items-center justify-center">
+                                    <img src="/logo.svg" alt="Assura Logo" className="w-32 h-32 object-contain" />
                                 </div>
-                                <span className="text-2xl font-bold text-slate-900">Assura</span>
                             </div>
                         </div>
                     </div>
                     <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
+                        <div className="text-center mb-8">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Join Assura</h1>
+                            <p className="text-base sm:text-lg text-slate-600">Your QA Workflow Just got reimagined</p>
+                        </div>
                         {renderCurrentScreen()}
                     </div>
                 </div>
