@@ -4,7 +4,7 @@ import { OrganizationService } from './OrganizationService';
 import { TestSuiteService } from './TestSuiteService';
 import { AssetService } from './AssetService';
 import { BugService } from './bugService';
-import { ArchiveTrashService } from './archiveTrashService';
+import { ArchiveTrashService } from './ArchiveTrashService';
 
 class FirestoreService extends BaseFirestoreService {
     constructor() {

@@ -1,8 +1,9 @@
-import { PlayIcon, Target, FileText } from 'lucide-react';
+import React from 'react';
+import { Play, Target, FileText } from 'lucide-react';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
 import BugReportButton from '../../modals/BugReportButton';
-import ScreenRecorderButton from '../../buttons/ScreenRecorderButton';
+import ScreenRecorderButton from '../../recorder/ScreenRecorderButton'; // Your updated component
 import ReportDropdown from '../../ReportDropdown';
 import TestCaseDropdown from '../../TestCaseDropdown';
 
@@ -12,6 +13,7 @@ const HeaderButtons = ({
     setShowBugForm,
     actions,
     activeSuite,
+    firestoreService, // Add this prop to pass your existing service
     disabled = false
 }) => {
     return (
@@ -56,18 +58,19 @@ const HeaderButtons = ({
                 <Button
                     variant="ghost"
                     disabled={disabled}
-                    leftIcon={<PlayIcon className="h-4 w-4" />}
+                    leftIcon={<Play className="h-4 w-4" />}
                     className="text-foreground hover:bg-accent/50"
                 >
                     <span className="hidden lg:inline">Run Tests</span>
                 </Button>
 
-                {/* Screen Recorder Button */}
+                {/* Enhanced Screen Recorder Button */}
                 <ScreenRecorderButton
-                    setShowBugForm={setShowBugForm}
-                    actions={actions}
+                    firestoreService={firestoreService}
+                    activeSuite={activeSuite}
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50"
+                    isPrimary={true}
                 />
 
                 {/* Report Dropdown */}
@@ -88,10 +91,9 @@ const HeaderButtons = ({
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50"
                 />
-
             </div>
         </div>
     );
 };
 
-export default HeaderButtons;
+export default HeaderButtons; 
