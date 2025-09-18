@@ -13,7 +13,6 @@ import {
     Bug,
     Video,
     Lightbulb,
-    Users,
     BarChart3
 } from 'lucide-react';
 import { useApp } from '../context/AppProvider';
@@ -21,9 +20,7 @@ import { useApp } from '../context/AppProvider';
 const SprintDashboard = ({ sprintId, suiteId }) => {
     const { state, actions } = useApp();
     const { sprints = [], activeSprint } = state.sprints || {};
-    const { activeSuite } = state.suites || {};
 
-    const [sprintData, setSprintData] = useState(null);
     const [assets, setAssets] = useState({
         testCases: [],
         bugs: [],

@@ -3,7 +3,7 @@ import { SparklesIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, XCircleIc
 import { useAIBugService } from '../hooks/useAIBugService';
 import BugReportAttachments from '../components/create-bug/BugReportAttachments';
 
-const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, userDisplayName, currentUser, recordings, isLoadingRecordings }) => {
+const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, isLoadingRecordings }) => {
     const [prompt, setPrompt] = useState('');
     const [consoleError, setConsoleError] = useState('');
     const [generatedReport, setGeneratedReport] = useState(null);

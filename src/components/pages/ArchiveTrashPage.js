@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Archive, Trash2, Search, CheckSquare, Calendar } from 'lucide-react';
 import { useApp } from '../../context/AppProvider';
 import { ItemCard } from '../../components/archiveTrash/ItemCard';
-import { BulkActions } from '../../components/archiveTrash/BulkActions';
 import { FilterControls } from '../../components/archiveTrash/FilterControls';
 import { EmptyState } from '../../components/archiveTrash/EmptyState';
 

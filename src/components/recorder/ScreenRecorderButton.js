@@ -91,19 +91,18 @@ const attachNetworkCapture = () => {
   };
   
   XMLHttpRequest.prototype.send = function (body) {
-    const xhr = this;
     const requestTime = new Date().toISOString();
     
-    xhr.addEventListener("loadend", function () {
+    this.addEventListener("loadend", function () {
       const logEntry = {
         id: `xhr_${Date.now()}_${Math.random()}`,
-        url: xhr.__url,
-        method: xhr.__method,
-        status: xhr.status,
+        url: this.__url,
+        method: this.__method,
+        status: this.status,
         time: requestTime,
-        duration: Date.now() - xhr.__startTime,
+        duration: Date.now() - this.__startTime,
         headers: {},
-        responseText: xhr.responseText?.substring(0, 200) + (xhr.responseText?.length > 200 ? '...' : '')
+        responseText: this.responseText?.substring(0, 200) + (this.responseText?.length > 200 ? '...' : '')
       };
       
       recordingStore.setState({
@@ -339,10 +338,11 @@ const ScreenRecorderButton = ({
         <div className="flex items-center space-x-2 text-red-600">
           <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
           <span className="font-mono text-sm">{formatTime(state.recordingTime)}</span>
+          {state.isPaused && <span className="text-yellow-600 text-xs">(Paused)</span>}
         </div>
         <button
           onClick={state.isPaused ? actions.resumeRecording : actions.pauseRecording}
-          className="p-1.5 bg-gray-200 hover:bg-gray-300 rounded"
+          className="p-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded"
           disabled={disabled}
         >
           {state.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -380,6 +380,31 @@ const ScreenRecorderButton = ({
       {isPrimary && state.showPreview && (
         <EnhancedScreenRecorder
           mode="recorder"
+          activeSuite={activeSuite}
+          firestoreService={{
+            createRecording: async (suiteId, data) => {
+              // Mock implementation - replace with your actual service
+              console.log('Creating recording for suite:', suiteId, data);
+              return { 
+                success: true, 
+                data: { 
+                  id: `rec_${Date.now()}`,
+                  ...data 
+                } 
+              };
+            },
+            createBug: async (suiteId, data) => {
+              // Mock implementation - replace with your actual service
+              console.log('Creating bug for suite:', suiteId, data);
+              return { 
+                success: true, 
+                data: { 
+                  id: `bug_${Date.now()}`,
+                  ...data 
+                } 
+              };
+            }
+          }}
           existingRecording={{
             videoUrl: state.previewUrl,
             duration: state.duration,

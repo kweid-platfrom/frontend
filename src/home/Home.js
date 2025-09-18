@@ -19,6 +19,7 @@ import {
     Rocket,
     Target
 } from "lucide-react";
+import Image from "next/image";
 
 // Features Component
 const Features = () => {
@@ -205,12 +206,12 @@ const Home = () => {
             <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-slate-100 z-50">
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="flex justify-between items-center h-16">
-                         <div className="flex items-center">
-                                <div className="w-32 h-32 flex items-center justify-center rounded-xl p-1">
-                                    {/* Inline SVG Logo */}
-                                    <img src="logo.svg" alt="FixMate Logo" className="w-32 h-32" />
-                                </div>
+                        <div className="flex items-center">
+                            <div className="w-32 h-32 flex items-center justify-center rounded-xl p-1">
+                                {/* Inline SVG Logo */}
+                                <Image src="/logo.svg" alt="Assura Logo" width={128} height={128} className="w-32 h-32" />
                             </div>
+                        </div>
 
 
                         <div className="hidden md:flex items-center space-x-8">
@@ -542,7 +543,7 @@ const Home = () => {
                             <div className="flex items-center">
                                 <div className="w-32 h-32 flex items-center rounded-xl p-1 justify-center">
                                     {/* Inline SVG Logo */}
-                                    <img src="logo.svg" alt="Assura Logo" className="w-32 h-32" />
+                                    <Image src="logo.svg" alt="Assura Logo" width={128} height={128} className="w-32 h-32" />
                                 </div>
                             </div>
                             <p className="text-slate-600 mb-6 max-w-md">

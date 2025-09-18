@@ -7,7 +7,6 @@ const TipsMode = ({
   isTrialActive,
   trialDaysRemaining,
   isOrganizationAccount,
-  onSuiteCreated,
   onInteraction, // Added prop for tracking interactions
 }) => {
   const router = useRouter();

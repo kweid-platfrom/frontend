@@ -128,7 +128,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
         } finally {
             setIsSubmitting(false);
         }
-    }, [formData, recommendation, onSave, onClose, currentUser, actions]);
+    }, [formData, recommendation, onSave, onClose, currentUser, actions,]);
 
     const handleTagsChange = (e) => {
         const tagString = e.target.value;

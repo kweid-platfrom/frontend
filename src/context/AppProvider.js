@@ -2,7 +2,6 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { useSlices, getAppState } from './hooks/useSlices';
 import { useAI } from './hooks/useAI';
 import { useTestCases } from './hooks/useTestCases';
@@ -10,15 +9,11 @@ import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
 import { useRecording } from './hooks/useRecording';
 import { useRecommendations } from '../hooks/useRecommendations';
-import { useArchiveTrash } from '../hooks/useArchiveTrash';
-import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
+import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
 
 // Import bulk actions components and utilities
-import { 
-  PAGE_CONFIGS, 
-  COLOR_CLASSES, 
-  BulkActionsPortal, 
+import {  
   createBulkActionHandlers 
 } from './BulkActionsProvider';
 
@@ -65,289 +60,7 @@ export const AppProvider = ({ children }) => {
         addBugsToSprint,
     } = useAssetLinking(slices);
 
-    // Enhanced recording hook integration
-    const recordingHook = useRecording(slices);
-    
-    // Enhanced recording methods that use the new FirestoreService recordings interface
-    const enhancedRecordingActions = useMemo(() => ({
-        // Core recording operations using the new interface
-        createRecording: async (suiteId, recordingData, sprintId = null) => {
-            try {
-                const result = await FirestoreService.recordings.createRecording(suiteId, recordingData, sprintId);
-                if (result.success) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'recording-create-success',
-                        type: 'success',
-                        message: 'Recording created successfully',
-                        duration: 3000,
-                    });
-                }
-                return result;
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-create-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        uploadAndCreateRecording: async (suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) => {
-            try {
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-upload-start',
-                    type: 'info',
-                    message: 'Uploading recording...',
-                    duration: 3000,
-                });
-
-                const result = await FirestoreService.recordings.uploadAndCreateRecording(
-                    suiteId, 
-                    recordingBlob, 
-                    metadata, 
-                    sprintId, 
-                    onProgress
-                );
-
-                if (result.success) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'recording-upload-success',
-                        type: 'success',
-                        message: 'Recording uploaded and saved successfully',
-                        duration: 3000,
-                    });
-                } else {
-                    throw new Error(result.error?.message || 'Upload failed');
-                }
-                return result;
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-upload-error',
-                    type: 'error',
-                    message: `Upload failed: ${errorMessage}`,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        updateRecording: async (recordingId, updates, suiteId, sprintId = null) => {
-            try {
-                const result = await FirestoreService.recordings.updateRecording(recordingId, updates, suiteId, sprintId);
-                if (result.success) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'recording-update-success',
-                        type: 'success',
-                        message: 'Recording updated successfully',
-                        duration: 3000,
-                    });
-                }
-                return result;
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-update-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        getRecording: async (recordingId, suiteId, sprintId = null) => {
-            try {
-                return await FirestoreService.recordings.getRecording(recordingId, suiteId, sprintId);
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-get-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        getRecordings: async (suiteId, sprintId = null, options = {}) => {
-            try {
-                return await FirestoreService.recordings.getRecordings(suiteId, sprintId, options);
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recordings-get-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        deleteRecording: async (recordingId, suiteId, sprintId = null) => {
-            try {
-                const result = await FirestoreService.recordings.deleteRecording(recordingId, suiteId, sprintId);
-                if (result.success) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'recording-delete-success',
-                        type: 'success',
-                        message: 'Recording deleted successfully',
-                        duration: 3000,
-                    });
-                }
-                return result;
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-delete-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        // Service status and utility methods
-        getRecordingServiceStatus: async () => {
-            try {
-                return await FirestoreService.recordings.getServiceStatus();
-            } catch (error) {
-                console.error('Error getting recording service status:', error);
-                return { success: false, error: { message: getFirebaseErrorMessage(error) } };
-            }
-        },
-
-        testYouTubeConnection: async () => {
-            try {
-                return await FirestoreService.recordings.testYouTubeConnection();
-            } catch (error) {
-                console.error('Error testing YouTube connection:', error);
-                return { success: false, error: { message: getFirebaseErrorMessage(error) } };
-            }
-        },
-
-        isYouTubeAvailable: async () => {
-            try {
-                return await FirestoreService.recordings.isYouTubeAvailable();
-            } catch (error) {
-                console.error('Error checking YouTube availability:', error);
-                return false;
-            }
-        },
-
-        getRecordingStatistics: async (suiteId, sprintId = null) => {
-            try {
-                return await FirestoreService.recordings.getStatistics(suiteId, sprintId);
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-stats-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        // URL utility methods
-        getPlaybackUrl: (recordingData) => {
-            try {
-                return FirestoreService.recordings.getPlaybackUrl(recordingData);
-            } catch (error) {
-                console.error('Error getting playback URL:', error);
-                return null;
-            }
-        },
-
-        getVideoUrl: (recordingData) => {
-            try {
-                return FirestoreService.recordings.getVideoUrl(recordingData);
-            } catch (error) {
-                console.error('Error getting video URL:', error);
-                return null;
-            }
-        },
-
-        getRecordingInfo: (recordingData) => {
-            try {
-                return FirestoreService.recordings.getRecordingInfo(recordingData);
-            } catch (error) {
-                console.error('Error getting recording info:', error);
-                return null;
-            }
-        },
-
-        validateRecordingData: (recordingData) => {
-            try {
-                return FirestoreService.recordings.validateRecordingData(recordingData);
-            } catch (error) {
-                console.error('Error validating recording data:', error);
-                return { valid: false, errors: [error.message] };
-            }
-        },
-
-        // Enhanced linking with recordings
-        linkRecordingToBug: async (recordingId, bugId, suiteId, sprintId = null) => {
-            try {
-                const result = await FirestoreService.linkRecordingToBug(recordingId, bugId, suiteId, sprintId);
-                if (result.success) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'recording-bug-link-success',
-                        type: 'success',
-                        message: 'Recording linked to bug successfully',
-                        duration: 3000,
-                    });
-                }
-                return result;
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-bug-link-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        unlinkRecordingFromBug: async (recordingId, bugId, suiteId, sprintId = null) => {
-            try {
-                const result = await FirestoreService.unlinkRecordingFromBug(recordingId, bugId, suiteId, sprintId);
-                if (result.success) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'recording-bug-unlink-success',
-                        type: 'success',
-                        message: 'Recording unlinked from bug successfully',
-                        duration: 3000,
-                    });
-                }
-                return result;
-            } catch (error) {
-                const errorMessage = getFirebaseErrorMessage(error);
-                slices.ui.actions.showNotification?.({
-                    id: 'recording-bug-unlink-error',
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                return { success: false, error: { message: errorMessage } };
-            }
-        },
-
-        // Legacy compatibility - use the enhanced version but keep the old interface
-        saveRecording: async (recordingData, suiteId, sprintId = null) => {
-            return await enhancedRecordingActions.createRecording(suiteId, recordingData, sprintId);
-        }
-
-    }), [slices.ui.actions]);
+    const { saveRecording, linkRecordingToBug } = useRecording(slices);
 
     // Initialize recommendations hook only if slice exists
     const recommendationsHook = hasRecommendationsSlice 
@@ -952,7 +665,7 @@ export const AppProvider = ({ children }) => {
         slices.subscription.state.isSubscriptionActive,
     ]);
 
-    // Asset subscriptions effect - Enhanced for recordings
+    // Asset subscriptions effect
     useEffect(() => {
         if (
             !slices.auth.state.isAuthenticated ||
@@ -1061,55 +774,8 @@ export const AppProvider = ({ children }) => {
         if (slices.bugs.actions.loadBugsSuccess) {
             subscribeAsset('Bugs', slices.bugs.actions.loadBugsSuccess);
         }
-        
-        // Enhanced recordings subscription using the new interface
         if (slices.recordings.actions.loadRecordingsSuccess) {
-            try {
-                console.log('Setting up enhanced recordings subscription...');
-                assetUnsubscribersRef.current['Recordings'] = FirestoreService.recordings.subscribeToRecordings(
-                    suiteId,
-                    (recordings) => {
-                        const safeRecordings = Array.isArray(recordings) ? recordings : [];
-                        console.log('Recordings loaded with enhanced data:', {
-                            count: safeRecordings.length,
-                            sampleRecording: safeRecordings[0] ? {
-                                id: safeRecordings[0].id,
-                                title: safeRecordings[0].title,
-                                provider: safeRecordings[0].provider,
-                                hasPlaybackUrl: !!safeRecordings[0].playbackUrl,
-                                hasDirectUrl: !!safeRecordings[0].directUrl,
-                                isYouTube: safeRecordings[0].isYouTube,
-                                isFirebase: safeRecordings[0].isFirebase,
-                                stats: safeRecordings[0].stats
-                            } : null
-                        });
-                        slices.recordings.actions.loadRecordingsSuccess(safeRecordings);
-                    },
-                    (error) => {
-                        let actualError = error;
-                        if (!error || (typeof error === 'object' && Object.keys(error).length === 0)) {
-                            actualError = new Error('Unknown error in Recordings subscription');
-                        }
-
-                        const errorMessage = getFirebaseErrorMessage(actualError);
-                        console.error('Enhanced recordings subscription error:', actualError);
-
-                        if (actualError?.code !== 'permission-denied') {
-                            slices.ui.actions.showNotification?.({
-                                id: 'recordings-subscription-error',
-                                type: 'error',
-                                message: `Failed to load recordings: ${errorMessage}`,
-                                duration: 5000,
-                            });
-                        }
-
-                        slices.recordings.actions.loadRecordingsSuccess([]);
-                    }
-                );
-            } catch (error) {
-                console.error('Error setting up enhanced recordings subscription:', error);
-                slices.recordings.actions.loadRecordingsSuccess([]);
-            }
+            subscribeAsset('Recordings', slices.recordings.actions.loadRecordingsSuccess);
         }
 
         // For sprints subscription
@@ -1373,154 +1039,158 @@ export const AppProvider = ({ children }) => {
         }
     };
 
-    // Bulk actions methods
-    const bulkActionMethods = useMemo(() => {
-        // Create a reference object for the current app actions
-        const appActionsRef = {
-            get current() {
-                return {
-                    testCases: {
-                        ...slices.testCases.actions,
-                        createTestCase: wrappedCreateTestCase,
-                        updateTestCase: wrappedUpdateTestCase,
-                        deleteTestCase: enhancedDeleteTestCase
-                    },
-                    bugs: {
-                        ...slices.bugs.actions,
-                        deleteBug: enhancedDeleteBug
-                    },
-                    recordings: { 
-                        ...slices.recordings.actions, 
-                        ...enhancedRecordingActions,
-                        deleteRecording: enhancedDeleteRecording
-                    },
-                    sprints: {
-                        ...slices.sprints.actions,
-                        deleteSprint: enhancedDeleteSprint
-                    },
-                    recommendations: {
-                        createRecommendation,
-                        updateRecommendation,
-                        deleteRecommendation: enhancedDeleteRecommendation,
-                        voteOnRecommendation,
-                        addComment,
-                        removeComment,
-                    },
-                    archive: {
-                        archiveItem,
-                        unarchiveItem,
-                        moveToTrash,
-                        restoreFromTrash,
-                        permanentlyDelete,
-                        bulkArchive,
-                        bulkRestore,
-                        bulkPermanentDelete,
-                        archiveTestCase: (suiteId, testCaseId, sprintId, reason) => 
-                            archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason),
-                        archiveBug: (suiteId, bugId, sprintId, reason) => 
-                            archiveItem(suiteId, 'bugs', bugId, sprintId, reason),
-                        archiveRecording: (suiteId, recordingId, sprintId, reason) => 
-                            archiveItem(suiteId, 'recordings', recordingId, sprintId, reason),
-                        archiveSprint: (suiteId, sprintId, reason) => 
-                            archiveItem(suiteId, 'sprints', sprintId, null, reason),
-                        archiveRecommendation: (suiteId, recommendationId, sprintId, reason) => 
-                            archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason),
-                    },
-                    reports: {
-                        getReports,
-                        saveReport,
-                        deleteReport,
-                        generatePDF,
-                    },
-                    ui: slices.ui.actions
-                };
-            }
-        };
 
-        return {
-            registerPageBulkActions: (pageType, onBulkAction) => {
-                setBulkActions(prev => ({
-                    ...prev,
-                    currentPageType: pageType,
-                    onBulkAction
-                }));
-            },
-
-            updateBulkSelection: (items) => {
-                setBulkActions(prev => ({
-                    ...prev,
-                    selectedItems: Array.isArray(items) ? items : []
-                }));
-            },
-
-            clearBulkSelection: () => {
-                setBulkActions(prev => ({
-                    ...prev,
-                    selectedItems: []
-                }));
-            },
-
-            executeBulkAction: async (actionId, items) => {
-                const { currentPageType, onBulkAction } = bulkActions;
-                
-                // Use custom bulk action handler if provided
-                if (onBulkAction) {
-                    await onBulkAction(actionId, items);
-                    return;
+        // Bulk actions methods
+        const bulkActionMethods = useMemo(() => {
+            // Create a reference object for the current app actions
+            const appActionsRef = {
+                get current() {
+                    return {
+                        testCases: {
+                            ...slices.testCases.actions,
+                            createTestCase: wrappedCreateTestCase,
+                            updateTestCase: wrappedUpdateTestCase,
+                            deleteTestCase: enhancedDeleteTestCase
+                        },
+                        bugs: {
+                            ...slices.bugs.actions,
+                            deleteBug: enhancedDeleteBug
+                        },
+                        recordings: { 
+                            ...slices.recordings.actions, 
+                            saveRecording, 
+                            linkRecordingToBug,
+                            deleteRecording: enhancedDeleteRecording
+                        },
+                        sprints: {
+                            ...slices.sprints.actions,
+                            deleteSprint: enhancedDeleteSprint
+                        },
+                        recommendations: {
+                            createRecommendation,
+                            updateRecommendation,
+                            deleteRecommendation: enhancedDeleteRecommendation,
+                            voteOnRecommendation,
+                            addComment,
+                            removeComment,
+                        },
+                        archive: {
+                            archiveItem,
+                            unarchiveItem,
+                            moveToTrash,
+                            restoreFromTrash,
+                            permanentlyDelete,
+                            bulkArchive,
+                            bulkRestore,
+                            bulkPermanentDelete,
+                            archiveTestCase: (suiteId, testCaseId, sprintId, reason) => 
+                                archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason),
+                            archiveBug: (suiteId, bugId, sprintId, reason) => 
+                                archiveItem(suiteId, 'bugs', bugId, sprintId, reason),
+                            archiveRecording: (suiteId, recordingId, sprintId, reason) => 
+                                archiveItem(suiteId, 'recordings', recordingId, sprintId, reason),
+                            archiveSprint: (suiteId, sprintId, reason) => 
+                                archiveItem(suiteId, 'sprints', sprintId, null, reason),
+                            archiveRecommendation: (suiteId, recommendationId, sprintId, reason) => 
+                                archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason),
+                        },
+                        reports: {
+                            getReports,
+                            saveReport,
+                            deleteReport,
+                            generatePDF,
+                        },
+                        ui: slices.ui.actions
+                    };
                 }
-
-                // Use default bulk action handlers
-                const activeSuite = slices.suites.state.activeSuite;
-                if (!activeSuite) {
-                    slices.ui.actions.showNotification?.({
-                        id: 'bulk-no-suite',
-                        type: 'error',
-                        message: 'No active suite selected',
-                        duration: 3000,
-                    });
-                    return;
+            };
+    
+            return {
+                registerPageBulkActions: (pageType, onBulkAction) => {
+                    setBulkActions(prev => ({
+                        ...prev,
+                        currentPageType: pageType,
+                        onBulkAction
+                    }));
+                },
+    
+                updateBulkSelection: (items) => {
+                    setBulkActions(prev => ({
+                        ...prev,
+                        selectedItems: Array.isArray(items) ? items : []
+                    }));
+                },
+    
+                clearBulkSelection: () => {
+                    setBulkActions(prev => ({
+                        ...prev,
+                        selectedItems: []
+                    }));
+                },
+    
+                executeBulkAction: async (actionId, items) => {
+                    const { currentPageType, onBulkAction } = bulkActions;
+                    
+                    // Use custom bulk action handler if provided
+                    if (onBulkAction) {
+                        await onBulkAction(actionId, items);
+                        return;
+                    }
+    
+                    // Use default bulk action handlers
+                    const activeSuite = slices.suites.state.activeSuite;
+                    if (!activeSuite) {
+                        slices.ui.actions.showNotification?.({
+                            id: 'bulk-no-suite',
+                            type: 'error',
+                            message: 'No active suite selected',
+                            duration: 3000,
+                        });
+                        return;
+                    }
+    
+                    const bulkHandlers = createBulkActionHandlers(appActionsRef.current, activeSuite);
+                    const handler = bulkHandlers[currentPageType];
+                    
+                    if (handler) {
+                        await handler(actionId, items);
+                    } else {
+                        console.warn(`No bulk action handler for page type: ${currentPageType}`);
+                        slices.ui.actions.showNotification?.({
+                            id: 'bulk-unsupported',
+                            type: 'warning',
+                            message: `Bulk actions not supported for ${currentPageType}`,
+                            duration: 3000,
+                        });
+                    }
                 }
-
-                const bulkHandlers = createBulkActionHandlers(appActionsRef.current, activeSuite);
-                const handler = bulkHandlers[currentPageType];
-                
-                if (handler) {
-                    await handler(actionId, items);
-                } else {
-                    console.warn(`No bulk action handler for page type: ${currentPageType}`);
-                    slices.ui.actions.showNotification?.({
-                        id: 'bulk-unsupported',
-                        type: 'warning',
-                        message: `Bulk actions not supported for ${currentPageType}`,
-                        duration: 3000,
-                    });
-                }
-            }
-        };
-    }, [
-        bulkActions,
-        slices,
-        wrappedCreateTestCase,
-        wrappedUpdateTestCase,
-        enhancedRecordingActions,
-        createRecommendation,
-        updateRecommendation,
-        voteOnRecommendation,
-        addComment,
-        removeComment,
-        archiveItem,
-        unarchiveItem,
-        moveToTrash,
-        restoreFromTrash,
-        permanentlyDelete,
-        bulkArchive,
-        bulkRestore,
-        bulkPermanentDelete,
-        getReports,
-        saveReport,
-        deleteReport,
-        generatePDF
-    ]);
+            };
+        }, [
+            bulkActions,
+            slices,
+            wrappedCreateTestCase,
+            wrappedUpdateTestCase,
+            saveRecording,
+            linkRecordingToBug,
+            createRecommendation,
+            updateRecommendation,
+            voteOnRecommendation,
+            addComment,
+            removeComment,
+            archiveItem,
+            unarchiveItem,
+            moveToTrash,
+            restoreFromTrash,
+            permanentlyDelete,
+            bulkArchive,
+            bulkRestore,
+            bulkPermanentDelete,
+            getReports,
+            saveReport,
+            deleteReport,
+            generatePDF
+        ]);
+    
 
     // Asset counts functionality
     const getAssetCounts = async (suiteId) => {
@@ -1563,10 +1233,10 @@ export const AppProvider = ({ children }) => {
                     ...slices.bugs.actions,
                     deleteBug: enhancedDeleteBug
                 },
-                // Enhanced recordings actions using the new interface
                 recordings: { 
                     ...slices.recordings.actions, 
-                    ...enhancedRecordingActions,
+                    saveRecording, 
+                    linkRecordingToBug,
                     deleteRecording: enhancedDeleteRecording
                 },
                 sprints: {
@@ -1663,9 +1333,6 @@ export const AppProvider = ({ children }) => {
                     getAvailableBugsForLinking: FirestoreService.getAvailableBugsForLinking.bind(FirestoreService),
                     bulkLinkTestCasesToBugs: FirestoreService.bulkLinkTestCasesToBugs.bind(FirestoreService),
                     bulkLinkBugsToTestCases: FirestoreService.bulkLinkBugsToTestCases.bind(FirestoreService),
-                    // Enhanced recording linking
-                    linkRecordingToBug: enhancedRecordingActions.linkRecordingToBug,
-                    unlinkRecordingFromBug: enhancedRecordingActions.unlinkRecordingFromBug,
                 },
 
                 // Bulk actions
@@ -1708,11 +1375,6 @@ export const AppProvider = ({ children }) => {
             recommendationsError: hasRecommendationsSlice ? slices.recommendations.state.error : null,
             recommendationsAvailable: hasRecommendationsSlice,
 
-            // Enhanced recordings state
-            recordingsServiceStatus: null, // Can be populated via getRecordingServiceStatus
-            youTubeAvailable: null, // Can be populated via isYouTubeAvailable
-            recordingStatistics: null, // Can be populated via getRecordingStatistics
-
             isLoading:
                 slices.auth.state.loading ||
                 slices.suites.state.loading ||
@@ -1735,7 +1397,8 @@ export const AppProvider = ({ children }) => {
             hasRecommendationsSlice,
             wrappedCreateTestCase,
             wrappedUpdateTestCase,
-            enhancedRecordingActions,
+            saveRecording,
+            linkRecordingToBug,
             generateTestCasesWithAI,
             getAIAnalytics,
             updateAISettings,
@@ -1800,18 +1463,6 @@ export const AppProvider = ({ children }) => {
     return (
         <AppContext.Provider value={value}>
           {children}
-          {/* Render bulk actions portal if we have selections and a container */}
-          {bulkActions.portalContainer && bulkActions.selectedItems.length > 0 && 
-            createPortal(
-              <BulkActionsPortal
-                selectedItems={bulkActions.selectedItems}
-                pageType={bulkActions.currentPageType}
-                onAction={bulkActionMethods.executeBulkAction}
-                onClear={bulkActionMethods.clearBulkSelection}
-              />,
-              bulkActions.portalContainer
-            )
-          }
         </AppContext.Provider>
       )
 };

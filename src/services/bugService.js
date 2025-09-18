@@ -1,4 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 import { doc, runTransaction, arrayUnion, arrayRemove, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
 

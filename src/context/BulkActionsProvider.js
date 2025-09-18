@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useContext, createContext } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Trash2, Archive, Download, Share, Edit3, Copy, Play, Pause, 
+  Trash2, Archive, Download, Play,
   CheckCircle, XCircle, RotateCcw, FileText, Bug, TestTube, 
-  Video, BarChart3, Lightbulb, Zap, Shield, RefreshCw, Eye, EyeOff 
+  Video, BarChart3, Lightbulb, Zap, Shield, RefreshCw, Eye, 
 } from 'lucide-react';
 
 // Page configurations for different contexts

@@ -2,20 +2,17 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { 
   Video, 
   Square, 
-  Play, 
-  Pause, 
+  Play,
   Bug, 
   Save, 
   Upload,
-  MessageCircle,
   Network,
   Terminal,
-  Settings,
-  Clock,
-  Download,
   X,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Link,
+  Copy
 } from "lucide-react";
 
 const formatTime = (s) => {
@@ -184,19 +181,18 @@ const EnhancedScreenRecorder = ({
     };
     
     XMLHttpRequest.prototype.send = function (body) {
-      const xhr = this;
       const requestTime = new Date().toISOString();
       
-      xhr.addEventListener("loadend", function () {
+      this.addEventListener("loadend", () => {
         const logEntry = {
           id: `xhr_${Date.now()}_${Math.random()}`,
-          url: xhr.__url,
-          method: xhr.__method,
-          status: xhr.status,
+          url: this.__url,
+          method: this.__method,
+          status: this.status,
           time: requestTime,
-          duration: Date.now() - xhr.__startTime,
+          duration: Date.now() - this.__startTime,
           headers: {},
-          responseText: xhr.responseText?.substring(0, 200) + (xhr.responseText?.length > 200 ? '...' : '')
+          responseText: this.responseText?.substring(0, 200) + (this.responseText?.length > 200 ? '...' : '')
         };
         
         setNetworkLogs(prev => [...prev, logEntry]);
@@ -364,8 +360,13 @@ const EnhancedScreenRecorder = ({
       const result = await firestoreService.createRecording(activeSuite.id, recordingData);
       
       if (result.success) {
-        setShareLink(`/recordings/${result.data.id}`);
+        const recordingShareLink = `${window.location.origin}/recordings/${result.data.id}`;
+        setShareLink(recordingShareLink);
         alert("Recording saved successfully!");
+        // Close the preview modal after successful save
+        setTimeout(() => {
+          onClose();
+        }, 1500);
       } else {
         throw new Error(result.error?.message || 'Failed to save recording');
       }
@@ -412,6 +413,17 @@ const EnhancedScreenRecorder = ({
     }
   };
 
+  // Copy share link to clipboard
+  const copyShareLink = () => {
+    if (shareLink) {
+      navigator.clipboard.writeText(shareLink).then(() => {
+        alert("Recording link copied to clipboard!");
+      }).catch(() => {
+        alert(`Failed to copy link. URL: ${shareLink}`);
+      });
+    }
+  };
+
   // Video player overlay state
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   
@@ -451,7 +463,7 @@ const EnhancedScreenRecorder = ({
             <div className="flex items-center space-x-2">
               {mode === 'recorder' && (
                 <>
-                  {!recording ? (
+                  {!recording && !previewUrl && (
                     <button
                       onClick={startRecording}
                       className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
@@ -459,7 +471,9 @@ const EnhancedScreenRecorder = ({
                       <Video className="w-4 h-4" />
                       <span>Start Recording</span>
                     </button>
-                  ) : (
+                  )}
+                  
+                  {recording && (
                     <button
                       onClick={stopRecording}
                       className="flex items-center space-x-2 px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
@@ -470,14 +484,26 @@ const EnhancedScreenRecorder = ({
                   )}
                   
                   {previewUrl && !recording && (
-                    <button
-                      onClick={saveRecording}
-                      disabled={saving}
-                      className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {uploading ? <Upload className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      <span>{uploading ? "Uploading..." : "Save Recording"}</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={saveRecording}
+                        disabled={saving}
+                        className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {uploading ? <Upload className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        <span>{uploading ? "Uploading..." : "Save Recording"}</span>
+                      </button>
+
+                      {shareLink && (
+                        <button
+                          onClick={copyShareLink}
+                          className="flex items-center space-x-2 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                        >
+                          <Link className="w-4 h-4" />
+                          <span>Copy Share Link</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )}

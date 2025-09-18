@@ -327,12 +327,12 @@ export const useRecommendations = (
         recommendationsSlice.actions.resetFilters();
     }, [recommendationsSlice]);
 
-    const addComment = useCallback(async (recommendationId, comment) => {
+    const addComment = useCallback(async () => {
         // Placeholder for comment functionality
         return { success: true };
     }, []);
 
-    const removeComment = useCallback(async (recommendationId, commentId) => {
+    const removeComment = useCallback(async () => {
         // Placeholder for comment functionality
         return { success: true };
     }, []);

@@ -7,7 +7,6 @@ import {
     ThumbsUp,
     ThumbsDown,
     Lightbulb,
-    Edit,
     Trash2,
     Archive,
     MoreHorizontal

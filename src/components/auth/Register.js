@@ -4,6 +4,7 @@ import MultiStepRegistrationForm from '../MultiStepRegistrationForm';
 import { useRegistration } from '../../hooks/useRegistration';
 import { CheckCircle } from 'lucide-react';
 import BackgroundDecorations from "@/components/BackgroundDecorations";
+import Image from 'next/image';
 import "../../app/globals.css";
 
 const Register = ({ onSwitchToLogin }) => {
@@ -96,7 +97,7 @@ const Register = ({ onSwitchToLogin }) => {
                         <div className="inline-block">
                              <div className="flex items-center mb-2">
                                 <div className="w-32 h-32 flex items-center justify-center">
-                                    <img src="/logo.svg" alt="Assura Logo" className="w-32 h-32 object-contain" />
+                                    <Image src="/logo.svg" alt="Assura Logo" width={128} height={128} className="w-32 h-32 object-contain" />
                                 </div>
                             </div>
                         </div>

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { handleFirebaseOperation, getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
+import { handleFirebaseOperation } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
 
 export const useArchiveTrash = (uiActions) => {

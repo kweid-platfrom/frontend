@@ -31,13 +31,8 @@ const Recordings = () => {
     recordings: contextRecordings = [],
     isLoading,
     isTrialActive,
-    actions: { 
-      recordings: recordingActions, 
-      archive, 
-      linking, 
-      ui,
-      bugs: bugActions
-    }
+    ui,
+    firestoreService // Your existing firestore service
   } = useApp();
 
   // State
@@ -73,7 +68,7 @@ const Recordings = () => {
     if (!hasActiveSuite) return;
     
     try {
-      const result = await recordingActions.updateRecording(recordingId, updates);
+      const result = await firestoreService.updateRecording(recordingId, updates);
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to update recording');
       }
@@ -97,16 +92,22 @@ const Recordings = () => {
   const handleDeleteRecording = async (recordingId) => {
     if (!hasActiveSuite) return;
     
-    if (!confirm('Are you sure you want to move this recording to trash? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
       return;
     }
 
     try {
-      // Use the enhanced delete method from AppProvider
-      const result = await recordingActions.deleteRecording(recordingId, activeSuite.id);
+      const result = await firestoreService.deleteRecording(recordingId);
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to delete recording');
       }
+      
+      ui.showNotification({
+        id: `delete-recording-success-${Date.now()}`,
+        type: 'success',
+        message: 'Recording deleted successfully',
+        duration: 3000,
+      });
     } catch (err) {
       console.error('Error deleting recording:', err);
       ui.showNotification({
@@ -162,14 +163,19 @@ const Recordings = () => {
           status: 'open',
           source: 'recording',
           recordingId: recording.id,
-          recordingUrl: recording.videoUrl
+          recordingUrl: recording.videoUrl,
+          suiteId: activeSuite.id
         };
 
-        const result = await bugActions.createBug(bugData);
+        const result = await firestoreService.createBug(activeSuite.id, bugData);
         if (result.success) {
           createdBugs++;
-          // Use the linking action from AppProvider
-          await linking.linkRecordingToBug(activeSuite.id, recording.id, result.data.id);
+          // Link recording to bug if you have a linking service
+          try {
+            await firestoreService.linkRecordingToBug(activeSuite.id, recording.id, result.data.id);
+          } catch (linkErr) {
+            console.warn('Failed to link recording to bug:', linkErr);
+          }
         }
       }
 
@@ -237,6 +243,18 @@ const Recordings = () => {
       );
     }
 
+    if (!hasActiveSuite) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center text-gray-500">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <div className="text-lg font-medium mb-2">No Suite Selected</div>
+            <div className="text-sm">Please select a test suite to view recordings</div>
+          </div>
+        </div>
+      );
+    }
+
     if (filteredRecordings.length === 0) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -264,69 +282,79 @@ const Recordings = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Recordings</h1>
             <p className="text-gray-600 dark:text-gray-400">
-              </p>
+              {hasActiveSuite ? `Screen recordings for ${activeSuite.name}` : 'Select a suite to view recordings'}
+            </p>
           </div>
           
-          {/* Only show recorder button if subscription is active */}
-          {isSubscriptionActive && (
+          {/* Only show recorder button if subscription is active and suite is selected */}
+          {isSubscriptionActive && hasActiveSuite && (
             <ScreenRecorderButton
               variant="contained"
-              isPrimary={false}
+              isPrimary={true}
             />
           )}
         </div>
 
-        {/* Toolbar - Always show */}
-        <div className="flex items-center justify-between mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search recordings..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-              />
+        {/* Toolbar - Only show if suite is selected */}
+        {hasActiveSuite && (
+          <div className="flex items-center justify-between mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center space-x-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search recordings..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              {/* Filter */}
+              <div className="relative">
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="appearance-none px-3 py-2 pr-8 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white bg-white"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
             </div>
 
-            {/* Filter */}
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="archived">Archived</option>
-            </select>
+            {/* View mode toggle */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded ${
+                  viewMode === 'grid' 
+                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400' 
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded ${
+                  viewMode === 'list' 
+                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400' 
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-
-          {/* View mode toggle */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded ${
-                viewMode === 'grid' 
-                  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400' 
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              <Grid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded ${
-                viewMode === 'list' 
-                  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400' 
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Content Area */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 min-h-96">
@@ -470,6 +498,8 @@ const Recordings = () => {
       {viewingRecording && (
         <EnhancedScreenRecorder
           mode="viewer"
+          activeSuite={activeSuite}
+          firestoreService={firestoreService}
           existingRecording={viewingRecording}
           onClose={() => setViewingRecording(null)}
         />
