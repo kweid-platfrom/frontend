@@ -1,7 +1,7 @@
 // Enhanced AssetService.js - Fixed for corrected YouTube service
 import { BaseFirestoreService } from './firestoreService';
 import { orderBy } from 'firebase/firestore';
-import recordingService from '../services/RecordingService';
+import recordingService from '../services/recordingService';
 
 export class AssetService extends BaseFirestoreService {
     constructor(testSuiteService) {
