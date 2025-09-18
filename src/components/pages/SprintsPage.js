@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Calendar, 
     Plus, 
@@ -30,19 +30,12 @@ const SprintsPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showOptions, setShowOptions] = useState(null);
 
-    // FIXED: Use useCallback to prevent infinite re-renders and add proper dependencies
-    const loadSprints = useCallback(async () => {
-        if (activeSuite?.id && actions.sprints?.loadSprints && !loading) {
-            await actions.sprints.loadSprints(activeSuite.id);
-        }
-    }, [activeSuite?.id, loading]); // Removed actions.sprints from deps to prevent recreation
-
-    // FIXED: Load sprints when component mounts or activeSuite changes, but not when loading state changes
+    // Load sprints when component mounts or activeSuite changes
     useEffect(() => {
         if (activeSuite?.id && actions.sprints?.loadSprints && !loading && sprints.length === 0) {
             actions.sprints.loadSprints(activeSuite.id);
         }
-    }, [activeSuite?.id]); // Only depend on activeSuite.id
+    }, [activeSuite?.id, actions.sprints, loading, sprints.length]);
 
     const getStatusInfo = (status) => {
         switch (status) {
@@ -91,7 +84,7 @@ const SprintsPage = () => {
 
     const handleSprintCreated = (sprint) => {
         setShowCreateModal(false);
-        // FIXED: Use correct method name
+        // Use correct method name
         if (actions.sprints?.setActiveSprint) {
             actions.sprints.setActiveSprint(sprint);
         }
@@ -100,7 +93,7 @@ const SprintsPage = () => {
 
     const handleSprintClick = (sprint) => {
         setSelectedSprint(sprint);
-        // FIXED: Use correct method name
+        // Use correct method name
         if (actions.sprints?.setActiveSprint) {
             actions.sprints.setActiveSprint(sprint);
         }

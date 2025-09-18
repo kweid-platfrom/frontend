@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Archive, Trash2, Search, CheckSquare, Calendar } from 'lucide-react';
+import { Archive, Trash2, Calendar } from 'lucide-react';
 import { useApp } from '../../context/AppProvider';
 import { ItemCard } from '../../components/archiveTrash/ItemCard';
 import { FilterControls } from '../../components/archiveTrash/FilterControls';
@@ -10,8 +10,7 @@ const ArchiveTrashPage = () => {
   const { 
     actions, 
     activeSuite, 
-    isAuthenticated, 
-    archiveLoading
+    isAuthenticated
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('archived');
@@ -236,15 +235,6 @@ const ArchiveTrashPage = () => {
     setSelectedItems(prev => prev.filter(id => id !== itemId));
   }, [activeTab]);
 
-  const removeMultipleFromLocalState = useCallback((itemIds) => {
-    if (activeTab === 'archived') {
-      setLocalArchivedItems(prev => prev.filter(i => !itemIds.includes(i.id)));
-    } else {
-      setLocalTrashedItems(prev => prev.filter(i => !itemIds.includes(i.id)));
-    }
-    setSelectedItems([]);
-  }, [activeTab]);
-
   const handleRestore = useCallback(async (item) => {
     const currentSuiteId = suiteIdRef.current;
     const currentActions = actionsRef.current;
@@ -306,86 +296,6 @@ const ArchiveTrashPage = () => {
       });
     }
   }, [removeFromLocalState]);
-
-  const handleBulkRestore = useCallback(async () => {
-    const currentSuiteId = suiteIdRef.current;
-    const currentActions = actionsRef.current;
-    
-    if (!currentSuiteId || selectedItems.length === 0) return;
-
-    try {
-      const selectedValidItems = filteredItems.filter(item => selectedItems.includes(item.id));
-      const itemsByType = selectedValidItems.reduce((acc, item) => {
-        if (!acc[item.type]) acc[item.type] = [];
-        acc[item.type].push(item.id);
-        return acc;
-      }, {});
-
-      for (const [assetType, assetIds] of Object.entries(itemsByType)) {
-        await currentActions.archive.bulkRestore(
-          currentSuiteId, 
-          assetType, 
-          assetIds, 
-          null, 
-          activeTab === 'trash'
-        );
-      }
-      
-      removeMultipleFromLocalState(selectedItems);
-      currentActions.ui?.showNotification?.({
-        id: 'bulk-restore',
-        type: 'success',
-        message: `Restored ${selectedItems.length} items`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Failed to bulk restore:', error);
-      actionsRef.current.ui?.showNotification?.({
-        id: 'bulk-restore-error',
-        type: 'error',
-        message: 'Failed to restore selected items',
-        duration: 5000,
-      });
-    }
-  }, [selectedItems, filteredItems, activeTab, removeMultipleFromLocalState]);
-
-  const handleBulkDelete = useCallback(async () => {
-    const currentSuiteId = suiteIdRef.current;
-    const currentActions = actionsRef.current;
-    
-    if (!currentSuiteId || selectedItems.length === 0) return;
-
-    if (!window.confirm(`Permanently delete ${selectedItems.length} items? This cannot be undone.`)) return;
-
-    try {
-      const itemsToDelete = filteredItems.filter(item => selectedItems.includes(item.id));
-      const itemsByType = itemsToDelete.reduce((acc, item) => {
-        if (!acc[item.type]) acc[item.type] = [];
-        acc[item.type].push(item.id);
-        return acc;
-      }, {});
-
-      for (const [assetType, assetIds] of Object.entries(itemsByType)) {
-        await currentActions.archive.bulkPermanentDelete(currentSuiteId, assetType, assetIds);
-      }
-      
-      removeMultipleFromLocalState(selectedItems);
-      currentActions.ui?.showNotification?.({
-        id: 'bulk-delete',
-        type: 'success',
-        message: `Permanently deleted ${selectedItems.length} items`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Failed to bulk delete:', error);
-      actionsRef.current.ui?.showNotification?.({
-        id: 'bulk-delete-error',
-        type: 'error',
-        message: 'Failed to delete selected items',
-        duration: 5000,
-      });
-    }
-  }, [selectedItems, filteredItems, removeMultipleFromLocalState]);
 
   // Show loading state
   if (!isAuthenticated) {
@@ -459,15 +369,6 @@ const ArchiveTrashPage = () => {
         filteredItems={filteredItems}
         selectedItems={selectedItems}
         onSelectAll={handleSelectAll}
-      />
-
-      {/* Bulk Actions */}
-      <BulkActions
-        selectedItems={selectedItems}
-        onBulkRestore={handleBulkRestore}
-        onBulkDelete={handleBulkDelete}
-        onDeselectAll={() => setSelectedItems([])}
-        isTrash={activeTab === 'trash'}
       />
 
       {/* Content */}

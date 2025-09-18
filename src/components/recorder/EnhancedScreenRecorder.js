@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   CheckCircle,
   Link,
-  Copy
 } from "lucide-react";
 
 const formatTime = (s) => {

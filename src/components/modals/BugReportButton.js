@@ -187,12 +187,12 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     }, [showBugForm, closeForm]);
 
     // Helper function for safe lowercase conversion
-    const safeToLowerCase = (value) => {
+    const safeToLowerCase = useCallback((value) => {
         if (value === null || value === undefined) return null;
         if (typeof value === 'string') return value.toLowerCase();
         if (typeof value === 'object' && value.toString) return value.toString().toLowerCase();
         return String(value).toLowerCase();
-    };
+    }, []);
 
     // Generic submit handler that works for both manual and AI reports
     const handleSubmit = useCallback(async (bugDataOverride) => {
@@ -338,7 +338,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         validateForm,
         currentUser,
         userDisplayName,
-        getPriorityFromSeverity,
         actions.ui,
         actions.bugs,
         onCreateBug,

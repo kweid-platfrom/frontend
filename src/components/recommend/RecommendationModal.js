@@ -54,7 +54,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
     }, [recommendation]);
 
     // Validate form data
-    const validateForm = () => {
+    const validateForm = useCallback(() => {
         const newErrors = {};
         
         if (!formData.title.trim()) {
@@ -75,7 +75,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    };
+    }, [formData.title, formData.description, formData.due_date]);
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
@@ -128,7 +128,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
         } finally {
             setIsSubmitting(false);
         }
-    }, [formData, recommendation, onSave, onClose, currentUser, actions,]);
+    }, [formData, recommendation, onSave, onClose, currentUser, actions, validateForm]);
 
     const handleTagsChange = (e) => {
         const tagString = e.target.value;

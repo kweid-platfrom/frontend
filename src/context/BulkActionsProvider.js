@@ -271,7 +271,7 @@ const BulkActionsPortal = () => {
 
 // Enhanced AppProvider integration
 export const withBulkActions = (WrappedAppProvider) => {
-  return ({ children, ...props }) => {
+  const BulkActionsWrapper = ({ children, ...props }) => {
     const [bulkActions, setBulkActions] = useState({
       selectedItems: [],
       currentPageType: '',
@@ -360,6 +360,11 @@ export const withBulkActions = (WrappedAppProvider) => {
       </BulkActionsContext.Provider>
     );
   };
+
+  // Set display name for the wrapper component
+  BulkActionsWrapper.displayName = `withBulkActions(${WrappedAppProvider.displayName || WrappedAppProvider.name || 'Component'})`;
+
+  return BulkActionsWrapper;
 };
 
 // Hook for pages to register and manage bulk actions

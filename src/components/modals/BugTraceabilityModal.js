@@ -1,28 +1,36 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
     Link,
     Search,
-    Filter,
     Bug,
     TestTube,
-    ArrowRight,
-    Eye,
     X,
     ExternalLink,
     Grid,
     List,
     BarChart3,
     AlertTriangle,
-    CheckCircle2,
-    Clock
+    CheckCircle2
 } from 'lucide-react';
 
 const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState('all'); // all, bugs, testcases
     const [selectedModule, setSelectedModule] = useState('all');
     const [viewType, setViewType] = useState('matrix'); // matrix, list, stats
     const [showOnlyLinked, setShowOnlyLinked] = useState(false);
+
+    // Get linked test cases for a bug
+    const getLinkedTestCases = useCallback((bugId) => {
+        const linkedIds = relationships?.bugToTestCases?.[bugId] || [];
+        return testCases?.filter(tc => linkedIds.includes(tc.id)) || [];
+    }, [relationships, testCases]);
+
+    // Get linked bugs for a test case
+    const getLinkedBugs = useCallback((testCaseId) => {
+        const linkedBugIds = Object.keys(relationships?.bugToTestCases || {})
+            .filter(bugId => relationships.bugToTestCases[bugId].includes(testCaseId));
+        return bugs?.filter(bug => linkedBugIds.includes(bug.id)) || [];
+    }, [relationships, bugs]);
 
     // Get unique modules from bugs and test cases
     const modules = useMemo(() => {
@@ -56,7 +64,7 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
         }
 
         return filtered;
-    }, [bugs, searchTerm, selectedModule, showOnlyLinked]);
+    }, [bugs, searchTerm, selectedModule, showOnlyLinked, getLinkedTestCases]);
 
     const filteredTestCases = useMemo(() => {
         if (!testCases) return [];
@@ -77,20 +85,7 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
         }
 
         return filtered;
-    }, [testCases, searchTerm, selectedModule, showOnlyLinked]);
-
-    // Get linked test cases for a bug
-    const getLinkedTestCases = (bugId) => {
-        const linkedIds = relationships?.bugToTestCases?.[bugId] || [];
-        return testCases?.filter(tc => linkedIds.includes(tc.id)) || [];
-    };
-
-    // Get linked bugs for a test case
-    const getLinkedBugs = (testCaseId) => {
-        const linkedBugIds = Object.keys(relationships?.bugToTestCases || {})
-            .filter(bugId => relationships.bugToTestCases[bugId].includes(testCaseId));
-        return bugs?.filter(bug => linkedBugIds.includes(bug.id)) || [];
-    };
+    }, [testCases, searchTerm, selectedModule, showOnlyLinked, getLinkedBugs]);
 
     // Calculate traceability statistics
     const stats = useMemo(() => {
@@ -122,7 +117,7 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
             testCasesCoverage: totalTestCases > 0 ? Math.round((testCasesWithBugs / totalTestCases) * 100) : 0,
             moduleStats
         };
-    }, [filteredBugs, filteredTestCases, modules, relationships]);
+    }, [filteredBugs, filteredTestCases, modules, getLinkedBugs, getLinkedTestCases]);
 
     const getSeverityColor = (severity) => {
         switch (severity) {

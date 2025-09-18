@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
     Upload,
     Download,
@@ -21,15 +21,15 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
     const [importing, setImporting] = useState(false);
     const fileInputRef = useRef(null);
 
-    const requiredFields = {
+    const requiredFields = useMemo(() => ({
         title: 'Bug Title',
         description: 'Description',
         status: 'Status',
         severity: 'Severity',
         priority: 'Priority'
-    };
+    }), []);
 
-    const optionalFields = {
+    const optionalFields = useMemo(() => ({
         assignee: 'Assignee',
         reporter: 'Reporter',
         steps_to_reproduce: 'Steps to Reproduce',
@@ -37,7 +37,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
         actual_result: 'Actual Result',
         tags: 'Tags',
         module: 'Module/Component'
-    };
+    }), []);
 
     const statusOptions = ['open', 'in-progress', 'resolved', 'closed', 'duplicate'];
     const severityOptions = ['critical', 'high', 'medium', 'low'];
@@ -51,33 +51,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
         setImporting(false);
     };
 
-    const handleDrag = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === 'dragenter' || e.type === 'dragover') {
-            setDragActive(true);
-        } else if (e.type === 'dragleave') {
-            setDragActive(false);
-        }
-    }, []);
-
-    const handleDrop = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
-
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            handleFile(e.dataTransfer.files[0]);
-        }
-    }, [handleFile]);
-
-    const handleFileSelect = (e) => {
-        if (e.target.files && e.target.files[0]) {
-            handleFile(e.target.files[0]);
-        }
-    };
-
-    const handleFile = async (selectedFile) => {
+    const handleFile = useCallback(async (selectedFile) => {
         if (!selectedFile) return;
 
         const fileType = selectedFile.name.split('.').pop().toLowerCase();
@@ -145,6 +119,32 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
             alert('Error parsing file: ' + error.message);
         } finally {
             setParsing(false);
+        }
+    }, [requiredFields, optionalFields]);
+
+    const handleDrag = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === 'dragenter' || e.type === 'dragover') {
+            setDragActive(true);
+        } else if (e.type === 'dragleave') {
+            setDragActive(false);
+        }
+    }, []);
+
+    const handleDrop = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(false);
+
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    }, [handleFile]);
+
+    const handleFileSelect = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            handleFile(e.target.files[0]);
         }
     };
 

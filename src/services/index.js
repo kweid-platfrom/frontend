@@ -643,98 +643,6 @@ class FirestoreService extends BaseFirestoreService {
 
         const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
         if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to link recording' } };
-        }
-
-        try {
-            // Get current recording to check existing links
-            const recordingResult = await this.assets.getRecording(recordingId, suiteId, sprintId);
-            if (!recordingResult.success) {
-                return recordingResult;
-            }
-
-            // Get current bug to check existing links  
-            const bugResult = await this.assets.getBug(bugId, suiteId, sprintId);
-            if (!bugResult.success) {
-                return bugResult;
-            }
-
-            const recording = recordingResult.data;
-            const bug = bugResult.data;
-
-            // Update recording with bug link (avoid duplicates)
-            const existingBugLinks = recording.linkedBugs || [];
-            const updatedBugLinks = existingBugLinks.includes(bugId) 
-                ? existingBugLinks 
-                : [...existingBugLinks, bugId];
-
-            const recordingUpdate = await this.assets.updateRecording(recordingId, {
-                linkedBugs: updatedBugLinks,
-                lastLinkedAt: new Date()
-            }, suiteId, sprintId);
-
-            if (recordingUpdate.success) {
-                // Update bug with recording link (avoid duplicates)
-                const existingRecordingLinks = bug.linkedRecordings || [];
-                const updatedRecordingLinks = existingRecordingLinks.includes(recordingId)
-                    ? existingRecordingLinks
-                    : [...existingRecordingLinks, recordingId];
-
-                const bugUpdate = await this.assets.updateBug(bugId, {
-                    linkedRecordings: updatedRecordingLinks,
-                    lastLinkedAt: new Date()
-                }, suiteId, sprintId);
-
-                if (bugUpdate.success) {
-                    return { 
-                        success: true, 
-                        data: { 
-                            recordingId, 
-                            bugId,
-                            linkedAt: new Date().toISOString()
-                        } 
-                    };
-                } else {
-                    // Rollback recording update if bug update fails
-                    console.warn('Bug update failed, rolling back recording update...');
-                    await this.assets.updateRecording(recordingId, {
-                        linkedBugs: existingBugLinks,
-                        lastLinkedAt: recording.lastLinkedAt || null
-                    }, suiteId, sprintId);
-                    return bugUpdate;
-                }
-            }
-
-            return recordingUpdate;
-
-        } catch (error) {
-            console.error('Error linking recording to bug:', error);
-            return { 
-                success: false, 
-                error: { 
-                    message: `Failed to link recording to bug: ${error.message}`,
-                    details: error.stack
-                } 
-            };
-        }
-    }
-
-    // Unlink recording from bug
-    async unlinkRecordingFromBug(recordingId, bugId, suiteId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        if (!recordingId || !bugId || !suiteId) {
-            return { 
-                success: false, 
-                error: { message: 'Recording ID, Bug ID, and Suite ID are all required' } 
-            };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
             return { success: false, error: { message: 'Insufficient permissions to unlink recording' } };
         }
 
@@ -1265,7 +1173,7 @@ class FirestoreService extends BaseFirestoreService {
     // BULK OPERATIONS
     // ========================
 
-    async bulkDelete(suiteId, assetType, assetIds, sprintId = null, reason = 'Bulk deletion') {
+    async bulkDelete(suiteId, assetType, assetIds, sprintId = null) {
         const results = [];
         
         for (const assetId of assetIds) {
@@ -1455,23 +1363,23 @@ class FirestoreService extends BaseFirestoreService {
     // COMPATIBILITY ALIASES (keeping existing method names)
     // ========================
 
-    async moveTestCaseToTrash(suiteId, testCaseId, sprintId = null, reason = null) {
+    async moveTestCaseToTrash(suiteId, testCaseId, sprintId = null) {
         return await this.deleteTestCase(testCaseId, suiteId, sprintId);
     }
 
-    async moveBugToTrash(suiteId, bugId, sprintId = null, reason = null) {
+    async moveBugToTrash(suiteId, bugId, sprintId = null) {
         return await this.deleteBug(bugId, suiteId, sprintId);
     }
 
-    async moveRecordingToTrash(suiteId, recordingId, sprintId = null, reason = null) {
+    async moveRecordingToTrash(suiteId, recordingId, sprintId = null) {
         return await this.deleteRecording(recordingId, suiteId, sprintId);
     }
 
-    async moveSprintToTrash(suiteId, sprintId, reason = null) {
+    async moveSprintToTrash(suiteId, sprintId) {
         return await this.deleteSprint(sprintId, suiteId);
     }
 
-    async moveRecommendationToTrash(suiteId, recommendationId, sprintId = null, reason = null) {
+    async moveRecommendationToTrash(suiteId, recommendationId, sprintId = null) {
         return await this.deleteRecommendation(recommendationId, suiteId, sprintId);
     }
 

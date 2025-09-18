@@ -1,4 +1,3 @@
-
 import { doc, runTransaction, arrayUnion, arrayRemove, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -220,7 +219,7 @@ export class BugService {
         }
 
         try {
-            const result = await runTransaction(db, async (transaction) => {
+            const comment = await runTransaction(db, async (transaction) => {
                 const recommendationPath = sprintId
                     ? `testSuites/${suiteId}/sprints/${sprintId}/recommendations/${recommendationId}`
                     : `testSuites/${suiteId}/recommendations/${recommendationId}`;
@@ -232,7 +231,7 @@ export class BugService {
                     throw new Error('Recommendation not found');
                 }
 
-                const comment = {
+                const newComment = {
                     id: Date.now().toString(), // Simple ID generation
                     text: commentData.text.trim(),
                     author_id: userId,
@@ -242,18 +241,18 @@ export class BugService {
                 };
 
                 transaction.update(recommendationRef, {
-                    comments: arrayUnion(comment),
+                    comments: arrayUnion(newComment),
                     updated_at: serverTimestamp(),
                     updated_by: userId
                 });
 
-                return { success: true, comment };
+                return newComment;
             });
 
             return {
                 success: true,
                 message: 'Comment added successfully',
-                comment: result.comment
+                comment
             };
         } catch (error) {
             console.error('addCommentToRecommendation error:', {
@@ -278,7 +277,7 @@ export class BugService {
         }
 
         try {
-            const result = await runTransaction(db, async (transaction) => {
+            await runTransaction(db, async (transaction) => {
                 const recommendationPath = sprintId
                     ? `testSuites/${suiteId}/sprints/${sprintId}/recommendations/${recommendationId}`
                     : `testSuites/${suiteId}/recommendations/${recommendationId}`;
@@ -311,8 +310,6 @@ export class BugService {
                     updated_at: serverTimestamp(),
                     updated_by: userId
                 });
-
-                return { success: true };
             });
 
             return {

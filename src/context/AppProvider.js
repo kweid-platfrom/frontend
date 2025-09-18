@@ -48,7 +48,7 @@ export const AppProvider = ({ children }) => {
         setAiInitialized
     );
 
-    const { wrappedCreateTestCase, wrappedUpdateTestCase, wrappedDeleteTestCase } = useTestCases(slices);
+    const { wrappedCreateTestCase, wrappedUpdateTestCase } = useTestCases(slices);
     const { setTheme, toggleTheme } = useTheme(slices.theme, slices.ui);
 
     const {
@@ -62,16 +62,18 @@ export const AppProvider = ({ children }) => {
 
     const { saveRecording, linkRecordingToBug } = useRecording(slices);
 
-    // Initialize recommendations hook only if slice exists
-    const recommendationsHook = hasRecommendationsSlice 
-        ? useRecommendations(slices.recommendations, slices.auth, slices.suites, slices.ui)
-        : null;
+    // Always call useRecommendations hook, but conditionally use its return values
+    const recommendationsHook = useRecommendations(
+        hasRecommendationsSlice ? slices.recommendations : null, 
+        slices.auth, 
+        slices.suites, 
+        slices.ui
+    );
 
     // Safe recommendations actions with fallbacks
     const {
         createRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         updateRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
-        deleteRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         voteOnRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         addComment = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         removeComment = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
@@ -82,7 +84,7 @@ export const AppProvider = ({ children }) => {
         closeModal = () => {},
         resetFilters = () => {},
         cleanup: cleanupRecommendations = () => {}
-    } = recommendationsHook || {};
+    } = hasRecommendationsSlice ? recommendationsHook : {};
 
     // Archive/trash functionality using FirestoreService directly
     const [archiveLoading, setArchiveLoading] = useState(false);

@@ -71,7 +71,6 @@ const RecommendationTableRow = ({
     recommendation, 
     onEdit, 
     onVote,
-    onStatusUpdate,
     onDelete,
     onArchive,
     currentUser,
@@ -226,7 +225,6 @@ const RecommendationTable = ({
     recommendations, 
     onEdit, 
     onVote,
-    onStatusUpdate,
     onDelete,
     onArchive,
     currentUser,
@@ -321,7 +319,6 @@ const RecommendationTable = ({
                                 recommendation={rec}
                                 onEdit={onEdit}
                                 onVote={onVote}
-                                onStatusUpdate={onStatusUpdate}
                                 onDelete={onDelete}
                                 onArchive={onArchive}
                                 currentUser={currentUser}
