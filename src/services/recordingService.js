@@ -3,7 +3,7 @@ import { uploadBytes, getDownloadURL, ref as storageRef, deleteObject } from 'fi
 import { storage } from '../config/firebase';
 import YouTubeService from '../lib/YoutubeService';
 
-class RecordingService {
+const recordingService = new class RecordingService {
     constructor() {
         this.storage = storage;
     }
@@ -430,4 +430,4 @@ class RecordingService {
     }
 }
 
-export default new RecordingService();
+export default recordingService;

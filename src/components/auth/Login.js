@@ -227,8 +227,10 @@ const Login = () => {
                 <div className="w-full max-w-md">
                     <div className="text-center mb-4">
                         <div className="inline-block">
-                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-primary to-teal-500 bg-clip-text text-transparent">
-                                Assura
+                             <div className="flex items-center mb-2">
+                                <div className="w-32 h-32 flex items-center justify-center">
+                                    <Image src="/logo.svg" alt="Assura Logo" width={128} height={128} className="w-32 h-32 object-contain" />
+                                </div>
                             </div>
                         </div>
                     </div>
