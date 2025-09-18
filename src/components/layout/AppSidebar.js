@@ -24,6 +24,7 @@ import {
     BugAntIcon,
     BeakerIcon,
 } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 
 const AppSidebar = ({
     open,
@@ -191,7 +192,7 @@ const AppSidebar = ({
                 <div className="flex items-center h-14 sm:h-16 px-3 sm:px-4 border-b border-border bg-nav flex-shrink-0 relative">
                     <div className="flex items-center min-w-0 flex-1">
                         <div className="flex-shrink-0 transition-transform duration-300 hover:scale-105">
-                            <img src="/logo-1.svg" alt="Assura Logo" className="w-10 h-10 object-contain" />
+                            <Image src="/logo-1.svg" alt="Assura Logo" width={128} height={128} className="w-10 h-10 object-contain" />
                         </div>
                         <div className={`sm:ml-3 overflow-hidden text-left transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:w-0 lg:opacity-0' : 'w-auto opacity-100'}`}>
                             <span className="text-lg sm:text-xl font-bold text-foreground whitespace-nowrap bg-gradient-to-r from-purple-600 to-teal-700 bg-clip-text">

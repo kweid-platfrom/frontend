@@ -36,34 +36,33 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
 
     // Load sprint assets
     useEffect(() => {
-        const loadSprintAssets = async () => {
-            if (!sprint || !suiteId) return;
+    const loadSprintAssets = async () => {
+        if (!sprint || !suiteId) return;
 
-            setLoading(true);
-            try {
-                // Load all asset types for the sprint
-                const [testCases, bugs, recordings, recommendations] = await Promise.all([
-                    actions.assets?.getTestCases?.(suiteId, sprint.id) || { success: true, data: [] },
-                    actions.assets?.getBugs?.(suiteId, sprint.id) || { success: true, data: [] },
-                    actions.assets?.getRecordings?.(suiteId, sprint.id) || { success: true, data: [] },
-                    actions.assets?.getRecommendations?.(suiteId, sprint.id) || { success: true, data: [] }
-                ]);
+        setLoading(true);
+        try {
+            const [testCases, bugs, recordings, recommendations] = await Promise.all([
+                actions.assets?.getTestCases?.(suiteId, sprint.id) || { success: true, data: [] },
+                actions.assets?.getBugs?.(suiteId, sprint.id) || { success: true, data: [] },
+                actions.assets?.getRecordings?.(suiteId, sprint.id) || { success: true, data: [] },
+                actions.assets?.getRecommendations?.(suiteId, sprint.id) || { success: true, data: [] }
+            ]);
 
-                setAssets({
-                    testCases: testCases.success ? testCases.data || [] : [],
-                    bugs: bugs.success ? bugs.data || [] : [],
-                    recordings: recordings.success ? recordings.data || [] : [],
-                    recommendations: recommendations.success ? recommendations.data || [] : []
-                });
-            } catch (error) {
-                console.error('Error loading sprint assets:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
+            setAssets({
+                testCases: testCases.success ? testCases.data || [] : [],
+                bugs: bugs.success ? bugs.data || [] : [],
+                recordings: recordings.success ? recordings.data || [] : [],
+                recommendations: recommendations.success ? recommendations.data || [] : []
+            });
+        } catch (error) {
+            console.error('Error loading sprint assets:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        loadSprintAssets();
-    }, [sprint?.id, suiteId, actions.assets]);
+    loadSprintAssets();
+}, [sprint, suiteId, actions.assets]); // Added sprint to dependencies
 
     // Calculate sprint metrics
     const getSprintMetrics = () => {

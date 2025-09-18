@@ -4,7 +4,6 @@ import { Button } from '../../ui/button';
 const AddUserButton = ({ 
     accountType, 
     userRole, 
-    currentUser, 
     actions, 
     disabled = false 
 }) => {

@@ -1,11 +1,11 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { 
-    Upload, 
-    Download, 
-    FileSpreadsheet, 
-    AlertCircle, 
-    CheckCircle, 
-    X, 
+import {
+    Upload,
+    Download,
+    FileSpreadsheet,
+    AlertCircle,
+    CheckCircle,
+    X,
     FileText,
     RefreshCw
 } from 'lucide-react';
@@ -23,7 +23,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
 
     const requiredFields = {
         title: 'Bug Title',
-        description: 'Description', 
+        description: 'Description',
         status: 'Status',
         severity: 'Severity',
         priority: 'Priority'
@@ -65,11 +65,11 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
         e.preventDefault();
         e.stopPropagation();
         setDragActive(false);
-        
+
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             handleFile(e.dataTransfer.files[0]);
         }
-    }, []);
+    }, [handleFile]);
 
     const handleFileSelect = (e) => {
         if (e.target.files && e.target.files[0]) {
@@ -113,10 +113,10 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
             const autoMappings = {};
             headers.forEach((header, index) => {
                 const headerLower = header.toString().toLowerCase();
-                
+
                 // Check required fields
                 Object.entries(requiredFields).forEach(([key, label]) => {
-                    if (headerLower.includes(key) || headerLower.includes(label.toLowerCase()) || 
+                    if (headerLower.includes(key) || headerLower.includes(label.toLowerCase()) ||
                         headerLower.includes(key.replace('_', ' ')) || headerLower.includes(key.replace('_', ''))) {
                         autoMappings[key] = index;
                     }
@@ -124,7 +124,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
 
                 // Check optional fields
                 Object.entries(optionalFields).forEach(([key, label]) => {
-                    if (headerLower.includes(key) || headerLower.includes(label.toLowerCase()) || 
+                    if (headerLower.includes(key) || headerLower.includes(label.toLowerCase()) ||
                         headerLower.includes(key.replace('_', ' ')) || headerLower.includes(key.replace('_', ''))) {
                         autoMappings[key] = index;
                     }
@@ -187,7 +187,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
                         const columnIndex = mappings[field];
                         if (columnIndex !== undefined && row[columnIndex] !== undefined) {
                             let value = row[columnIndex].toString().trim();
-                            
+
                             // Normalize status, severity, priority
                             if (field === 'status') {
                                 value = statusOptions.find(opt => opt.toLowerCase() === value.toLowerCase()) || 'open';
@@ -196,7 +196,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
                             } else if (field === 'priority') {
                                 value = priorityOptions.find(opt => opt.toLowerCase() === value.toLowerCase()) || 'medium';
                             }
-                            
+
                             bugData[field] = value;
                         }
                     });
@@ -212,7 +212,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
                         const columnIndex = mappings[field];
                         if (columnIndex !== undefined && row[columnIndex] !== undefined) {
                             let value = row[columnIndex].toString().trim();
-                            
+
                             // Handle tags - split by comma
                             if (field === 'tags' && value) {
                                 bugData[field] = value.split(',').map(tag => tag.trim()).filter(tag => tag);
@@ -256,7 +256,7 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
             ...Object.values(requiredFields),
             ...Object.values(optionalFields)
         ];
-        
+
         const sampleData = [
             [
                 'Login button not working',
@@ -304,9 +304,8 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
                             <div className="space-y-6">
                                 {/* File Upload Area */}
                                 <div
-                                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                                        dragActive ? 'border-teal-400 bg-teal-50' : 'border-gray-300'
-                                    }`}
+                                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${dragActive ? 'border-teal-400 bg-teal-50' : 'border-gray-300'
+                                        }`}
                                     onDragEnter={handleDrag}
                                     onDragLeave={handleDrag}
                                     onDragOver={handleDrag}
@@ -396,9 +395,8 @@ const BugImportModal = ({ isOpen, onClose, onImport, activeSuite, currentUser })
                                                                 ...prev,
                                                                 [field]: e.target.value === '' ? undefined : parseInt(e.target.value)
                                                             }))}
-                                                            className={`w-full text-sm border rounded px-2 py-1 ${
-                                                                mappings[field] !== undefined ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
-                                                            }`}
+                                                            className={`w-full text-sm border rounded px-2 py-1 ${mappings[field] !== undefined ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+                                                                }`}
                                                         >
                                                             <option value="">Select column...</option>
                                                             {previewData.headers.map((header, index) => (

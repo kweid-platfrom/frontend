@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Target, FileText, MoreHorizontal } from 'lucide-react';
-import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
 import BugReportButton from '../../modals/BugReportButton';
 import ScreenRecorderButton from '../../recorder/ScreenRecorderButton';
@@ -10,8 +9,6 @@ import TestCaseDropdown from '../../TestCaseDropdown';
 const HeaderButtons = ({
     onCreateSprint,
     onCreateDocument,
-    setShowBugForm,
-    actions,
     activeSuite,
     firestoreService,
     disabled = false

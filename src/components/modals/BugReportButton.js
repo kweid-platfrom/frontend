@@ -195,7 +195,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     };
 
     // Generic submit handler that works for both manual and AI reports
-    const handleSubmit = async (bugDataOverride) => {
+    const handleSubmit = useCallback(async (bugDataOverride) => {
         if (!canCreateBugs) {
             setError("Bug creation is not available with your current plan. Please upgrade.");
             actions.ui.showNotification({
@@ -216,7 +216,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             return;
         }
 
-        // Determine if this is an AI-generated report or manual report
         const isAIReport = bugDataOverride?.creationType === 'ai';
         const sourceData = isAIReport ? bugDataOverride : formData;
 
@@ -249,7 +248,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 category: sourceData.category,
                 tags: [safeToLowerCase(sourceData.category).replace(/\s+/g, '_')],
                 source: isAIReport ? "AI Generated" : "Manual",
-                creationType: isAIReport ? "ai" : "manual", // Track creation type
+                creationType: isAIReport ? "ai" : "manual",
                 environment: sourceData.environment || "Production",
                 frequency: sourceData.frequency || "Once",
                 browserInfo: formData.browserInfo || getBrowserInfo(),
@@ -318,7 +317,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             });
 
             closeForm();
-
         } catch (error) {
             console.error("Error submitting bug report:", error);
             const errorMessage = error.message || 'Failed to submit bug report';
@@ -332,7 +330,21 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [
+        canCreateBugs,
+        hasActiveSubscription,
+        formData,
+        attachments,
+        validateForm,
+        currentUser,
+        userDisplayName,
+        getPriorityFromSeverity,
+        actions.ui,
+        actions.bugs,
+        onCreateBug,
+        closeForm,
+        safeToLowerCase
+    ]);
 
     // Manual form submit handler
     const handleManualSubmit = useCallback(() => {

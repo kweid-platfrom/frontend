@@ -14,12 +14,8 @@ import { useUI } from '@/hooks/useUI';
 import { 
     Bug, 
     Lightbulb, 
-    Table, 
-    List, 
     Minimize, 
     Maximize,
-    ToggleLeft,
-    ToggleRight 
 } from 'lucide-react';
 
 // Helper functions for localStorage
@@ -97,7 +93,7 @@ const BugTrackerPage = () => {
     // FIXED: Use separate state for filtered bugs (like test cases page does)
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [selectedBug, setSelectedBug] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [, setIsModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     
     // FIXED: Initialize states from localStorage with fallbacks
@@ -105,8 +101,8 @@ const BugTrackerPage = () => {
     const [pageMode, setPageMode] = useState(() => getStoredPageMode());
     const [bugViewType, setBugViewType] = useState(() => getStoredBugViewType());
     
-    const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [ setIsTraceabilityOpen] = useState(false);
+    const [ setIsImportModalOpen] = useState(false);
     
     // FIXED: Stable filter state
     const [filters, setFilters] = useState({

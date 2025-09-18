@@ -1,24 +1,16 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Video, 
   Play, 
   Eye, 
-  Edit, 
-  Trash2, 
-  Download, 
-  Share2, 
-  Calendar, 
-  Clock,
+  Trash2,
+  Share2,
   Bug,
-  Plus,
   Search,
-  Filter,
   Grid,
   List,
-  MoreVertical,
   AlertCircle
 } from 'lucide-react';
 import EnhancedScreenRecorder from '../recorder/EnhancedScreenRecorder';
@@ -64,30 +56,6 @@ const Recordings = () => {
     setViewingRecording(recording);
   };
 
-  const handleEditRecording = async (recordingId, updates) => {
-    if (!hasActiveSuite) return;
-    
-    try {
-      const result = await firestoreService.updateRecording(recordingId, updates);
-      if (!result.success) {
-        throw new Error(result.error?.message || 'Failed to update recording');
-      }
-      ui.showNotification({
-        id: `edit-recording-success-${Date.now()}`,
-        type: 'success',
-        message: 'Recording updated successfully',
-        duration: 3000,
-      });
-    } catch (err) {
-      console.error('Error updating recording:', err);
-      ui.showNotification({
-        id: `edit-recording-error-${Date.now()}`,
-        type: 'error',
-        message: `Failed to update recording: ${err.message}`,
-        duration: 5000,
-      });
-    }
-  };
 
   const handleDeleteRecording = async (recordingId) => {
     if (!hasActiveSuite) return;

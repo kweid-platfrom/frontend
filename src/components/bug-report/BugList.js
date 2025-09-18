@@ -18,7 +18,6 @@ import {
     Tag,
     ChevronDown,
     ChevronUp,
-    Filter,
     SortAsc,
     SortDesc,
 } from 'lucide-react';

@@ -9,7 +9,7 @@ import {
     BeakerIcon,
 } from '@heroicons/react/24/outline';
 
-const LoadingScreen = ({ message = "Loading..." }) => {
+const LoadingScreen = () => {
     const [currentIconIndex, setCurrentIconIndex] = useState(0);
 
     const icons = [

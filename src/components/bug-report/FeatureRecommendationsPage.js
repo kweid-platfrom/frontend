@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useApp } from '../../context/AppProvider';
 import {
     Lightbulb,
     Plus,
     Search,
-    Filter,
 } from 'lucide-react';
 
 import RecommendationCards from '../recommend/RecommendationCards';
@@ -17,9 +16,9 @@ import RecommendationModal from '../recommend/RecommendationModal';
 // Safe date formatting helper
 const safeFormatDate = (dateValue, formatType = 'relative') => {
     if (!dateValue) return 'No date';
-    
+
     let date;
-    
+
     // Handle Firestore Timestamp objects
     if (dateValue && typeof dateValue === 'object' && dateValue.toDate) {
         date = dateValue.toDate();
@@ -33,11 +32,11 @@ const safeFormatDate = (dateValue, formatType = 'relative') => {
     } else {
         return 'Invalid date';
     }
-    
+
     if (isNaN(date.getTime())) {
         return 'Invalid date';
     }
-    
+
     try {
         if (formatType === 'relative') {
             return formatDistanceToNow(date, { addSuffix: true });
@@ -55,7 +54,7 @@ const safeFormatDate = (dateValue, formatType = 'relative') => {
 const FeatureRecommendationsPage = () => {
     // Get app state and actions
     const { state, actions, currentUser, isLoading } = useApp();
-    
+
     // Safely destructure recommendations state with fallbacks
     const recommendationsState = state.recommendations || {};
     const {
@@ -81,23 +80,19 @@ const FeatureRecommendationsPage = () => {
     // Safely get recommendation actions with fallbacks
     const recommendationActions = actions.recommendations || {};
     const {
-        createRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         updateRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         deleteRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         archiveRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         voteOnRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
-        addComment = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
-        removeComment = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
-        setFilters = () => {},
-        setSortConfig = () => {},
-        setViewMode = () => {},
-        openModal = () => {},
-        closeModal = () => {},
-        resetFilters = () => {}
+        setFilters = () => { },
+        setSortConfig = () => { },
+        setViewMode = () => { },
+        openModal = () => { },
+        closeModal = () => { },
     } = recommendationActions;
 
     // Check if recommendations feature is available
-    const recommendationsAvailable = state.recommendations !== undefined && 
+    const recommendationsAvailable = state.recommendations !== undefined &&
         actions.recommendations !== undefined;
 
     // Filter and sort recommendations using the store selector
@@ -107,7 +102,7 @@ const FeatureRecommendationsPage = () => {
         }
 
         let filtered = [...recommendations];
-        
+
         // Apply filters
         if (filters.search) {
             const searchTerm = filters.search.toLowerCase();
@@ -121,36 +116,36 @@ const FeatureRecommendationsPage = () => {
                 return searchableFields.some((field) => field.includes(searchTerm));
             });
         }
-        
+
         if (filters.status !== 'all') {
             filtered = filtered.filter((rec) => rec.status === filters.status);
         }
-        
+
         if (filters.priority !== 'all') {
             filtered = filtered.filter((rec) => rec.priority === filters.priority);
         }
-        
+
         if (filters.category !== 'all') {
             filtered = filtered.filter((rec) => rec.category === filters.category);
         }
-        
+
         if (filters.impact !== 'all') {
             filtered = filtered.filter((rec) => rec.impact === filters.impact);
         }
-        
+
         if (filters.effort !== 'all') {
             filtered = filtered.filter((rec) => rec.effort === filters.effort);
         }
-        
+
         // Apply sorting
         if (sortConfig.key) {
             filtered.sort((a, b) => {
                 const aValue = a[sortConfig.key];
                 const bValue = b[sortConfig.key];
-                
+
                 if (['created_at', 'updated_at'].includes(sortConfig.key)) {
                     let aDate, bDate;
-                    
+
                     // Handle various date formats
                     if (aValue && typeof aValue === 'object' && aValue.toDate) {
                         aDate = aValue.toDate();
@@ -159,7 +154,7 @@ const FeatureRecommendationsPage = () => {
                     } else {
                         aDate = new Date(aValue);
                     }
-                    
+
                     if (bValue && typeof bValue === 'object' && bValue.toDate) {
                         bDate = bValue.toDate();
                     } else if (bValue && typeof bValue === 'object' && bValue.seconds) {
@@ -167,7 +162,7 @@ const FeatureRecommendationsPage = () => {
                     } else {
                         bDate = new Date(bValue);
                     }
-                    
+
                     if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
                     if (isNaN(aDate.getTime())) return 1;
                     if (isNaN(bDate.getTime())) return -1;
@@ -179,7 +174,7 @@ const FeatureRecommendationsPage = () => {
                     const bVotes = (b.upvotes || 0) - (b.downvotes || 0);
                     return sortConfig.direction === 'asc' ? aVotes - bVotes : bVotes - aVotes;
                 }
-                
+
                 if (aValue < bValue) {
                     return sortConfig.direction === 'asc' ? -1 : 1;
                 }
@@ -189,7 +184,7 @@ const FeatureRecommendationsPage = () => {
                 return 0;
             });
         }
-        
+
         return filtered;
     }, [recommendations, filters, sortConfig, recommendationsAvailable]);
 
@@ -230,7 +225,7 @@ const FeatureRecommendationsPage = () => {
             });
             return;
         }
-        
+
         if (!recommendationsAvailable) {
             actions.ui.showNotification({
                 id: 'recommendations-unavailable',
@@ -245,7 +240,7 @@ const FeatureRecommendationsPage = () => {
             console.log('Voting on recommendation:', recId, voteType);
             // Pass only primitive values - the vote type should be just 'up' or 'down'
             const result = await voteOnRecommendation(recId, voteType);
-            
+
             if (result && result.success === false) {
                 actions.ui.showNotification({
                     id: 'vote-error',
@@ -276,7 +271,7 @@ const FeatureRecommendationsPage = () => {
             });
             return;
         }
-        
+
         if (!recommendationsAvailable) {
             actions.ui.showNotification({
                 id: 'recommendations-unavailable',
@@ -308,7 +303,7 @@ const FeatureRecommendationsPage = () => {
             };
 
             const result = await updateRecommendation(updateData);
-            
+
             if (result && result.success === false) {
                 actions.ui.showNotification({
                     id: 'status-update-error',
@@ -346,7 +341,7 @@ const FeatureRecommendationsPage = () => {
             });
             return;
         }
-        
+
         if (!recommendationsAvailable) {
             actions.ui.showNotification({
                 id: 'recommendations-unavailable',
@@ -359,7 +354,7 @@ const FeatureRecommendationsPage = () => {
 
         try {
             const result = await deleteRecommendation(recId);
-            
+
             if (result && result.success === false) {
                 actions.ui.showNotification({
                     id: 'delete-error',
@@ -397,7 +392,7 @@ const FeatureRecommendationsPage = () => {
             });
             return;
         }
-        
+
         if (!recommendationsAvailable) {
             actions.ui.showNotification({
                 id: 'recommendations-unavailable',
@@ -410,7 +405,7 @@ const FeatureRecommendationsPage = () => {
 
         try {
             const result = await archiveRecommendation(recId);
-            
+
             if (result && result.success === false) {
                 actions.ui.showNotification({
                     id: 'archive-error',
@@ -583,21 +578,19 @@ const FeatureRecommendationsPage = () => {
                             <div className="flex border border-gray-300 rounded-md">
                                 <button
                                     onClick={() => setViewMode('cards')}
-                                    className={`px-3 py-2 text-sm font-medium rounded-l-md ${
-                                        viewMode === 'cards'
+                                    className={`px-3 py-2 text-sm font-medium rounded-l-md ${viewMode === 'cards'
                                             ? 'bg-teal-50 text-teal-700 border-teal-200'
                                             : 'text-gray-700 hover:bg-gray-50'
-                                    }`}
+                                        }`}
                                 >
                                     Cards
                                 </button>
                                 <button
                                     onClick={() => setViewMode('table')}
-                                    className={`px-3 py-2 text-sm font-medium rounded-r-md border-l ${
-                                        viewMode === 'table'
+                                    className={`px-3 py-2 text-sm font-medium rounded-r-md border-l ${viewMode === 'table'
                                             ? 'bg-teal-50 text-teal-700 border-teal-200'
                                             : 'text-gray-700 hover:bg-gray-50'
-                                    }`}
+                                        }`}
                                 >
                                     Table
                                 </button>
@@ -608,7 +601,7 @@ const FeatureRecommendationsPage = () => {
 
                 {/* Content */}
                 {viewMode === 'cards' ? (
-                    <RecommendationCards 
+                    <RecommendationCards
                         recommendations={filteredRecommendations}
                         onEdit={handleEditRecommendation}
                         onVote={handleVote}
@@ -619,7 +612,7 @@ const FeatureRecommendationsPage = () => {
                         safeFormatDate={safeFormatDate}
                     />
                 ) : (
-                    <RecommendationTable 
+                    <RecommendationTable
                         recommendations={filteredRecommendations}
                         onEdit={handleEditRecommendation}
                         onVote={handleVote}
@@ -637,7 +630,7 @@ const FeatureRecommendationsPage = () => {
                 )}
             </div>
 
-                            {/* Modal for creating/editing recommendations */}
+            {/* Modal for creating/editing recommendations */}
             {isModalOpen && (
                 <RecommendationModal
                     recommendation={selectedRecommendation}
