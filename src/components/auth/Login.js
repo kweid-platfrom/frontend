@@ -8,6 +8,7 @@ import { FcGoogle } from "react-icons/fc";
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendEmailVerification, onAuthStateChanged } from "firebase/auth";
 import { auth } from "../../config/firebase";
 import BackgroundDecorations from "@/components/BackgroundDecorations";
+import Image from "next/image";
 import "../../app/globals.css";
 
 const Login = () => {
@@ -224,7 +225,7 @@ const Login = () => {
             <BackgroundDecorations />
             <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
                 <div className="w-full max-w-md">
-                    <div className="text-center mb-8">
+                    <div className="text-center mb-4">
                         <div className="inline-block">
                             <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-primary to-teal-500 bg-clip-text text-transparent">
                                 Assura

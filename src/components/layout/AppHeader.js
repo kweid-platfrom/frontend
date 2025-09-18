@@ -7,24 +7,20 @@ import { useApp } from '../../context/AppProvider';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../config/firebase';
 import '../../app/globals.css';
-import {
-    Bars3Icon,
-    MagnifyingGlassIcon,
-    PlayIcon,
-    PlusIcon,
-    ChevronDownIcon,
-} from '@heroicons/react/24/outline';
-import { X, Bell, Building2, Calendar } from 'lucide-react';
+import { Bars3Icon } from '@heroicons/react/24/outline';
+import { X, Bell } from 'lucide-react';
 
 // Import components
-import BugReportButton from '../modals/BugReportButton';
-import TeamInviteButton from '../buttons/TeamInviteButton';
-import ScreenRecorderButton from '../buttons/ScreenRecorderButton';
-import ReportDropdown from '../ReportDropdown';
-import TestCaseDropdown from '../TestCaseDropdown';
-import CreateSuiteModal from '../modals/createSuiteModal';
+import { Button } from '../ui/button';
+import CreateSprintModal from '../modals/CreateSprintModal';
 import UserMenuDropdown from '../UserMenuDropdown';
+import SuiteSelector from './head/SuiteSelector';
+import CalendarTime from './head/CalendarTime';
+import HeaderSearch from './head/HeaderSearch';
+import HeaderButtons from './head//HeaderButtons';
+import AddUserButton from './head/AddUserButton';
 import { safeArray, safeLength, safeMap } from '../../utils/safeArrayUtils';
+
 
 const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = false }) => {
     const { state, actions } = useApp();
@@ -36,50 +32,31 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
     const { accountType, userRole } = state.subscription;
     const { notifications } = state.notifications || { notifications: [] };
 
-    // State management for all dropdowns
+    // State management for dropdowns
     const [showUserMenu, setShowUserMenu] = useState(false);
-    const [showSuiteSelector, setShowSuiteSelector] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [showCreateSprintModal, setShowCreateSprintModal] = useState(false);
 
-    // Modal states
-    const [showCreateSuiteModal, setShowCreateSuiteModal] = useState(false);
+    // Notification dropdown position
+    const [notificationsPosition, setNotificationsPosition] = useState({ 
+        top: 0, 
+        left: 0, 
+        right: 'auto' 
+    });
 
     // Refs for dropdown positioning
     const userMenuRef = useRef(null);
-    const suiteSelectorRef = useRef(null);
     const notificationsRef = useRef(null);
-    const suiteSelectorButtonRef = useRef(null);
     const notificationsButtonRef = useRef(null);
 
-    // Dropdown positions
-    const [suiteSelectorPosition, setSuiteSelectorPosition] = useState({ top: 0, left: 0, right: 'auto' });
-    const [notificationsPosition, setNotificationsPosition] = useState({ top: 0, left: 0, right: 'auto' });
-
     // Safe arrays
-    const safeSuites = safeArray(testSuites);
     const safeNotifications = safeArray(notifications);
 
-    // Check if user is organization admin
-    const isOrganizationAdmin = accountType === 'organization' && userRole === 'admin';
-
-    // Toggle dropdown helper - disabled when header is disabled
-    const toggleDropdown = (type) => {
+    // Toggle notification dropdown
+    const toggleNotifications = () => {
         if (disabled) return;
-        
-        switch (type) {
-            case 'suite':
-                setShowSuiteSelector(!showSuiteSelector);
-                setShowUserMenu(false);
-                setShowNotifications(false);
-                break;
-            case 'notifications':
-                setShowNotifications(!showNotifications);
-                setShowSuiteSelector(false);
-                setShowUserMenu(false);
-                break;
-            default:
-                break;
-        }
+        setShowNotifications(!showNotifications);
+        setShowUserMenu(false);
     };
 
     // Close menus when clicking outside
@@ -89,14 +66,6 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
         const handleClickOutside = (event) => {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
                 setShowUserMenu(false);
-            }
-            if (
-                suiteSelectorRef.current &&
-                !suiteSelectorRef.current.contains(event.target) &&
-                suiteSelectorButtonRef.current &&
-                !suiteSelectorButtonRef.current.contains(event.target)
-            ) {
-                setShowSuiteSelector(false);
             }
             if (
                 notificationsRef.current &&
@@ -112,24 +81,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [disabled]);
 
-    // Calculate dropdown positions
-    useEffect(() => {
-        if (disabled) return;
-        
-        if (showSuiteSelector && suiteSelectorButtonRef.current) {
-            const rect = suiteSelectorButtonRef.current.getBoundingClientRect();
-            const dropdownWidth = 300;
-            const windowWidth = window.innerWidth;
-            const spaceOnRight = windowWidth - rect.left;
-
-            setSuiteSelectorPosition({
-                top: rect.bottom + window.scrollY,
-                left: spaceOnRight >= dropdownWidth ? rect.left : 'auto',
-                right: spaceOnRight >= dropdownWidth ? 'auto' : windowWidth - rect.right,
-            });
-        }
-    }, [showSuiteSelector, disabled]);
-
+    // Calculate notification dropdown position
     useEffect(() => {
         if (disabled) return;
         
@@ -166,41 +118,31 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
         }
     };
 
-    // Suite handlers
-    const handleSelectSuite = (suite) => {
-        if (disabled) return;
-        
-        actions.suites.activateSuite(suite);
-        setShowSuiteSelector(false);
-        actions.ui.showNotification('info', `Switched to suite: ${suite.name}`, 2000);
-    };
-
-    const handleCreateSuite = () => {
-        if (disabled) return;
-        
-        setShowSuiteSelector(false);
-        setShowCreateSuiteModal(true);
-    };
-
-    const handleSuiteCreated = (suite) => {
-        if (disabled) return;
-        
-        actions.suites.activateSuite(suite);
-        setShowCreateSuiteModal(false);
-        actions.ui.showNotification('success', `Suite "${suite.name}" created successfully!`, 3000);
-        if (!hasCreatedSuite) {
-            router.push('/dashboard');
-        }
-    };
-
-    // Sprint creation handler
+    // Sprint creation handlers
     const handleCreateSprint = () => {
         if (disabled) return;
         
-        if (setActivePage) {
-            setActivePage('sprints');
+        if (!activeSuite) {
+            actions.ui.showError('Please select a test suite first');
+            return;
         }
-        actions.ui.showNotification('info', 'Opening sprint creation...', 2000);
+        
+        setShowCreateSprintModal(true);
+    };
+
+    const handleSprintCreated = (sprint) => {
+        if (disabled) return;
+        
+        // Set the new sprint as active
+        actions.sprints?.setActiveSprint?.(sprint);
+        setShowCreateSprintModal(false);
+        actions.ui.showNotification('success', `Sprint "${sprint.name}" created successfully!`, 3000);
+    };
+
+    // Document creation handler
+    const handleCreateDocument = () => {
+        if (disabled) return;
+        router.push('/documents/create');
     };
 
     // Get unread notifications count
@@ -224,105 +166,81 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
 
     return (
         <>
-            <header className={`bg-nav border-b border-border relative z-50 overflow-visible shadow-theme ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <header className={`bg-background border-b border-border relative z-50 overflow-visible shadow-sm ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
                 {/* Top Layer */}
                 <div className="px-4 sm:px-6 lg:px-8 border-b border-border">
                     <div className="flex justify-between items-center h-14">
                         {/* Left Section */}
                         <div className="flex items-center flex-1">
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="iconSm"
                                 onClick={disabled ? undefined : onMenuClick}
-                                className={`lg:hidden p-2 rounded-md text-muted-foreground transition-colors ${
-                                    disabled 
-                                        ? 'cursor-not-allowed' 
-                                        : 'hover:text-foreground hover:bg-secondary/80'
-                                }`}
+                                className="lg:hidden text-foreground hover:bg-accent/50"
                                 disabled={disabled}
                             >
                                 <Bars3Icon className="h-6 w-6" />
-                            </button>
+                            </Button>
 
+                            {/* Suite Selector */}
                             {isAuthenticated && (
-                                <div className="relative ml-2 lg:ml-4">
-                                    <button
-                                        ref={suiteSelectorButtonRef}
-                                        onClick={() => toggleDropdown('suite')}
-                                        className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium text-secondary-foreground bg-secondary rounded-lg border border-border transition-colors ${
-                                            disabled 
-                                                ? 'cursor-not-allowed opacity-50' 
-                                                : 'hover:bg-secondary/80'
-                                        }`}
-                                        disabled={disabled}
-                                    >
-                                        <Building2 className="h-4 w-4 text-primary" />
-                                        <span className="max-w-24 sm:max-w-32 lg:max-w-48 truncate">
-                                            {activeSuite ? activeSuite.name : 'Select Suite'}
-                                        </span>
-                                        <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
-                                    </button>
-                                </div>
-                            )}
-
-                            <button
-                                onClick={handleCreateSprint}
-                                className={`hidden sm:flex items-center space-x-2 ml-4 px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary border border-border transition-colors ${
-                                    disabled 
-                                        ? 'cursor-not-allowed opacity-50' 
-                                        : 'hover:bg-secondary/80'
-                                }`}
-                                title="Create Sprint"
-                                disabled={disabled}
-                            >
-                                <Calendar className="h-4 w-4" />
-                                <span className="hidden lg:inline">Create Sprint</span>
-                            </button>
-                        </div>
-
-                        {/* Right Section - Top Layer */}
-                        <div className="flex items-center space-x-2">
-                            {isOrganizationAdmin && (
-                                <TeamInviteButton 
-                                    currentUser={currentUser} 
-                                    actions={actions} 
+                                <SuiteSelector
+                                    testSuites={testSuites}
+                                    activeSuite={activeSuite}
+                                    hasCreatedSuite={hasCreatedSuite}
+                                    actions={actions}
+                                    router={router}
                                     disabled={disabled}
                                 />
                             )}
+                        </div>
 
+                        {/* Right Section */}
+                        <div className="flex items-center space-x-2">
+                            {/* Calendar & Time */}
+                            <CalendarTime disabled={disabled} />
+
+                            {/* Add User Button */}
+                            <AddUserButton
+                                accountType={accountType}
+                                userRole={userRole}
+                                currentUser={currentUser}
+                                actions={actions}
+                                disabled={disabled}
+                            />
+
+                            {/* Notifications */}
                             <div className="relative">
-                                <button
+                                <Button
                                     ref={notificationsButtonRef}
-                                    onClick={() => toggleDropdown('notifications')}
-                                    className={`relative p-2 text-muted-foreground rounded-md transition-colors ${
-                                        disabled 
-                                            ? 'cursor-not-allowed opacity-50' 
-                                            : 'hover:text-foreground hover:bg-secondary/80'
-                                    }`}
+                                    variant="ghost"
+                                    size="iconSm"
+                                    onClick={toggleNotifications}
                                     disabled={disabled}
+                                    className="relative text-foreground hover:bg-accent/50"
                                 >
                                     <Bell className="h-5 w-5" />
                                     {unreadNotificationsCount > 0 && (
-                                        <span className="absolute top-0 right-0 -mt-1 -mr-1 px-2 py-1 text-xs font-bold leading-none text-destructive-foreground bg-destructive rounded-full">
+                                        <span className="absolute top-0 right-0 -mt-1 -mr-1 px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
                                             {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
                                         </span>
                                     )}
-                                </button>
+                                </Button>
                             </div>
 
+                            {/* User Menu */}
                             {isAuthenticated && (
                                 <div className="relative" ref={userMenuRef}>
-                                    <button
+                                    <Button
+                                        variant="ghost"
+                                        size="iconSm"
                                         onClick={() => {
                                             if (disabled) return;
                                             setShowUserMenu(!showUserMenu);
-                                            setShowSuiteSelector(false);
                                             setShowNotifications(false);
                                         }}
-                                        className={`flex items-center space-x-2 p-2 text-muted-foreground rounded-md transition-colors ${
-                                            disabled 
-                                                ? 'cursor-not-allowed opacity-50' 
-                                                : 'hover:text-foreground hover:bg-secondary/80'
-                                        }`}
                                         disabled={disabled}
+                                        className="p-1 hover:bg-accent/50"
                                     >
                                         {currentUser?.photoURL ? (
                                             <img
@@ -340,7 +258,7 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
                                                     .toUpperCase()}
                                             </div>
                                         )}
-                                    </button>
+                                    </Button>
                                     {showUserMenu && !disabled && (
                                         <UserMenuDropdown
                                             currentUser={currentUser}
@@ -362,154 +280,25 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
                 <div className="px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-12">
                         <div className="flex items-center flex-1">
-                            <div className="relative flex-1 max-w-md">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <MagnifyingGlassIcon className="h-4 w-4 text-muted-foreground" />
-                                </div>
-                                <input
-                                    type="text"
-                                    className={`block w-full pl-10 pr-3 py-2 rounded-md border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background ${
-                                        disabled ? 'cursor-not-allowed opacity-50' : ''
-                                    }`}
-                                    placeholder="Search test cases, bugs, reports..."
-                                    disabled={disabled}
-                                />
-                            </div>
+                            <HeaderSearch disabled={disabled} />
                         </div>
 
-                        <div className="flex items-center">
-                            <div className="sm:hidden">
-                                <button 
-                                    className={`p-2 text-muted-foreground rounded-md transition-colors ${
-                                        disabled 
-                                            ? 'cursor-not-allowed opacity-50' 
-                                            : 'hover:text-foreground hover:bg-secondary/80'
-                                    }`}
-                                    disabled={disabled}
-                                >
-                                    <Bars3Icon className="h-5 w-5" />
-                                </button>
-                            </div>
-
-                            <div className="hidden sm:flex items-center space-x-1 lg:space-x-2">
-                                <button 
-                                    className={`px-2 lg:px-3 py-2 text-sm rounded-md flex items-center space-x-1 lg:space-x-2 text-secondary-foreground bg-secondary border border-border transition-colors ${
-                                        disabled 
-                                            ? 'cursor-not-allowed opacity-50' 
-                                            : 'hover:bg-secondary/80'
-                                    }`}
-                                    disabled={disabled}
-                                >
-                                    <PlayIcon className="h-4 w-4" />
-                                    <span className="hidden lg:inline">Run Tests</span>
-                                </button>
-
-                                <BugReportButton 
-                                    className={`px-2 lg:px-3 py-2 text-sm rounded-md text-secondary-foreground bg-secondary border border-border transition-colors ${
-                                        disabled 
-                                            ? 'cursor-not-allowed opacity-50' 
-                                            : 'hover:bg-secondary/80'
-                                    }`}
-                                    disabled={disabled}
-                                />
-
-                                <ScreenRecorderButton 
-                                    setShowBugForm={setShowBugForm} 
-                                    actions={actions} 
-                                    disabled={disabled}
-                                />
-
-                                <ReportDropdown disabled={disabled} />
-
-                                <TestCaseDropdown disabled={disabled} />
-
-                                <button
-                                    onClick={handleCreateSprint}
-                                    className={`sm:hidden flex items-center space-x-1 px-2 py-2 text-sm rounded-md text-secondary-foreground bg-secondary border border-border transition-colors ${
-                                        disabled 
-                                            ? 'cursor-not-allowed opacity-50' 
-                                            : 'hover:bg-secondary/80'
-                                    }`}
-                                    title="Create Sprint"
-                                    disabled={disabled}
-                                >
-                                    <Calendar className="h-4 w-4" />
-                                </button>
-                            </div>
-                        </div>
+                        <HeaderButtons
+                            onCreateSprint={handleCreateSprint}
+                            onCreateDocument={handleCreateDocument}
+                            setShowBugForm={setShowBugForm}
+                            actions={actions}
+                            activeSuite={activeSuite}
+                            disabled={disabled}
+                        />
                     </div>
                 </div>
-
-                {/* Suite Selector Dropdown */}
-                {showSuiteSelector && !disabled && (
-                    <div
-                        ref={suiteSelectorRef}
-                        className="fixed bg-card border border-border shadow-theme-lg rounded-lg z-50"
-                        style={{
-                            top: `${suiteSelectorPosition.top}px`,
-                            left: suiteSelectorPosition.left !== 'auto' ? `${suiteSelectorPosition.left}px` : 'auto',
-                            right: suiteSelectorPosition.right !== 'auto' ? `${suiteSelectorPosition.right}px` : 'auto',
-                            minWidth: '300px',
-                            maxWidth: '400px',
-                        }}
-                    >
-                        <div className="p-2">
-                            <button
-                                onClick={handleCreateSuite}
-                                className="w-full flex items-center px-3 py-2 text-sm text-primary hover:bg-teal-50 hover:text-teal-800 rounded-md border-b border-border mb-2"
-                            >
-                                <PlusIcon className="h-4 w-4 mr-2" />
-                                Create New Suite
-                            </button>
-
-                            <div className="max-h-64 overflow-y-auto">
-                                {safeLength(safeSuites) === 0 ? (
-                                    <div className="px-3 py-4 text-center text-muted-foreground text-sm">
-                                        <Building2 className="h-8 w-8 mx-auto mb-2 text-muted" />
-                                        <p>No test suites yet</p>
-                                        <p className="text-xs">Create your first suite to get started</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-1">
-                                        {safeMap(safeSuites, (suite) => (
-                                            <button
-                                                key={suite.id}
-                                                onClick={() => handleSelectSuite(suite)}
-                                                className={`w-full flex items-center px-3 py-2 text-sm rounded-md text-left transition-colors ${
-                                                    activeSuite?.id === suite.id
-                                                        ? 'bg-teal-50 text-teal-800 font-medium'
-                                                        : 'text-foreground hover:bg-secondary/80'
-                                                }`}
-                                            >
-                                                <div
-                                                    className={`w-2 h-2 rounded-full mr-3 flex-shrink-0 ${
-                                                        activeSuite?.id === suite.id ? 'bg-primary' : 'bg-muted'
-                                                    }`}
-                                                ></div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="truncate" title={suite.name}>
-                                                        {suite.name}
-                                                    </p>
-                                                    {suite.description && (
-                                                        <p className="text-xs text-muted-foreground truncate" title={suite.description}>
-                                                            {suite.description}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* Notifications Dropdown */}
                 {showNotifications && !disabled && (
                     <div
                         ref={notificationsRef}
-                        className="fixed bg-card border border-border shadow-theme-lg rounded-lg z-50"
+                        className="fixed bg-card border border-border shadow-lg rounded-lg z-50"
                         style={{
                             top: `${notificationsPosition.top}px`,
                             left: notificationsPosition.left !== 'auto' ? `${notificationsPosition.left}px` : 'auto',
@@ -522,18 +311,19 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-sm font-medium text-foreground">Notifications</h3>
                                 {safeLength(safeNotifications) > 0 && (
-                                    <button
+                                    <Button
+                                        variant="link"
+                                        size="xs"
                                         onClick={handleMarkAllAsRead}
-                                        className="text-xs text-primary hover:text-teal-800"
                                     >
                                         Mark all as read
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
                             <div className="max-h-80 overflow-y-auto">
                                 {safeLength(safeNotifications) === 0 ? (
                                     <div className="text-center py-6 text-muted-foreground">
-                                        <Bell className="h-8 w-8 mx-auto mb-2 text-muted" />
+                                        <Bell className="h-11 w-11 mx-auto mb-2 text-muted" />
                                         <p className="text-sm">No notifications yet</p>
                                     </div>
                                 ) : (
@@ -544,14 +334,14 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
                                                 className={`p-3 rounded-lg border transition-colors ${
                                                     notification.read
                                                         ? 'bg-secondary border-border'
-                                                        : 'bg-teal-50 border-teal-300'
+                                                        : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1">
                                                         <p
                                                             className={`text-sm ${
-                                                                notification.read ? 'text-foreground' : 'text-teal-800 font-medium'
+                                                                notification.read ? 'text-foreground' : 'text-blue-800 font-medium dark:text-blue-200'
                                                             }`}
                                                         >
                                                             {notification.message}
@@ -566,14 +356,14 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
                                                         {!notification.read && (
                                                             <button
                                                                 onClick={() => handleMarkAsRead(notification.id)}
-                                                                className="text-xs text-primary hover:text-teal-800"
+                                                                className="text-xs text-primary hover:text-primary/80 transition-colors"
                                                             >
                                                                 Read
                                                             </button>
                                                         )}
                                                         <button
                                                             onClick={() => handleClearNotification(notification.id)}
-                                                            className="text-muted-foreground hover:text-foreground"
+                                                            className="text-muted-foreground hover:text-foreground transition-colors p-1"
                                                         >
                                                             <X className="h-3 w-3" />
                                                         </button>
@@ -589,14 +379,16 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
                 )}
             </header>
 
-            <CreateSuiteModal
-                isOpen={showCreateSuiteModal && !disabled}
-                onSuiteCreated={handleSuiteCreated}
-                onCancel={() => setShowCreateSuiteModal(false)}
+            {/* Create Sprint Modal */}
+            <CreateSprintModal
+                isOpen={showCreateSprintModal && !disabled}
+                onSprintCreated={handleSprintCreated}
+                onCancel={() => setShowCreateSprintModal(false)}
+                suiteId={activeSuite?.id}
             />
         </>
     );
 
-}
+};
 
-export default  AppHeader;
+export default AppHeader;

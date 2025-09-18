@@ -9,6 +9,7 @@ import {
     LifebuoyIcon,
     CheckCircleIcon,
     ExclamationTriangleIcon,
+    ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 
 const UserMenuDropdown = ({ setShowUserMenu }) => {
@@ -17,6 +18,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
         state, 
         actions, 
         currentUser, 
+        activeSuite,
         profileSubscriptionActive 
     } = useApp();
 
@@ -24,14 +26,11 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
     const accountType = state.auth.accountType;
 
     const getUserDisplayName = () => {
-
-        // Priority order for display name
         if (profileData?.display_name?.trim()) return profileData.display_name.trim();
         if (profileData?.name?.trim()) return profileData.name.trim();
         if (currentUser?.displayName?.trim()) return currentUser.displayName.trim();
         if (currentUser?.name?.trim()) return currentUser.name.trim();
         
-        // Try currentUser first/last name (from enhanced user object)
         if (currentUser?.firstName || currentUser?.lastName) {
             const firstName = currentUser.firstName || '';
             const lastName = currentUser.lastName || '';
@@ -39,7 +38,6 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
             if (fullName) return fullName;
         }
         
-        // Fallback to profile first + last name
         if (profileData?.first_name || profileData?.last_name) {
             const firstName = profileData.first_name || '';
             const lastName = profileData.last_name || '';
@@ -47,7 +45,6 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
             if (fullName) return fullName;
         }
         
-        // Fallback to email-based name
         const email = profileData?.email || currentUser?.email;
         if (email) {
             const emailName = email.split('@')[0];
@@ -77,16 +74,13 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
     const handleSignOut = async () => {
         try {
             setShowUserMenu(false);
-            
             actions.ui.showNotification?.({
                 id: 'signing-out',
                 type: 'info',
                 message: 'Signing out...',
                 duration: 2000,
             });
-
             await actions.auth.logout();
-            
             actions.ui.showNotification?.({
                 id: 'signed-out',
                 type: 'success',
@@ -107,9 +101,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
 
     const handleSupport = () => {
         setShowUserMenu(false);
-        // Navigate to support page using Next.js router
         router.push('/support');
-        
         actions.ui.showNotification?.({
             id: 'support-opened',
             type: 'info',
@@ -120,9 +112,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
 
     const handleProfile = () => {
         setShowUserMenu(false);
-        // Navigate to profile/settings page using Next.js router
         router.push('/profile-settings');
-        
         actions.ui.showNotification?.({
             id: 'profile-opened',
             type: 'info',
@@ -131,7 +121,19 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
         });
     };
 
+    const handleArchiveTrash = () => {
+        setShowUserMenu(false);
+        router.push('/archive-trash');
+        actions.ui.showNotification?.({
+            id: 'archive-opened',
+            type: 'info',
+            message: 'Opening archive & trash...',
+            duration: 2000,
+        });
+    };
+
     const organizationInfo = getOrganizationInfo();
+    const hasActiveSuite = Boolean(activeSuite?.id);
 
     return (
         <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-lg shadow-theme-lg z-20">
@@ -148,7 +150,6 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                             </p>
                         </div>
                         
-                        {/* Profile sync status indicator */}
                         <div className="flex-shrink-0 ml-2">
                             {profileSubscriptionActive ? (
                                 <CheckCircleIcon 
@@ -164,7 +165,6 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                         </div>
                     </div>
                     
-                    {/* Organization info */}
                     {organizationInfo && (
                         <div className="flex items-center mt-2">
                             <BuildingOffice2Icon className="h-3 w-3 text-muted-foreground mr-1 flex-shrink-0" />
@@ -177,12 +177,18 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                         </div>
                     )}
                     
-                    {/* Account type indicator */}
                     <div className="mt-1">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
                             {accountType === 'organization' ? 'Team Account' : 'Individual Account'}
                         </span>
                     </div>
+
+                    {hasActiveSuite && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                            <span className="font-medium">Active Suite:</span>
+                            <div className="truncate">{activeSuite.name}</div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Theme Switcher */}
@@ -199,6 +205,17 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                         <UserIcon className="h-4 w-4 mr-2 text-muted-foreground" />
                         Profile & Settings
                     </button>
+
+                    {hasActiveSuite && (
+                        <button
+                            onClick={handleArchiveTrash}
+                            className="w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors"
+                            title="Manage archived and deleted items"
+                        >
+                            <ArchiveBoxIcon className="h-4 w-4 mr-2 text-muted-foreground" />
+                            Archive & Trash
+                        </button>
+                    )}
                     
                     <button
                         onClick={handleSupport}
@@ -216,6 +233,15 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                         Sign Out
                     </button>
                 </div>
+
+                {!hasActiveSuite && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground bg-muted/50 rounded-md">
+                        <div className="flex items-center">
+                            <ArchiveBoxIcon className="h-3 w-3 mr-1 flex-shrink-0" />
+                            <span>Select a test suite to access archive & trash</span>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
