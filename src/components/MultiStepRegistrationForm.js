@@ -416,7 +416,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     };
 
     const getStepCount = () => {
-        return formData.accountType === 'individual' ? 3 : 4; 
+        return formData.accountType === 'individual' ? 3 : 4;
     };
 
     const getCurrentStepForDisplay = () => {
@@ -430,17 +430,17 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     const renderAccountTypeStep = () => (
         <div className="space-y-6">
             <div className="text-center">
-                <GoogleSSO 
-                    loading={googleLoading} 
+                <GoogleSSO
+                    loading={googleLoading}
                     onGoogleAuth={handleGoogleAuth}
                 />
 
                 <div className="flex items-center my-6">
-                    <div className="flex-grow border-t border-slate-300"></div>
-                    <span className="px-4 text-sm text-slate-500 font-medium bg-white">or</span>
-                    <div className="flex-grow border-t border-slate-300"></div>
+                    <div className="flex-grow border-t border-border"></div>
+                    <span className="px-4 text-sm text-muted-foreground font-medium bg-background">or</span>
+                    <div className="flex-grow border-t border-border"></div>
                 </div>
-                <p className="text-slate-600">Select the option that best fits your testing needs</p>
+                <p className="text-muted-foreground">Select the option that best fits your testing needs</p>
             </div>
 
             <div className="space-y-4">
@@ -449,24 +449,24 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         key={type.value}
                         onClick={() => handleAccountTypeChange(type.value)}
                         className={`relative p-6 rounded-xl border-2 cursor-pointer transition-all duration-200 ${formData.accountType === type.value
-                            ? 'border-teal-500 bg-teal-50'
-                            : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                            ? 'border-primary bg-teal-50'
+                            : 'border-border hover:border-muted-foreground hover:shadow-theme-md'
                             }`}
                     >
                         <div className="flex items-start gap-4">
-                            <div className="p-3 rounded-lg bg-slate-100">
-                                <type.icon className="w-6 h-6 text-slate-600" />
+                            <div className="p-3 rounded-lg bg-muted">
+                                <type.icon className="w-6 h-6 text-muted-foreground" />
                             </div>
                             <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-slate-900 mb-1">{type.label}</h3>
-                                <p className="text-slate-600 text-sm">{type.description}</p>
+                                <h3 className="text-lg font-semibold text-foreground mb-1">{type.label}</h3>
+                                <p className="text-muted-foreground text-sm">{type.description}</p>
                             </div>
                             <div className={`w-5 h-5 rounded-full border-2 ${formData.accountType === type.value
-                                ? 'border-teal-500 bg-teal-500'
-                                : 'border-slate-300'
+                                ? 'border-primary bg-primary'
+                                : 'border-border'
                                 }`}>
                                 {formData.accountType === type.value && (
-                                    <CheckCircle className="w-5 h-5 text-white -m-0.5" />
+                                    <CheckCircle className="w-5 h-5 text-primary-foreground -m-0.5" />
                                 )}
                             </div>
                         </div>
@@ -475,7 +475,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
             </div>
 
             {errors.accountType && (
-                <p className="text-sm text-red-500 text-center">{errors.accountType}</p>
+                <p className="text-sm text-error text-center">{errors.accountType}</p>
             )}
         </div>
     );
@@ -484,13 +484,13 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     const renderBasicInfoStep = () => (
         <div className="space-y-6">
             <div className="text-center">
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Basic Information</h2>
-                <p className="text-slate-600">Tell us a bit about yourself</p>
+                <h2 className="text-2xl font-bold text-foreground mb-2">Basic Information</h2>
+                <p className="text-muted-foreground">Tell us a bit about yourself</p>
             </div>
 
             <div className="space-y-4">
                 <div>
-                    <label htmlFor="email" className="text-sm font-medium text-slate-700 block mb-2">
+                    <label htmlFor="email" className="text-sm font-medium text-foreground block mb-2">
                         Email Address
                     </label>
                     <input
@@ -498,12 +498,12 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className={`w-full px-4 py-3 border ${errors.email || emailError ? 'border-red-500' : 'border-slate-200'} rounded-lg text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        className={`w-full px-4 py-3 border ${errors.email || emailError ? 'border-error' : 'border-input'} rounded-lg bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10`}
                         placeholder={formData.accountType === 'organization' ? "name@yourcompany.com" : "name@example.com"}
                         required
                     />
                     {(errors.email || emailError) && (
-                        <p className="text-sm text-red-500 mt-1">{errors.email || emailError}</p>
+                        <p className="text-sm text-error mt-1">{errors.email || emailError}</p>
                     )}
                     {showDomainSuggestion && formData.accountType === 'individual' && (
                         <DomainSuggestion
@@ -516,7 +516,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                 </div>
 
                 <div>
-                    <label htmlFor="displayName" className="text-sm font-medium text-slate-700 block mb-2">
+                    <label htmlFor="displayName" className="text-sm font-medium text-foreground block mb-2">
                         Full Name
                     </label>
                     <input
@@ -524,12 +524,12 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="displayName"
                         value={formData.displayName}
                         onChange={(e) => handleInputChange('displayName', e.target.value)}
-                        className={`w-full px-4 py-3 border ${errors.displayName ? 'border-red-500' : 'border-slate-200'} rounded-lg text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        className={`w-full px-4 py-3 border ${errors.displayName ? 'border-error' : 'border-input'} rounded-lg bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10`}
                         placeholder="Enter your full name"
                         required
                     />
                     {errors.displayName && (
-                        <p className="text-sm text-red-500 mt-1">{errors.displayName}</p>
+                        <p className="text-sm text-error mt-1">{errors.displayName}</p>
                     )}
                 </div>
             </div>
@@ -540,47 +540,47 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     const renderOrganizationInfoStep = () => (
         <div className="space-y-6">
             <div className="text-center">
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Organization Details</h2>
-                <p className="text-slate-600">Help us set up your organization</p>
+                <h2 className="text-2xl font-bold text-foreground mb-2">Organization Details</h2>
+                <p className="text-muted-foreground">Help us set up your organization</p>
             </div>
 
             <div className="space-y-4">
                 <div>
-                    <label htmlFor="organizationName" className="text-sm font-medium text-slate-700 block mb-2">
-                        Organization Name <span className="text-red-500">*</span>
+                    <label htmlFor="organizationName" className="text-sm font-medium text-foreground block mb-2">
+                        Organization Name <span className="text-error">*</span>
                     </label>
                     <input
                         type="text"
                         id="organizationName"
                         value={formData.organizationName}
                         onChange={(e) => handleInputChange('organizationName', e.target.value)}
-                        className={`w-full px-4 py-3 border ${errors.organizationName ? 'border-red-500' : 'border-slate-200'} rounded-lg text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10`}
+                        className={`w-full px-4 py-3 border ${errors.organizationName ? 'border-error' : 'border-input'} rounded-lg bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10`}
                         placeholder="Enter your organization name"
                         required
                     />
                     {errors.organizationName && (
-                        <p className="text-sm text-red-500 mt-1">{errors.organizationName}</p>
+                        <p className="text-sm text-error mt-1">{errors.organizationName}</p>
                     )}
                 </div>
 
                 <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-2">
-                        Industry <span className="text-red-500">*</span>
+                    <label className="text-sm font-medium text-foreground block mb-2">
+                        Industry <span className="text-error">*</span>
                     </label>
                     <div className="relative">
                         <button
                             type="button"
                             onClick={() => setIsIndustryDropdownOpen(!isIndustryDropdownOpen)}
-                            className={`w-full px-4 py-3 border ${errors.organizationIndustry ? 'border-red-500' : 'border-slate-200'} rounded-lg text-slate-900 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 bg-white text-left flex items-center justify-between`}
+                            className={`w-full px-4 py-3 border ${errors.organizationIndustry ? 'border-error' : 'border-input'} rounded-lg text-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 bg-background text-left flex items-center justify-between`}
                         >
-                            <span className={formData.organizationIndustry ? 'text-slate-900' : 'text-slate-400'}>
+                            <span className={formData.organizationIndustry ? 'text-foreground' : 'text-muted-foreground'}>
                                 {industries.find(ind => ind.value === formData.organizationIndustry)?.label || 'Select your industry'}
                             </span>
-                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isIndustryDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isIndustryDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {isIndustryDropdownOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-theme-lg z-10 max-h-48 overflow-y-auto">
                                 {industries.map((industry) => (
                                     <button
                                         key={industry.value}
@@ -589,7 +589,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                                             handleInputChange('organizationIndustry', industry.value);
                                             setIsIndustryDropdownOpen(false);
                                         }}
-                                        className={`w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg ${formData.organizationIndustry === industry.value ? 'bg-teal-50 text-teal-900 font-medium' : 'text-slate-900'
+                                        className={`w-full px-4 py-2.5 text-left hover:bg-muted transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg ${formData.organizationIndustry === industry.value ? 'bg-teal-50 text-teal-800 font-medium' : 'text-card-foreground'
                                             }`}
                                     >
                                         {industry.label}
@@ -599,28 +599,28 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         )}
                     </div>
                     {errors.organizationIndustry && (
-                        <p className="text-sm text-red-500 mt-1">{errors.organizationIndustry}</p>
+                        <p className="text-sm text-error mt-1">{errors.organizationIndustry}</p>
                     )}
                 </div>
 
                 <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-2">
+                    <label className="text-sm font-medium text-foreground block mb-2">
                         Organization Size
                     </label>
                     <div className="relative">
                         <button
                             type="button"
                             onClick={() => setIsSizeDropdownOpen(!isSizeDropdownOpen)}
-                            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-slate-900 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 bg-white text-left flex items-center justify-between"
+                            className="w-full px-4 py-3 border border-input rounded-lg text-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 bg-background text-left flex items-center justify-between"
                         >
                             <span>
                                 {organizationSizes.find(size => size.value === formData.organizationSize)?.label}
                             </span>
-                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isSizeDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isSizeDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {isSizeDropdownOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-theme-lg z-10">
                                 {organizationSizes.map((size) => (
                                     <button
                                         key={size.value}
@@ -629,7 +629,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                                             handleInputChange('organizationSize', size.value);
                                             setIsSizeDropdownOpen(false);
                                         }}
-                                        className={`w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg ${formData.organizationSize === size.value ? 'bg-teal-50 text-teal-900 font-medium' : 'text-slate-900'
+                                        className={`w-full px-4 py-2.5 text-left hover:bg-muted transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg ${formData.organizationSize === size.value ? 'bg-teal-50 text-teal-800 font-medium' : 'text-card-foreground'
                                             }`}
                                     >
                                         {size.label}
@@ -647,13 +647,13 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
     const renderPasswordTermsStep = () => (
         <div className="space-y-6">
             <div className="text-center">
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Security & Terms</h2>
-                <p className="text-slate-600">Create your password and agree to our terms</p>
+                <h2 className="text-2xl font-bold text-foreground mb-2">Security & Terms</h2>
+                <p className="text-muted-foreground">Create your password and agree to our terms</p>
             </div>
 
             <div className="space-y-4">
                 <div>
-                    <label htmlFor="password" className="text-sm font-medium text-slate-700 block mb-2">
+                    <label htmlFor="password" className="text-sm font-medium text-foreground block mb-2">
                         Password
                     </label>
                     <div className="relative">
@@ -669,14 +669,14 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         />
                         <button
                             type="button"
-                            className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                            className="absolute inset-y-0 right-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                             onClick={() => setShowPassword(!showPassword)}
                         >
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
                     {errors.password && (
-                        <p className="text-sm text-red-500 mt-1">{errors.password}</p>
+                        <p className="text-sm text-error mt-1">{errors.password}</p>
                     )}
                 </div>
 
@@ -686,22 +686,22 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="agreeToTerms"
                         checked={formData.agreeToTerms}
                         onChange={(e) => handleInputChange('agreeToTerms', e.target.checked)}
-                        className="mt-1 h-4 w-4 text-teal-600 border-slate-300 rounded focus:ring-teal-500"
+                        className="mt-1 h-4 w-4 text-primary border-border rounded focus:ring-primary"
                         required
                     />
-                    <label htmlFor="agreeToTerms" className="text-sm text-slate-600 cursor-pointer">
+                    <label htmlFor="agreeToTerms" className="text-sm text-muted-foreground cursor-pointer">
                         I agree to the{' '}
-                        <a href="/terms" className="text-teal-600 hover:text-teal-700 font-medium">
+                        <a href="/terms" className="text-primary hover:text-teal-600 font-medium">
                             Terms of Service
                         </a>{' '}
                         and{' '}
-                        <a href="/privacy" className="text-teal-600 hover:text-teal-700 font-medium">
+                        <a href="/privacy" className="text-primary hover:text-teal-600 font-medium">
                             Privacy Policy
                         </a>
                     </label>
                 </div>
                 {errors.agreeToTerms && (
-                    <p className="text-sm text-red-500">{errors.agreeToTerms}</p>
+                    <p className="text-sm text-error">{errors.agreeToTerms}</p>
                 )}
 
                 {errors.submit && (
@@ -797,17 +797,16 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                 {Array.from({ length: getStepCount() }, (_, i) => i + 1).map((step) => {
                     const isActive = getCurrentStepForDisplay() === step;
                     const isCompleted = getCurrentStepForDisplay() > step;
-                    
+
                     return (
                         <div
                             key={step}
-                            className={`w-2 h-2 rounded-full transition-all duration-200 ${
-                                isActive
-                                    ? 'bg-teal-600 scale-125'
+                            className={`w-2 h-2 rounded-full transition-all duration-200 ${isActive
+                                    ? 'bg-primary scale-125'
                                     : isCompleted
-                                    ? 'bg-teal-400'
-                                    : 'bg-slate-300'
-                            }`}
+                                        ? 'bg-teal-300'
+                                        : 'bg-border'
+                                }`}
                         />
                     );
                 })}
