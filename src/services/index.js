@@ -1,4 +1,4 @@
-// Complete FirestoreService.js - Full Implementation with Recording Integration
+// Complete FirestoreService.js - Fixed Implementation with Proper Recording Integration
 import { BaseFirestoreService } from './firestoreService';
 import { UserService } from './userService';
 import { OrganizationService } from './OrganizationService';
@@ -23,58 +23,106 @@ class FirestoreService extends BaseFirestoreService {
         // Initialize ArchiveTrashService
         this.archiveTrash = new ArchiveTrashService(this.testSuite);
 
-        // Complete recordings interface - delegates to enhanced AssetService
+        // Enhanced recordings interface - properly delegates to AssetService
         this.recordings = {
-            // Main recording operations
+            // Core creation methods
+            create: async (suiteId, recordingData, sprintId = null) => {
+                return await this.assets.createRecording(suiteId, recordingData, sprintId);
+            },
+            
             createRecording: async (suiteId, recordingData, sprintId = null) => {
                 return await this.assets.createRecording(suiteId, recordingData, sprintId);
             },
             
             // Upload and create in one operation
+            uploadAndCreate: async (suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) => {
+                return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
+            },
+            
             uploadAndCreateRecording: async (suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) => {
                 return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
             },
             
-            // Get operations
-            getRecordings: async (suiteId, sprintId = null, options = {}) => {
-                return await this.assets.getRecordings(suiteId, sprintId, options);
+            // Read operations
+            get: async (recordingId, suiteId, sprintId = null) => {
+                return await this.assets.getRecording(recordingId, suiteId, sprintId);
             },
             
             getRecording: async (recordingId, suiteId, sprintId = null) => {
                 return await this.assets.getRecording(recordingId, suiteId, sprintId);
             },
             
-            // Update operation
+            getAll: async (suiteId, sprintId = null, options = {}) => {
+                return await this.assets.getRecordings(suiteId, sprintId, options);
+            },
+            
+            getRecordings: async (suiteId, sprintId = null, options = {}) => {
+                return await this.assets.getRecordings(suiteId, sprintId, options);
+            },
+            
+            // Update operations
+            update: async (recordingId, updates, suiteId, sprintId = null) => {
+                return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
+            },
+            
             updateRecording: async (recordingId, updates, suiteId, sprintId = null) => {
                 return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
             },
             
-            // Delete operation (soft delete)
+            // Delete operations
+            delete: async (recordingId, suiteId, sprintId = null) => {
+                return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
+            },
+            
             deleteRecording: async (recordingId, suiteId, sprintId = null) => {
-                return await this.deleteRecording(recordingId, suiteId, sprintId);
+                return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
             },
             
             // Subscribe to real-time updates
-            subscribeToRecordings: (suiteId, callback, errorCallback, sprintId = null) => {
+            subscribe: (suiteId, callback, errorCallback = null, sprintId = null) => {
                 return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
             },
             
-            // Utility operations
+            subscribeToRecordings: (suiteId, callback, errorCallback = null, sprintId = null) => {
+                return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
+            },
+            
+            // Service status and utility methods
+            getServiceStatus: async () => {
+                return await this.assets.getRecordingServiceStatus();
+            },
+            
+            testYouTubeConnection: async () => {
+                return await this.assets.testYouTubeConnection();
+            },
+            
             isYouTubeAvailable: async () => {
                 return await this.assets.isYouTubeAvailable();
             },
             
+            getStatistics: async (suiteId, sprintId = null) => {
+                return await this.assets.getRecordingStatistics(suiteId, sprintId);
+            },
+            
+            // URL utility methods
             getPlaybackUrl: (recordingData) => {
                 return this.assets.recordingService.getPlaybackUrl(recordingData);
             },
             
-            // Link recording to bug
-            linkRecordingToBug: async (recordingId, bugId, suiteId, sprintId = null) => {
-                return await this.linkRecordingToBug(recordingId, bugId, suiteId, sprintId);
+            getVideoUrl: (recordingData) => {
+                return this.assets.recordingService.getVideoUrl(recordingData);
+            },
+            
+            getRecordingInfo: (recordingData) => {
+                return this.assets.recordingService.getRecordingInfo(recordingData);
+            },
+            
+            validateRecordingData: (recordingData) => {
+                return this.assets.recordingService.validateRecordingData(recordingData);
             }
         };
 
-        // Reports interface
+        // Reports interface (unchanged from original)
         this.reports = {
             getReports: async (orgId) => {
                 try {
@@ -403,6 +451,56 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     // ========================
+    // RECORDING METHODS (properly delegated to AssetService)
+    // ========================
+
+    async createRecording(suiteId, recordingData, sprintId = null) {
+        return await this.assets.createRecording(suiteId, recordingData, sprintId);
+    }
+
+    async uploadAndCreateRecording(suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) {
+        return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
+    }
+
+    async updateRecording(recordingId, updates, suiteId, sprintId = null) {
+        return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
+    }
+
+    async getRecording(recordingId, suiteId, sprintId = null) {
+        return await this.assets.getRecording(recordingId, suiteId, sprintId);
+    }
+
+    async getRecordings(suiteId, sprintId = null, options = {}) {
+        // Set default options to exclude deleted by default
+        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        return await this.assets.getRecordings(suiteId, sprintId, defaultOptions);
+    }
+
+    async getAllRecordings(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+        return await this.assets.getRecordings(suiteId, sprintId, { includeStatus });
+    }
+
+    subscribeToRecordings(suiteId, callback, errorCallback = null, sprintId = null) {
+        return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
+    }
+
+    async getRecordingServiceStatus() {
+        return await this.assets.getRecordingServiceStatus();
+    }
+
+    async testYouTubeConnection() {
+        return await this.assets.testYouTubeConnection();
+    }
+
+    async isYouTubeAvailable() {
+        return await this.assets.isYouTubeAvailable();
+    }
+
+    async getRecordingStatistics(suiteId, sprintId = null) {
+        return await this.assets.getRecordingStatistics(suiteId, sprintId);
+    }
+
+    // ========================
     // BUG METHODS (delegated to BugService)
     // ========================
 
@@ -410,7 +508,7 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.createBug(suiteId, bugData, sprintId);
     }
 
-    async updateBug(bugId, updates, suiteId = null, sprintId = null) {
+    async updateBug(bugId, updates, suiteId, sprintId = null) {
         return await this.bugs.updateBug(bugId, updates, suiteId, sprintId);
     }
 
@@ -418,16 +516,46 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.getBug(bugId, suiteId, sprintId);
     }
 
-    async getBugs(suiteId, sprintId = null) {
-        return await this.bugs.getBugs(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
+    async getBugs(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        return await this.bugs.getBugs(suiteId, sprintId, defaultOptions);
     }
 
     async getAllBugs(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
         return await this.bugs.getBugs(suiteId, sprintId, { includeStatus });
     }
 
-    subscribeToBugs(suiteId, onSuccess, onError) {
-        return this.bugs.subscribeToBugs(suiteId, onSuccess, onError);
+    subscribeToBugs(suiteId, callback, errorCallback = null, sprintId = null) {
+        return this.bugs.subscribeToBugs(suiteId, callback, errorCallback, sprintId);
+    }
+
+    // ========================
+    // TEST CASE METHODS (delegated to AssetService)
+    // ========================
+
+    async createTestCase(suiteId, testCaseData, sprintId = null) {
+        return await this.assets.createTestCase(suiteId, testCaseData, sprintId);
+    }
+
+    async updateTestCase(testCaseId, updates, suiteId, sprintId = null) {
+        return await this.assets.updateTestCase(testCaseId, updates, suiteId, sprintId);
+    }
+
+    async getTestCase(testCaseId, suiteId, sprintId = null) {
+        return await this.assets.getTestCase(testCaseId, suiteId, sprintId);
+    }
+
+    async getTestCases(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        return await this.assets.getTestCases(suiteId, sprintId, defaultOptions);
+    }
+
+    async getAllTestCases(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+        return await this.assets.getTestCases(suiteId, sprintId, { includeStatus });
+    }
+
+    subscribeToTestCases(suiteId, callback, errorCallback = null, sprintId = null) {
+        return this.assets.subscribeToTestCases(suiteId, callback, errorCallback, sprintId);
     }
 
     // ========================
@@ -438,7 +566,7 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.createRecommendation(suiteId, recommendationData, sprintId);
     }
 
-    async updateRecommendation(recommendationId, updates, suiteId = null, sprintId = null) {
+    async updateRecommendation(recommendationId, updates, suiteId, sprintId = null) {
         return await this.bugs.updateRecommendation(recommendationId, updates, suiteId, sprintId);
     }
 
@@ -450,8 +578,9 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.getRecommendation(recommendationId, suiteId, sprintId);
     }
 
-    async getRecommendations(suiteId, sprintId = null) {
-        return await this.bugs.getRecommendations(suiteId, sprintId);
+    async getRecommendations(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        return await this.bugs.getRecommendations(suiteId, sprintId, defaultOptions);
     }
 
     subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
@@ -498,11 +627,18 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.bulkLinkBugsToTestCases(suiteId, testCaseIds, bugIds, sprintId);
     }
 
-    // Link recording to bug
+    // Enhanced recording-to-bug linking with proper error handling
     async linkRecordingToBug(recordingId, bugId, suiteId, sprintId = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        if (!recordingId || !bugId || !suiteId) {
+            return { 
+                success: false, 
+                error: { message: 'Recording ID, Bug ID, and Suite ID are all required' } 
+            };
         }
 
         const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
@@ -510,88 +646,165 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'Insufficient permissions to link recording' } };
         }
 
-        // Update recording with bug link
-        const recordingUpdate = await this.assets.updateRecording(recordingId, {
-            linkedBugs: [bugId],
-            lastLinkedAt: new Date()
-        }, suiteId, sprintId);
+        try {
+            // Get current recording to check existing links
+            const recordingResult = await this.assets.getRecording(recordingId, suiteId, sprintId);
+            if (!recordingResult.success) {
+                return recordingResult;
+            }
 
-        if (recordingUpdate.success) {
-            // Update bug with recording link
-            const bugUpdate = await this.assets.updateBug(bugId, {
-                linkedRecordings: [recordingId],
+            // Get current bug to check existing links  
+            const bugResult = await this.assets.getBug(bugId, suiteId, sprintId);
+            if (!bugResult.success) {
+                return bugResult;
+            }
+
+            const recording = recordingResult.data;
+            const bug = bugResult.data;
+
+            // Update recording with bug link (avoid duplicates)
+            const existingBugLinks = recording.linkedBugs || [];
+            const updatedBugLinks = existingBugLinks.includes(bugId) 
+                ? existingBugLinks 
+                : [...existingBugLinks, bugId];
+
+            const recordingUpdate = await this.assets.updateRecording(recordingId, {
+                linkedBugs: updatedBugLinks,
                 lastLinkedAt: new Date()
             }, suiteId, sprintId);
 
-            if (bugUpdate.success) {
-                return { success: true, data: { recordingId, bugId } };
-            } else {
-                // Rollback recording update if bug update fails
-                await this.assets.updateRecording(recordingId, {
-                    linkedBugs: [],
-                    lastLinkedAt: null
+            if (recordingUpdate.success) {
+                // Update bug with recording link (avoid duplicates)
+                const existingRecordingLinks = bug.linkedRecordings || [];
+                const updatedRecordingLinks = existingRecordingLinks.includes(recordingId)
+                    ? existingRecordingLinks
+                    : [...existingRecordingLinks, recordingId];
+
+                const bugUpdate = await this.assets.updateBug(bugId, {
+                    linkedRecordings: updatedRecordingLinks,
+                    lastLinkedAt: new Date()
                 }, suiteId, sprintId);
-                return bugUpdate;
+
+                if (bugUpdate.success) {
+                    return { 
+                        success: true, 
+                        data: { 
+                            recordingId, 
+                            bugId,
+                            linkedAt: new Date().toISOString()
+                        } 
+                    };
+                } else {
+                    // Rollback recording update if bug update fails
+                    console.warn('Bug update failed, rolling back recording update...');
+                    await this.assets.updateRecording(recordingId, {
+                        linkedBugs: existingBugLinks,
+                        lastLinkedAt: recording.lastLinkedAt || null
+                    }, suiteId, sprintId);
+                    return bugUpdate;
+                }
             }
+
+            return recordingUpdate;
+
+        } catch (error) {
+            console.error('Error linking recording to bug:', error);
+            return { 
+                success: false, 
+                error: { 
+                    message: `Failed to link recording to bug: ${error.message}`,
+                    details: error.stack
+                } 
+            };
+        }
+    }
+
+    // Unlink recording from bug
+    async unlinkRecordingFromBug(recordingId, bugId, suiteId, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        return recordingUpdate;
-    }
+        if (!recordingId || !bugId || !suiteId) {
+            return { 
+                success: false, 
+                error: { message: 'Recording ID, Bug ID, and Suite ID are all required' } 
+            };
+        }
 
-    // ========================
-    // TEST CASE METHODS (delegated to AssetService)
-    // ========================
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to unlink recording' } };
+        }
 
-    async createTestCase(suiteId, testCaseData, sprintId = null) {
-        return await this.assets.createTestCase(suiteId, testCaseData, sprintId);
-    }
+        try {
+            // Get current recording
+            const recordingResult = await this.assets.getRecording(recordingId, suiteId, sprintId);
+            if (!recordingResult.success) {
+                return recordingResult;
+            }
 
-    async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
-        return await this.assets.updateTestCase(testCaseId, updates, suiteId, sprintId);
-    }
+            // Get current bug
+            const bugResult = await this.assets.getBug(bugId, suiteId, sprintId);
+            if (!bugResult.success) {
+                return bugResult;
+            }
 
-    async getTestCase(testCaseId, suiteId, sprintId = null) {
-        return await this.assets.getTestCase(testCaseId, suiteId, sprintId);
-    }
+            const recording = recordingResult.data;
+            const bug = bugResult.data;
 
-    async getTestCases(suiteId, sprintId = null) {
-        return await this.assets.getTestCases(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
-    }
+            // Remove bug from recording's linked bugs
+            const existingBugLinks = recording.linkedBugs || [];
+            const updatedBugLinks = existingBugLinks.filter(id => id !== bugId);
 
-    async getAllTestCases(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
-        return await this.assets.getTestCases(suiteId, sprintId, { includeStatus });
-    }
+            const recordingUpdate = await this.assets.updateRecording(recordingId, {
+                linkedBugs: updatedBugLinks,
+                lastUnlinkedAt: new Date()
+            }, suiteId, sprintId);
 
-    subscribeToTestCases(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToTestCases(suiteId, onSuccess, onError);
-    }
+            if (recordingUpdate.success) {
+                // Remove recording from bug's linked recordings
+                const existingRecordingLinks = bug.linkedRecordings || [];
+                const updatedRecordingLinks = existingRecordingLinks.filter(id => id !== recordingId);
 
-    // ========================
-    // RECORDING METHODS (delegated to AssetService)
-    // ========================
+                const bugUpdate = await this.assets.updateBug(bugId, {
+                    linkedRecordings: updatedRecordingLinks,
+                    lastUnlinkedAt: new Date()
+                }, suiteId, sprintId);
 
-    async createRecording(suiteId, recordingData, sprintId = null) {
-        return await this.assets.createRecording(suiteId, recordingData, sprintId);
-    }
+                if (bugUpdate.success) {
+                    return { 
+                        success: true, 
+                        data: { 
+                            recordingId, 
+                            bugId,
+                            unlinkedAt: new Date().toISOString()
+                        } 
+                    };
+                } else {
+                    // Rollback recording update if bug update fails
+                    console.warn('Bug update failed, rolling back recording update...');
+                    await this.assets.updateRecording(recordingId, {
+                        linkedBugs: existingBugLinks,
+                        lastUnlinkedAt: recording.lastUnlinkedAt || null
+                    }, suiteId, sprintId);
+                    return bugUpdate;
+                }
+            }
 
-    async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
-        return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
-    }
+            return recordingUpdate;
 
-    async getRecording(recordingId, suiteId, sprintId = null) {
-        return await this.assets.getRecording(recordingId, suiteId, sprintId);
-    }
-
-    async getRecordings(suiteId, sprintId = null) {
-        return await this.assets.getRecordings(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
-    }
-
-    async getAllRecordings(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
-        return await this.assets.getRecordings(suiteId, sprintId, { includeStatus });
-    }
-
-    subscribeToRecordings(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToRecordings(suiteId, onSuccess, onError);
+        } catch (error) {
+            console.error('Error unlinking recording from bug:', error);
+            return { 
+                success: false, 
+                error: { 
+                    message: `Failed to unlink recording from bug: ${error.message}`,
+                    details: error.stack
+                } 
+            };
+        }
     }
 
     // ========================
@@ -602,7 +815,7 @@ class FirestoreService extends BaseFirestoreService {
         return await this.assets.createSprint(suiteId, sprintData);
     }
 
-    async updateSprint(sprintId, updates, suiteId = null) {
+    async updateSprint(sprintId, updates, suiteId) {
         return await this.assets.updateSprint(sprintId, updates, suiteId);
     }
 
@@ -610,16 +823,17 @@ class FirestoreService extends BaseFirestoreService {
         return await this.assets.getSprint(sprintId, suiteId);
     }
 
-    async getSprints(suiteId) {
-        return await this.assets.getSprints(suiteId, { excludeStatus: ['archived', 'deleted'] });
+    async getSprints(suiteId, options = {}) {
+        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        return await this.assets.getSprints(suiteId, defaultOptions);
     }
 
     async getAllSprints(suiteId, includeStatus = ['active', 'archived', 'deleted']) {
         return await this.assets.getSprints(suiteId, { includeStatus });
     }
 
-    subscribeToSprints(suiteId, onSuccess, onError) {
-        return this.assets.subscribeToSprints(suiteId, onSuccess, onError);
+    subscribeToSprints(suiteId, callback, errorCallback = null) {
+        return this.assets.subscribeToSprints(suiteId, callback, errorCallback);
     }
 
     // ========================

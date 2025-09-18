@@ -1,7 +1,7 @@
 // lib/firebase/recordingService.js - Updated for fixed YouTube service
 import { uploadBytes, getDownloadURL, ref as storageRef, deleteObject } from 'firebase/storage';
 import { storage } from '../config/firebase';
-import youTubeService from '../services/YoutubeService';
+import YouTubeService from '../lib/YoutubeService';
 
 class RecordingService {
     constructor() {
@@ -51,7 +51,7 @@ class RecordingService {
     // Check YouTube service availability
     async checkYouTubeAvailability() {
         try {
-            const status = youTubeService.getStatus();
+            const status = YouTubeService.getStatus();
             if (!status.hasCredentials) {
                 console.warn('YouTube credentials not configured');
                 return false;
@@ -429,3 +429,5 @@ class RecordingService {
         };
     }
 }
+
+export default new RecordingService();
