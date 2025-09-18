@@ -1,3 +1,4 @@
+// Complete FirestoreService.js - Full Implementation with Recording Integration
 import { BaseFirestoreService } from './firestoreService';
 import { UserService } from './userService';
 import { OrganizationService } from './OrganizationService';
@@ -22,18 +23,58 @@ class FirestoreService extends BaseFirestoreService {
         // Initialize ArchiveTrashService
         this.archiveTrash = new ArchiveTrashService(this.testSuite);
 
+        // Complete recordings interface - delegates to enhanced AssetService
         this.recordings = {
-            createRecording: (recordingData) => {
-                return this.assets.createRecording(recordingData.suiteId, recordingData);
+            // Main recording operations
+            createRecording: async (suiteId, recordingData, sprintId = null) => {
+                return await this.assets.createRecording(suiteId, recordingData, sprintId);
             },
-            linkRecordingToBug: async (recordingId, bugId) => {
-                return { success: true, data: { recordingId, bugId } };
+            
+            // Upload and create in one operation
+            uploadAndCreateRecording: async (suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) => {
+                return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
             },
-            subscribeToRecordings: (suiteId, callback, errorCallback) => {
-                return this.assets.subscribeToRecordings(suiteId, callback, errorCallback);
+            
+            // Get operations
+            getRecordings: async (suiteId, sprintId = null, options = {}) => {
+                return await this.assets.getRecordings(suiteId, sprintId, options);
+            },
+            
+            getRecording: async (recordingId, suiteId, sprintId = null) => {
+                return await this.assets.getRecording(recordingId, suiteId, sprintId);
+            },
+            
+            // Update operation
+            updateRecording: async (recordingId, updates, suiteId, sprintId = null) => {
+                return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
+            },
+            
+            // Delete operation (soft delete)
+            deleteRecording: async (recordingId, suiteId, sprintId = null) => {
+                return await this.deleteRecording(recordingId, suiteId, sprintId);
+            },
+            
+            // Subscribe to real-time updates
+            subscribeToRecordings: (suiteId, callback, errorCallback, sprintId = null) => {
+                return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
+            },
+            
+            // Utility operations
+            isYouTubeAvailable: async () => {
+                return await this.assets.isYouTubeAvailable();
+            },
+            
+            getPlaybackUrl: (recordingData) => {
+                return this.assets.recordingService.getPlaybackUrl(recordingData);
+            },
+            
+            // Link recording to bug
+            linkRecordingToBug: async (recordingId, bugId, suiteId, sprintId = null) => {
+                return await this.linkRecordingToBug(recordingId, bugId, suiteId, sprintId);
             }
         };
 
+        // Reports interface
         this.reports = {
             getReports: async (orgId) => {
                 try {
@@ -322,7 +363,6 @@ class FirestoreService extends BaseFirestoreService {
         const preparedSuiteData = {
             ...suiteData,
             name: suiteData.name.trim(),
-            // Ensure these fields are set for TestSuiteService
             access_control: {
                 ownerType: suiteData.ownerType,
                 ownerId: suiteData.ownerId,
@@ -379,7 +419,6 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     async getBugs(suiteId, sprintId = null) {
-        // Only return active (non-archived, non-deleted) bugs by default
         return await this.bugs.getBugs(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
     }
 
@@ -459,41 +498,68 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.bulkLinkBugsToTestCases(suiteId, testCaseIds, bugIds, sprintId);
     }
 
+    // Link recording to bug
+    async linkRecordingToBug(recordingId, bugId, suiteId, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions to link recording' } };
+        }
+
+        // Update recording with bug link
+        const recordingUpdate = await this.assets.updateRecording(recordingId, {
+            linkedBugs: [bugId],
+            lastLinkedAt: new Date()
+        }, suiteId, sprintId);
+
+        if (recordingUpdate.success) {
+            // Update bug with recording link
+            const bugUpdate = await this.assets.updateBug(bugId, {
+                linkedRecordings: [recordingId],
+                lastLinkedAt: new Date()
+            }, suiteId, sprintId);
+
+            if (bugUpdate.success) {
+                return { success: true, data: { recordingId, bugId } };
+            } else {
+                // Rollback recording update if bug update fails
+                await this.assets.updateRecording(recordingId, {
+                    linkedBugs: [],
+                    lastLinkedAt: null
+                }, suiteId, sprintId);
+                return bugUpdate;
+            }
+        }
+
+        return recordingUpdate;
+    }
+
     // ========================
     // TEST CASE METHODS (delegated to AssetService)
     // ========================
 
     async createTestCase(suiteId, testCaseData, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.createTestCase(suiteId, testCaseData, sprintId);
+        return await this.assets.createTestCase(suiteId, testCaseData, sprintId);
     }
 
     async updateTestCase(testCaseId, updates, suiteId = null, sprintId = null) {
-        if (suiteId) {
-            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-            if (!accessCheck.success) return accessCheck;
-        }
-        return this.assets.updateTestCase(testCaseId, updates, suiteId, sprintId);
+        return await this.assets.updateTestCase(testCaseId, updates, suiteId, sprintId);
     }
 
     async getTestCase(testCaseId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getTestCase(testCaseId, suiteId, sprintId);
+        return await this.assets.getTestCase(testCaseId, suiteId, sprintId);
     }
 
     async getTestCases(suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        // Only return active (non-archived, non-deleted) test cases by default
-        return this.assets.getTestCases(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
+        return await this.assets.getTestCases(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
     }
 
     async getAllTestCases(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getTestCases(suiteId, sprintId, { includeStatus });
+        return await this.assets.getTestCases(suiteId, sprintId, { includeStatus });
     }
 
     subscribeToTestCases(suiteId, onSuccess, onError) {
@@ -505,36 +571,23 @@ class FirestoreService extends BaseFirestoreService {
     // ========================
 
     async createRecording(suiteId, recordingData, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.createRecording(suiteId, recordingData, sprintId);
+        return await this.assets.createRecording(suiteId, recordingData, sprintId);
     }
 
     async updateRecording(recordingId, updates, suiteId = null, sprintId = null) {
-        if (suiteId) {
-            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-            if (!accessCheck.success) return accessCheck;
-        }
-        return this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
+        return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
     }
 
     async getRecording(recordingId, suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getRecording(recordingId, suiteId, sprintId);
+        return await this.assets.getRecording(recordingId, suiteId, sprintId);
     }
 
     async getRecordings(suiteId, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        // Only return active (non-archived, non-deleted) recordings by default
-        return this.assets.getRecordings(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
+        return await this.assets.getRecordings(suiteId, sprintId, { excludeStatus: ['archived', 'deleted'] });
     }
 
     async getAllRecordings(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getRecordings(suiteId, sprintId, { includeStatus });
+        return await this.assets.getRecordings(suiteId, sprintId, { includeStatus });
     }
 
     subscribeToRecordings(suiteId, onSuccess, onError) {
@@ -546,36 +599,23 @@ class FirestoreService extends BaseFirestoreService {
     // ========================
 
     async createSprint(suiteId, sprintData) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.createSprint(suiteId, sprintData);
+        return await this.assets.createSprint(suiteId, sprintData);
     }
 
     async updateSprint(sprintId, updates, suiteId = null) {
-        if (suiteId) {
-            const accessCheck = await this.validateSuiteAccess(suiteId, 'write');
-            if (!accessCheck.success) return accessCheck;
-        }
-        return this.assets.updateSprint(sprintId, updates, suiteId);
+        return await this.assets.updateSprint(sprintId, updates, suiteId);
     }
 
     async getSprint(sprintId, suiteId) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getSprint(sprintId, suiteId);
+        return await this.assets.getSprint(sprintId, suiteId);
     }
 
     async getSprints(suiteId) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        // Only return active (non-archived, non-deleted) sprints by default
-        return this.assets.getSprints(suiteId, { excludeStatus: ['archived', 'deleted'] });
+        return await this.assets.getSprints(suiteId, { excludeStatus: ['archived', 'deleted'] });
     }
 
     async getAllSprints(suiteId, includeStatus = ['active', 'archived', 'deleted']) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-        return this.assets.getSprints(suiteId, { includeStatus });
+        return await this.assets.getSprints(suiteId, { includeStatus });
     }
 
     subscribeToSprints(suiteId, onSuccess, onError) {
@@ -587,162 +627,101 @@ class FirestoreService extends BaseFirestoreService {
     // ========================
 
     async batchLinkTestCasesToBug(bugId, testCaseIds) {
-        return this.assets.batchLinkTestCasesToBug(bugId, testCaseIds);
+        return await this.assets.batchLinkTestCasesToBug(bugId, testCaseIds);
     }
 
     async batchUnlinkTestCaseFromBug(bugId, testCaseId) {
-        return this.assets.batchUnlinkTestCaseFromBug(bugId, testCaseId);
+        return await this.assets.batchUnlinkTestCaseFromBug(bugId, testCaseId);
     }
 
     async batchLinkBugsToTestCase(testCaseId, bugIds) {
-        return this.assets.batchLinkBugsToTestCase(testCaseId, bugIds);
+        return await this.assets.batchLinkBugsToTestCase(testCaseId, bugIds);
     }
 
     async batchUnlinkBugFromTestCase(testCaseId, bugId) {
-        return this.assets.batchUnlinkBugFromTestCase(testCaseId, bugId);
+        return await this.assets.batchUnlinkBugFromTestCase(testCaseId, bugId);
     }
 
     async addTestCasesToSprint(sprintId, testCaseIds) {
-        return this.assets.addTestCasesToSprint(sprintId, testCaseIds);
+        return await this.assets.addTestCasesToSprint(sprintId, testCaseIds);
     }
 
     async addBugsToSprint(sprintId, bugIds) {
-        return this.assets.addBugsToSprint(sprintId, bugIds);
+        return await this.assets.addBugsToSprint(sprintId, bugIds);
     }
 
     // ========================
-    // FIXED DELETE OPERATIONS - Using Direct Asset Updates
+    // DELETE OPERATIONS (soft delete by default)
     // ========================
 
     async deleteTestCase(testCaseId, suiteId, sprintId = null) {
-        console.log('FirestoreService.deleteTestCase called:', { testCaseId, suiteId, sprintId });
-        
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete test case' } };
-        }
-
-        // Use AssetService updateTestCase method directly with delete status
         return await this.assets.updateTestCase(testCaseId, {
             status: 'deleted',
             deleted_at: new Date(),
             deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             delete_reason: 'User deletion'
         }, suiteId, sprintId);
     }
 
     async deleteBug(bugId, suiteId, sprintId = null) {
-        console.log('FirestoreService.deleteBug called:', { bugId, suiteId, sprintId });
-        
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete bug' } };
-        }
-
-        // Use AssetService updateBug method directly with delete status
         return await this.assets.updateBug(bugId, {
             status: 'deleted',
             deleted_at: new Date(),
             deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             delete_reason: 'User deletion'
         }, suiteId, sprintId);
     }
 
     async deleteRecording(recordingId, suiteId, sprintId = null) {
-        console.log('FirestoreService.deleteRecording called:', { recordingId, suiteId, sprintId });
-        
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete recording' } };
-        }
-
-        // Use AssetService updateRecording method directly with delete status
         return await this.assets.updateRecording(recordingId, {
             status: 'deleted',
             deleted_at: new Date(),
             deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             delete_reason: 'User deletion'
         }, suiteId, sprintId);
     }
 
     async deleteSprint(sprintId, suiteId) {
-        console.log('FirestoreService.deleteSprint called:', { sprintId, suiteId });
-        
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete sprint' } };
-        }
-
-        // Use AssetService updateSprint method directly with delete status
         return await this.assets.updateSprint(sprintId, {
             status: 'deleted',
             deleted_at: new Date(),
             deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             delete_reason: 'User deletion'
         }, suiteId);
     }
 
-    // FIXED: Delete recommendation using direct asset update
-    async deleteRecommendation(recommendationId, suiteId, sprintId = null) {
-        console.log('FirestoreService.deleteRecommendation called:', { recommendationId, suiteId, sprintId });
-        
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to delete recommendation' } };
-        }
-
-        // Use AssetService updateRecommendation method directly with delete status
-        return await this.assets.updateRecommendation(recommendationId, {
-            status: 'deleted',
-            deleted_at: new Date(),
-            deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-            delete_reason: 'User deletion'
-        }, suiteId, sprintId);
-    }
-
     // ========================
-    // FIXED ARCHIVE OPERATIONS - Using Direct Asset Updates
+    // ARCHIVE OPERATIONS
     // ========================
 
     async archiveTestCase(suiteId, testCaseId, sprintId = null, reason = null) {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to archive test case' } };
         }
 
         return await this.assets.updateTestCase(testCaseId, {
@@ -759,11 +738,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to archive bug' } };
-        }
-
         return await this.assets.updateBug(bugId, {
             status: 'archived',
             archived_at: new Date(),
@@ -776,11 +750,6 @@ class FirestoreService extends BaseFirestoreService {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to archive recording' } };
         }
 
         return await this.assets.updateRecording(recordingId, {
@@ -797,11 +766,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to archive sprint' } };
-        }
-
         return await this.assets.updateSprint(sprintId, {
             status: 'archived',
             archived_at: new Date(),
@@ -814,11 +778,6 @@ class FirestoreService extends BaseFirestoreService {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to archive recommendation' } };
         }
 
         return await this.assets.updateRecommendation(recommendationId, {
@@ -839,11 +798,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to unarchive test case' } };
-        }
-
         return await this.assets.updateTestCase(testCaseId, {
             status: 'active',
             unarchived_at: new Date(),
@@ -858,11 +812,6 @@ class FirestoreService extends BaseFirestoreService {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to unarchive bug' } };
         }
 
         return await this.assets.updateBug(bugId, {
@@ -881,11 +830,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to unarchive recording' } };
-        }
-
         return await this.assets.updateRecording(recordingId, {
             status: 'active',
             unarchived_at: new Date(),
@@ -902,11 +846,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to unarchive sprint' } };
-        }
-
         return await this.assets.updateSprint(sprintId, {
             status: 'active',
             unarchived_at: new Date(),
@@ -921,11 +860,6 @@ class FirestoreService extends BaseFirestoreService {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to unarchive recommendation' } };
         }
 
         return await this.assets.updateRecommendation(recommendationId, {
@@ -948,11 +882,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore test case' } };
-        }
-
         return await this.assets.updateTestCase(testCaseId, {
             status: 'active',
             restored_at: new Date(),
@@ -968,11 +897,6 @@ class FirestoreService extends BaseFirestoreService {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore bug' } };
         }
 
         return await this.assets.updateBug(bugId, {
@@ -992,11 +916,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore recording' } };
-        }
-
         return await this.assets.updateRecording(recordingId, {
             status: 'active',
             restored_at: new Date(),
@@ -1014,11 +933,6 @@ class FirestoreService extends BaseFirestoreService {
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore sprint' } };
-        }
-
         return await this.assets.updateSprint(sprintId, {
             status: 'active',
             restored_at: new Date(),
@@ -1034,11 +948,6 @@ class FirestoreService extends BaseFirestoreService {
         const userId = this.getCurrentUserId();
         if (!userId) {
             return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to restore recommendation' } };
         }
 
         return await this.assets.updateRecommendation(recommendationId, {
@@ -1101,44 +1010,38 @@ class FirestoreService extends BaseFirestoreService {
     // ========================
 
     async getArchivedItems(suiteId, assetType, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-
         const options = { includeStatus: ['archived'] };
         
         switch (assetType) {
             case 'testCases':
-                return await this.assets.getSuiteAssets(suiteId, 'testCases', sprintId, options);
+                return await this.assets.getTestCases(suiteId, sprintId, options);
             case 'bugs':
-                return await this.assets.getSuiteAssets(suiteId, 'bugs', sprintId, options);
+                return await this.assets.getBugs(suiteId, sprintId, options);
             case 'recordings':
-                return await this.assets.getSuiteAssets(suiteId, 'recordings', sprintId, options);
+                return await this.assets.getRecordings(suiteId, sprintId, options);
             case 'sprints':
-                return await this.assets.getSuiteAssets(suiteId, 'sprints', null, options);
+                return await this.assets.getSprints(suiteId, options);
             case 'recommendations':
-                return await this.assets.getSuiteAssets(suiteId, 'recommendations', sprintId, options);
+                return await this.assets.getRecommendations(suiteId, sprintId, options);
             default:
                 return { success: false, error: { message: `Unknown asset type: ${assetType}` } };
         }
     }
 
     async getTrashedItems(suiteId, assetType, sprintId = null) {
-        const accessCheck = await this.validateSuiteAccess(suiteId, 'read');
-        if (!accessCheck.success) return accessCheck;
-
         const options = { includeStatus: ['deleted'] };
         
         switch (assetType) {
             case 'testCases':
-                return await this.assets.getSuiteAssets(suiteId, 'testCases', sprintId, options);
+                return await this.assets.getTestCases(suiteId, sprintId, options);
             case 'bugs':
-                return await this.assets.getSuiteAssets(suiteId, 'bugs', sprintId, options);
+                return await this.assets.getBugs(suiteId, sprintId, options);
             case 'recordings':
-                return await this.assets.getSuiteAssets(suiteId, 'recordings', sprintId, options);
+                return await this.assets.getRecordings(suiteId, sprintId, options);
             case 'sprints':
-                return await this.assets.getSuiteAssets(suiteId, 'sprints', null, options);
+                return await this.assets.getSprints(suiteId, options);
             case 'recommendations':
-                return await this.assets.getSuiteAssets(suiteId, 'recommendations', sprintId, options);
+                return await this.assets.getRecommendations(suiteId, sprintId, options);
             default:
                 return { success: false, error: { message: `Unknown asset type: ${assetType}` } };
         }
