@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Link, Save, X } from 'lucide-react';
+import { Link, Save } from 'lucide-react';
 
 const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, recordingData }) => {
   const [saving, setSaving] = useState(false);
@@ -19,6 +19,34 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
     };
   };
 
+  const generateShareLink = () => {
+    if (shareLink) {
+      return shareLink;
+    }
+    
+    // Generate a shareable link even without saving
+    if (previewUrl) {
+      const temporaryShareLink = `${window.location.origin}/recordings/preview/${Date.now()}`;
+      setShareLink(temporaryShareLink);
+      return temporaryShareLink;
+    }
+    
+    return null;
+  };
+
+  const copyShareLink = () => {
+    const linkToShare = generateShareLink();
+    if (linkToShare) {
+      navigator.clipboard.writeText(linkToShare).then(() => {
+        alert('Recording link copied to clipboard!');
+      }).catch(() => {
+        alert(`Failed to copy link. URL: ${linkToShare}`);
+      });
+    } else {
+      alert('No recording available to share.');
+    }
+  };
+
   const saveRecording = async () => {
     if (!previewUrl) {
       alert('No recording to save.');
@@ -28,6 +56,7 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
       alert('Please select a test suite first.');
       return;
     }
+    
     setSaving(true);
     try {
       const blob = await (await fetch(previewUrl)).blob();
@@ -36,9 +65,11 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
         description: `Screen recording for test suite: ${activeSuite.name}`,
         privacy: 'private'
       });
+      
       if (!uploadResult.success) {
         throw new Error('Failed to upload video');
       }
+      
       const recordingDataToSave = {
         title: `Recording - ${new Date().toLocaleDateString()}`,
         videoUrl: uploadResult.data.url,
@@ -48,10 +79,13 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
         suiteId: activeSuite.id,
         status: 'active'
       };
+      
       const result = await firestoreService.createRecording(activeSuite.id, recordingDataToSave);
+      
       if (result.success) {
-        const recordingShareLink = `${window.location.origin}/recordings/${result.data.id}`;
-        setShareLink(recordingShareLink);
+        // Update share link to the permanent saved recording
+        const permanentShareLink = `${window.location.origin}/recordings/${result.data.id}`;
+        setShareLink(permanentShareLink);
         alert('Recording saved successfully!');
         setTimeout(() => onClose(), 1500);
       } else {
@@ -65,41 +99,30 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
     }
   };
 
-  const copyShareLink = () => {
-    if (shareLink) {
-      navigator.clipboard.writeText(shareLink).then(() => {
-        alert('Recording link copied to clipboard!');
-      }).catch(() => {
-        alert(`Failed to copy link. URL: ${shareLink}`);
-      });
-    }
-  };
-
   return (
-    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-      <button
-        onClick={copyShareLink}
-        disabled={!shareLink}
-        className="flex items-center space-x-2 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
-      >
-        <Link className="w-4 h-4" />
-        <span>Copy Share Link</span>
-      </button>
-      <button
-        onClick={saveRecording}
-        disabled={saving}
-        className="flex items-center space-x-2 px-3 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50"
-      >
-        <Save className="w-4 h-4" />
-        <span>Save & Close</span>
-      </button>
-      <button
-        onClick={onClose}
-        className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-      >
-        <X className="w-4 h-4" />
-        <span>Discard</span>
-      </button>
+    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+      <div className="text-sm text-gray-600 dark:text-gray-400">
+        {shareLink ? 'Recording link ready to share' : 'Click share to generate link'}
+      </div>
+      <div className="flex space-x-2">
+        <button
+          onClick={copyShareLink}
+          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          title="Generate and copy shareable link"
+        >
+          <Link className="w-4 h-4" />
+          <span>Share</span>
+        </button>
+        <button
+          onClick={saveRecording}
+          disabled={saving}
+          className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+          title="Save recording permanently"
+        >
+          <Save className="w-4 h-4" />
+          <span>{saving ? 'Saving...' : 'Save'}</span>
+        </button>
+      </div>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Video, Play, Pause, Square, Mic, MicOff } from 'lucide-react';
 import { useRecordingStore } from './ScreenRecorderButton';
 
@@ -12,17 +12,6 @@ const formatTime = (s) => {
 
 const RecorderControls = ({ disabled = false, className = "", variant = "ghost", isPrimary = false }) => {
   const { state, actions } = useRecordingStore();
-  const [micMuted, setMicMuted] = useState(false);
-
-  const toggleMic = () => {
-    if (state.stream) {
-      const audioTracks = state.stream.getAudioTracks();
-      audioTracks.forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setMicMuted(!micMuted);
-    }
-  };
 
   let buttonClass = `inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className}`;
   if (variant === "contained") {
@@ -41,22 +30,29 @@ const RecorderControls = ({ disabled = false, className = "", variant = "ghost",
         </div>
         <button
           onClick={state.isPaused ? actions.resumeRecording : actions.pauseRecording}
-          className="p-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded"
+          className="p-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors"
           disabled={disabled}
+          title={state.isPaused ? "Resume Recording" : "Pause Recording"}
         >
           {state.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
         </button>
         <button
-          onClick={toggleMic}
-          className={`p-1.5 ${micMuted ? 'bg-gray-600 hover:bg-gray-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded`}
+          onClick={actions.toggleMute}
+          className={`p-1.5 transition-colors text-white rounded ${
+            state.micMuted 
+              ? 'bg-gray-600 hover:bg-gray-700' 
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
           disabled={disabled}
+          title={state.micMuted ? "Unmute Microphone" : "Mute Microphone"}
         >
-          {micMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          {state.micMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>
         <button
           onClick={actions.stopRecording}
-          className="p-1.5 bg-red-600 text-white hover:bg-red-700 rounded"
+          className="p-1.5 bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
           disabled={disabled}
+          title="Stop Recording"
         >
           <Square className="w-4 h-4" />
         </button>
@@ -69,6 +65,7 @@ const RecorderControls = ({ disabled = false, className = "", variant = "ghost",
       onClick={actions.startRecording}
       disabled={disabled}
       className={buttonClass}
+      title="Start Screen Recording"
     >
       {variant === "contained" ? <Video className="w-4 h-4 mr-2" /> : <Video className="w-4 h-4 mr-2" />}
       <span className={variant === "ghost" ? "hidden lg:inline" : ""}>
