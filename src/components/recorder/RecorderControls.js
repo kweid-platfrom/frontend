@@ -24,13 +24,13 @@ const RecorderControls = ({ disabled = false, className = "", variant = "ghost",
     return (
       <div className="flex items-center space-x-2">
         <div className="flex items-center space-x-2 text-red-600">
-          <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
+          <div className="w-3 h-3 bg-primary rounded-full animate-pulse"></div>
           <span className="font-mono text-sm">{formatTime(state.recordingTime)}</span>
           {state.isPaused && <span className="text-yellow-600 text-xs">(Paused)</span>}
         </div>
         <button
           onClick={state.isPaused ? actions.resumeRecording : actions.pauseRecording}
-          className="p-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors"
+          className="p-1.5 bg-orange-300 hover:bg-orange-400 text-white rounded transition-colors"
           disabled={disabled}
           title={state.isPaused ? "Resume Recording" : "Pause Recording"}
         >
@@ -41,7 +41,7 @@ const RecorderControls = ({ disabled = false, className = "", variant = "ghost",
           className={`p-1.5 transition-colors text-white rounded ${
             state.micMuted 
               ? 'bg-gray-600 hover:bg-gray-700' 
-              : 'bg-blue-600 hover:bg-blue-700'
+              : 'bg-orange-500 hover:bg-orange-600'
           }`}
           disabled={disabled}
           title={state.micMuted ? "Unmute Microphone" : "Mute Microphone"}

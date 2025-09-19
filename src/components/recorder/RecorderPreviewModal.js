@@ -10,7 +10,6 @@ const RecorderPreviewModal = ({
   activeSuite,
   firestoreService,
   onClose,
-  existingRecording,
   previewUrl,
   duration,
   consoleLogs = [],

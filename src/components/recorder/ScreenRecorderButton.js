@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Video, Plus, Pause, Play, Square } from 'lucide-react';
 import RecorderControls from './RecorderControls';
 import RecorderPreviewModal from './RecorderPreviewModal';
 import { useApp } from '../../context/AppProvider';

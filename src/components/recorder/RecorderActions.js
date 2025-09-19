@@ -107,7 +107,7 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
       <div className="flex space-x-2">
         <button
           onClick={copyShareLink}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          className="flex items-center space-x-2 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
           title="Generate and copy shareable link"
         >
           <Link className="w-4 h-4" />
@@ -116,7 +116,7 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
         <button
           onClick={saveRecording}
           disabled={saving}
-          className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+          className="flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 transition-colors"
           title="Save recording permanently"
         >
           <Save className="w-4 h-4" />

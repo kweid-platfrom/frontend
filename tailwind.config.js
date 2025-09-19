@@ -84,6 +84,18 @@ module.exports = {
         white: 'rgb(var(--color-background))',
         black: 'rgb(var(--color-foreground))',
       },
+       orange: {
+          50:  "#FFF5EC",
+          100: "#FFE5D0",
+          200: "#FFC299",
+          300: "#FFA066",
+          400: "#FF8B30", // your default
+          500: "#F5761F",
+          600: "#DB660F",
+          700: "#B14F0A",
+          800: "#803906",
+          900: "#4D2202",
+       },
       boxShadow: {
         'theme-sm': 'var(--shadow-sm)',
         'theme': 'var(--shadow)',

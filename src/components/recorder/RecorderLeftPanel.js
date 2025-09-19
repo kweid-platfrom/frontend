@@ -132,7 +132,7 @@ const RecorderLeftPanel = ({
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             placeholder="Add a comment at current time..."
-            className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-2 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
             onKeyPress={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -143,7 +143,7 @@ const RecorderLeftPanel = ({
           <button
             onClick={() => addCommentAtCurrentTime(commentText)}
             disabled={!commentText.trim()}
-            className="px-3 py-1 text-xs bg-blue-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors whitespace-nowrap"
+            className="px-3 py-1 text-xs bg-orange-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-colors whitespace-nowrap"
           >
             @ {formatTime(currentVideoTime)}
           </button>
@@ -165,7 +165,7 @@ const RecorderLeftPanel = ({
                   <div className="flex items-center justify-between mb-1">
                     <button
                       onClick={() => seekTo(comment.time)}
-                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-xs hover:underline"
+                      className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-xs hover:underline"
                     >
                       [{comment.timeStr}]
                     </button>
@@ -193,7 +193,7 @@ const RecorderLeftPanel = ({
                 onClick={() => setActiveTab(id)}
                 className={`px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap flex items-center space-x-1 transition-colors ${
                   activeTab === id
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-900'
+                    ? 'border-primary text-primary dark:text-orange-400 bg-white dark:bg-gray-900'
                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
@@ -202,7 +202,7 @@ const RecorderLeftPanel = ({
                 {count > 0 && (
                   <span className={`px-1 py-0.5 text-[10px] rounded-full ${
                     activeTab === id 
-                      ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400' 
+                      ? 'bg-blue-100 text-primary dark:bg-primary dark:text-white' 
                       : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400'
                   }`}>
                     {count}
@@ -234,7 +234,7 @@ const RecorderLeftPanel = ({
                         <span className={`font-medium text-[10px] px-2 py-0.5 rounded ${
                           log.level === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
                           log.level === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                          'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                          'bg-teal-100 text-primary dark:bg-primary dark:text-white'
                         }`}>
                           {log.level.toUpperCase()}
                         </span>
@@ -308,7 +308,7 @@ const RecorderLeftPanel = ({
                     className={`p-3 rounded border-l-4 ${
                       issue.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
                       issue.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' :
-                      'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      'border-primary bg-teal-50 dark:bg-teal-900/20'
                     }`}
                   >
                     <div className="flex items-start justify-between">
@@ -316,8 +316,8 @@ const RecorderLeftPanel = ({
                         <div className="flex items-center space-x-2 mb-1">
                           <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${
                             issue.severity === 'high' ? 'text-red-600' :
-                            issue.severity === 'medium' ? 'text-yellow-600' :
-                            'text-blue-600'
+                            issue.severity === 'medium' ? 'text-orange-500' :
+                            'text-primary'
                           }`} />
                           <span className="text-sm font-medium capitalize truncate">
                             {issue.type.replace('_', ' ')}
@@ -325,7 +325,7 @@ const RecorderLeftPanel = ({
                           <span className={`text-[10px] px-2 py-1 rounded uppercase font-medium ${
                             issue.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
                             issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                            'bg-blue-100 text-primary dark:bg-primary/60 dark:text-white'
                           }`}>
                             {issue.severity}
                           </span>
@@ -371,7 +371,7 @@ const RecorderLeftPanel = ({
                         <div className="flex items-center justify-between mb-2">
                           <button
                             onClick={() => seekTo(comment.time)}
-                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-sm hover:underline"
+                            className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-sm hover:underline"
                           >
                             [{comment.timeStr}]
                           </button>
