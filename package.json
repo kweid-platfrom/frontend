@@ -39,6 +39,7 @@
     "firestore": "^1.1.6",
     "framer-motion": "^12.23.6",
     "googleapis": "^146.0.0",
+    "idb": "^8.0.3",
     "jspdf": "^3.0.1",
     "keyword-extractor": "^0.0.28",
     "lucide-react": "^0.487.0",

@@ -1,7 +1,11 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { Video, Plus, Pause, Play, Square } from 'lucide-react';
-import EnhancedScreenRecorder from './EnhancedScreenRecorder';
+import RecorderControls from './RecorderControls';
+import RecorderPreviewModal from './RecorderPreviewModal';
 import { useApp } from '../../context/AppProvider';
+import { openDB } from 'idb';
 
 const formatTime = (s) => {
   const sec = Math.floor(s % 60).toString().padStart(2, '0');
@@ -9,7 +13,7 @@ const formatTime = (s) => {
   return `${min}:${sec}`;
 };
 
-const attachConsoleCapture = () => {
+const attachConsoleCapture = (setState) => {
   const originalMethods = {};
   ["log", "error", "warn", "info"].forEach((level) => {
     originalMethods[level] = console[level];
@@ -21,14 +25,10 @@ const attachConsoleCapture = () => {
         time: new Date().toISOString(),
         timestamp: Date.now()
       };
-      
-      recordingStore.setState({
-        consoleLogs: [...recordingStore.state.consoleLogs, logEntry]
-      });
+      setState(prev => ({ consoleLogs: [...prev.consoleLogs, logEntry] }));
       originalMethods[level].apply(console, args);
     };
   });
-  
   return () => {
     Object.keys(originalMethods).forEach(level => {
       console[level] = originalMethods[level];
@@ -36,16 +36,14 @@ const attachConsoleCapture = () => {
   };
 };
 
-const attachNetworkCapture = () => {
+const attachNetworkCapture = (setState) => {
   const originalFetch = window.fetch;
   window.fetch = async (...args) => {
     const start = Date.now();
     const requestTime = new Date().toISOString();
-    
     try {
       const response = await originalFetch(...args);
       const end = Date.now();
-      
       const logEntry = {
         id: `req_${Date.now()}_${Math.random()}`,
         url: args[0],
@@ -56,10 +54,7 @@ const attachNetworkCapture = () => {
         headers: Object.fromEntries(response.headers.entries ? [...response.headers.entries()] : []),
         responseText: response.status < 400 ? 'Success' : 'Error'
       };
-      
-      recordingStore.setState({
-        networkLogs: [...recordingStore.state.networkLogs, logEntry]
-      });
+      setState(prev => ({ networkLogs: [...prev.networkLogs, logEntry] }));
       return response;
     } catch (err) {
       const logEntry = {
@@ -71,29 +66,21 @@ const attachNetworkCapture = () => {
         duration: Date.now() - start,
         error: err.message
       };
-      
-      recordingStore.setState({
-        networkLogs: [...recordingStore.state.networkLogs, logEntry]
-      });
+      setState(prev => ({ networkLogs: [...prev.networkLogs, logEntry] }));
       throw err;
     }
   };
-
-  // XHR capture
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
-  
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this.__method = method;
     this.__url = url;
     this.__startTime = Date.now();
     return originalOpen.apply(this, [method, url, ...rest]);
   };
-  
   XMLHttpRequest.prototype.send = function (body) {
     const requestTime = new Date().toISOString();
-    
-    this.addEventListener("loadend", function () {
+    this.addEventListener("loadend", () => {
       const logEntry = {
         id: `xhr_${Date.now()}_${Math.random()}`,
         url: this.__url,
@@ -104,15 +91,10 @@ const attachNetworkCapture = () => {
         headers: {},
         responseText: this.responseText?.substring(0, 200) + (this.responseText?.length > 200 ? '...' : '')
       };
-      
-      recordingStore.setState({
-        networkLogs: [...recordingStore.state.networkLogs, logEntry]
-      });
+      setState(prev => ({ networkLogs: [...prev.networkLogs, logEntry] }));
     });
-    
     return originalSend.apply(this, [body]);
   };
-
   return () => {
     window.fetch = originalFetch;
     XMLHttpRequest.prototype.open = originalOpen;
@@ -145,6 +127,14 @@ const recordingStore = {
   setState: function(updates) {
     this.state = {...this.state, ...updates};
     this.listeners.forEach(listener => listener(this.state));
+    // Save to IndexedDB
+    openDB('recordingStore', 1, {
+      upgrade(db) {
+        db.createObjectStore('state');
+      },
+    }).then(db => {
+      db.put('state', 'recording', this.state);
+    });
   },
   subscribe: function(listener) {
     this.listeners.push(listener);
@@ -155,6 +145,8 @@ const recordingStore = {
   actions: {
     startRecording: async () => {
       try {
+        // Request microphone permission
+        await navigator.mediaDevices.getUserMedia({ audio: true });
         recordingStore.setState({
           chunks: [],
           consoleLogs: [],
@@ -164,36 +156,27 @@ const recordingStore = {
           recordingTime: 0,
           isPaused: false,
         });
-
-        const cleanupConsole = attachConsoleCapture();
-        recordingStore.setState({cleanupConsole});
-
-        const cleanupNetwork = attachNetworkCapture();
-        recordingStore.setState({cleanupNetwork});
-
+        const cleanupConsole = attachConsoleCapture(recordingStore.setState);
+        recordingStore.setState({ cleanupConsole });
+        const cleanupNetwork = attachNetworkCapture(recordingStore.setState);
+        recordingStore.setState({ cleanupNetwork });
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: { cursor: "always" },
           audio: true,
         });
-
-        recordingStore.setState({stream});
-
-        // Start countdown
+        recordingStore.setState({ stream });
         let count = 3;
-        recordingStore.setState({showCountdown: count});
+        recordingStore.setState({ showCountdown: count });
         const countdownInterval = setInterval(() => {
           count--;
           if (count > 0) {
-            recordingStore.setState({showCountdown: count});
+            recordingStore.setState({ showCountdown: count });
           } else {
             clearInterval(countdownInterval);
-            recordingStore.setState({showCountdown: 0, countdownInterval: null});
-
-            // Start recorder
+            recordingStore.setState({ showCountdown: 0, countdownInterval: null });
             const mediaRecorder = new MediaRecorder(stream, {
               mimeType: "video/webm;codecs=vp9",
             });
-
             mediaRecorder.ondataavailable = (ev) => {
               if (ev.data && ev.data.size > 0) {
                 recordingStore.setState({
@@ -201,22 +184,17 @@ const recordingStore = {
                 });
               }
             };
-
             mediaRecorder.onstop = () => {
               const blob = new Blob(recordingStore.state.chunks, { type: "video/webm" });
               const url = URL.createObjectURL(blob);
-              recordingStore.setState({previewUrl: url, chunks: []}); // Clear chunks to save memory
-
+              recordingStore.setState({ previewUrl: url, chunks: [] });
               const tempVideo = document.createElement("video");
               tempVideo.src = url;
               tempVideo.onloadedmetadata = () => {
-                recordingStore.setState({duration: formatTime(tempVideo.duration)});
+                recordingStore.setState({ duration: formatTime(tempVideo.duration) });
               };
-
               recordingStore.state.cleanupConsole();
               recordingStore.state.cleanupNetwork();
-
-              // Compute issues
               const issues = [];
               recordingStore.state.consoleLogs.forEach(log => {
                 if (log.level === 'error') {
@@ -243,23 +221,19 @@ const recordingStore = {
                   });
                 }
               });
-              recordingStore.setState({detectedIssues: issues});
-
-              recordingStore.setState({showPreview: true});
+              recordingStore.setState({ detectedIssues: issues, showPreview: true });
             };
-
             mediaRecorder.start();
-            recordingStore.setState({recorder: mediaRecorder, isRecording: true});
-
+            recordingStore.setState({ recorder: mediaRecorder, isRecording: true });
             const timerInterval = setInterval(() => {
               if (!recordingStore.state.isPaused) {
-                recordingStore.setState({recordingTime: recordingStore.state.recordingTime + 1});
+                recordingStore.setState({ recordingTime: recordingStore.state.recordingTime + 1 });
               }
             }, 1000);
-            recordingStore.setState({timerInterval});
+            recordingStore.setState({ timerInterval });
           }
         }, 1000);
-        recordingStore.setState({countdownInterval});
+        recordingStore.setState({ countdownInterval });
       } catch (err) {
         console.warn('User cancelled screen share or error occurred:', err);
       }
@@ -267,42 +241,54 @@ const recordingStore = {
     pauseRecording: () => {
       if (recordingStore.state.recorder && !recordingStore.state.isPaused) {
         recordingStore.state.recorder.pause();
-        recordingStore.setState({isPaused: true});
+        recordingStore.setState({ isPaused: true });
       }
     },
     resumeRecording: () => {
       if (recordingStore.state.recorder && recordingStore.state.isPaused) {
         recordingStore.state.recorder.resume();
-        recordingStore.setState({isPaused: false});
+        recordingStore.setState({ isPaused: false });
       }
     },
     stopRecording: () => {
       if (recordingStore.state.recorder) {
         clearInterval(recordingStore.state.timerInterval);
-        recordingStore.setState({timerInterval: null, isRecording: false, isPaused: false});
+        recordingStore.setState({ timerInterval: null, isRecording: false, isPaused: false });
         recordingStore.state.recorder.stop();
         recordingStore.state.stream.getTracks().forEach(track => track.stop());
       }
     },
-    setShowPreview: (value) => recordingStore.setState({showPreview: value}),
+    setShowPreview: (value) => recordingStore.setState({ showPreview: value }),
   }
 };
 
 const useRecordingStore = () => {
   const [state, setState] = useState(recordingStore.state);
   useEffect(() => {
+    if (typeof window === 'undefined') return; // Avoid SSR issues
+    openDB('recordingStore', 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('state')) {
+          db.createObjectStore('state');
+        }
+      },
+    }).then(db => {
+      db.get('state', 'recording').then(savedState => {
+        if (savedState) {
+          recordingStore.setState(savedState);
+          setState(savedState);
+        }
+      });
+    }).catch(err => {
+      console.error('Failed to open IndexedDB:', err);
+    });
     const unsubscribe = recordingStore.subscribe(setState);
     return unsubscribe;
   }, []);
   return { state, actions: recordingStore.actions };
 };
 
-const ScreenRecorderButton = ({ 
-  disabled = false, 
-  className = "",
-  variant = "ghost",
-  isPrimary = false
-}) => {
+const ScreenRecorderButton = ({ disabled = false, className = "", variant = "ghost", isPrimary = false }) => {
   const { activeSuite, ui } = useApp();
   const { state, actions } = useRecordingStore();
 
@@ -319,56 +305,9 @@ const ScreenRecorderButton = ({
     actions.startRecording();
   };
 
-  let buttonClass = "inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
-  let icon = <Video className="w-4 h-4 mr-2" />;
-  let label = "Screen Record";
-  
-  if (variant === "contained") {
-    buttonClass += " bg-primary text-white hover:bg-primary/90";
-    icon = <Plus className="w-4 h-4 mr-2" />;
-    label = "New Recording";
-  } else {
-    buttonClass += " text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800";
-  }
-  buttonClass += ` ${className}`;
-
-  if (state.isRecording) {
-    return (
-      <div className="flex items-center space-x-2">
-        <div className="flex items-center space-x-2 text-red-600">
-          <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
-          <span className="font-mono text-sm">{formatTime(state.recordingTime)}</span>
-          {state.isPaused && <span className="text-yellow-600 text-xs">(Paused)</span>}
-        </div>
-        <button
-          onClick={state.isPaused ? actions.resumeRecording : actions.pauseRecording}
-          className="p-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded"
-          disabled={disabled}
-        >
-          {state.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-        </button>
-        <button
-          onClick={actions.stopRecording}
-          className="p-1.5 bg-red-600 text-white hover:bg-red-700 rounded"
-          disabled={disabled}
-        >
-          <Square className="w-4 h-4" />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <>
-      <button
-        onClick={handleStart}
-        disabled={disabled}
-        className={buttonClass}
-      >
-        {icon}
-        <span className={variant === "ghost" ? "hidden lg:inline" : ""}>{label}</span>
-      </button>
-
+      <RecorderControls disabled={disabled} className={className} variant={variant} isPrimary={isPrimary} />
       {isPrimary && state.showCountdown > 0 && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="text-white text-9xl font-bold animate-bounce">
@@ -376,14 +315,11 @@ const ScreenRecorderButton = ({
           </div>
         </div>
       )}
-
       {isPrimary && state.showPreview && (
-        <EnhancedScreenRecorder
-          mode="recorder"
+        <RecorderPreviewModal
           activeSuite={activeSuite}
           firestoreService={{
             createRecording: async (suiteId, data) => {
-              // Mock implementation - replace with your actual service
               console.log('Creating recording for suite:', suiteId, data);
               return { 
                 success: true, 
@@ -394,7 +330,6 @@ const ScreenRecorderButton = ({
               };
             },
             createBug: async (suiteId, data) => {
-              // Mock implementation - replace with your actual service
               console.log('Creating bug for suite:', suiteId, data);
               return { 
                 success: true, 
@@ -405,19 +340,19 @@ const ScreenRecorderButton = ({
               };
             }
           }}
-          existingRecording={{
-            videoUrl: state.previewUrl,
-            duration: state.duration,
-            consoleLogs: state.consoleLogs,
-            networkLogs: state.networkLogs,
-            comments: state.comments,
-            detectedIssues: state.detectedIssues,
-          }}
           onClose={() => actions.setShowPreview(false)}
+          previewUrl={state.previewUrl}
+          duration={state.duration}
+          consoleLogs={state.consoleLogs}
+          networkLogs={state.networkLogs}
+          detectedIssues={state.detectedIssues}
+          comments={state.comments}
         />
       )}
     </>
   );
 };
 
+// Explicitly export useRecordingStore
+export { useRecordingStore };
 export default ScreenRecorderButton;
