@@ -7,30 +7,18 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
   const [saving, setSaving] = useState(false);
   const [shareLink, setShareLink] = useState(null);
 
-  const uploadToYouTube = async (blob, metadata) => {
-    console.log('Uploading to YouTube:', metadata);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return { 
-      success: true, 
-      data: { 
-        videoId: `yt_${Date.now()}`, 
-        url: `https://youtube.com/watch?v=demo_${Date.now()}` 
-      } 
-    };
-  };
-
   const generateShareLink = () => {
     if (shareLink) {
       return shareLink;
     }
-    
+
     // Generate a shareable link even without saving
     if (previewUrl) {
       const temporaryShareLink = `${window.location.origin}/recordings/preview/${Date.now()}`;
       setShareLink(temporaryShareLink);
       return temporaryShareLink;
     }
-    
+
     return null;
   };
 
@@ -56,40 +44,80 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
       alert('Please select a test suite first.');
       return;
     }
-    
+
     setSaving(true);
     try {
+      // Get the blob from the preview URL
       const blob = await (await fetch(previewUrl)).blob();
-      const uploadResult = await uploadToYouTube(blob, {
-        title: `Recording - ${activeSuite.name} - ${new Date().toLocaleDateString()}`,
-        description: `Screen recording for test suite: ${activeSuite.name}`,
-        privacy: 'private'
-      });
+
+      // Import and use the recording service
+      const recordingService = (await import('../../services/recordingService')).default;
+
+      // Debug: Check service status first
+      console.log('Checking YouTube service status...');
+      const serviceStatus = await recordingService.getServiceStatus();
+      console.log('Service Status:', serviceStatus);
       
+      const isAvailable = await recordingService.isYouTubeAvailable();
+      console.log('YouTube Available:', isAvailable);
+
+      // Upload directly to YouTube
+      const uploadResult = await recordingService.uploadToYouTube(
+        blob,
+        {
+          title: `${activeSuite.name} - ${new Date().toLocaleDateString()}`,
+          description: `Screen recording for test suite: ${activeSuite.name}\n\nCaptured Issues: ${recordingData.detectedIssues?.length || 0}\nConsole Logs: ${recordingData.consoleLogs?.length || 0}\nNetwork Errors: ${recordingData.networkLogs?.length || 0}`,
+          tags: ['qa-testing', 'screen-recording', activeSuite.name],
+          privacy: 'private'
+        },
+        (progress) => {
+          console.log(`Upload progress: ${progress}%`);
+        }
+      );
+
       if (!uploadResult.success) {
-        throw new Error('Failed to upload video');
+        throw new Error(uploadResult.error?.message || 'Failed to upload video to YouTube');
       }
-      
+
+      // Prepare data for Firestore - only YouTube URL and metadata
       const recordingDataToSave = {
-        title: `Recording - ${new Date().toLocaleDateString()}`,
-        videoUrl: uploadResult.data.url,
+        title: `${activeSuite.name} - ${new Date().toLocaleDateString()}`,
+        description: `Screen recording with ${recordingData.detectedIssues?.length || 0} detected issues`,
+        duration: recordingData.duration,
+
+        // YouTube video information
         youtubeId: uploadResult.data.videoId,
-        ...recordingData,
+        videoUrl: uploadResult.data.url,
+        embedUrl: uploadResult.data.embedUrl,
+        thumbnailUrl: uploadResult.data.thumbnailUrl,
+        privacyStatus: uploadResult.data.privacyStatus || 'private',
+
+        // Recording analysis data
+        consoleLogs: recordingData.consoleLogs || [],
+        networkLogs: recordingData.networkLogs || [],
+        detectedIssues: recordingData.detectedIssues || [],
+        comments: recordingData.comments || [],
+
+        // Metadata
         platform: navigator.userAgent,
         suiteId: activeSuite.id,
-        status: 'active'
+        status: 'active',
+        recordedAt: new Date(),
+        provider: 'youtube'
       };
-      
+
+      // Save to Firestore
       const result = await firestoreService.createRecording(activeSuite.id, recordingDataToSave);
-      
+
       if (result.success) {
-        // Update share link to the permanent saved recording
-        const permanentShareLink = `${window.location.origin}/recordings/${result.data.id}`;
+        const permanentShareLink = uploadResult.data.url;
         setShareLink(permanentShareLink);
-        alert('Recording saved successfully!');
+        alert('Recording saved successfully to YouTube!');
         setTimeout(() => onClose(), 1500);
       } else {
-        throw new Error(result.error?.message || 'Failed to save recording');
+        // If Firestore save fails, we should consider cleaning up the YouTube video
+        console.error('Failed to save recording metadata to Firestore:', result.error);
+        throw new Error(result.error?.message || 'Failed to save recording metadata to database');
       }
     } catch (err) {
       console.error('Failed to save recording:', err);
@@ -117,7 +145,7 @@ const RecorderActions = ({ previewUrl, activeSuite, firestoreService, onClose, r
           onClick={saveRecording}
           disabled={saving}
           className="flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          title="Save recording permanently"
+          title="Save recording to YouTube"
         >
           <Save className="w-4 h-4" />
           <span>{saving ? 'Saving...' : 'Save'}</span>

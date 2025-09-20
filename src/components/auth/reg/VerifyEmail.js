@@ -8,6 +8,7 @@ import { auth } from '../../../config/firebase';
 import { CheckCircle, XCircle, Loader2, ArrowRight } from 'lucide-react';
 import BackgroundDecorations from '../../BackgroundDecorations';
 import '../../../app/globals.css';
+import Image from 'next/image';
 
 const retryOperation = async (operation, maxAttempts = 3, delay = 1000) => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -111,8 +112,8 @@ const VerifyEmail = () => {
                 <div className="w-full max-w-md">
                     <div className="text-center mb-8">
                         <div className="inline-block">
-                            <div className="font-bold text-3xl sm:text-4xl bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                                QAID
+                            <div className="w-32 h-32 flex items-center justify-center">
+                                <Image src="/logo.svg" alt="Assura Logo" width={128} height={128} className="w-32 h-32 object-contain" />
                             </div>
                         </div>
                     </div>

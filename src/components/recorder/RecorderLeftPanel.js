@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info } from 'lucide-react';
+import { useRecording } from '../../hooks/useRecording';
 
 const RecorderLeftPanel = ({ 
   consoleLogs = [], 
@@ -18,6 +19,9 @@ const RecorderLeftPanel = ({
   const [selectedBugs, setSelectedBugs] = useState([]);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const commentsEndRef = useRef(null);
+  
+  // Get recording orchestrator for adding comments during live recording
+  const { actions: recordingActions, isActive } = useRecording();
 
   const formatTime = (s) => {
     const sec = Math.floor(s % 60).toString().padStart(2, '0');
@@ -43,21 +47,32 @@ const RecorderLeftPanel = ({
   }, [comments, activeTab]);
 
   const addCommentAtCurrentTime = (text) => {
-    if (!videoRef.current || !text.trim()) return;
+    if (!text.trim()) return;
     
-    const currentTime = videoRef.current.currentTime;
-    const comment = {
-      id: `comment_${Date.now()}_${Math.random()}`,
-      text: text.trim(),
-      time: Number(currentTime.toFixed(1)),
-      timeStr: formatTime(currentTime),
-      createdAt: new Date().toISOString(),
-    };
+    let comment;
     
-    if (onAddComment) {
-      onAddComment(comment);
+    // If recording is active, add to live recording
+    if (isActive && recordingActions) {
+      comment = recordingActions.addComment(text, currentVideoTime);
+    } 
+    // Otherwise, add to preview data
+    else if (videoRef.current) {
+      const currentTime = videoRef.current.currentTime;
+      comment = {
+        id: `comment_${Date.now()}_${Math.random()}`,
+        text: text.trim(),
+        time: Number(currentTime.toFixed(1)),
+        timeStr: formatTime(currentTime),
+        createdAt: new Date().toISOString(),
+      };
+      
+      if (onAddComment) {
+        onAddComment(comment);
+      }
     }
+    
     setCommentText('');
+    return comment;
   };
 
   const seekTo = (seconds) => {
@@ -167,10 +182,10 @@ const RecorderLeftPanel = ({
                       onClick={() => seekTo(comment.time)}
                       className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-xs hover:underline"
                     >
-                      [{comment.timeStr}]
+                      [{comment.timeStr || formatTime(comment.time)}]
                     </button>
                     <span className="text-gray-400 text-[10px]">
-                      {new Date(comment.createdAt).toLocaleTimeString()}
+                      {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
                   <div className="text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
@@ -226,18 +241,25 @@ const RecorderLeftPanel = ({
                   .slice()
                   .reverse()
                   .map((log, i) => (
-                    <div key={i} className="text-xs border border-gray-100 dark:border-gray-700 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <div key={`${log.timestamp}-${i}`} className="text-xs border border-gray-100 dark:border-gray-700 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-800">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-gray-400 text-[10px]">
-                          {new Date(log.time).toLocaleTimeString()}
+                          {new Date(log.time || log.timestamp).toLocaleTimeString()}
                         </span>
-                        <span className={`font-medium text-[10px] px-2 py-0.5 rounded ${
-                          log.level === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                          log.level === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                          'bg-teal-100 text-primary dark:bg-primary dark:text-white'
-                        }`}>
-                          {log.level.toUpperCase()}
-                        </span>
+                        <div className="flex items-center space-x-1">
+                          <span className={`font-medium text-[10px] px-2 py-0.5 rounded ${
+                            log.level === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                            log.level === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                            'bg-teal-100 text-primary dark:bg-primary dark:text-white'
+                          }`}>
+                            {log.level?.toUpperCase() || 'LOG'}
+                          </span>
+                          {(log.count && log.count > 1) && (
+                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                              {log.count}x
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 break-words">{log.message}</div>
                     </div>
@@ -259,7 +281,7 @@ const RecorderLeftPanel = ({
                   .reverse()
                   .map((req, i) => (
                     <div
-                      key={req.id || i}
+                      key={req.id || `${req.timestamp}-${i}`}
                       className="p-2 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -276,13 +298,18 @@ const RecorderLeftPanel = ({
                           }`}>
                             {req.status}
                           </span>
+                          {(req.count && req.count > 1) && (
+                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                              {req.count}x
+                            </span>
+                          )}
                         </div>
                         <span className="text-[10px] text-gray-500">{req.duration}ms</span>
                       </div>
                       <div className="text-[11px] text-gray-700 dark:text-gray-300 break-all">{req.url}</div>
-                      {req.responseText && (
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 truncate">
-                          {req.responseText}
+                      {req.error && (
+                        <div className="text-[10px] text-red-500 dark:text-red-400 mt-1 truncate">
+                          Error: {req.error}
                         </div>
                       )}
                     </div>
@@ -329,10 +356,15 @@ const RecorderLeftPanel = ({
                           }`}>
                             {issue.severity}
                           </span>
+                          {(issue.count && issue.count > 1) && (
+                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                              {issue.count}x
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 break-words">{issue.message}</div>
                         <div className="text-[10px] text-gray-500">
-                          {new Date(issue.time).toLocaleTimeString()}
+                          {new Date(issue.time || issue.timestamp).toLocaleTimeString()}
                         </div>
                       </div>
                       <button
@@ -373,10 +405,10 @@ const RecorderLeftPanel = ({
                             onClick={() => seekTo(comment.time)}
                             className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-sm hover:underline"
                           >
-                            [{comment.timeStr}]
+                            [{comment.timeStr || formatTime(comment.time)}]
                           </button>
                           <span className="text-gray-400 text-[10px]">
-                            {new Date(comment.createdAt).toLocaleTimeString()}
+                            {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
                           </span>
                         </div>
                         <div className="text-sm text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
@@ -391,23 +423,6 @@ const RecorderLeftPanel = ({
           {activeTab === 'info' && (
             <div className="text-xs space-y-2">
               <div className="grid grid-cols-1 gap-2">
-                <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Recording Details</div>
-                  <div className="space-y-1 text-gray-600 dark:text-gray-400">
-                    <div><strong>URL:</strong> {window.location.href}</div>
-                    <div><strong>Timestamp:</strong> {new Date().toLocaleString()}</div>
-                    <div><strong>Duration:</strong> {formatTime(videoRef.current?.duration || 0)}</div>
-                  </div>
-                </div>
-                <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Environment</div>
-                  <div className="space-y-1 text-gray-600 dark:text-gray-400">
-                    <div><strong>Platform:</strong> {navigator.platform}</div>
-                    <div><strong>Browser:</strong> {navigator.userAgent.split(' ').slice(-2).join(' ')}</div>
-                    <div><strong>Screen:</strong> {window.innerWidth}x{window.innerHeight}</div>
-                    <div><strong>Timezone:</strong> {Intl.DateTimeFormat().resolvedOptions().timeZone}</div>
-                  </div>
-                </div>
                 <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
                   <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Statistics</div>
                   <div className="space-y-1 text-gray-600 dark:text-gray-400">
@@ -426,4 +441,4 @@ const RecorderLeftPanel = ({
   );
 };
 
-export default RecorderLeftPanel;
+export default RecorderLeftPanel

@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Video, Play, Pause, Square, Mic, MicOff } from 'lucide-react';
-import { useRecordingStore } from './ScreenRecorderButton';
 
 const formatTime = (s) => {
   const sec = Math.floor(s % 60).toString().padStart(2, '0');
@@ -10,9 +9,15 @@ const formatTime = (s) => {
   return `${min}:${sec}`;
 };
 
-const RecorderControls = ({ disabled = false, className = "", variant = "ghost", isPrimary = false }) => {
-  const { state, actions } = useRecordingStore();
-
+const RecorderControls = ({ 
+  disabled = false, 
+  className = "", 
+  variant = "ghost", 
+  isPrimary = false,
+  onStart,
+  recordingState,
+  actions
+}) => {
   let buttonClass = `inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className}`;
   if (variant === "contained") {
     buttonClass += " bg-primary text-white hover:bg-primary/90";
@@ -20,33 +25,33 @@ const RecorderControls = ({ disabled = false, className = "", variant = "ghost",
     buttonClass += " text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800";
   }
 
-  if (state.isRecording) {
+  if (recordingState.isRecording) {
     return (
       <div className="flex items-center space-x-2">
         <div className="flex items-center space-x-2 text-red-600">
           <div className="w-3 h-3 bg-primary rounded-full animate-pulse"></div>
-          <span className="font-mono text-sm">{formatTime(state.recordingTime)}</span>
-          {state.isPaused && <span className="text-yellow-600 text-xs">(Paused)</span>}
+          <span className="font-mono text-sm">{formatTime(recordingState.recordingTime)}</span>
+          {recordingState.isPaused && <span className="text-yellow-600 text-xs">(Paused)</span>}
         </div>
         <button
-          onClick={state.isPaused ? actions.resumeRecording : actions.pauseRecording}
+          onClick={recordingState.isPaused ? actions.resumeRecording : actions.pauseRecording}
           className="p-1.5 bg-orange-300 hover:bg-orange-400 text-white rounded transition-colors"
           disabled={disabled}
-          title={state.isPaused ? "Resume Recording" : "Pause Recording"}
+          title={recordingState.isPaused ? "Resume Recording" : "Pause Recording"}
         >
-          {state.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+          {recordingState.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
         </button>
         <button
           onClick={actions.toggleMute}
           className={`p-1.5 transition-colors text-white rounded ${
-            state.micMuted 
+            recordingState.micMuted 
               ? 'bg-gray-600 hover:bg-gray-700' 
               : 'bg-orange-500 hover:bg-orange-600'
           }`}
           disabled={disabled}
-          title={state.micMuted ? "Unmute Microphone" : "Mute Microphone"}
+          title={recordingState.micMuted ? "Unmute Microphone" : "Mute Microphone"}
         >
-          {state.micMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          {recordingState.micMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>
         <button
           onClick={actions.stopRecording}
@@ -62,7 +67,7 @@ const RecorderControls = ({ disabled = false, className = "", variant = "ghost",
 
   return (
     <button
-      onClick={actions.startRecording}
+      onClick={onStart}
       disabled={disabled}
       className={buttonClass}
       title="Start Screen Recording"

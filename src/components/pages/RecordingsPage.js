@@ -13,7 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import EnhancedScreenRecorder from '../recorder/EnhancedScreenRecorder';
-import RecorderControls from '../recorder/RecorderControls';
+import ScreenRecorderButton from '../recorder/ScreenRecorderButton';
 import { useApp } from '../../context/AppProvider';
 
 const Recordings = () => {
@@ -226,12 +226,13 @@ const Recordings = () => {
             </p>
           </div>
           {isSubscriptionActive && hasActiveSuite && (
-            <RecorderControls
+            <ScreenRecorderButton
               variant="contained"
               isPrimary={true}
             />
           )}
         </div>
+        
         {hasActiveSuite && (
           <div className="flex items-center justify-between mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-4">
@@ -286,6 +287,7 @@ const Recordings = () => {
             </div>
           </div>
         )}
+        
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 min-h-96">
           {renderEmptyState() || (
             <div className="p-6">
@@ -412,6 +414,7 @@ const Recordings = () => {
           )}
         </div>
       </div>
+      
       {viewingRecording && (
         <EnhancedScreenRecorder
           mode="viewer"
