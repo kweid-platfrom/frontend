@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Brain } from 'lucide-react';
+import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Bot } from 'lucide-react';
 import { useRecording } from '../../hooks/useRecording';
 import AIHighlights from './AIHighlights';
 
@@ -12,14 +12,15 @@ const RecorderLeftPanel = ({
   videoRef, 
   activeSuite, 
   firestoreService,
-  isPreviewMode = false, // New prop to distinguish preview vs saved recording
+  isPreviewMode = false,
   aiHighlightEnabled = true,
   onToggleAiHighlight
 }) => {
-  const [activeTab, setActiveTab] = useState(isPreviewMode ? 'ai-highlights' : 'console');
+  const [activeTab, setActiveTab] = useState(isPreviewMode ? 'comments' : 'console');
   const [commentText, setCommentText] = useState('');
   const [selectedBugs, setSelectedBugs] = useState([]);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [showAIInsights, setShowAIInsights] = useState(false);
   const commentsEndRef = useRef(null);
   
   // Get recording orchestrator for adding comments during live recording
@@ -74,6 +75,8 @@ const RecorderLeftPanel = ({
     }
     
     setCommentText('');
+    // Switch to comments tab immediately
+    setActiveTab('comments');
     return comment;
   };
 
@@ -123,14 +126,12 @@ const RecorderLeftPanel = ({
       case 'network': return networkLogs.length;
       case 'issues': return detectedIssues.length;
       case 'comments': return comments.length;
-      case 'ai-highlights': return 0; // Count handled by AI component
       default: return 0;
     }
   };
 
   // Define tabs based on preview mode
   const tabs = [
-    { id: 'ai-highlights', label: 'AI Insights', icon: Brain },
     { id: 'comments', label: 'Comments', icon: MessageSquare },
     // Show dev tool tabs only when not in preview mode
     ...(isPreviewMode ? [] : [
@@ -142,79 +143,81 @@ const RecorderLeftPanel = ({
   ];
 
   return (
-    <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 flex flex-col min-w-80">
-      {/* Comments Section - Fixed Height - Always visible */}
-      <div className="h-48 border-b border-gray-200 dark:border-gray-700 p-3 flex flex-col">
-        <div className="text-sm font-medium mb-2 flex items-center justify-between">
-          <span>Add Comment</span>
-          <span className="text-xs text-gray-500">{comments.length} comments</span>
-        </div>
-        
-        <div className="flex space-x-2 mb-3">
-          <input
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Add a comment at current time..."
-            className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-2 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                addCommentAtCurrentTime(commentText);
-              }
-            }}
-          />
+    <div className="w-2/5 border-r border-gray-200 dark:border-gray-700 flex flex-col min-w-80 max-w-md">
+      {/* AI Insights Section - 50% */}
+      <div className="h-1/2 border-b border-gray-200 dark:border-gray-700 flex flex-col">
+        {/* AI Toggle Button */}
+        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
           <button
-            onClick={() => addCommentAtCurrentTime(commentText)}
-            disabled={!commentText.trim()}
-            className="px-3 py-1 text-xs bg-orange-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-colors whitespace-nowrap"
+            onClick={() => setShowAIInsights(!showAIInsights)}
+            className="w-full flex items-center justify-between p-2 rounded text-sm font-medium transition-colors bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
           >
-            @ {formatTime(currentVideoTime)}
+            <div className="flex items-center space-x-2">
+              <Bot className="w-4 h-4 text-gray-500" />
+              <span>AI Insights</span>
+            </div>
+            <div className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400">
+              {showAIInsights ? 'ON' : 'OFF'}
+            </div>
           </button>
         </div>
-        
-        <div className="flex-1 overflow-y-auto space-y-1">
-          {comments.length === 0 ? (
-            <div className="text-xs text-gray-500 text-center py-4">
-              No comments yet. Add one to mark important moments.
-            </div>
+
+        {/* AI Insights Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {showAIInsights ? (
+            <AIHighlights
+              consoleLogs={consoleLogs}
+              networkLogs={networkLogs}
+              detectedIssues={detectedIssues}
+              duration={videoRef.current?.duration || 0}
+              onSeekTo={seekTo}
+              isEnabled={aiHighlightEnabled}
+              onToggle={onToggleAiHighlight}
+            />
           ) : (
-            <>
-              {comments
-                .slice()
-                .sort((a, b) => b.time - a.time)
-                .slice(0, 5)
-                .map(comment => (
-                <div key={comment.id} className="text-xs p-2 bg-gray-50 dark:bg-gray-800 rounded border">
-                  <div className="flex items-center justify-between mb-1">
-                    <button
-                      onClick={() => seekTo(comment.time)}
-                      className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-xs hover:underline"
-                    >
-                      [{comment.timeStr || formatTime(comment.time)}]
-                    </button>
-                    <span className="text-gray-400 text-[10px]">
-                      {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
-                </div>
-              ))}
-              <div ref={commentsEndRef} />
-            </>
+            <div className="text-xs text-gray-500 text-center py-8">
+              Toggle AI Insights ON to view analysis of your recording
+            </div>
           )}
         </div>
       </div>
 
-      {/* Tabs Section - Flexible Height */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex overflow-x-auto border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+      {/* Comments/DevTools Section - 50% */}
+      <div className="h-1/2 flex flex-col">
+        {/* Comment Input - Above tabs */}
+        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex space-x-2">
+            <input
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Add a comment at current time..."
+              className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-2 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  addCommentAtCurrentTime(commentText);
+                }
+              }}
+            />
+            <button
+              onClick={() => addCommentAtCurrentTime(commentText)}
+              disabled={!commentText.trim()}
+              className="px-3 py-1 text-xs bg-orange-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-colors whitespace-nowrap"
+            >
+              @ {formatTime(currentVideoTime)}
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs - Horizontal/Vertical Scrollable */}
+        <div className="flex overflow-x-auto overflow-y-hidden border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           {tabs.map(({ id, label, icon: Icon }) => {
             const count = getTabCount(id);
             return (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap flex items-center space-x-1 transition-colors ${
+                className={`flex-shrink-0 px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap flex items-center space-x-1 transition-colors ${
                   activeTab === id
                     ? 'border-primary text-primary dark:text-orange-400 bg-white dark:bg-gray-900'
                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
@@ -225,7 +228,7 @@ const RecorderLeftPanel = ({
                 {count > 0 && (
                   <span className={`px-1 py-0.5 text-[10px] rounded-full ${
                     activeTab === id 
-                      ? 'bg-blue-100 text-primary dark:bg-primary dark:text-white' 
+                      ? 'bg-teal-100 text-primary dark:bg-primary dark:text-white' 
                       : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400'
                   }`}>
                     {count}
@@ -236,20 +239,8 @@ const RecorderLeftPanel = ({
           })}
         </div>
 
+        {/* Tab Content - Vertically Scrollable */}
         <div className="flex-1 overflow-y-auto p-3">
-          {/* AI Highlights Tab */}
-          {activeTab === 'ai-highlights' && (
-            <AIHighlights
-              consoleLogs={consoleLogs}
-              networkLogs={networkLogs}
-              detectedIssues={detectedIssues}
-              duration={videoRef.current?.duration || 0}
-              onSeekTo={seekTo}
-              isEnabled={aiHighlightEnabled}
-              onToggle={onToggleAiHighlight}
-            />
-          )}
-
           {/* Comments Tab */}
           {activeTab === 'comments' && (
             <div className="space-y-2">
@@ -257,7 +248,7 @@ const RecorderLeftPanel = ({
                 <div className="text-gray-500 text-sm text-center py-8">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <div>No comments added yet</div>
-                  <div className="text-xs mt-1">Add comments above to mark important moments</div>
+                  <div className="text-xs mt-1">Add a comment above to get started</div>
                 </div>
               ) : (
                 <>
@@ -410,7 +401,7 @@ const RecorderLeftPanel = ({
                           <span className={`text-[10px] px-2 py-1 rounded uppercase font-medium ${
                             issue.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
                             issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-blue-100 text-primary dark:bg-primary/60 dark:text-white'
+                            'bg-teal-100 text-primary dark:bg-primary/60 dark:text-white'
                           }`}>
                             {issue.severity}
                           </span>
