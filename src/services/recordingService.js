@@ -1,55 +1,41 @@
-// lib/firebase/recordingService.js - YouTube Only Implementation
-import youTubeService from '../lib/YoutubeService';
-
+// lib/recordingService.js - Enhanced implementation with playlist support
 const recordingService = new class RecordingService {
     constructor() {
-        // Debug environment variables
-        console.log('Environment check:', {
-            nodeEnv: process.env.NODE_ENV,
-            allEnvVars: Object.keys(process.env).filter(key => key.includes('YOUTUBE')),
-            reactAppClientId: process.env.REACT_APP_YOUTUBE_CLIENT_ID?.substring(0, 10) + '...',
-            reactAppSecret: process.env.REACT_APP_YOUTUBE_CLIENT_SECRET?.substring(0, 10) + '...',
-            reactAppRefresh: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN?.substring(0, 10) + '...',
-            nodeClientId: process.env.YOUTUBE_CLIENT_ID?.substring(0, 10) + '...',
-            nodeSecret: process.env.YOUTUBE_CLIENT_SECRET?.substring(0, 10) + '...',
-            nodeRefresh: process.env.YOUTUBE_REFRESH_TOKEN?.substring(0, 10) + '...'
-        });
-
-        this.clientId = process.env.REACT_APP_YOUTUBE_CLIENT_ID || process.env.YOUTUBE_CLIENT_ID;
-        this.clientSecret = process.env.REACT_APP_YOUTUBE_CLIENT_SECRET || process.env.YOUTUBE_CLIENT_SECRET;
-        this.refreshToken = process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || process.env.YOUTUBE_REFRESH_TOKEN;
-
-        console.log('Final credentials:', {
-            hasClientId: !!this.clientId,
-            hasClientSecret: !!this.clientSecret,
-            hasRefreshToken: !!this.refreshToken,
-            clientIdPrefix: this.clientId?.substring(0, 10) + '...'
-        });
-
-        this.accessToken = null;
-        this.tokenExpiresAt = null;
-        this.initialized = false;
+        this.apiBaseUrl = process.env.NODE_ENV === 'production' 
+            ? 'https://your-domain.com/api' 
+            : '/api';
     }
 
-    // Check YouTube service availability
-    async checkYouTubeAvailability() {
+    // Create or get playlist for test suite
+    async createPlaylistForSuite(suiteId, suiteName) {
         try {
-            const status = youTubeService.getStatus();
-            if (!status.hasCredentials) {
-                console.warn('YouTube credentials not configured');
-                return false;
+            const response = await fetch(`${this.apiBaseUrl}/recordings/playlist`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    suiteId,
+                    title: `${suiteName} - Test Recordings`,
+                    description: `Automated test recordings for ${suiteName}`,
+                    privacy: 'private'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Playlist creation failed: ${response.status}`);
             }
 
-            return await youTubeService.isAvailable();
+            const result = await response.json();
+            return result;
         } catch (error) {
-            console.warn('YouTube service not available:', error);
-            return false;
+            console.error('Failed to create playlist:', error);
+            return { success: false, error: { message: error.message } };
         }
     }
 
-    // Main upload method - YouTube only
+    // Upload to YouTube with playlist assignment
     async uploadToYouTube(blob, metadata = {}, onProgress = null) {
-        // Validate inputs
         if (!blob || !(blob instanceof Blob)) {
             return {
                 success: false,
@@ -64,54 +50,90 @@ const recordingService = new class RecordingService {
             };
         }
 
-        // Check YouTube availability
-        const youtubeAvailable = await this.checkYouTubeAvailability();
-
-        if (!youtubeAvailable) {
-            return {
-                success: false,
-                error: { message: 'YouTube service is not available or not configured' }
-            };
-        }
-
         try {
-            console.log('Uploading to YouTube...');
+            console.log('Uploading to YouTube via API...');
 
-            // Upload to YouTube with progress tracking
-            const youtubeResult = await youTubeService.uploadVideoWithProgress(
-                blob,
-                {
-                    title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
-                    description: metadata.description || 'Screen recording from QA testing',
-                    privacy: metadata.privacy || 'private',
-                    tags: ['qa-testing', 'screen-recording', ...(metadata.tags || [])],
-                    categoryId: '28' // Science & Technology
-                },
-                onProgress
-            );
+            // Create playlist for suite if needed
+            let playlistResult = null;
+            if (metadata.suiteId && metadata.suiteName) {
+                playlistResult = await this.createPlaylistForSuite(metadata.suiteId, metadata.suiteName);
+                if (!playlistResult.success) {
+                    console.warn('Failed to create playlist, continuing without it:', playlistResult.error);
+                }
+            }
 
-            if (youtubeResult.success) {
-                console.log('YouTube upload successful');
+            // Create form data with enhanced metadata
+            const formData = new FormData();
+            formData.append('video', blob, `recording_${Date.now()}.webm`);
+            formData.append('metadata', JSON.stringify({
+                title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
+                description: metadata.description || 'Screen recording from QA testing',
+                tags: metadata.tags || ['qa-testing', 'screen-recording'],
+                privacy: metadata.privacy || 'private',
+                categoryId: metadata.categoryId || '28',
+                playlistId: playlistResult?.data?.playlistId || null,
+                suiteId: metadata.suiteId,
+                suiteName: metadata.suiteName
+            }));
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minute timeout
+
+            const response = await fetch(`${this.apiBaseUrl}/recordings/upload`, {
+                method: 'POST',
+                body: formData,
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Upload failed: ${response.status} ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                console.log('YouTube upload successful with video ID:', result.data.videoId);
+                
+                if (onProgress) {
+                    onProgress(100);
+                }
+
                 return {
                     success: true,
                     data: {
-                        videoId: youtubeResult.data.videoId,
-                        url: youtubeResult.data.url,
-                        embedUrl: youtubeResult.data.embedUrl,
-                        thumbnailUrl: youtubeResult.data.thumbnailUrl,
-                        privacyStatus: youtubeResult.data.privacyStatus,
-                        uploadedAt: new Date().toISOString()
+                        videoId: result.data.videoId,
+                        youtubeId: result.data.videoId,
+                        url: result.data.url,
+                        videoUrl: result.data.url,
+                        embedUrl: result.data.embedUrl,
+                        thumbnailUrl: result.data.thumbnailUrl,
+                        privacyStatus: result.data.privacyStatus,
+                        playlistId: result.data.playlistId,
+                        provider: 'youtube',
+                        uploadedAt: result.data.uploadedAt || new Date().toISOString()
                     }
                 };
             } else {
-                console.error('YouTube upload failed:', youtubeResult.error);
+                console.error('YouTube upload failed:', result.error);
                 return {
                     success: false,
-                    error: youtubeResult.error || { message: 'YouTube upload failed' }
+                    error: result.error || { message: 'Upload failed' }
                 };
             }
+
         } catch (error) {
             console.error('YouTube upload error:', error);
+            
+            if (error.name === 'AbortError') {
+                return {
+                    success: false,
+                    error: { message: 'Upload timeout - please try again with a smaller file' }
+                };
+            }
+
             return {
                 success: false,
                 error: { message: error.message || 'Failed to upload to YouTube' }
@@ -119,17 +141,41 @@ const recordingService = new class RecordingService {
         }
     }
 
-    // Upload with retry logic
+    // Get video duration properly
+    async getVideoDuration(blob) {
+        return new Promise((resolve) => {
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            
+            video.onloadedmetadata = () => {
+                const duration = video.duration;
+                URL.revokeObjectURL(video.src);
+                resolve(isFinite(duration) ? duration : 0);
+            };
+            
+            video.onerror = () => {
+                URL.revokeObjectURL(video.src);
+                resolve(0);
+            };
+            
+            video.src = URL.createObjectURL(blob);
+        });
+    }
+
+    // Enhanced upload with retry and better error handling
     async uploadToYouTubeWithRetry(blob, metadata = {}, onProgress = null, maxRetries = 3) {
         let lastError = null;
-
+        
+        // Get actual video duration
+        const videoDuration = await this.getVideoDuration(blob);
+        metadata.duration = videoDuration;
+        
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`Upload attempt ${attempt}/${maxRetries}`);
-
+                console.log(`Upload attempt ${attempt}/${maxRetries} - File size: ${blob.size} bytes, Duration: ${videoDuration}s`);
+                
                 const result = await this.uploadToYouTube(blob, metadata, (progress) => {
                     if (onProgress) {
-                        // Adjust progress to account for multiple attempts
                         const attemptProgress = progress / maxRetries;
                         const totalProgress = ((attempt - 1) / maxRetries) * 100 + attemptProgress;
                         onProgress(Math.min(totalProgress, 100));
@@ -142,17 +188,16 @@ const recordingService = new class RecordingService {
                 }
 
                 lastError = result.error;
-
+                
                 if (attempt < maxRetries) {
-                    console.log(`Upload attempt ${attempt} failed, retrying...`);
-                    // Wait before retry (exponential backoff)
+                    console.log(`Upload attempt ${attempt} failed, retrying in ${Math.pow(2, attempt - 1)}s...`);
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
                 }
-
+                
             } catch (error) {
                 lastError = { message: error.message };
-                console.error(`Upload attempt ${attempt} threw error:`, error);
-
+                console.error(`Upload attempt ${attempt} error:`, error);
+                
                 if (attempt < maxRetries) {
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
                 }
@@ -168,7 +213,43 @@ const recordingService = new class RecordingService {
         };
     }
 
-    // Delete recording from YouTube
+    // Get playlist info
+    async getPlaylistForSuite(suiteId) {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/recordings/playlist?suiteId=${suiteId}`, {
+                method: 'GET'
+            });
+
+            if (!response.ok) {
+                return { success: false, error: { message: 'Failed to get playlist' } };
+            }
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            return { success: false, error: { message: error.message } };
+        }
+    }
+
+    // List recordings for suite
+    async getRecordingsForSuite(suiteId) {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/recordings?suiteId=${suiteId}`, {
+                method: 'GET'
+            });
+
+            if (!response.ok) {
+                return { success: false, error: { message: 'Failed to get recordings' } };
+            }
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            return { success: false, error: { message: error.message } };
+        }
+    }
+
+    // Delete recording and remove from playlist
     async deleteRecording(recordingData) {
         if (!recordingData) {
             return { success: false, error: { message: 'No recording data provided' } };
@@ -177,248 +258,134 @@ const recordingService = new class RecordingService {
         try {
             const videoId = recordingData.youtubeId || recordingData.videoId;
             if (!videoId) {
-                return {
-                    success: false,
-                    error: { message: 'No YouTube video ID found in recording data' }
+                return { 
+                    success: false, 
+                    error: { message: 'No YouTube video ID found' } 
                 };
             }
 
             console.log(`Deleting YouTube video: ${videoId}`);
-            return await youTubeService.deleteVideo(videoId);
 
-        } catch (error) {
-            console.error('Error deleting YouTube video:', error);
-            return {
-                success: false,
-                error: { message: error.message || 'Failed to delete YouTube video' }
-            };
-        }
-    }
+            const response = await fetch(`${this.apiBaseUrl}/recordings/delete`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    videoId,
+                    playlistId: recordingData.playlistId,
+                    recordingData
+                })
+            });
 
-    // Get YouTube embed URL
-    getEmbedUrl(recordingData) {
-        if (!recordingData) return null;
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (videoId) {
-            return `https://www.youtube.com/embed/${videoId}`;
-        }
-
-        return null;
-    }
-
-    // Get YouTube watch URL
-    getWatchUrl(recordingData) {
-        if (!recordingData) return null;
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (videoId) {
-            return `https://www.youtube.com/watch?v=${videoId}`;
-        }
-
-        return recordingData.videoUrl;
-    }
-
-    // Get video URL (alias for compatibility)
-    getVideoUrl(recordingData) {
-        return this.getWatchUrl(recordingData);
-    }
-
-    // Check if YouTube is available and authenticated
-    async isYouTubeAvailable() {
-        return await this.checkYouTubeAvailability();
-    }
-
-    // Get service status
-    async getServiceStatus() {
-        const youtubeStatus = youTubeService.getStatus();
-
-        return {
-            youtube: {
-                available: youtubeStatus.hasCredentials && youtubeStatus.initialized,
-                initialized: youtubeStatus.initialized,
-                hasValidToken: youtubeStatus.hasValidToken,
-                hasCredentials: youtubeStatus.hasCredentials,
-                tokenExpiresAt: youtubeStatus.tokenExpiresAt
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Delete failed: ${response.status}`);
             }
-        };
-    }
 
-    // Test YouTube connection
-    async testYouTubeConnection() {
-        try {
-            const channelResult = await youTubeService.getChannelInfo();
-            return {
-                success: channelResult.success,
-                data: channelResult.success ? {
-                    connected: true,
-                    channelId: channelResult.data?.id,
-                    channelTitle: channelResult.data?.snippet?.title,
-                    subscriberCount: channelResult.data?.statistics?.subscriberCount
-                } : null,
-                error: channelResult.success ? null : channelResult.error
-            };
+            const result = await response.json();
+            return result;
+            
         } catch (error) {
+            console.error('Error deleting recording:', error);
             return {
                 success: false,
-                error: { message: error.message }
+                error: { message: error.message || 'Failed to delete recording' }
             };
         }
     }
 
-    // Update video metadata on YouTube
-    async updateVideoMetadata(recordingData, metadata) {
-        if (!recordingData) {
-            return {
-                success: false,
-                error: { message: 'No recording data provided' }
-            };
-        }
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (!videoId) {
-            return {
-                success: false,
-                error: { message: 'No YouTube video ID found in recording data' }
-            };
-        }
-
-        try {
-            return await youTubeService.updateVideo(videoId, metadata);
-        } catch (error) {
-            return {
-                success: false,
-                error: { message: error.message || 'Failed to update video metadata' }
-            };
-        }
+    // Format duration properly
+    formatDuration(seconds) {
+        if (!isFinite(seconds) || seconds < 0) return "0:00";
+        
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
-    // Create a playlist for recordings
-    async createRecordingsPlaylist(title) {
-        try {
-            return await youTubeService.createRecordingsPlaylist(title);
-        } catch (error) {
-            return {
-                success: false,
-                error: { message: error.message || 'Failed to create playlist' }
-            };
-        }
-    }
-
-    // Add video to playlist
-    async addVideoToPlaylist(recordingData, playlistId) {
-        if (!recordingData) {
-            return {
-                success: false,
-                error: { message: 'No recording data provided' }
-            };
-        }
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (!videoId) {
-            return {
-                success: false,
-                error: { message: 'No YouTube video ID found in recording data' }
-            };
-        }
-
-        try {
-            return await youTubeService.addVideoToPlaylist(videoId, playlistId);
-        } catch (error) {
-            return {
-                success: false,
-                error: { message: error.message || 'Failed to add video to playlist' }
-            };
-        }
-    }
-
-    // Get recording info
-    getRecordingInfo(recordingData) {
-        if (!recordingData) return null;
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-
-        return {
-            provider: 'youtube',
-            videoId: videoId,
-            url: this.getWatchUrl(recordingData),
-            embedUrl: this.getEmbedUrl(recordingData),
-            thumbnailUrl: recordingData.thumbnailUrl,
-            privacyStatus: recordingData.privacyStatus || 'private',
-            uploadedAt: recordingData.uploadedAt || recordingData.recordedAt,
-            title: recordingData.title,
-            description: recordingData.description
-        };
-    }
-
-    // Validate recording data structure
-    validateRecordingData(recordingData) {
+    // Validate video blob
+    async validateVideoBlob(blob) {
         const errors = [];
-
-        if (!recordingData) {
-            errors.push('Recording data is required');
+        
+        if (!blob) {
+            errors.push('No video blob provided');
             return { valid: false, errors };
         }
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (!videoId) {
-            errors.push('YouTube video ID is required');
+        
+        if (!(blob instanceof Blob)) {
+            errors.push('Invalid blob object');
+            return { valid: false, errors };
         }
-
-        if (!recordingData.videoUrl && !videoId) {
-            errors.push('Either videoUrl or YouTube video ID is required');
+        
+        if (blob.size === 0) {
+            errors.push('Empty video file');
+            return { valid: false, errors };
         }
-
-        return {
-            valid: errors.length === 0,
-            errors
+        
+        if (blob.size > 128 * 1024 * 1024) { // 128MB limit
+            errors.push('Video file too large (>128MB)');
+            return { valid: false, errors };
+        }
+        
+        // Get duration
+        const duration = await this.getVideoDuration(blob);
+        if (duration === 0) {
+            errors.push('Invalid or corrupted video file');
+            return { valid: false, errors, duration };
+        }
+        
+        return { 
+            valid: errors.length === 0, 
+            errors, 
+            duration,
+            size: blob.size,
+            type: blob.type 
         };
     }
 
-    // Get video statistics from YouTube
-    async getVideoStatistics(recordingData) {
-        if (!recordingData) {
-            return { success: false, error: { message: 'No recording data provided' } };
-        }
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (!videoId) {
-            return { success: false, error: { message: 'No YouTube video ID found' } };
-        }
-
+    // Enhanced service status
+    async getServiceStatus() {
         try {
-            return await youTubeService.getVideoStatistics(videoId);
-        } catch (error) {
+            const response = await fetch(`${this.apiBaseUrl}/recordings/status`, {
+                method: 'GET'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                return {
+                    youtube: {
+                        available: result.success && result.data?.hasCredentials,
+                        initialized: result.data?.initialized || false,
+                        hasValidToken: result.data?.hasValidToken || false,
+                        hasCredentials: result.data?.hasCredentials || false,
+                        tokenExpiresAt: result.data?.tokenExpiresAt,
+                        environment: result.data?.environment,
+                        playlistsSupported: result.data?.playlistsSupported || false
+                    }
+                };
+            }
+            
             return {
-                success: false,
-                error: { message: error.message || 'Failed to get video statistics' }
-            };
-        }
-    }
-
-    // Check if video exists on YouTube
-    async checkVideoExists(recordingData) {
-        if (!recordingData) {
-            return { success: false, exists: false };
-        }
-
-        const videoId = recordingData.youtubeId || recordingData.videoId;
-        if (!videoId) {
-            return { success: false, exists: false };
-        }
-
-        try {
-            const result = await youTubeService.getVideoDetails(videoId);
-            return {
-                success: true,
-                exists: result.success,
-                data: result.success ? result.data : null
+                youtube: {
+                    available: false,
+                    initialized: false,
+                    hasValidToken: false,
+                    hasCredentials: false,
+                    playlistsSupported: false
+                }
             };
         } catch (error) {
+            console.error('Error getting service status:', error);
             return {
-                success: false,
-                exists: false,
-                error: { message: error.message }
+                youtube: {
+                    available: false,
+                    initialized: false,
+                    hasValidToken: false,
+                    hasCredentials: false,
+                    playlistsSupported: false,
+                    error: error.message
+                }
             };
         }
     }

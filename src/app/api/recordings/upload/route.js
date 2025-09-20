@@ -1,34 +1,23 @@
-// app/api/recordings/upload/route.js
+// app/api/recordings/upload/route.js - Enhanced with playlist support
 import { NextRequest, NextResponse } from 'next/server';
 
-// Server-side YouTube service for API routes
-class ServerYouTubeService {
+class EnhancedYouTubeService {
     constructor() {
-        // Server-side environment variables (no REACT_APP_ prefix)
         this.clientId = process.env.YOUTUBE_CLIENT_ID;
         this.clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
         this.refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
         this.accessToken = null;
         this.tokenExpiresAt = null;
         this.initialized = false;
-
-        // Validate credentials on instantiation
-        if (!this.clientId || !this.clientSecret || !this.refreshToken) {
-            console.error('Missing YouTube API credentials in server environment');
-        }
+        
+        // Cache for playlists to avoid recreating
+        this.playlistCache = new Map();
     }
 
     async initialize() {
         if (this.initialized && this.isTokenValid()) return;
-
-        try {
-            await this.refreshAccessToken();
-            this.initialized = true;
-            console.log('Server YouTube API initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize server YouTube API:', error);
-            throw new Error('YouTube API initialization failed: ' + error.message);
-        }
+        await this.refreshAccessToken();
+        this.initialized = true;
     }
 
     isTokenValid() {
@@ -37,37 +26,28 @@ class ServerYouTubeService {
 
     async refreshAccessToken() {
         if (!this.clientId || !this.clientSecret || !this.refreshToken) {
-            throw new Error('Missing required YouTube API credentials');
+            throw new Error('Missing YouTube API credentials');
         }
 
-        try {
-            const response = await fetch('https://oauth2.googleapis.com/token', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    client_id: this.clientId,
-                    client_secret: this.clientSecret,
-                    refresh_token: this.refreshToken,
-                    grant_type: 'refresh_token'
-                })
-            });
+        const response = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: this.clientId,
+                client_secret: this.clientSecret,
+                refresh_token: this.refreshToken,
+                grant_type: 'refresh_token'
+            })
+        });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`Token refresh failed: ${response.status} - ${errorData.error_description || errorData.error || response.statusText}`);
-            }
-
-            const data = await response.json();
-            this.accessToken = data.access_token;
-            this.tokenExpiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
-            
-            console.log('Server YouTube access token refreshed successfully');
-        } catch (error) {
-            console.error('Failed to refresh server YouTube access token:', error);
-            throw error;
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(`Token refresh failed: ${error.error_description || response.statusText}`);
         }
+
+        const data = await response.json();
+        this.accessToken = data.access_token;
+        this.tokenExpiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
     }
 
     async ensureValidToken() {
@@ -76,15 +56,177 @@ class ServerYouTubeService {
         }
     }
 
+    // Create or get playlist for test suite
+    async createOrGetPlaylist(suiteId, title, description = '') {
+        const cacheKey = `suite_${suiteId}`;
+        
+        // Check cache first
+        if (this.playlistCache.has(cacheKey)) {
+            const cached = this.playlistCache.get(cacheKey);
+            // Verify playlist still exists
+            const exists = await this.verifyPlaylistExists(cached.id);
+            if (exists) {
+                return { success: true, data: cached };
+            } else {
+                this.playlistCache.delete(cacheKey);
+            }
+        }
+
+        await this.ensureValidToken();
+
+        try {
+            const response = await fetch(
+                'https://www.googleapis.com/youtube/v3/playlists?part=snippet,status',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        snippet: {
+                            title: title,
+                            description: description
+                        },
+                        status: {
+                            privacyStatus: 'private'
+                        }
+                    })
+                }
+            );
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    await this.refreshAccessToken();
+                    return this.createOrGetPlaylist(suiteId, title, description);
+                }
+                
+                const error = await response.json().catch(() => ({}));
+                throw new Error(`Playlist creation failed: ${error.error?.message || response.statusText}`);
+            }
+
+            const playlist = await response.json();
+            const playlistData = {
+                id: playlist.id,
+                title: playlist.snippet.title,
+                description: playlist.snippet.description,
+                url: `https://www.youtube.com/playlist?list=${playlist.id}`,
+                createdAt: new Date().toISOString()
+            };
+
+            // Cache the playlist
+            this.playlistCache.set(cacheKey, playlistData);
+
+            return {
+                success: true,
+                data: playlistData
+            };
+
+        } catch (error) {
+            console.error('Playlist creation error:', error);
+            return {
+                success: false,
+                error: { message: error.message }
+            };
+        }
+    }
+
+    // Verify playlist exists
+    async verifyPlaylistExists(playlistId) {
+        try {
+            await this.ensureValidToken();
+            
+            const response = await fetch(
+                `https://www.googleapis.com/youtube/v3/playlists?part=id&id=${playlistId}`,
+                {
+                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                return data.items && data.items.length > 0;
+            }
+            
+            return false;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Add video to playlist
+    async addVideoToPlaylist(videoId, playlistId) {
+        if (!playlistId) return { success: true }; // Skip if no playlist
+
+        try {
+            await this.ensureValidToken();
+
+            const response = await fetch(
+                'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        snippet: {
+                            playlistId: playlistId,
+                            resourceId: {
+                                kind: 'youtube#video',
+                                videoId: videoId
+                            }
+                        }
+                    })
+                }
+            );
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(`Failed to add video to playlist: ${error.error?.message || response.statusText}`);
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error adding video to playlist:', error);
+            // Don't fail the entire upload if playlist addition fails
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Enhanced upload with playlist support
     async uploadVideoWithProgress(videoBlob, metadata = {}) {
         try {
             await this.initialize();
             await this.ensureValidToken();
 
+            console.log('Starting YouTube upload with metadata:', {
+                title: metadata.title,
+                suiteId: metadata.suiteId,
+                playlistId: metadata.playlistId,
+                fileSize: videoBlob.size
+            });
+
+            // Create playlist if needed
+            let playlistData = null;
+            if (metadata.suiteId && metadata.suiteName) {
+                const playlistResult = await this.createOrGetPlaylist(
+                    metadata.suiteId,
+                    `${metadata.suiteName} - Test Recordings`,
+                    `Automated test recordings for test suite: ${metadata.suiteName}`
+                );
+                
+                if (playlistResult.success) {
+                    playlistData = playlistResult.data;
+                } else {
+                    console.warn('Failed to create/get playlist:', playlistResult.error);
+                }
+            }
+
             const finalMetadata = {
                 snippet: {
                     title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
-                    description: metadata.description || 'Screen recording uploaded from QA testing tool',
+                    description: metadata.description || 'Screen recording from QA testing tool',
                     tags: metadata.tags || ['qa', 'testing', 'screen-recording'],
                     categoryId: metadata.categoryId || '28'
                 },
@@ -94,15 +236,39 @@ class ServerYouTubeService {
                 }
             };
 
-            // For API routes, we'll use resumable upload
-            return await this.performResumableUpload(videoBlob, finalMetadata);
+            // Upload video
+            const uploadResult = await this.performResumableUpload(videoBlob, finalMetadata);
+            
+            if (!uploadResult.success) {
+                return uploadResult;
+            }
+
+            const videoId = uploadResult.data.videoId;
+
+            // Add to playlist if available
+            if (playlistData) {
+                const playlistResult = await this.addVideoToPlaylist(videoId, playlistData.id);
+                if (!playlistResult.success) {
+                    console.warn('Failed to add video to playlist:', playlistResult.error);
+                }
+            }
+
+            // Return enhanced result
+            return {
+                success: true,
+                data: {
+                    ...uploadResult.data,
+                    playlistId: playlistData?.id || null,
+                    playlistUrl: playlistData?.url || null
+                }
+            };
 
         } catch (error) {
-            console.error('Server YouTube upload failed:', error);
+            console.error('YouTube upload failed:', error);
             return {
                 success: false,
                 error: { 
-                    message: error.message || "Failed to upload video",
+                    message: error.message || "Upload failed",
                     code: error.code || 'UPLOAD_ERROR'
                 }
             };
@@ -110,15 +276,12 @@ class ServerYouTubeService {
     }
 
     async performResumableUpload(videoBlob, metadata) {
-        // Initiate resumable upload
         const uploadUrl = await this.initiateResumableUpload(videoBlob, metadata);
         
-        // Upload the video in chunks
         const chunkSize = 256 * 1024; // 256KB chunks
         const totalSize = videoBlob.size;
         let uploadedBytes = 0;
 
-        // Convert blob to buffer for server-side processing
         const arrayBuffer = await videoBlob.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
@@ -127,53 +290,39 @@ class ServerYouTubeService {
             const chunk = buffer.slice(uploadedBytes, chunkEnd);
             const contentRange = `bytes ${uploadedBytes}-${chunkEnd - 1}/${totalSize}`;
 
-            try {
-                const response = await fetch(uploadUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Length': chunk.length.toString(),
-                        'Content-Range': contentRange
-                    },
-                    body: chunk
-                });
+            const response = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Length': chunk.length.toString(),
+                    'Content-Range': contentRange
+                },
+                body: chunk
+            });
 
-                if (response.status === 308) {
-                    // Resume incomplete - continue with next chunk
-                    uploadedBytes = chunkEnd;
-                } else if (response.status === 200 || response.status === 201) {
-                    // Upload complete
-                    const result = await response.json();
-                    
-                    return {
-                        success: true,
-                        data: {
-                            videoId: result.id,
-                            youtubeId: result.id, // Alias for compatibility
-                            url: `https://www.youtube.com/watch?v=${result.id}`,
-                            videoUrl: `https://www.youtube.com/watch?v=${result.id}`,
-                            embedUrl: `https://www.youtube.com/embed/${result.id}`,
-                            title: result.snippet.title,
-                            description: result.snippet.description,
-                            thumbnailUrl: result.snippet.thumbnails?.default?.url,
-                            privacyStatus: result.status.privacyStatus,
-                            provider: 'youtube',
-                            uploadedAt: new Date().toISOString()
-                        }
-                    };
-                } else if (response.status === 401) {
-                    // Token expired, refresh and retry
-                    await this.refreshAccessToken();
-                    return this.uploadVideoWithProgress(videoBlob, { title: 'Retrying upload' });
-                } else {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(`Upload failed at byte ${uploadedBytes}: ${response.status} - ${errorData.error?.message || response.statusText}`);
-                }
-            } catch (error) {
-                if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                    console.warn(`Network error at byte ${uploadedBytes}, retrying chunk...`);
-                    continue;
-                }
-                throw error;
+            if (response.status === 308) {
+                uploadedBytes = chunkEnd;
+            } else if (response.status === 200 || response.status === 201) {
+                const result = await response.json();
+                
+                return {
+                    success: true,
+                    data: {
+                        videoId: result.id,
+                        url: `https://www.youtube.com/watch?v=${result.id}`,
+                        embedUrl: `https://www.youtube.com/embed/${result.id}`,
+                        title: result.snippet.title,
+                        description: result.snippet.description,
+                        thumbnailUrl: result.snippet.thumbnails?.default?.url,
+                        privacyStatus: result.status.privacyStatus,
+                        uploadedAt: new Date().toISOString()
+                    }
+                };
+            } else if (response.status === 401) {
+                await this.refreshAccessToken();
+                throw new Error('Token expired during upload, please retry');
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`Upload failed at byte ${uploadedBytes}: ${response.status} - ${errorData.error?.message || response.statusText}`);
             }
         }
     }
@@ -195,61 +344,15 @@ class ServerYouTubeService {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Failed to initiate resumable upload: ${response.status} - ${errorData.error?.message || response.statusText}`);
+            throw new Error(`Failed to initiate upload: ${response.status} - ${errorData.error?.message || response.statusText}`);
         }
 
         const uploadUrl = response.headers.get('location');
         if (!uploadUrl) {
-            throw new Error('No upload URL received from YouTube API');
+            throw new Error('No upload URL received');
         }
 
         return uploadUrl;
-    }
-
-    async deleteVideo(videoId) {
-        try {
-            await this.initialize();
-            await this.ensureValidToken();
-
-            const response = await fetch(
-                `https://www.googleapis.com/youtube/v3/videos?id=${videoId}`,
-                {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${this.accessToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    await this.refreshAccessToken();
-                    return this.deleteVideo(videoId);
-                }
-                
-                if (response.status === 404) {
-                    return {
-                        success: false,
-                        error: { message: 'Video not found or already deleted' }
-                    };
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`Failed to delete video: ${response.status} - ${errorData.error?.message || response.statusText}`);
-            }
-
-            return {
-                success: true,
-                data: { message: 'Video deleted successfully' }
-            };
-        } catch (error) {
-            console.error('Failed to delete video:', error);
-            return {
-                success: false,
-                error: { message: error.message }
-            };
-        }
     }
 
     async getServiceStatus() {
@@ -257,75 +360,63 @@ class ServerYouTubeService {
             initialized: this.initialized,
             hasValidToken: this.isTokenValid(),
             tokenExpiresAt: this.tokenExpiresAt,
-            hasCredentials: !!(this.clientId && this.clientSecret && this.refreshToken)
+            hasCredentials: !!(this.clientId && this.clientSecret && this.refreshToken),
+            playlistsSupported: true
         };
     }
 }
 
-// Initialize server YouTube service
-const serverYouTubeService = new ServerYouTubeService();
+const youTubeService = new EnhancedYouTubeService();
 
 export async function POST(request) {
     try {
-        console.log('Starting server-side YouTube upload...');
-
-        // Parse form data
         const formData = await request.formData();
         const videoFile = formData.get('video');
         const metadataString = formData.get('metadata');
         
-        if (!videoFile) {
+        if (!videoFile || videoFile.size === 0) {
             return NextResponse.json(
-                { success: false, error: { message: 'No video file provided' } },
+                { success: false, error: { message: 'Invalid or empty video file' } },
                 { status: 400 }
             );
         }
 
-        if (!videoFile.size || videoFile.size === 0) {
-            return NextResponse.json(
-                { success: false, error: { message: 'Empty video file provided' } },
-                { status: 400 }
-            );
-        }
-
-        // Parse metadata
         let metadata = {};
         if (metadataString) {
             try {
                 metadata = JSON.parse(metadataString);
             } catch (error) {
-                console.warn('Failed to parse metadata, using defaults:', error);
+                console.warn('Invalid metadata JSON, using defaults');
             }
         }
 
-        console.log('Upload request details:', {
+        console.log('Processing upload:', {
             fileSize: videoFile.size,
             fileType: videoFile.type,
-            fileName: videoFile.name,
-            metadataKeys: Object.keys(metadata)
+            suiteId: metadata.suiteId,
+            suiteName: metadata.suiteName
         });
 
-        // Convert File to Blob for compatibility
         const videoBlob = new Blob([await videoFile.arrayBuffer()], { 
             type: videoFile.type || 'video/webm' 
         });
 
-        // Upload to YouTube
-        const uploadResult = await serverYouTubeService.uploadVideoWithProgress(videoBlob, metadata);
+        const uploadResult = await youTubeService.uploadVideoWithProgress(videoBlob, metadata);
 
         if (uploadResult.success) {
-            console.log('Server-side YouTube upload successful');
+            console.log('Upload successful:', {
+                videoId: uploadResult.data.videoId,
+                playlistId: uploadResult.data.playlistId
+            });
+            
             return NextResponse.json(uploadResult);
         } else {
-            console.error('Server-side YouTube upload failed:', uploadResult.error);
-            return NextResponse.json(
-                uploadResult,
-                { status: 500 }
-            );
+            console.error('Upload failed:', uploadResult.error);
+            return NextResponse.json(uploadResult, { status: 500 });
         }
 
     } catch (error) {
-        console.error('API route error:', error);
+        console.error('API error:', error);
         return NextResponse.json(
             { 
                 success: false, 
@@ -339,10 +430,9 @@ export async function POST(request) {
     }
 }
 
-// GET endpoint for service status
 export async function GET() {
     try {
-        const status = await serverYouTubeService.getServiceStatus();
+        const status = await youTubeService.getServiceStatus();
         return NextResponse.json({
             success: true,
             data: {
@@ -354,10 +444,7 @@ export async function GET() {
         });
     } catch (error) {
         return NextResponse.json(
-            { 
-                success: false, 
-                error: { message: error.message } 
-            },
+            { success: false, error: { message: error.message } },
             { status: 500 }
         );
     }
