@@ -1,62 +1,45 @@
-// lib/firebase/recordingService.js - Updated for fixed YouTube service
-import { uploadBytes, getDownloadURL, ref as storageRef, deleteObject } from 'firebase/storage';
-import { storage } from '../config/firebase';
-import YouTubeService from '../lib/YoutubeService';
+// lib/firebase/recordingService.js - YouTube Only Implementation
+import youTubeService from '../lib/YoutubeService';
 
 const recordingService = new class RecordingService {
     constructor() {
-        this.storage = storage;
-    }
+        // Debug environment variables
+        console.log('Environment check:', {
+            nodeEnv: process.env.NODE_ENV,
+            allEnvVars: Object.keys(process.env).filter(key => key.includes('YOUTUBE')),
+            reactAppClientId: process.env.REACT_APP_YOUTUBE_CLIENT_ID?.substring(0, 10) + '...',
+            reactAppSecret: process.env.REACT_APP_YOUTUBE_CLIENT_SECRET?.substring(0, 10) + '...',
+            reactAppRefresh: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN?.substring(0, 10) + '...',
+            nodeClientId: process.env.YOUTUBE_CLIENT_ID?.substring(0, 10) + '...',
+            nodeSecret: process.env.YOUTUBE_CLIENT_SECRET?.substring(0, 10) + '...',
+            nodeRefresh: process.env.YOUTUBE_REFRESH_TOKEN?.substring(0, 10) + '...'
+        });
 
-    // Upload blob to Firebase Storage (fallback if YouTube fails)
-    async uploadToFirebaseStorage(blob, filename) {
-        try {
-            const storageReference = storageRef(this.storage, `recordings/${filename}`);
-            const snapshot = await uploadBytes(storageReference, blob);
-            const downloadURL = await getDownloadURL(snapshot.ref);
-            
-            return {
-                success: true,
-                data: {
-                    url: downloadURL,
-                    path: snapshot.ref.fullPath,
-                    size: blob.size,
-                    filename: filename
-                }
-            };
-        } catch (error) {
-            console.error('Firebase storage upload failed:', error);
-            return {
-                success: false,
-                error: { message: error.message }
-            };
-        }
-    }
+        this.clientId = process.env.REACT_APP_YOUTUBE_CLIENT_ID || process.env.YOUTUBE_CLIENT_ID;
+        this.clientSecret = process.env.REACT_APP_YOUTUBE_CLIENT_SECRET || process.env.YOUTUBE_CLIENT_SECRET;
+        this.refreshToken = process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || process.env.YOUTUBE_REFRESH_TOKEN;
 
-    // Delete from Firebase Storage
-    async deleteFromFirebaseStorage(path) {
-        try {
-            const fileRef = storageRef(this.storage, path);
-            await deleteObject(fileRef);
-            return { success: true };
-        } catch (error) {
-            console.error('Firebase storage delete failed:', error);
-            return {
-                success: false,
-                error: { message: error.message }
-            };
-        }
+        console.log('Final credentials:', {
+            hasClientId: !!this.clientId,
+            hasClientSecret: !!this.clientSecret,
+            hasRefreshToken: !!this.refreshToken,
+            clientIdPrefix: this.clientId?.substring(0, 10) + '...'
+        });
+
+        this.accessToken = null;
+        this.tokenExpiresAt = null;
+        this.initialized = false;
     }
 
     // Check YouTube service availability
     async checkYouTubeAvailability() {
         try {
-            const status = YouTubeService.getStatus();
+            const status = youTubeService.getStatus();
             if (!status.hasCredentials) {
                 console.warn('YouTube credentials not configured');
                 return false;
             }
-            
+
             return await youTubeService.isAvailable();
         } catch (error) {
             console.warn('YouTube service not available:', error);
@@ -64,10 +47,8 @@ const recordingService = new class RecordingService {
         }
     }
 
-    // Main upload method with YouTube primary, Firebase fallback
-    async uploadRecording(blob, metadata = {}, onProgress = null) {
-        const filename = `recording_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
-        
+    // Main upload method - YouTube only
+    async uploadToYouTube(blob, metadata = {}, onProgress = null) {
         // Validate inputs
         if (!blob || !(blob instanceof Blob)) {
             return {
@@ -83,98 +64,70 @@ const recordingService = new class RecordingService {
             };
         }
 
-        // Check YouTube availability first
+        // Check YouTube availability
         const youtubeAvailable = await this.checkYouTubeAvailability();
-        
-        if (youtubeAvailable) {
-            try {
-                console.log('Attempting YouTube upload...');
-                
-                // Try YouTube upload with progress tracking
-                const youtubeResult = await youTubeService.uploadVideoWithProgress(
-                    blob, 
-                    {
-                        title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
-                        description: metadata.description || 'Screen recording from QA testing',
-                        privacy: metadata.privacy || 'private',
-                        tags: ['qa-testing', 'screen-recording', ...(metadata.tags || [])],
-                        categoryId: '28' // Science & Technology
-                    },
-                    onProgress
-                );
 
-                if (youtubeResult.success) {
-                    console.log('YouTube upload successful');
-                    return {
-                        success: true,
-                        data: {
-                            ...youtubeResult.data,
-                            provider: 'youtube',
-                            filename,
-                            videoId: youtubeResult.data.videoId,
-                            youtubeId: youtubeResult.data.videoId, // Alias for compatibility
-                            videoUrl: youtubeResult.data.url,
-                            embedUrl: youtubeResult.data.embedUrl,
-                            thumbnailUrl: youtubeResult.data.thumbnailUrl,
-                            privacyStatus: youtubeResult.data.privacyStatus
-                        }
-                    };
-                } else {
-                    console.warn('YouTube upload failed, falling back to Firebase Storage:', youtubeResult.error);
-                }
-            } catch (error) {
-                console.warn('YouTube upload error, falling back to Firebase Storage:', error);
-            }
-        } else {
-            console.log('YouTube service not available, using Firebase Storage');
-        }
-
-        // Fallback to Firebase Storage
-        console.log('Uploading to Firebase Storage...');
-        if (onProgress) onProgress(0);
-        
-        const firebaseResult = await this.uploadToFirebaseStorage(blob, filename);
-        
-        if (onProgress) onProgress(100);
-
-        if (firebaseResult.success) {
-            console.log('Firebase Storage upload successful');
+        if (!youtubeAvailable) {
             return {
-                success: true,
-                data: {
-                    url: firebaseResult.data.url,
-                    videoUrl: firebaseResult.data.url, // Alias for compatibility
-                    provider: 'firebase',
-                    filename: firebaseResult.data.filename,
-                    storagePath: firebaseResult.data.path,
-                    size: firebaseResult.data.size
-                }
+                success: false,
+                error: { message: 'YouTube service is not available or not configured' }
             };
         }
 
-        // Both methods failed
-        console.error('Both YouTube and Firebase Storage uploads failed');
-        return {
-            success: false,
-            error: { 
-                message: 'Both YouTube and Firebase Storage uploads failed',
-                details: {
-                    youtube: youtubeAvailable ? 'Upload failed' : 'Service unavailable',
-                    firebase: firebaseResult.error?.message || 'Upload failed'
-                }
+        try {
+            console.log('Uploading to YouTube...');
+
+            // Upload to YouTube with progress tracking
+            const youtubeResult = await youTubeService.uploadVideoWithProgress(
+                blob,
+                {
+                    title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
+                    description: metadata.description || 'Screen recording from QA testing',
+                    privacy: metadata.privacy || 'private',
+                    tags: ['qa-testing', 'screen-recording', ...(metadata.tags || [])],
+                    categoryId: '28' // Science & Technology
+                },
+                onProgress
+            );
+
+            if (youtubeResult.success) {
+                console.log('YouTube upload successful');
+                return {
+                    success: true,
+                    data: {
+                        videoId: youtubeResult.data.videoId,
+                        url: youtubeResult.data.url,
+                        embedUrl: youtubeResult.data.embedUrl,
+                        thumbnailUrl: youtubeResult.data.thumbnailUrl,
+                        privacyStatus: youtubeResult.data.privacyStatus,
+                        uploadedAt: new Date().toISOString()
+                    }
+                };
+            } else {
+                console.error('YouTube upload failed:', youtubeResult.error);
+                return {
+                    success: false,
+                    error: youtubeResult.error || { message: 'YouTube upload failed' }
+                };
             }
-        };
+        } catch (error) {
+            console.error('YouTube upload error:', error);
+            return {
+                success: false,
+                error: { message: error.message || 'Failed to upload to YouTube' }
+            };
+        }
     }
 
     // Upload with retry logic
-    async uploadRecordingWithRetry(blob, metadata = {}, onProgress = null, maxRetries = 2) {
+    async uploadToYouTubeWithRetry(blob, metadata = {}, onProgress = null, maxRetries = 3) {
         let lastError = null;
-        
+
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 console.log(`Upload attempt ${attempt}/${maxRetries}`);
-                
-                const result = await this.uploadRecording(blob, metadata, (progress) => {
+
+                const result = await this.uploadToYouTube(blob, metadata, (progress) => {
                     if (onProgress) {
                         // Adjust progress to account for multiple attempts
                         const attemptProgress = progress / maxRetries;
@@ -189,17 +142,17 @@ const recordingService = new class RecordingService {
                 }
 
                 lastError = result.error;
-                
+
                 if (attempt < maxRetries) {
                     console.log(`Upload attempt ${attempt} failed, retrying...`);
                     // Wait before retry (exponential backoff)
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
                 }
-                
+
             } catch (error) {
                 lastError = { message: error.message };
                 console.error(`Upload attempt ${attempt} threw error:`, error);
-                
+
                 if (attempt < maxRetries) {
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
                 }
@@ -215,70 +168,60 @@ const recordingService = new class RecordingService {
         };
     }
 
-    // Delete recording from storage
+    // Delete recording from YouTube
     async deleteRecording(recordingData) {
         if (!recordingData) {
             return { success: false, error: { message: 'No recording data provided' } };
         }
 
         try {
-            if (recordingData.provider === 'youtube' && (recordingData.videoId || recordingData.youtubeId)) {
-                const videoId = recordingData.videoId || recordingData.youtubeId;
-                console.log(`Deleting YouTube video: ${videoId}`);
-                return await youTubeService.deleteVideo(videoId);
-            } 
-            
-            if (recordingData.provider === 'firebase' && recordingData.storagePath) {
-                console.log(`Deleting Firebase Storage file: ${recordingData.storagePath}`);
-                return await this.deleteFromFirebaseStorage(recordingData.storagePath);
-            }
-            
-            // Try to infer provider from available data
-            if (recordingData.youtubeId || recordingData.videoId) {
-                const videoId = recordingData.youtubeId || recordingData.videoId;
-                console.log(`Attempting YouTube deletion for video: ${videoId}`);
-                return await youTubeService.deleteVideo(videoId);
-            }
-            
-            if (recordingData.storagePath) {
-                console.log(`Attempting Firebase deletion for path: ${recordingData.storagePath}`);
-                return await this.deleteFromFirebaseStorage(recordingData.storagePath);
+            const videoId = recordingData.youtubeId || recordingData.videoId;
+            if (!videoId) {
+                return {
+                    success: false,
+                    error: { message: 'No YouTube video ID found in recording data' }
+                };
             }
 
-            return { 
-                success: false, 
-                error: { message: 'Could not determine storage provider or missing required data' } 
-            };
-            
+            console.log(`Deleting YouTube video: ${videoId}`);
+            return await youTubeService.deleteVideo(videoId);
+
         } catch (error) {
-            console.error('Error deleting recording:', error);
+            console.error('Error deleting YouTube video:', error);
             return {
                 success: false,
-                error: { message: error.message || 'Failed to delete recording' }
+                error: { message: error.message || 'Failed to delete YouTube video' }
             };
         }
     }
 
-    // Get playback URL (for embedded players if needed)
-    getPlaybackUrl(recordingData) {
+    // Get YouTube embed URL
+    getEmbedUrl(recordingData) {
         if (!recordingData) return null;
 
-        if (recordingData.provider === 'youtube' && (recordingData.videoId || recordingData.youtubeId)) {
-            return `https://www.youtube.com/embed/${recordingData.videoId || recordingData.youtubeId}`;
+        const videoId = recordingData.youtubeId || recordingData.videoId;
+        if (videoId) {
+            return `https://www.youtube.com/embed/${videoId}`;
         }
-        
-        return recordingData.url || recordingData.videoUrl;
+
+        return null;
     }
 
-    // Get direct video URL
-    getVideoUrl(recordingData) {
+    // Get YouTube watch URL
+    getWatchUrl(recordingData) {
         if (!recordingData) return null;
 
-        if (recordingData.provider === 'youtube' && (recordingData.videoId || recordingData.youtubeId)) {
-            return `https://www.youtube.com/watch?v=${recordingData.videoId || recordingData.youtubeId}`;
+        const videoId = recordingData.youtubeId || recordingData.videoId;
+        if (videoId) {
+            return `https://www.youtube.com/watch?v=${videoId}`;
         }
-        
-        return recordingData.url || recordingData.videoUrl;
+
+        return recordingData.videoUrl;
+    }
+
+    // Get video URL (alias for compatibility)
+    getVideoUrl(recordingData) {
+        return this.getWatchUrl(recordingData);
     }
 
     // Check if YouTube is available and authenticated
@@ -289,7 +232,7 @@ const recordingService = new class RecordingService {
     // Get service status
     async getServiceStatus() {
         const youtubeStatus = youTubeService.getStatus();
-        
+
         return {
             youtube: {
                 available: youtubeStatus.hasCredentials && youtubeStatus.initialized,
@@ -297,10 +240,6 @@ const recordingService = new class RecordingService {
                 hasValidToken: youtubeStatus.hasValidToken,
                 hasCredentials: youtubeStatus.hasCredentials,
                 tokenExpiresAt: youtubeStatus.tokenExpiresAt
-            },
-            firebase: {
-                available: !!this.storage,
-                configured: !!this.storage
             }
         };
     }
@@ -327,74 +266,89 @@ const recordingService = new class RecordingService {
         }
     }
 
-    // Update video metadata
+    // Update video metadata on YouTube
     async updateVideoMetadata(recordingData, metadata) {
-        if (!recordingData || recordingData.provider !== 'youtube') {
+        if (!recordingData) {
             return {
                 success: false,
-                error: { message: 'Can only update metadata for YouTube videos' }
+                error: { message: 'No recording data provided' }
             };
         }
 
-        const videoId = recordingData.videoId || recordingData.youtubeId;
+        const videoId = recordingData.youtubeId || recordingData.videoId;
         if (!videoId) {
             return {
                 success: false,
-                error: { message: 'No video ID found in recording data' }
+                error: { message: 'No YouTube video ID found in recording data' }
             };
         }
 
-        return await youTubeService.updateVideo(videoId, metadata);
+        try {
+            return await youTubeService.updateVideo(videoId, metadata);
+        } catch (error) {
+            return {
+                success: false,
+                error: { message: error.message || 'Failed to update video metadata' }
+            };
+        }
     }
 
     // Create a playlist for recordings
     async createRecordingsPlaylist(title) {
-        return await youTubeService.createRecordingsPlaylist(title);
+        try {
+            return await youTubeService.createRecordingsPlaylist(title);
+        } catch (error) {
+            return {
+                success: false,
+                error: { message: error.message || 'Failed to create playlist' }
+            };
+        }
     }
 
     // Add video to playlist
     async addVideoToPlaylist(recordingData, playlistId) {
-        if (!recordingData || recordingData.provider !== 'youtube') {
+        if (!recordingData) {
             return {
                 success: false,
-                error: { message: 'Can only add YouTube videos to playlists' }
+                error: { message: 'No recording data provided' }
             };
         }
 
-        const videoId = recordingData.videoId || recordingData.youtubeId;
+        const videoId = recordingData.youtubeId || recordingData.videoId;
         if (!videoId) {
             return {
                 success: false,
-                error: { message: 'No video ID found in recording data' }
+                error: { message: 'No YouTube video ID found in recording data' }
             };
         }
 
-        return await youTubeService.addVideoToPlaylist(videoId, playlistId);
+        try {
+            return await youTubeService.addVideoToPlaylist(videoId, playlistId);
+        } catch (error) {
+            return {
+                success: false,
+                error: { message: error.message || 'Failed to add video to playlist' }
+            };
+        }
     }
 
-    // Get recording statistics/info
+    // Get recording info
     getRecordingInfo(recordingData) {
         if (!recordingData) return null;
 
-        const info = {
-            provider: recordingData.provider,
-            filename: recordingData.filename,
-            size: recordingData.size,
-            created: recordingData.created_at || recordingData.createdAt
+        const videoId = recordingData.youtubeId || recordingData.videoId;
+
+        return {
+            provider: 'youtube',
+            videoId: videoId,
+            url: this.getWatchUrl(recordingData),
+            embedUrl: this.getEmbedUrl(recordingData),
+            thumbnailUrl: recordingData.thumbnailUrl,
+            privacyStatus: recordingData.privacyStatus || 'private',
+            uploadedAt: recordingData.uploadedAt || recordingData.recordedAt,
+            title: recordingData.title,
+            description: recordingData.description
         };
-
-        if (recordingData.provider === 'youtube') {
-            info.videoId = recordingData.videoId || recordingData.youtubeId;
-            info.url = this.getVideoUrl(recordingData);
-            info.embedUrl = this.getPlaybackUrl(recordingData);
-            info.thumbnailUrl = recordingData.thumbnailUrl;
-            info.privacyStatus = recordingData.privacyStatus;
-        } else if (recordingData.provider === 'firebase') {
-            info.url = recordingData.url || recordingData.videoUrl;
-            info.storagePath = recordingData.storagePath;
-        }
-
-        return info;
     }
 
     // Validate recording data structure
@@ -406,21 +360,13 @@ const recordingService = new class RecordingService {
             return { valid: false, errors };
         }
 
-        if (!recordingData.provider) {
-            errors.push('Provider is required');
+        const videoId = recordingData.youtubeId || recordingData.videoId;
+        if (!videoId) {
+            errors.push('YouTube video ID is required');
         }
 
-        if (recordingData.provider === 'youtube') {
-            if (!recordingData.videoId && !recordingData.youtubeId) {
-                errors.push('YouTube video ID is required');
-            }
-        } else if (recordingData.provider === 'firebase') {
-            if (!recordingData.url && !recordingData.videoUrl) {
-                errors.push('Firebase storage URL is required');
-            }
-            if (!recordingData.storagePath) {
-                errors.push('Firebase storage path is required');
-            }
+        if (!recordingData.videoUrl && !videoId) {
+            errors.push('Either videoUrl or YouTube video ID is required');
         }
 
         return {
@@ -428,6 +374,54 @@ const recordingService = new class RecordingService {
             errors
         };
     }
-}
+
+    // Get video statistics from YouTube
+    async getVideoStatistics(recordingData) {
+        if (!recordingData) {
+            return { success: false, error: { message: 'No recording data provided' } };
+        }
+
+        const videoId = recordingData.youtubeId || recordingData.videoId;
+        if (!videoId) {
+            return { success: false, error: { message: 'No YouTube video ID found' } };
+        }
+
+        try {
+            return await youTubeService.getVideoStatistics(videoId);
+        } catch (error) {
+            return {
+                success: false,
+                error: { message: error.message || 'Failed to get video statistics' }
+            };
+        }
+    }
+
+    // Check if video exists on YouTube
+    async checkVideoExists(recordingData) {
+        if (!recordingData) {
+            return { success: false, exists: false };
+        }
+
+        const videoId = recordingData.youtubeId || recordingData.videoId;
+        if (!videoId) {
+            return { success: false, exists: false };
+        }
+
+        try {
+            const result = await youTubeService.getVideoDetails(videoId);
+            return {
+                success: true,
+                exists: result.success,
+                data: result.success ? result.data : null
+            };
+        } catch (error) {
+            return {
+                success: false,
+                exists: false,
+                error: { message: error.message }
+            };
+        }
+    }
+}();
 
 export default recordingService;
