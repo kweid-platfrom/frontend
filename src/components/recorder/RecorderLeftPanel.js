@@ -1,8 +1,7 @@
-'use client';
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info } from 'lucide-react';
+import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Brain } from 'lucide-react';
 import { useRecording } from '../../hooks/useRecording';
+import AIHighlights from './AIHighlights';
 
 const RecorderLeftPanel = ({ 
   consoleLogs = [], 
@@ -12,9 +11,12 @@ const RecorderLeftPanel = ({
   onAddComment,
   videoRef, 
   activeSuite, 
-  firestoreService 
+  firestoreService,
+  isPreviewMode = false, // New prop to distinguish preview vs saved recording
+  aiHighlightEnabled = true,
+  onToggleAiHighlight
 }) => {
-  const [activeTab, setActiveTab] = useState('console');
+  const [activeTab, setActiveTab] = useState(isPreviewMode ? 'ai-highlights' : 'console');
   const [commentText, setCommentText] = useState('');
   const [selectedBugs, setSelectedBugs] = useState([]);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
@@ -121,21 +123,27 @@ const RecorderLeftPanel = ({
       case 'network': return networkLogs.length;
       case 'issues': return detectedIssues.length;
       case 'comments': return comments.length;
+      case 'ai-highlights': return 0; // Count handled by AI component
       default: return 0;
     }
   };
 
+  // Define tabs based on preview mode
   const tabs = [
-    { id: 'console', label: 'Console', icon: Terminal },
-    { id: 'network', label: 'Network', icon: Network },
-    { id: 'issues', label: 'Issues', icon: Bug },
+    { id: 'ai-highlights', label: 'AI Insights', icon: Brain },
     { id: 'comments', label: 'Comments', icon: MessageSquare },
-    { id: 'info', label: 'Info', icon: Info },
+    // Show dev tool tabs only when not in preview mode
+    ...(isPreviewMode ? [] : [
+      { id: 'console', label: 'Console', icon: Terminal },
+      { id: 'network', label: 'Network', icon: Network },
+      { id: 'issues', label: 'Issues', icon: Bug },
+      { id: 'info', label: 'Info', icon: Info }
+    ])
   ];
 
   return (
     <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 flex flex-col min-w-80">
-      {/* Comments Section - Fixed Height */}
+      {/* Comments Section - Fixed Height - Always visible */}
       <div className="h-48 border-b border-gray-200 dark:border-gray-700 p-3 flex flex-col">
         <div className="text-sm font-medium mb-2 flex items-center justify-between">
           <span>Add Comment</span>
@@ -229,7 +237,57 @@ const RecorderLeftPanel = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
-          {activeTab === 'console' && (
+          {/* AI Highlights Tab */}
+          {activeTab === 'ai-highlights' && (
+            <AIHighlights
+              consoleLogs={consoleLogs}
+              networkLogs={networkLogs}
+              detectedIssues={detectedIssues}
+              duration={videoRef.current?.duration || 0}
+              onSeekTo={seekTo}
+              isEnabled={aiHighlightEnabled}
+              onToggle={onToggleAiHighlight}
+            />
+          )}
+
+          {/* Comments Tab */}
+          {activeTab === 'comments' && (
+            <div className="space-y-2">
+              {comments.length === 0 ? (
+                <div className="text-gray-500 text-sm text-center py-8">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <div>No comments added yet</div>
+                  <div className="text-xs mt-1">Add comments above to mark important moments</div>
+                </div>
+              ) : (
+                <>
+                  {comments
+                    .slice()
+                    .sort((a, b) => a.time - b.time)
+                    .map(comment => (
+                      <div key={comment.id} className="p-3 bg-gray-50 dark:bg-gray-800 rounded border">
+                        <div className="flex items-center justify-between mb-2">
+                          <button
+                            onClick={() => seekTo(comment.time)}
+                            className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-sm hover:underline"
+                          >
+                            [{comment.timeStr || formatTime(comment.time)}]
+                          </button>
+                          <span className="text-gray-400 text-[10px]">
+                            {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
+                      </div>
+                    ))}
+                  <div ref={commentsEndRef} />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Developer Tool Tabs - Only shown when not in preview mode */}
+          {!isPreviewMode && activeTab === 'console' && (
             <div className="space-y-1">
               {consoleLogs.length === 0 ? (
                 <div className="text-gray-500 text-sm text-center py-8">
@@ -268,7 +326,7 @@ const RecorderLeftPanel = ({
             </div>
           )}
 
-          {activeTab === 'network' && (
+          {!isPreviewMode && activeTab === 'network' && (
             <div className="space-y-2">
               {networkLogs.length === 0 ? (
                 <div className="text-gray-500 text-sm text-center py-8">
@@ -318,7 +376,7 @@ const RecorderLeftPanel = ({
             </div>
           )}
 
-          {activeTab === 'issues' && (
+          {!isPreviewMode && activeTab === 'issues' && (
             <div className="space-y-2">
               {detectedIssues.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-gray-500 py-8">
@@ -385,42 +443,7 @@ const RecorderLeftPanel = ({
             </div>
           )}
 
-          {activeTab === 'comments' && (
-            <div className="space-y-2">
-              {comments.length === 0 ? (
-                <div className="text-gray-500 text-sm text-center py-8">
-                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <div>No comments added yet</div>
-                  <div className="text-xs mt-1">Add comments above to mark important moments</div>
-                </div>
-              ) : (
-                <>
-                  {comments
-                    .slice()
-                    .sort((a, b) => a.time - b.time)
-                    .map(comment => (
-                      <div key={comment.id} className="p-3 bg-gray-50 dark:bg-gray-800 rounded border">
-                        <div className="flex items-center justify-between mb-2">
-                          <button
-                            onClick={() => seekTo(comment.time)}
-                            className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-sm hover:underline"
-                          >
-                            [{comment.timeStr || formatTime(comment.time)}]
-                          </button>
-                          <span className="text-gray-400 text-[10px]">
-                            {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
-                      </div>
-                    ))}
-                  <div ref={commentsEndRef} />
-                </>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'info' && (
+          {!isPreviewMode && activeTab === 'info' && (
             <div className="text-xs space-y-2">
               <div className="grid grid-cols-1 gap-2">
                 <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
@@ -441,4 +464,4 @@ const RecorderLeftPanel = ({
   );
 };
 
-export default RecorderLeftPanel
+export default RecorderLeftPanel;
