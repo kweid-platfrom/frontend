@@ -1,6 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Brain, Zap, AlertTriangle, CheckCircle, Clock, Network, Code, Loader2 } from 'lucide-react';
-import { useApp } from '../../context/AppProvider';
+'use client'
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { 
+  Brain, 
+  Zap, 
+  AlertTriangle, 
+  CheckCircle, 
+  Clock, 
+  Network, 
+  Code,
+  Shield,
+  User,
+  TrendingUp,
+  Wifi
+} from 'lucide-react';
+
+// Import the AI insight service
+import aiInsightService from '../../services/AIInsightService';
 
 const AIHighlights = ({ 
   consoleLogs = [], 
@@ -8,25 +24,29 @@ const AIHighlights = ({
   detectedIssues = [], 
   duration = 0,
   onSeekTo,
-  isEnabled = true,
-  onToggle,
-  onSaveHighlights,
+  isEnabled = false,
   className = ""
 }) => {
-  const { 
-    actions: { ai: { generateTestCasesWithAI } },
-    state: { 
-      aiAvailable: canGenerate, 
-      aiGenerating: isGenerating, 
-      aiError: aiError,
-      isLoading: isInitializing
-    }
-  } = useApp();
-
   const [highlights, setHighlights] = useState([]);
+  const [displayedHighlights, setDisplayedHighlights] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisComplete, setAnalysisComplete] = useState(false);
-  const [error, setError] = useState(null);
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [displayIndex, setDisplayIndex] = useState(0);
+  const intervalRef = useRef(null);
+
+  // Icon mapping for different insight types
+  const iconMapping = {
+    AlertTriangle,
+    CheckCircle,
+    Clock,
+    Network,
+    Code,
+    Brain,
+    Shield,
+    User,
+    TrendingUp,
+    Wifi
+  };
 
   const formatTime = (seconds) => {
     const sec = Math.floor(seconds % 60).toString().padStart(2, '0');
@@ -34,55 +54,41 @@ const AIHighlights = ({
     return `${min}:${sec}`;
   };
 
-  const getLogTime = (log) => {
-    if (log.time) return typeof log.time === 'number' ? log.time : 0;
-    if (log.timestamp) {
-      const date = new Date(log.timestamp);
-      return isNaN(date.getTime()) ? Math.random() * duration : (date.getTime() % (duration * 1000)) / 1000;
-    }
-    return Math.random() * duration;
+  const getIconComponent = (iconName) => {
+    return iconMapping[iconName] || Brain;
   };
 
-  const getUrlDomain = (url) => {
-    try {
-      return new URL(url).hostname;
-    } catch {
-      return url.split('/')[0] || 'unknown';
-    }
+  const getColorClasses = (color) => {
+    const classes = {
+      red: 'border-red-400 bg-red-50/80 dark:bg-red-900/20 text-red-700 dark:text-red-300',
+      yellow: 'border-yellow-400 bg-yellow-50/80 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300',
+      green: 'border-green-400 bg-green-50/80 dark:bg-green-900/20 text-green-700 dark:text-green-300',
+      blue: 'border-blue-400 bg-blue-50/80 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300',
+      purple: 'border-purple-400 bg-purple-50/80 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'
+    };
+    return classes[color] || classes.purple;
   };
 
-  const getSeverityIcon = (severity) => {
-    switch (severity) {
-      case 'high': return AlertTriangle;
-      case 'medium': return Clock;
-      case 'low': return CheckCircle;
-      case 'dev_tool': return Code;
-      default: return Brain;
-    }
+  const getSeverityBadge = (severity) => {
+    const badges = {
+      critical: 'bg-red-500 text-white',
+      high: 'bg-red-400 text-white',
+      medium: 'bg-yellow-500 text-white',
+      low: 'bg-blue-500 text-white',
+      info: 'bg-green-500 text-white'
+    };
+    return badges[severity] || 'bg-gray-500 text-white';
   };
 
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'high': return 'red';
-      case 'medium': return 'yellow';
-      case 'low': return 'blue';
-      case 'dev_tool': return 'purple';
-      default: return 'purple';
-    }
-  };
-
-  const generateHighlights = useCallback(async () => {
-    if (!canGenerate || !isEnabled || isAnalyzing) {
-      console.log('Cannot generate highlights:', { canGenerate, isEnabled, isAnalyzing });
+  // Pre-analyze and store insights in background when data is available
+  const preAnalyzeInsights = useCallback(async () => {
+    if (hasAnalyzed || (consoleLogs.length === 0 && networkLogs.length === 0 && detectedIssues.length === 0)) {
       return;
     }
 
-    setIsAnalyzing(true);
-    setError(null);
-    setAnalysisComplete(false);
-
     try {
       const recordingData = {
+        id: `recording_${Date.now()}`,
         duration,
         consoleLogs: consoleLogs.map(log => ({
           level: log.level,
@@ -112,349 +118,196 @@ const AIHighlights = ({
         }
       };
 
-      const analysisPrompt = `
-Analyze this screen recording session data and provide key insights for timeline-based highlights:
+      const result = await aiInsightService.analyzeRecording(recordingData);
 
-Recording Duration: ${duration} seconds
-Console Logs: ${consoleLogs.length} entries
-Network Requests: ${networkLogs.length} entries  
-Detected Issues: ${detectedIssues.length} entries
+      console.log('Debug - AI service result:', result);
 
-Console Error Summary:
-${consoleLogs.filter(log => log.level === 'error').map(log => `- ${log.message}`).join('\n').substring(0, 500)}
-
-Network Issues Summary:
-${networkLogs.filter(req => req.status >= 400).map(req => `- ${req.method} ${req.url} (${req.status})`).join('\n').substring(0, 500)}
-
-Please identify the most critical issues, performance problems, and positive aspects. Return insights in JSON format with: id, type, title, description, time, severity, confidence, impact, recommendation, tags. Ensure insights are tied to specific timestamps for timeline-based highlights.
-      `.trim();
-
-      const result = await generateTestCasesWithAI(analysisPrompt, 'Recording Analysis', {
-        temperature: 0.3,
-        maxTokens: 2000,
-        framework: 'Recording Analysis'
-      });
-
-      if (result.success && result.data?.testCases) {
-        const aiHighlights = result.data.testCases.map((testCase, index) => {
-          const insight = parseAIInsight(testCase, index);
-          return {
-            id: `ai-${index}`,
-            type: insight.type || 'general_insight',
-            category: insight.category || 'analysis',
-            title: insight.title || testCase.name || 'AI Insight',
-            description: insight.description || testCase.description || 'AI detected an important pattern',
-            time: insight.time || (duration * Math.random()),
-            severity: insight.severity || 'medium',
-            confidence: insight.confidence || 0.8,
-            impact: insight.impact || 'May affect user experience',
-            recommendation: insight.recommendation || 'Review and address if needed',
-            tags: insight.tags || ['ai-generated'],
-            icon: getSeverityIcon(insight.severity || 'medium'),
-            color: getSeverityColor(insight.severity || 'medium'),
-            aiGenerated: true,
-            source: 'ai-analysis'
-          };
-        });
-
-        setHighlights(aiHighlights);
-        setAnalysisComplete(true);
-        console.log(`Generated ${aiHighlights.length} AI highlights`);
+      if (result.success && result.data?.insights) {
+        setHighlights(result.data.insights);
+        setHasAnalyzed(true);
+      } else if (result.fallbackData?.insights) {
+        setHighlights(result.fallbackData.insights);
+        setHasAnalyzed(true);
       } else {
-        throw new Error(result.error || 'AI analysis failed');
+        // Force fallback analysis if AI returns empty
+        const fallbackInsights = generateBasicFallback(recordingData);
+        setHighlights(fallbackInsights);
+        setHasAnalyzed(true);
       }
 
     } catch (err) {
-      console.error('AI highlight generation failed:', err);
-      setError(err.message || 'Failed to generate AI insights');
-      
-      const fallbackHighlights = generateBasicHighlights();
-      setHighlights(fallbackHighlights);
-      setAnalysisComplete(true);
-    } finally {
-      setIsAnalyzing(false);
+      console.error('AI pre-analysis failed:', err);
+      setHasAnalyzed(true);
     }
-  }, [generateTestCasesWithAI, canGenerate, isEnabled, isAnalyzing, consoleLogs, networkLogs, detectedIssues, duration]);
+  }, [consoleLogs, networkLogs, detectedIssues, duration, hasAnalyzed]);
 
-  const parseAIInsight = (testCase, index) => {
-    try {
-      const description = testCase.description || '';
-      const severityMatch = description.match(/severity[:\s]*(high|medium|low|dev_tool)/i);
-      const timeMatch = description.match(/time[:\s]*(\d+)/);
-      const typeMatch = description.match(/type[:\s]*(\w+)/i);
-      
-      return {
-        type: typeMatch ? typeMatch[1].toLowerCase() : 'insight',
-        severity: severityMatch ? severityMatch[1].toLowerCase() : 'medium',
-        time: timeMatch ? parseInt(timeMatch[1]) : duration * Math.random(),
-        title: testCase.name || `AI Insight ${index + 1}`,
-        description: description,
-        confidence: 0.85
-      };
-    } catch (err) {
-      console.warn('Failed to parse AI insight:', err);
-      return {};
+  // Progressive display of insights when toggled on
+  const startProgressiveDisplay = useCallback(() => {
+    if (highlights.length === 0) return;
+
+    setDisplayedHighlights([]);
+    setDisplayIndex(0);
+    
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
     }
-  };
 
-  const generateBasicHighlights = () => {
-    const basicHighlights = [];
-
-    const errors = consoleLogs.filter(log => log.level === 'error');
-    if (errors.length > 0) {
-      basicHighlights.push({
-        id: 'basic-errors',
-        type: 'error_summary',
-        category: 'errors',
-        title: `${errors.length} Console Errors`,
-        description: `Found ${errors.length} JavaScript errors that may impact functionality`,
-        time: getLogTime(errors[0]),
-        severity: 'high',
-        confidence: 1.0,
-        impact: 'May break application functionality',
-        recommendation: 'Review and fix JavaScript errors',
-        tags: ['javascript', 'errors'],
-        icon: AlertTriangle,
-        color: 'red'
+    // Start progressive display
+    intervalRef.current = setInterval(() => {
+      setDisplayIndex(prev => {
+        const nextIndex = prev + 1;
+        if (nextIndex >= highlights.length) {
+          clearInterval(intervalRef.current);
+          return prev;
+        }
+        return nextIndex;
       });
-    }
+    }, 800); // Display one insight every 800ms for smooth AI-like generation
 
-    const failedRequests = networkLogs.filter(req => req.status >= 400);
-    if (failedRequests.length > 0) {
-      basicHighlights.push({
-        id: 'basic-network',
-        type: 'network_summary',
-        category: 'network',
-        title: `${failedRequests.length} Failed Requests`,
-        description: `Detected ${failedRequests.length} failed network requests`,
-        time: getLogTime(failedRequests[0]),
-        severity: 'medium',
-        confidence: 1.0,
-        impact: 'May affect data loading',
-        recommendation: 'Check API endpoints and error handling',
-        tags: ['network', 'api'],
-        icon: Network,
-        color: 'yellow'
-      });
-    }
+  }, [highlights]);
 
-    const devToolIssues = detectedIssues.filter(issue => issue.type.includes('dev_tool'));
-    if (devToolIssues.length > 0) {
-      basicHighlights.push({
-        id: 'basic-dev-tools',
-        type: 'dev_tool_summary',
-        category: 'dev_tools',
-        title: `${devToolIssues.length} Dev Tool Issues`,
-        description: `Detected ${devToolIssues.length} developer tool-related issues`,
-        time: getLogTime(devToolIssues[0]),
-        severity: 'dev_tool',
-        confidence: 1.0,
-        impact: 'May require developer attention',
-        recommendation: 'Review developer tool configurations',
-        tags: ['dev_tools', 'configuration'],
-        icon: Code,
-        color: 'purple'
-      });
-    }
-
-    if (basicHighlights.length === 0) {
-      basicHighlights.push({
-        id: 'basic-positive',
-        type: 'positive_feedback',
-        category: 'performance',
-        title: 'Clean Recording Session',
-        description: 'No critical issues detected in this recording',
-        time: duration * 0.5,
-        severity: 'info',
-        confidence: 1.0,
-        impact: 'Good application health',
-        recommendation: 'Continue monitoring for potential issues',
-        tags: ['positive', 'clean'],
-        icon: CheckCircle,
-        color: 'green'
-      });
-    }
-
-    return basicHighlights;
-  };
-
+  // Update displayed insights when displayIndex changes
   useEffect(() => {
-    if (isEnabled && (consoleLogs.length > 0 || networkLogs.length > 0)) {
-      generateHighlights();
+    if (displayIndex > 0 && highlights.length > 0) {
+      setDisplayedHighlights(highlights.slice(0, displayIndex));
     }
-  }, [isEnabled, consoleLogs.length, networkLogs.length, generateHighlights]);
+  }, [displayIndex, highlights]);
 
-  if (isAnalyzing) {
-    return (
-      <div className={`space-y-3 ${className}`}>
-        <div className="flex items-center justify-center py-8">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-3" />
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              {isInitializing ? 'Initializing AI service...' : 'AI analyzing recording...'}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {isInitializing ? 'Please wait while we prepare the AI' : 'Identifying key moments and insights'}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Pre-analyze in background when data is available
+  useEffect(() => {
+    if (consoleLogs.length > 0 || networkLogs.length > 0 || detectedIssues.length > 0) {
+      preAnalyzeInsights();
+    }
+  }, [preAnalyzeInsights]);
 
-  if (error || aiError) {
+  // Handle toggle on/off
+  useEffect(() => {
+    if (isEnabled && hasAnalyzed && highlights.length > 0) {
+      startProgressiveDisplay();
+    } else if (!isEnabled) {
+      // Reset display when toggled off
+      setDisplayedHighlights([]);
+      setDisplayIndex(0);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    }
+  }, [isEnabled, hasAnalyzed, highlights, startProgressiveDisplay]);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  if (!isEnabled) {
     return (
-      <div className={`space-y-3 ${className}`}>
-        <div className="text-center py-8">
-          <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-red-400" />
-          <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            AI Analysis Failed
+      <div className={`text-center py-4 ${className}`}>
+        <Brain className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+        <div className="text-xs text-gray-500">AI Insights Disabled</div>
+        {hasAnalyzed && highlights.length > 0 && (
+          <div className="text-[10px] text-purple-500 mt-1">
+            {highlights.length} insights ready
           </div>
-          <div className="text-xs text-red-500 mb-4">
-            {error || aiError?.message || 'Unknown error'}
-          </div>
-          <button
-            onClick={generateHighlights}
-            className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            Retry Analysis
-          </button>
-        </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className={`space-y-3 ${className}`}>
-      <div className="flex items-center justify-between mb-3">
+    <div className={`space-y-2 ${className}`}>
+      {/* Compact Header */}
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-2">
-          <Brain className="w-5 h-5 text-purple-400" />
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            AI Timeline Highlights
+          <Zap className="w-4 h-4 text-purple-500" />
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            AI Insights
           </span>
-        </div>
-        <div className="flex items-center space-x-2">
-          {highlights.length > 0 && (
-            <button
-              onClick={() => onSaveHighlights?.(highlights)}
-              className="px-3 py-1 text-xs bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors"
-            >
-              Save Highlights
-            </button>
+          {displayedHighlights.length > 0 && (
+            <span className="text-xs bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded">
+              {displayedHighlights.length}
+              {displayIndex < highlights.length && (
+                <span className="ml-1 animate-pulse">...</span>
+              )}
+            </span>
           )}
-          <button
-            onClick={onToggle}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              isEnabled
-                ? 'bg-purple-600 text-white hover:bg-purple-700'
-                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-            }`}
-          >
-            {isEnabled ? 'Hide AI Highlights' : 'Show AI Highlights'}
-          </button>
         </div>
       </div>
 
-      {!analysisComplete && highlights.length === 0 && (
-        <div className="text-center py-8">
-          <Brain className="w-12 h-12 mx-auto mb-3 text-purple-400" />
-          <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            AI Insights Ready
+      {/* Insights List with Progressive Display */}
+      <div className="space-y-1.5">
+        {displayedHighlights.length === 0 && highlights.length === 0 ? (
+          <div className="text-center py-4">
+            <CheckCircle className="w-6 h-6 mx-auto mb-1 text-green-500" />
+            <div className="text-xs text-gray-600 dark:text-gray-400">No issues detected</div>
           </div>
-          <div className="text-xs text-gray-500 mb-4">
-            {canGenerate 
-              ? 'Click to analyze this recording with AI'
-              : 'AI service not available - check configuration'
-            }
-          </div>
-          {canGenerate && (
-            <button
-              onClick={generateHighlights}
-              className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Generate AI Insights
-            </button>
-          )}
-        </div>
-      )}
+        ) : (
+          <>
+            {displayedHighlights.map((highlight, index) => {
+              const IconComponent = getIconComponent(highlight.icon);
+              const colorClasses = getColorClasses(highlight.color);
+              const severityBadge = getSeverityBadge(highlight.severity);
+              const isLatest = index === displayedHighlights.length - 1 && displayIndex < highlights.length;
 
-      {highlights.length > 0 && (
-        <>
-          <div className="text-xs text-gray-600 dark:text-gray-400 mb-3 p-2 bg-purple-50 dark:bg-purple-900/20 rounded border-l-4 border-purple-400">
-            <div className="flex items-center space-x-2">
-              <Zap className="w-3 h-3" />
-              <span className="font-medium">
-                {analysisComplete ? 'AI Analysis Complete' : 'AI Insights'}
-              </span>
-            </div>
-            <div className="mt-1">
-              Found {highlights.length} key insights from your recording
-            </div>
-          </div>
-          
-          {highlights.map((highlight) => {
-            const IconComponent = highlight.icon || Brain;
-            const colorClasses = {
-              red: 'border-red-500 bg-red-50/50 dark:bg-red-900/10',
-              yellow: 'border-yellow-500 bg-yellow-50/50 dark:bg-yellow-900/10', 
-              green: 'border-green-500 bg-green-50/50 dark:bg-green-900/10',
-              blue: 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/10',
-              purple: 'border-purple-500 bg-purple-50/50 dark:bg-purple-900/10'
-            };
-
-            return (
-              <div
-                key={highlight.id}
-                className={`p-3 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
-                  colorClasses[highlight.color] || colorClasses.purple
-                }`}
-                onClick={() => onSeekTo && onSeekTo(highlight.time)}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <IconComponent className="w-4 h-4 text-purple-600" />
-                      <span className="font-medium text-sm">{highlight.title}</span>
-                      <span className={`text-[10px] px-2 py-1 rounded uppercase font-medium ${
-                        highlight.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                        highlight.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                        highlight.severity === 'low' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
-                        highlight.severity === 'dev_tool' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' :
-                        'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-                      }`}>
-                        {highlight.severity}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                      {highlight.description}
-                    </div>
-                    {highlight.recommendation && (
-                      <div className="text-xs text-gray-700 dark:text-gray-300 mb-2 italic">
-                        💡 {highlight.recommendation}
+              return (
+                <div
+                  key={highlight.id}
+                  className={`p-2 rounded border-l-2 cursor-pointer hover:bg-opacity-70 transition-all ${colorClasses} ${
+                    isLatest ? 'animate-fadeIn' : ''
+                  }`}
+                  onClick={() => onSeekTo && onSeekTo(highlight.time)}
+                >
+                  <div className="flex items-start space-x-2">
+                    <IconComponent className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-xs truncate">{highlight.title}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-medium ${severityBadge}`}>
+                          {highlight.severity}
+                        </span>
                       </div>
-                    )}
-                    <div className="flex items-center space-x-3 text-[10px] text-gray-500">
-                      <span>@ {formatTime(highlight.time)}</span>
-                      <span>Confidence: {Math.round(highlight.confidence * 100)}%</span>
-                      <div className="flex space-x-1">
-                        {highlight.tags?.map(tag => (
-                          <span key={tag} className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">
-                            {tag}
-                          </span>
-                        ))}
-                        {highlight.aiGenerated && (
-                          <span className="bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-300 px-1 py-0.5 rounded">
-                            AI
-                          </span>
-                        )}
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 mb-1 truncate">
+                        {highlight.description}
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] text-gray-500">
+                        <span>@ {formatTime(highlight.time)}</span>
+                        <span className="truncate max-w-20">{highlight.evidence}</span>
                       </div>
                     </div>
                   </div>
                 </div>
+              );
+            })}
+            
+            {displayIndex < highlights.length && (
+              <div className="text-center py-2">
+                <div className="flex items-center justify-center space-x-1">
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce"></div>
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce delay-100"></div>
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce delay-200"></div>
+                </div>
               </div>
-            );
-          })}
-        </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Quick Stats Footer */}
+      {displayedHighlights.length > 0 && (
+        <div className="text-[10px] text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <span>Critical: {displayedHighlights.filter(i => i.severity === 'critical').length}</span>
+            <span>High: {displayedHighlights.filter(i => i.severity === 'high').length}</span>
+            <span>
+              {displayedHighlights.length}
+              {highlights.length > displayedHighlights.length && `/${highlights.length}`}
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );

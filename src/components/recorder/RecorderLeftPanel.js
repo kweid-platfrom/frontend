@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Bot } from 'lucide-react';
+import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Bot, Download, Share2 } from 'lucide-react';
 import { useRecording } from '../../hooks/useRecording';
 import AIHighlights from './AIHighlights';
 
@@ -13,14 +13,18 @@ const RecorderLeftPanel = ({
   activeSuite, 
   firestoreService,
   isPreviewMode = false,
-  aiHighlightEnabled = true,
-  onToggleAiHighlight
+  aiHighlightEnabled = false,
+  onToggleAiHighlight,
+  onSaveInsights, // Add callback for saving insights
+  onCreateTestCaseFromInsight, // Add callback for creating test cases
+  onCreateBugFromInsight // Add callback for creating bugs
 }) => {
   const [activeTab, setActiveTab] = useState(isPreviewMode ? 'comments' : 'console');
   const [commentText, setCommentText] = useState('');
   const [selectedBugs, setSelectedBugs] = useState([]);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
-  const [showAIInsights, setShowAIInsights] = useState(false);
+  const [showAIInsights, setShowAIInsights] = useState(aiHighlightEnabled);
+  const [aiInsights, setAiInsights] = useState([]);
   const commentsEndRef = useRef(null);
   
   // Get recording orchestrator for adding comments during live recording
@@ -48,6 +52,11 @@ const RecorderLeftPanel = ({
       commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [comments, activeTab]);
+
+  // Sync AI insights visibility with prop
+  useEffect(() => {
+    setShowAIInsights(aiHighlightEnabled);
+  }, [aiHighlightEnabled]);
 
   const addCommentAtCurrentTime = (text) => {
     if (!text.trim()) return;
@@ -120,6 +129,98 @@ const RecorderLeftPanel = ({
     }
   };
 
+  // Handle AI insights actions
+  const handleSaveInsights = (insights) => {
+    console.log('Saving AI insights:', insights);
+    setAiInsights(insights);
+    
+    if (onSaveInsights) {
+      onSaveInsights(insights);
+    } else {
+      // Default behavior: create a downloadable JSON file
+      const insightsData = {
+        recordingId: `recording_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        totalInsights: insights.length,
+        insights: insights,
+        metadata: {
+          consoleLogs: consoleLogs.length,
+          networkLogs: networkLogs.length,
+          detectedIssues: detectedIssues.length,
+          duration: videoRef.current?.duration || 0
+        }
+      };
+
+      const blob = new Blob([JSON.stringify(insightsData, null, 2)], { 
+        type: 'application/json' 
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ai-insights-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleCreateTestCaseFromInsight = (insight) => {
+    console.log('Creating test case from insight:', insight);
+    
+    if (onCreateTestCaseFromInsight) {
+      onCreateTestCaseFromInsight(insight);
+    } else {
+      // Default behavior: show alert with test case suggestion
+      const testCaseData = {
+        title: `Test case for: ${insight.title}`,
+        description: insight.description,
+        priority: insight.severity === 'critical' ? 'Critical' : 
+                 insight.severity === 'high' ? 'High' :
+                 insight.severity === 'medium' ? 'Medium' : 'Low',
+        category: insight.category,
+        steps: [
+          'Navigate to the affected area',
+          'Perform the action that triggered the issue',
+          'Verify the expected behavior'
+        ],
+        expectedResult: insight.recommendation,
+        tags: insight.tags || []
+      };
+
+      alert(`Test Case Suggestion:\n\nTitle: ${testCaseData.title}\nDescription: ${testCaseData.description}\nPriority: ${testCaseData.priority}`);
+    }
+  };
+
+  const handleCreateBugFromInsight = (insight) => {
+    console.log('Creating bug from insight:', insight);
+    
+    if (onCreateBugFromInsight) {
+      onCreateBugFromInsight(insight);
+    } else {
+      // Default behavior: use existing bug creation logic
+      const issueData = {
+        id: insight.id,
+        message: insight.description,
+        type: insight.type,
+        severity: insight.severity,
+        time: insight.time || 0,
+        source: 'ai_insight'
+      };
+      
+      createBugFromIssue(issueData);
+    }
+  };
+
+  const toggleAIInsights = () => {
+    const newState = !showAIInsights;
+    setShowAIInsights(newState);
+    
+    if (onToggleAiHighlight) {
+      onToggleAiHighlight(newState);
+    }
+  };
+
   const getTabCount = (tab) => {
     switch (tab) {
       case 'console': return consoleLogs.length;
@@ -142,19 +243,37 @@ const RecorderLeftPanel = ({
     ])
   ];
 
+  // Get AI insights count for display
+  const aiInsightCount = aiInsights.length;
+  const criticalInsightCount = aiInsights.filter(insight => 
+    insight.severity === 'critical' || insight.severity === 'high'
+  ).length;
+
   return (
     <div className="w-full h-full border-r border-gray-200 dark:border-gray-700 flex flex-col">
       {/* AI Insights Section - 50% */}
       <div className="h-1/2 flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex flex-col">
-        {/* AI Toggle Button */}
+        {/* AI Toggle Button with Stats */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700">
           <button
-            onClick={() => setShowAIInsights(!showAIInsights)}
+            onClick={toggleAIInsights}
             className="w-full flex items-center justify-between p-2 rounded text-sm font-medium transition-colors bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
           >
             <div className="flex items-center space-x-2">
-              <Bot className="w-4 h-4 text-gray-500" />
+              <Bot className="w-4 h-4 text-purple-500" />
               <span>AI Insights</span>
+              {aiInsightCount > 0 && (
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full">
+                    {aiInsightCount}
+                  </span>
+                  {criticalInsightCount > 0 && (
+                    <span className="text-xs bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300 px-2 py-0.5 rounded-full">
+                      {criticalInsightCount} critical
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400">
               {showAIInsights ? 'ON' : 'OFF'}
@@ -163,20 +282,28 @@ const RecorderLeftPanel = ({
         </div>
 
         {/* AI Insights Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex-1 overflow-y-auto">
           {showAIInsights ? (
-            <AIHighlights
-              consoleLogs={consoleLogs}
-              networkLogs={networkLogs}
-              detectedIssues={detectedIssues}
-              duration={videoRef.current?.duration || 0}
-              onSeekTo={seekTo}
-              isEnabled={aiHighlightEnabled}
-              onToggle={onToggleAiHighlight}
-            />
+            <div className="p-3">
+              <AIHighlights
+                consoleLogs={consoleLogs}
+                networkLogs={networkLogs}
+                detectedIssues={detectedIssues}
+                duration={videoRef.current?.duration || 0}
+                onSeekTo={seekTo}
+                isEnabled={showAIInsights}
+                onToggle={onToggleAiHighlight}
+                onSaveHighlights={handleSaveInsights}
+                className="space-y-2"
+              />
+            </div>
           ) : (
-            <div className="text-xs text-gray-500 text-center py-8">
-              Toggle AI Insights ON to view analysis of your recording
+            <div className="p-6 text-center">
+              <Bot className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+              <div className="text-sm text-gray-500 mb-2">AI Insights Disabled</div>
+              <div className="text-xs text-gray-400 mb-4">
+                Toggle AI Insights ON to view intelligent analysis of your recording
+              </div>
             </div>
           )}
         </div>
@@ -438,14 +565,31 @@ const RecorderLeftPanel = ({
             <div className="text-xs space-y-2">
               <div className="grid grid-cols-1 gap-2">
                 <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Statistics</div>
+                  <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Recording Statistics</div>
                   <div className="space-y-1 text-gray-600 dark:text-gray-400">
                     <div><strong>Console Logs:</strong> {consoleLogs.length}</div>
                     <div><strong>Network Requests:</strong> {networkLogs.length}</div>
                     <div><strong>Issues Found:</strong> {detectedIssues.length}</div>
                     <div><strong>Comments:</strong> {comments.length}</div>
+                    <div><strong>Duration:</strong> {formatTime(videoRef.current?.duration || 0)}</div>
                   </div>
                 </div>
+
+                {aiInsightCount > 0 && (
+                  <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                    <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">AI Analysis</div>
+                    <div className="space-y-1 text-gray-600 dark:text-gray-400">
+                      <div><strong>Total Insights:</strong> {aiInsightCount}</div>
+                      <div><strong>Critical/High:</strong> {criticalInsightCount}</div>
+                      <div><strong>Automation Ready:</strong> {aiInsights.filter(i => i.automationPotential === 'high').length}</div>
+                      <div><strong>Avg Confidence:</strong> {
+                        aiInsights.length > 0 
+                          ? Math.round(aiInsights.reduce((sum, i) => sum + (i.confidence || 0), 0) / aiInsights.length * 100)
+                          : 0
+                      }%</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
