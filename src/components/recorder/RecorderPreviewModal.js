@@ -64,23 +64,9 @@ const RecorderPreviewModal = ({
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-          {/* Left Panel - Full width on mobile, 1/3 on larger screens */}
-          <div className="lg:hidden w-full border-b border-gray-200 dark:border-gray-700">
-            <RecorderLeftPanel
-              consoleLogs={consoleLogs}
-              networkLogs={networkLogs}
-              detectedIssues={detectedIssues}
-              comments={comments}
-              onAddComment={addComment}
-              videoRef={videoRef}
-              activeSuite={activeSuite}
-              firestoreService={firestoreService}
-              isPreviewMode={true}
-            />
-          </div>
-          
-          <div className="hidden lg:block">
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* Left Panel - 40% width */}
+          <div className="w-2/5 flex-shrink-0">
             <RecorderLeftPanel
               consoleLogs={consoleLogs}
               networkLogs={networkLogs}
@@ -94,8 +80,8 @@ const RecorderPreviewModal = ({
             />
           </div>
 
-          {/* Right Panel - Video and Controls */}
-          <div className="flex-1 flex flex-col min-w-0">
+          {/* Right Panel - 60% width */}
+          <div className="w-3/5 flex-shrink-0 flex flex-col min-w-0">
             {/* Video Container */}
             <div className="flex-1 bg-black relative min-h-[200px] sm:min-h-[300px]">
               {previewUrl ? (

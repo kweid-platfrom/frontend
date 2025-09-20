@@ -143,9 +143,9 @@ const RecorderLeftPanel = ({
   ];
 
   return (
-    <div className="w-2/5 border-r border-gray-200 dark:border-gray-700 flex flex-col min-w-80 max-w-md">
+    <div className="w-full h-full border-r border-gray-200 dark:border-gray-700 flex flex-col">
       {/* AI Insights Section - 50% */}
-      <div className="h-1/2 border-b border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className="h-1/2 flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex flex-col">
         {/* AI Toggle Button */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700">
           <button
@@ -183,7 +183,7 @@ const RecorderLeftPanel = ({
       </div>
 
       {/* Comments/DevTools Section - 50% */}
-      <div className="h-1/2 flex flex-col">
+      <div className="h-1/2 flex-shrink-0 flex flex-col">
         {/* Comment Input - Above tabs */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex space-x-2">
