@@ -1,5 +1,5 @@
 // app/api/recordings/delete/route.js
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ServerYouTubeService } from '../upload/route.js';
 
 // Reuse the server YouTube service
