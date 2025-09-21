@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useState } from 'react';
 import { 
   Video, 
@@ -24,52 +23,40 @@ const Recordings = () => {
     isLoading,
     isTrialActive,
     ui,
-    firestoreService // Your existing firestore service
+    firestoreService
   } = useApp();
 
-  // State
   const [viewingRecording, setViewingRecording] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
 
-  // Safeguard recordings to always be an array
   const safeRecordings = Array.isArray(contextRecordings) ? contextRecordings : [];
-
-  // Determine the current state for conditional rendering
   const hasActiveSuite = activeSuite?.id;
   const isDataLoading = isLoading;
   const isSubscriptionActive = isTrialActive;
 
-  // Filter recordings
   const filteredRecordings = safeRecordings.filter(recording => {
     const matchesSearch = recording.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          recording.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    
     const matchesFilter = filterStatus === 'all' || recording.status === filterStatus;
-    
     return matchesSearch && matchesFilter;
   });
 
-  // Handle recording actions
   const handleViewRecording = (recording) => {
     setViewingRecording(recording);
   };
 
-
   const handleDeleteRecording = async (recordingId) => {
     if (!hasActiveSuite) return;
-    
     if (!confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
       return;
     }
-
     try {
       const result = await firestoreService.deleteRecording(recordingId);
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to delete recording');
       }
-      
       ui.showNotification({
         id: `delete-recording-success-${Date.now()}`,
         type: 'success',
@@ -106,10 +93,8 @@ const Recordings = () => {
     });
   };
 
-  // Create bugs from recording issues
   const createBugsFromRecording = async (recording) => {
     if (!hasActiveSuite) return;
-    
     if (!recording.detectedIssues?.length) {
       ui.showNotification({
         id: `no-issues-${Date.now()}`,
@@ -119,10 +104,8 @@ const Recordings = () => {
       });
       return;
     }
-
     try {
       let createdBugs = 0;
-      
       for (const issue of recording.detectedIssues) {
         const bugData = {
           title: `Bug: ${issue.message}`,
@@ -134,11 +117,9 @@ const Recordings = () => {
           recordingUrl: recording.videoUrl,
           suiteId: activeSuite.id
         };
-
         const result = await firestoreService.createBug(activeSuite.id, bugData);
         if (result.success) {
           createdBugs++;
-          // Link recording to bug if you have a linking service
           try {
             await firestoreService.linkRecordingToBug(activeSuite.id, recording.id, result.data.id);
           } catch (linkErr) {
@@ -146,7 +127,6 @@ const Recordings = () => {
           }
         }
       }
-
       if (createdBugs > 0) {
         ui.showNotification({
           id: `create-bugs-success-${Date.now()}`,
@@ -168,7 +148,6 @@ const Recordings = () => {
     }
   };
 
-  // Format duration
   const formatDuration = (duration) => {
     if (typeof duration === 'string') return duration;
     if (typeof duration === 'number') {
@@ -179,14 +158,12 @@ const Recordings = () => {
     return '0:00';
   };
 
-  // Format date
   const formatDate = (timestamp) => {
     if (!timestamp) return 'Unknown';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString();
   };
 
-  // Render empty state based on current condition
   const renderEmptyState = () => {
     if (isDataLoading) {
       return (
@@ -198,7 +175,6 @@ const Recordings = () => {
         </div>
       );
     }
-
     if (!isSubscriptionActive) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -210,7 +186,6 @@ const Recordings = () => {
         </div>
       );
     }
-
     if (!hasActiveSuite) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -222,7 +197,6 @@ const Recordings = () => {
         </div>
       );
     }
-
     if (filteredRecordings.length === 0) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -238,14 +212,12 @@ const Recordings = () => {
         </div>
       );
     }
-
     return null;
   };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="p-6">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Recordings</h1>
@@ -253,8 +225,6 @@ const Recordings = () => {
               {hasActiveSuite ? `Screen recordings for ${activeSuite.name}` : 'Select a suite to view recordings'}
             </p>
           </div>
-          
-          {/* Only show recorder button if subscription is active and suite is selected */}
           {isSubscriptionActive && hasActiveSuite && (
             <ScreenRecorderButton
               variant="contained"
@@ -262,12 +232,10 @@ const Recordings = () => {
             />
           )}
         </div>
-
-        {/* Toolbar - Only show if suite is selected */}
+        
         {hasActiveSuite && (
           <div className="flex items-center justify-between mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-4">
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
@@ -278,8 +246,6 @@ const Recordings = () => {
                   className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
               </div>
-
-              {/* Filter */}
               <div className="relative">
                 <select
                   value={filterStatus}
@@ -297,8 +263,6 @@ const Recordings = () => {
                 </div>
               </div>
             </div>
-
-            {/* View mode toggle */}
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setViewMode('grid')}
@@ -323,8 +287,7 @@ const Recordings = () => {
             </div>
           </div>
         )}
-
-        {/* Content Area */}
+        
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 min-h-96">
           {renderEmptyState() || (
             <div className="p-6">
@@ -341,7 +304,6 @@ const Recordings = () => {
                   >
                     {viewMode === 'grid' ? (
                       <>
-                        {/* Thumbnail */}
                         <div className="aspect-video bg-gray-100 dark:bg-gray-600 relative">
                           <div className="absolute inset-0 flex items-center justify-center">
                             <Play className="w-8 h-8 text-gray-400" />
@@ -356,8 +318,6 @@ const Recordings = () => {
                             </div>
                           )}
                         </div>
-
-                        {/* Content */}
                         <div className="p-4">
                           <h3 className="font-medium text-gray-900 dark:text-white mb-1 truncate">
                             {recording.title || 'Untitled Recording'}
@@ -368,8 +328,6 @@ const Recordings = () => {
                           <div className="text-xs text-gray-400 dark:text-gray-500 mb-3">
                             {recording.consoleLogs?.length || 0} console logs • {recording.networkLogs?.length || 0} requests
                           </div>
-
-                          {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
                               <button
@@ -393,7 +351,6 @@ const Recordings = () => {
                                 </button>
                               )}
                             </div>
-                            
                             <div className="relative">
                               <button
                                 onClick={() => handleDeleteRecording(recording.id)}
@@ -407,11 +364,9 @@ const Recordings = () => {
                       </>
                     ) : (
                       <>
-                        {/* List view */}
                         <div className="w-16 h-12 bg-gray-100 dark:bg-gray-600 rounded flex items-center justify-center mr-4">
                           <Video className="w-6 h-6 text-gray-400" />
                         </div>
-                        
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
                             <div>
@@ -422,7 +377,6 @@ const Recordings = () => {
                                 {formatDate(recording.created_at)} • {formatDuration(recording.duration)}
                               </div>
                             </div>
-                            
                             <div className="flex items-center space-x-2">
                               {recording.detectedIssues?.length > 0 && (
                                 <div className="flex items-center space-x-1 text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded text-sm">
@@ -430,7 +384,6 @@ const Recordings = () => {
                                   <span>{recording.detectedIssues.length}</span>
                                 </div>
                               )}
-                              
                               <button
                                 onClick={() => handleViewRecording(recording)}
                                 className="px-3 py-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded text-sm"
@@ -461,8 +414,7 @@ const Recordings = () => {
           )}
         </div>
       </div>
-
-      {/* Viewer Modal */}
+      
       {viewingRecording && (
         <EnhancedScreenRecorder
           mode="viewer"
