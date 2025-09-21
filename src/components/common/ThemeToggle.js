@@ -2,36 +2,38 @@
 'use client';
 
 import React from 'react';
-import { useApp } from '@/context/AppProvider';
+import { Sun, Moon, Monitor } from 'lucide-react';
+import { useGlobalTheme } from '../../providers/GlobalThemeProvider';
 
-const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) => {
-    const { state: { theme }, actions: { theme: themeActions } } = useApp();
+const ThemeToggle = ({ 
+    className = '', 
+    showLabel = false, 
+    variant = 'button',
+    size = 'default' 
+}) => {
+    const { theme, effectiveTheme, setTheme, toggleTheme, isInitialized } = useGlobalTheme();
+
+    // Don't render until theme is initialized to prevent hydration issues
+    if (!isInitialized) {
+        return (
+            <div className={`${size === 'small' ? 'w-8 h-8' : 'w-10 h-10'} ${className}`}>
+                <div className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded-lg w-full h-full" />
+            </div>
+        );
+    }
 
     const getThemeIcon = (selectedTheme) => {
+        const iconSize = size === 'small' ? 'w-3 h-3' : 'w-4 h-4';
+        
         switch (selectedTheme) {
             case 'light':
-                return (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                );
+                return <Sun className={iconSize} />;
             case 'dark':
-                return (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                    </svg>
-                );
+                return <Moon className={iconSize} />;
             case 'system':
-                return (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                );
+                return <Monitor className={iconSize} />;
             default:
-                return null;
+                return <Sun className={iconSize} />;
         }
     };
 
@@ -44,17 +46,18 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
             case 'system':
                 return 'System';
             default:
-                return 'Theme';
+                return 'Light';
         }
     };
 
+    // Dropdown variant
     if (variant === 'dropdown') {
         return (
             <div className={`relative ${className}`}>
                 <select
-                    value={theme.selectedTheme}
-                    onChange={(e) => themeActions.setTheme(e.target.value)}
-                    className="appearance-none bg-background border border-border rounded-md px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                    className="appearance-none bg-background border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-foreground"
                 >
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
@@ -69,31 +72,34 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
         );
     }
 
+    // Segmented variant
     if (variant === 'segmented') {
         return (
-            <div className={`flex bg-muted rounded-lg p-1 ${className}`}>
+            <div className={`flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 ${className}`}>
                 {['light', 'dark', 'system'].map((themeOption) => (
                     <button
                         key={themeOption}
-                        onClick={() => themeActions.setTheme(themeOption)}
-                        className={`flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${theme.selectedTheme === themeOption
+                        onClick={() => setTheme(themeOption)}
+                        className={`flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                            theme === themeOption
                                 ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'
-                            }`}
+                                : 'text-muted-foreground hover:text-foreground hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
                         title={`Switch to ${getThemeLabel(themeOption)} theme`}
                     >
                         {getThemeIcon(themeOption)}
-                        {showLabel && <span className="ml-1">{getThemeLabel(themeOption)}</span>}
+                        {showLabel && <span className="ml-2">{getThemeLabel(themeOption)}</span>}
                     </button>
                 ))}
             </div>
         );
     }
 
+    // Menu variant
     if (variant === 'menu') {
         return (
             <div className={`flex items-center justify-between px-4 py-3 ${className}`}>
-                <div className="flex items-center space-x-3 bg-muted p-1.5 rounded-md">
+                <div className="flex items-center space-x-3 bg-gray-100 dark:bg-gray-700 p-1.5 rounded-lg">
                     {[
                         { value: 'light', icon: getThemeIcon('light') },
                         { value: 'dark', icon: getThemeIcon('dark') },
@@ -101,13 +107,13 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
                     ].map(({ value, icon }) => (
                         <button
                             key={value}
-                            onClick={() => themeActions.setTheme(value)}
-                            className={`p-2 rounded-md transition-colors ${
-                                theme.selectedTheme === value 
-                                    ? 'bg-teal-700 text-primary-foreground' 
-                                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                            onClick={() => setTheme(value)}
+                            className={`p-2 rounded-lg transition-colors duration-200 ${
+                                theme === value 
+                                    ? 'bg-teal-600 text-white' 
+                                    : 'text-muted-foreground hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-foreground'
                             }`}
-                            title={value.charAt(0).toUpperCase() + value.slice(1)}
+                            title={`Switch to ${value} theme`}
                         >
                             {icon}
                         </button>
@@ -120,13 +126,17 @@ const ThemeToggle = ({ className = '', showLabel = false, variant = 'button' }) 
     // Default button variant
     return (
         <button
-            onClick={themeActions.toggleTheme}
-            className={`inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background hover:bg-teal-600 hover:text-teal-700 h-15 px-4 py-2 ${className}`}
-            title={`Current theme: ${getThemeLabel(theme.selectedTheme)}. Click to cycle themes.`}
+            onClick={toggleTheme}
+            className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-foreground ${
+                size === 'small' ? 'h-8 px-2 text-xs' : 'h-10 px-3 text-sm'
+            } ${className}`}
+            title={`Current theme: ${getThemeLabel(theme)} (${effectiveTheme}). Click to cycle themes.`}
         >
-            {getThemeIcon(theme.selectedTheme)}
+            {getThemeIcon(theme)}
             {showLabel && (
-                <span className="ml-2">{getThemeLabel(theme.selectedTheme)}</span>
+                <span className={size === 'small' ? 'ml-1' : 'ml-2'}>
+                    {getThemeLabel(theme)}
+                </span>
             )}
         </button>
     );

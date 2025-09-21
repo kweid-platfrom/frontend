@@ -4,6 +4,7 @@ import React, { Suspense } from 'react';
 import { CacheProvider } from '@emotion/react';
 import createCache from '@emotion/cache';
 import AppProviderWrapper from '@/components/AppProviderWrapper';
+import { GlobalThemeProvider } from '../providers/GlobalThemeProvider'
 import { Poppins, Montserrat, Noto_Sans_Hebrew } from 'next/font/google';
 import LoadingScreen from '@/components/common/LoadingScreen';
 import '@/app/globals.css';
@@ -31,6 +32,36 @@ const sansHebrew = Noto_Sans_Hebrew({
     variable: '--font-sans-hebrew',
 });
 
+// Theme script that runs immediately
+const ThemeScript = () => {
+    const script = `
+        (function() {
+            try {
+                const savedTheme = localStorage.getItem('theme') || 'system';
+                const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                const effectiveTheme = savedTheme === 'system' ? systemTheme : savedTheme;
+                
+                const htmlElement = document.documentElement;
+                
+                // Add loading class to prevent transitions during initial load
+                document.body?.classList.add('theme-loading');
+                
+                if (effectiveTheme === 'dark') {
+                    htmlElement.classList.add('dark');
+                    htmlElement.setAttribute('data-theme', 'dark');
+                } else {
+                    htmlElement.classList.remove('dark');
+                    htmlElement.setAttribute('data-theme', 'light');
+                }
+            } catch (e) {
+                console.error('Theme initialization error:', e);
+            }
+        })();
+    `;
+
+    return <script dangerouslySetInnerHTML={{ __html: script }} />;
+};
+
 export default function RootLayout({ children }) {
     return (
         <CacheProvider value={cache}>
@@ -42,6 +73,9 @@ export default function RootLayout({ children }) {
                 <head>
                     <meta charSet="utf-8" />
                     <meta name="viewport" content="width=device-width, initial-scale=1" />
+                    
+                    {/* Theme Script - Must be first */}
+                    <ThemeScript />
                     
                     {/* Basic Meta Tags */}
                     <meta name="description" content="Assura - Streamline your test management with our efficient and intuitive platform. Organize, track, and optimize your testing workflows." />
@@ -89,12 +123,14 @@ export default function RootLayout({ children }) {
                     {/* Canonical URL */}
                     <link rel="canonical" href="https://assura.com" />
                 </head>
-                <body className={`${poppins.className} antialiased min-h-screen transition-colors duration-200`}>
-                    <AppProviderWrapper>
-                        <Suspense fallback={<LoadingScreen message="Loading page..." />}>
-                            {children}
-                        </Suspense>
-                    </AppProviderWrapper>
+                <body className={`${poppins.className} antialiased min-h-screen transition-colors duration-200 theme-loading`}>
+                    <GlobalThemeProvider>
+                        <AppProviderWrapper>
+                            <Suspense fallback={<LoadingScreen message="Loading page..." />}>
+                                {children}
+                            </Suspense>
+                        </AppProviderWrapper>
+                    </GlobalThemeProvider>
                 </body>
             </html>
         </CacheProvider>
