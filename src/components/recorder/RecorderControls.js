@@ -12,8 +12,7 @@ const formatTime = (s) => {
 const RecorderControls = ({ 
   disabled = false, 
   className = "", 
-  variant = "ghost", 
-  isPrimary = false,
+  variant = "ghost",
   onStart,
   recordingState,
   actions
