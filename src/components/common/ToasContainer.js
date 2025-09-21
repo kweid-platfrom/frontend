@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useApp } from '../context/AppProvider';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 
-const Toast = ({ toast, onRemove }) => {
+const Toast = ({ toast }) => {
     const { id, type, message, duration } = toast;
 
     // Convert raw error messages to user-friendly ones
@@ -10,11 +10,11 @@ const Toast = ({ toast, onRemove }) => {
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            onRemove(id);
+            // Automatically remove the toast after the specified duration
         }, duration || 3500);
 
         return () => clearTimeout(timer);
-    }, [id, duration, onRemove]);
+    }, [id, duration ]);
 
     const getToastStyles = () => {
         const baseStyles = "flex items-center p-4 mb-3 text-sm rounded-lg shadow-lg border";
@@ -68,14 +68,6 @@ const Toast = ({ toast, onRemove }) => {
             <div className="flex-1">
                 {displayMessage}
             </div>
-            <button
-                onClick={() => onRemove(id)}
-                className="ml-3 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
         </div>
     );
 };
@@ -100,7 +92,6 @@ const ToastContainer = () => {
                 <Toast
                     key={alert.id}
                     toast={alert}
-                    onRemove={handleRemoveToast}
                 />
             ))}
         </div>
