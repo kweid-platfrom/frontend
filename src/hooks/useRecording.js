@@ -152,7 +152,7 @@ export const useRecording = () => {
     let duration = 30; // default fallback
     
     try {
-      duration = await new Promise((resolve, reject) => {
+      duration = await new Promise((resolve) => {
         const video = document.createElement('video');
         video.preload = 'metadata';
         

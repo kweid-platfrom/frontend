@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import RecorderControls from './RecorderControls';
 import RecorderPreviewModal from './RecorderPreviewModal';
 import { useApp } from '../../context/AppProvider';

@@ -1,4 +1,5 @@
 // services/AIInsightService.js - AI service for recording analysis and insights
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import aiServiceInstance from './aiService';
 import { FirestoreService } from './index';
 
@@ -14,11 +15,11 @@ class AIInsightService {
     // Initialize the AI insight service
     async initialize() {
         console.log('🚀 Initializing AI Insight Service...');
-        
+
         try {
             // Test the underlying AI service connection
             const connectionTest = await this.aiService.testConnection();
-            
+
             if (!connectionTest.success) {
                 throw new Error(connectionTest.error || 'AI service connection failed');
             }
@@ -28,7 +29,7 @@ class AIInsightService {
             this.currentModel = connectionTest.model;
 
             console.log('✅ AI Insight Service initialized successfully');
-            
+
             return {
                 success: true,
                 data: {
@@ -37,14 +38,14 @@ class AIInsightService {
                     healthy: true
                 }
             };
-            
+
         } catch (error) {
             console.error('❌ AI Insight Service initialization failed:', error);
-            
+
             this.isInitialized = false;
             this.currentProvider = null;
             this.currentModel = null;
-            
+
             return {
                 success: false,
                 error: error.message,
@@ -68,7 +69,7 @@ class AIInsightService {
 
         try {
             const healthCheck = await this.aiService.testConnection();
-            
+
             return {
                 success: healthCheck.success,
                 healthy: healthCheck.success,
@@ -77,7 +78,7 @@ class AIInsightService {
                 responseTime: healthCheck.responseTime,
                 error: healthCheck.error
             };
-            
+
         } catch (error) {
             return {
                 success: false,
@@ -98,9 +99,9 @@ class AIInsightService {
 
         try {
             console.log('🤖 Starting AI analysis of recording data...');
-            
+
             const prompt = this.buildAnalysisPrompt(recordingData);
-            
+
             const result = await this.aiService.callAI(prompt, {
                 type: 'recording_analysis',
                 temperature: 0.6,
@@ -112,7 +113,7 @@ class AIInsightService {
                 try {
                     const parsedData = this.parseAnalysisResponse(result.data);
                     const enhancedInsights = this.enhanceInsights(parsedData.insights, recordingData);
-                    
+
                     // Store the analysis result
                     const analysisId = await this.storeAnalysisResult({
                         recordingId: recordingData.id,
@@ -128,7 +129,7 @@ class AIInsightService {
 
                     return {
                         success: true,
-                        data: { 
+                        data: {
                             insights: enhancedInsights,
                             summary: parsedData.summary || this.generateSummary(enhancedInsights)
                         },
@@ -140,16 +141,16 @@ class AIInsightService {
                             model: result.model
                         }
                     };
-                    
+
                 } catch (parseError) {
                     console.error('Failed to parse AI analysis response:', parseError);
-                    
+
                     // Fallback to basic analysis if AI parsing fails
                     const fallbackInsights = this.generateFallbackInsights(recordingData);
-                    
+
                     return {
                         success: true,
-                        data: { 
+                        data: {
                             insights: fallbackInsights,
                             summary: this.generateSummary(fallbackInsights)
                         },
@@ -165,13 +166,13 @@ class AIInsightService {
             } else {
                 throw new Error(result.error || 'AI analysis failed');
             }
-            
+
         } catch (error) {
             console.error('❌ Recording analysis failed:', error);
-            
+
             // Generate fallback insights on error
             const fallbackInsights = this.generateFallbackInsights(recordingData);
-            
+
             return {
                 success: false,
                 error: error.message,
@@ -268,7 +269,7 @@ Provide specific, actionable recommendations with evidence from the actual log d
     // Format console logs for AI analysis
     formatConsoleLogs(consoleLogs) {
         if (consoleLogs.length === 0) return 'No console logs recorded.';
-        
+
         const logSummary = {};
         consoleLogs.forEach(log => {
             logSummary[log.level] = (logSummary[log.level] || 0) + (log.count || 1);
@@ -326,16 +327,16 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
     parseAnalysisResponse(response) {
         try {
             // Try to extract JSON from markdown code blocks if present
-            const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
-                            response.match(/```\n([\s\S]*?)\n```/);
-            
+            const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) ||
+                response.match(/```\n([\s\S]*?)\n```/);
+
             if (jsonMatch) {
                 return JSON.parse(jsonMatch[1]);
             }
 
             // Try to parse as direct JSON
             return JSON.parse(response);
-            
+
         } catch (error) {
             // If parsing fails, try to clean up the response
             const cleanedResponse = response
@@ -366,7 +367,7 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
     calculateInsightTime(insight, recordingData) {
         // Try to map insight to actual log timestamps
         if (insight.relatedLogs?.length > 0) {
-            const relatedLog = recordingData.consoleLogs.find(log => 
+            const relatedLog = recordingData.consoleLogs.find(log =>
                 insight.relatedLogs.some(related => log.message.includes(related.substring(0, 20)))
             );
             if (relatedLog && relatedLog.timestamp) {
@@ -381,7 +382,7 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
     // Generate fallback insights when AI analysis fails
     generateFallbackInsights(recordingData) {
         const insights = [];
-        const { consoleLogs, networkLogs, detectedIssues, duration } = recordingData;
+        const { consoleLogs, networkLogs, duration } = recordingData;
 
         // Basic error analysis
         const errors = consoleLogs.filter(log => log.level === 'error');
@@ -485,7 +486,7 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
     generateSummary(insights) {
         const criticalIssues = insights.filter(i => i.severity === 'critical').length;
         const automationCandidates = insights.filter(i => i.automationPotential === 'high').length;
-        
+
         const healthScore = this.calculateHealthScore(insights);
         let overallHealth = 'excellent';
         if (healthScore < 40) overallHealth = 'critical';
@@ -518,7 +519,7 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
         if (insights.length === 0) return 100;
 
         const severityWeights = { critical: 40, high: 20, medium: 10, low: 5, info: 0 };
-        const totalPenalty = insights.reduce((sum, insight) => 
+        const totalPenalty = insights.reduce((sum, insight) =>
             sum + (severityWeights[insight.severity] || 0), 0
         );
 
@@ -535,7 +536,7 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
             });
 
             return result.success ? result.docId : null;
-            
+
         } catch (error) {
             console.error('Error storing analysis result:', error);
             return null;
@@ -565,23 +566,23 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
 
     getUserFriendlyError(errorMessage) {
         const message = errorMessage.toLowerCase();
-        
+
         if (message.includes('api key') || message.includes('apikey')) {
             return 'AI service requires proper API key configuration. Please check your environment settings.';
         }
-        
+
         if (message.includes('connection') || message.includes('network')) {
             return 'Unable to connect to AI service. Please check your internet connection and try again.';
         }
-        
+
         if (message.includes('quota') || message.includes('limit')) {
             return 'AI service usage limit reached. Please check your quota or try again later.';
         }
-        
+
         if (message.includes('provider')) {
             return 'AI provider configuration issue. Please check your provider settings.';
         }
-        
+
         return 'AI analysis service is temporarily unavailable. Please try again later.';
     }
 
@@ -600,22 +601,22 @@ Average Response Time: ${this.calculateAverageResponseTime(networkLogs)}ms`;
     async switchProvider(provider) {
         try {
             const switched = this.aiService.switchProvider(provider);
-            
+
             if (switched) {
                 const healthTest = await this.testHealth();
-                
+
                 if (healthTest.success) {
                     this.currentProvider = provider;
                     return { success: true, provider };
                 }
             }
-            
+
             throw new Error(`Failed to switch to provider: ${provider}`);
-            
-        } catch (error) {
+
+        } catch {
             return {
                 success: false,
-                error: error.message
+                error: `Failed to switch to provider: ${provider}`
             };
         }
     }

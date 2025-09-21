@@ -1,198 +1,6 @@
-// app/api/recordings/upload/route.js - Simplified without playlist support
-import { NextRequest, NextResponse } from 'next/server';
-
-class SimplifiedYouTubeService {
-    constructor() {
-        this.clientId = process.env.YOUTUBE_CLIENT_ID;
-        this.clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-        this.refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
-        this.accessToken = null;
-        this.tokenExpiresAt = null;
-        this.initialized = false;
-    }
-
-    async initialize() {
-        if (this.initialized && this.isTokenValid()) return;
-        await this.refreshAccessToken();
-        this.initialized = true;
-    }
-
-    isTokenValid() {
-        return this.accessToken && this.tokenExpiresAt && new Date() < this.tokenExpiresAt;
-    }
-
-    async refreshAccessToken() {
-        if (!this.clientId || !this.clientSecret || !this.refreshToken) {
-            throw new Error('Missing YouTube API credentials');
-        }
-
-        const response = await fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_id: this.clientId,
-                client_secret: this.clientSecret,
-                refresh_token: this.refreshToken,
-                grant_type: 'refresh_token'
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(`Token refresh failed: ${error.error_description || response.statusText}`);
-        }
-
-        const data = await response.json();
-        this.accessToken = data.access_token;
-        this.tokenExpiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
-    }
-
-    async ensureValidToken() {
-        if (!this.isTokenValid()) {
-            await this.refreshAccessToken();
-        }
-    }
-
-    // Simplified upload without playlist support
-    async uploadVideo(videoBlob, metadata = {}) {
-        try {
-            await this.initialize();
-            await this.ensureValidToken();
-
-            console.log('Starting YouTube upload with metadata:', {
-                title: metadata.title,
-                fileSize: videoBlob.size
-            });
-
-            const finalMetadata = {
-                snippet: {
-                    title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
-                    description: metadata.description || 'Screen recording from QA testing tool',
-                    tags: metadata.tags || ['qa', 'testing', 'screen-recording'],
-                    categoryId: metadata.categoryId || '28'
-                },
-                status: {
-                    privacyStatus: metadata.privacy || 'private',
-                    selfDeclaredMadeForKids: false
-                }
-            };
-
-            const uploadResult = await this.performResumableUpload(videoBlob, finalMetadata);
-            
-            if (!uploadResult.success) {
-                return uploadResult;
-            }
-
-            return {
-                success: true,
-                data: uploadResult.data
-            };
-
-        } catch (error) {
-            console.error('YouTube upload failed:', error);
-            return {
-                success: false,
-                error: { 
-                    message: error.message || "Upload failed",
-                    code: error.code || 'UPLOAD_ERROR'
-                }
-            };
-        }
-    }
-
-    async performResumableUpload(videoBlob, metadata) {
-        const uploadUrl = await this.initiateResumableUpload(videoBlob, metadata);
-        
-        const chunkSize = 256 * 1024; // 256KB chunks
-        const totalSize = videoBlob.size;
-        let uploadedBytes = 0;
-
-        const arrayBuffer = await videoBlob.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        while (uploadedBytes < totalSize) {
-            const chunkEnd = Math.min(uploadedBytes + chunkSize, totalSize);
-            const chunk = buffer.slice(uploadedBytes, chunkEnd);
-            const contentRange = `bytes ${uploadedBytes}-${chunkEnd - 1}/${totalSize}`;
-
-            const response = await fetch(uploadUrl, {
-                method: 'PUT',
-                headers: {
-                    'Content-Length': chunk.length.toString(),
-                    'Content-Range': contentRange
-                },
-                body: chunk
-            });
-
-            if (response.status === 308) {
-                uploadedBytes = chunkEnd;
-            } else if (response.status === 200 || response.status === 201) {
-                const result = await response.json();
-                
-                return {
-                    success: true,
-                    data: {
-                        videoId: result.id,
-                        url: `https://www.youtube.com/watch?v=${result.id}`,
-                        embedUrl: `https://www.youtube.com/embed/${result.id}`,
-                        title: result.snippet.title,
-                        description: result.snippet.description,
-                        thumbnailUrl: result.snippet.thumbnails?.default?.url,
-                        privacyStatus: result.status.privacyStatus,
-                        uploadedAt: new Date().toISOString(),
-                        provider: 'youtube'
-                    }
-                };
-            } else if (response.status === 401) {
-                await this.refreshAccessToken();
-                throw new Error('Token expired during upload, please retry');
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`Upload failed at byte ${uploadedBytes}: ${response.status} - ${errorData.error?.message || response.statusText}`);
-            }
-        }
-    }
-
-    async initiateResumableUpload(videoBlob, metadata) {
-        const response = await fetch(
-            'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.accessToken}`,
-                    'Content-Type': 'application/json; charset=UTF-8',
-                    'X-Upload-Content-Length': videoBlob.size.toString(),
-                    'X-Upload-Content-Type': videoBlob.type || 'video/webm'
-                },
-                body: JSON.stringify(metadata)
-            }
-        );
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Failed to initiate upload: ${response.status} - ${errorData.error?.message || response.statusText}`);
-        }
-
-        const uploadUrl = response.headers.get('location');
-        if (!uploadUrl) {
-            throw new Error('No upload URL received');
-        }
-
-        return uploadUrl;
-    }
-
-    async getServiceStatus() {
-        return {
-            initialized: this.initialized,
-            hasValidToken: this.isTokenValid(),
-            tokenExpiresAt: this.tokenExpiresAt,
-            hasCredentials: !!(this.clientId && this.clientSecret && this.refreshToken),
-            playlistsSupported: false
-        };
-    }
-}
-
-const youTubeService = new SimplifiedYouTubeService();
+// app/api/recordings/upload/route.js
+import { NextResponse } from 'next/server';
+import { youTubeService } from '../../../../lib/YoutubeService';
 
 export async function POST(request) {
     try {
@@ -211,43 +19,24 @@ export async function POST(request) {
         if (metadataString) {
             try {
                 metadata = JSON.parse(metadataString);
-            } catch (error) {
+            } catch {
                 console.warn('Invalid metadata JSON, using defaults');
             }
         }
-
-        console.log('Processing upload:', {
-            fileSize: videoFile.size,
-            fileType: videoFile.type,
-            title: metadata.title
-        });
 
         const videoBlob = new Blob([await videoFile.arrayBuffer()], { 
             type: videoFile.type || 'video/webm' 
         });
 
         const uploadResult = await youTubeService.uploadVideo(videoBlob, metadata);
-
-        if (uploadResult.success) {
-            console.log('Upload successful:', {
-                videoId: uploadResult.data.videoId
-            });
-            
-            return NextResponse.json(uploadResult);
-        } else {
-            console.error('Upload failed:', uploadResult.error);
-            return NextResponse.json(uploadResult, { status: 500 });
-        }
+        return NextResponse.json(uploadResult);
 
     } catch (error) {
         console.error('API error:', error);
         return NextResponse.json(
             { 
                 success: false, 
-                error: { 
-                    message: error.message || 'Internal server error',
-                    code: 'API_ERROR'
-                } 
+                error: { message: error.message || 'Internal server error' } 
             },
             { status: 500 }
         );

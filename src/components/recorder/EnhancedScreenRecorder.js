@@ -34,7 +34,7 @@ const EnhancedScreenRecorder = ({
       console.log('EnhancedScreenRecorder unmounting, cleaning up resources');
       recordingActions.cleanup();
     };
-  }, []);
+  }, [recordingActions]);
 
   // Viewer mode - show existing recording
   if (mode === 'viewer' && existingRecording) {

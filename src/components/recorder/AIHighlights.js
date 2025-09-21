@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Brain, 
-  Zap, 
+  Brain,
   AlertTriangle, 
   CheckCircle, 
   Clock, 
@@ -27,6 +26,9 @@ const AIHighlights = ({
   duration = 0,
   onSeekTo,
   isEnabled = false,
+  onSaveHighlights,
+  onCreateTestCase,
+  onCreateBug,
   className = ""
 }) => {
   const [insights, setInsights] = useState([]);
@@ -127,7 +129,7 @@ const AIHighlights = ({
     }
   }, [consoleLogs, networkLogs, detectedIssues, duration, hasAnalyzed]);
 
-  // Progressive display logic (same as before)
+  // Progressive display logic
   const startProgressiveDisplay = useCallback(() => {
     if (insights.length === 0) return;
 
@@ -149,7 +151,28 @@ const AIHighlights = ({
       });
     }, 800);
 
-  }, [insights]);
+  }, [insights.length]);
+
+  // Handle saving insights
+  const handleSaveInsights = useCallback(() => {
+    if (onSaveHighlights && insights.length > 0) {
+      onSaveHighlights(insights);
+    }
+  }, [onSaveHighlights, insights]);
+
+  // Handle creating test case from insight
+  const handleCreateTestCase = useCallback((insight) => {
+    if (onCreateTestCase) {
+      onCreateTestCase(insight);
+    }
+  }, [onCreateTestCase]);
+
+  // Handle creating bug from insight
+  const handleCreateBug = useCallback((insight) => {
+    if (onCreateBug) {
+      onCreateBug(insight);
+    }
+  }, [onCreateBug]);
 
   useEffect(() => {
     if (displayIndex > 0 && insights.length > 0) {
@@ -161,7 +184,7 @@ const AIHighlights = ({
     if (consoleLogs.length > 0 || networkLogs.length > 0 || detectedIssues.length > 0) {
       analyzeExistingIssues();
     }
-  }, [analyzeExistingIssues]);
+  }, [consoleLogs.length, networkLogs.length, detectedIssues.length, analyzeExistingIssues]);
 
   useEffect(() => {
     if (isEnabled && hasAnalyzed && insights.length > 0) {
@@ -173,7 +196,7 @@ const AIHighlights = ({
         clearInterval(intervalRef.current);
       }
     }
-  }, [isEnabled, hasAnalyzed, insights, startProgressiveDisplay]);
+  }, [isEnabled, hasAnalyzed, insights.length, startProgressiveDisplay]);
 
   useEffect(() => {
     return () => {
@@ -229,6 +252,18 @@ const AIHighlights = ({
             </span>
           )}
         </div>
+        
+        {/* Action buttons */}
+        {displayedInsights.length > 0 && (
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={handleSaveInsights}
+              className="text-[10px] px-2 py-1 bg-purple-100 text-purple-700 dark:bg-purple-800 dark:text-purple-300 rounded hover:bg-purple-200 dark:hover:bg-purple-700 transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Insights List */}
@@ -260,19 +295,47 @@ const AIHighlights = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium text-xs truncate">{insight.title}</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-medium ${severityBadge}`}>
-                          {insight.severity}
-                        </span>
+                        <div className="flex items-center space-x-1">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-medium ${severityBadge}`}>
+                            {insight.severity}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-[11px] text-gray-600 dark:text-gray-400 mb-1 line-clamp-2">
                         {insight.description}
                       </div>
-                      <div className="flex items-center justify-between text-[9px] text-gray-500">
+                      <div className="flex items-center justify-between text-[9px] text-gray-500 mb-1">
                         <span>@ {formatTime(insight.time)}</span>
                         {insight.confidence && (
                           <span className="truncate max-w-20">
                             {Math.round(insight.confidence * 100)}% confident
                           </span>
+                        )}
+                      </div>
+                      
+                      {/* Action buttons for each insight */}
+                      <div className="flex items-center space-x-1 mt-1">
+                        {(insight.type === 'error' || insight.severity === 'critical' || insight.severity === 'high') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCreateBug(insight);
+                            }}
+                            className="text-[9px] px-2 py-0.5 bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-700 transition-colors"
+                          >
+                            Create Bug
+                          </button>
+                        )}
+                        {insight.testCaseRecommendations && insight.testCaseRecommendations.length > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCreateTestCase(insight);
+                            }}
+                            className="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-700 transition-colors"
+                          >
+                            Create Test
+                          </button>
                         )}
                       </div>
                     </div>

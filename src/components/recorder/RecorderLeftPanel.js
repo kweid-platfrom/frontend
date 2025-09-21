@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Bot, Download, Share2 } from 'lucide-react';
+import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Bot, } from 'lucide-react';
 import { useRecording } from '../../hooks/useRecording';
 import AIHighlights from './AIHighlights';
 
@@ -97,6 +97,7 @@ const RecorderLeftPanel = ({
     }
   };
 
+  // Create bug from detected issue (for recording issues)
   const createBugFromIssue = async (issue) => {
     if (!activeSuite?.id) {
       alert('Please select a test suite first.');
@@ -165,50 +166,97 @@ const RecorderLeftPanel = ({
     }
   };
 
-  const handleCreateTestCaseFromInsight = (insight) => {
+  // Handle test case creation from AI insight
+  const handleCreateTestCaseFromInsight = async (insight) => {
     console.log('Creating test case from insight:', insight);
     
     if (onCreateTestCaseFromInsight) {
+      // Use parent component's handler
       onCreateTestCaseFromInsight(insight);
     } else {
-      // Default behavior: show alert with test case suggestion
-      const testCaseData = {
-        title: `Test case for: ${insight.title}`,
-        description: insight.description,
-        priority: insight.severity === 'critical' ? 'Critical' : 
-                 insight.severity === 'high' ? 'High' :
-                 insight.severity === 'medium' ? 'Medium' : 'Low',
-        category: insight.category,
-        steps: [
-          'Navigate to the affected area',
-          'Perform the action that triggered the issue',
-          'Verify the expected behavior'
-        ],
-        expectedResult: insight.recommendation,
-        tags: insight.tags || []
-      };
+      // Default behavior: create test case using firestoreService
+      if (!activeSuite?.id) {
+        alert('Please select a test suite first.');
+        return;
+      }
 
-      alert(`Test Case Suggestion:\n\nTitle: ${testCaseData.title}\nDescription: ${testCaseData.description}\nPriority: ${testCaseData.priority}`);
+      try {
+        const testCaseData = {
+          title: insight.title || `Test: ${insight.description.substring(0, 80)}...`,
+          description: insight.description,
+          priority: insight.severity === 'critical' ? 'Critical' : 
+                   insight.severity === 'high' ? 'High' :
+                   insight.severity === 'medium' ? 'Medium' : 'Low',
+          category: insight.category || 'AI Generated',
+          steps: [
+            'Navigate to the affected area identified by AI analysis',
+            'Reproduce the scenario that triggered the insight',
+            'Verify the expected behavior matches requirements'
+          ],
+          expectedResult: insight.recommendation || 'System should behave as expected without issues',
+          tags: [...(insight.tags || []), 'ai-generated', 'from-recording'],
+          source: 'ai_insight',
+          automationPotential: insight.automationPotential || 'medium',
+          confidence: insight.confidence || 0,
+          recordingTime: insight.time || 0
+        };
+
+        const result = await firestoreService.createTestCase(activeSuite.id, testCaseData);
+        if (result.success) {
+          alert(`Test case created successfully: ${testCaseData.title}`);
+        } else {
+          throw new Error(result.error?.message || 'Failed to create test case');
+        }
+      } catch (error) {
+        console.error('Failed to create test case from insight:', error);
+        alert('Failed to create test case: ' + error.message);
+      }
     }
   };
 
-  const handleCreateBugFromInsight = (insight) => {
+  // Handle bug creation from AI insight
+  const handleCreateBugFromInsight = async (insight) => {
     console.log('Creating bug from insight:', insight);
     
     if (onCreateBugFromInsight) {
+      // Use parent component's handler
       onCreateBugFromInsight(insight);
     } else {
-      // Default behavior: use existing bug creation logic
-      const issueData = {
-        id: insight.id,
-        message: insight.description,
-        type: insight.type,
-        severity: insight.severity,
-        time: insight.time || 0,
-        source: 'ai_insight'
-      };
-      
-      createBugFromIssue(issueData);
+      // Default behavior: create bug using firestoreService
+      if (!activeSuite?.id) {
+        alert('Please select a test suite first.');
+        return;
+      }
+
+      try {
+        const bugData = {
+          title: `AI Bug: ${insight.title || insight.description.substring(0, 80)}...`,
+          description: `Bug identified by AI analysis\n\n${insight.description}\n\nRecommendation: ${insight.recommendation || 'Review and fix the identified issue'}`,
+          severity: insight.severity || 'medium',
+          status: 'open',
+          source: 'ai_insight',
+          category: insight.category || 'AI Detected',
+          tags: [...(insight.tags || []), 'ai-detected', 'from-recording'],
+          confidence: insight.confidence || 0,
+          recordingTime: insight.time || 0,
+          automationPotential: insight.automationPotential || 'medium',
+          recordingData: {
+            aiInsight: insight,
+            relatedLogs: insight.relatedLogs || [],
+            timestamp: new Date().toISOString()
+          }
+        };
+
+        const result = await firestoreService.createBug(activeSuite.id, bugData);
+        if (result.success) {
+          alert(`Bug created successfully: ${bugData.title}`);
+        } else {
+          throw new Error(result.error?.message || 'Failed to create bug');
+        }
+      } catch (error) {
+        console.error('Failed to create bug from insight:', error);
+        alert('Failed to create bug: ' + error.message);
+      }
     }
   };
 
@@ -294,6 +342,8 @@ const RecorderLeftPanel = ({
                 isEnabled={showAIInsights}
                 onToggle={onToggleAiHighlight}
                 onSaveHighlights={handleSaveInsights}
+                onCreateTestCase={handleCreateTestCaseFromInsight}
+                onCreateBug={handleCreateBugFromInsight}
                 className="space-y-2"
               />
             </div>
@@ -501,7 +551,7 @@ const RecorderLeftPanel = ({
                   <div className="text-center">
                     <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
                     <div className="font-medium">No issues detected</div>
-                    <div className="text-xs mt-1">Great job! Your app appears to be running smoothly.</div>
+                    <div className="text-xs mt-1">Your app appears to be running smoothly.</div>
                   </div>
                 </div>
               ) : (
