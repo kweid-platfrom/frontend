@@ -1,3 +1,4 @@
+// SuiteSelector.jsx - Fixed responsive issues
 import { useState, useRef, useEffect } from 'react';
 import { Building2, PlusIcon, ChevronDownIcon } from 'lucide-react';
 import { Button } from '../../ui/button';
@@ -60,7 +61,7 @@ const SuiteSelector = ({
             const spaceOnRight = windowWidth - rect.left;
 
             setSuiteSelectorPosition({
-                top: rect.bottom + window.scrollY,
+                top: rect.bottom + window.scrollY + 4, // Add small gap
                 left: spaceOnRight >= dropdownWidth ? rect.left : 'auto',
                 right: spaceOnRight >= dropdownWidth ? 'auto' : windowWidth - rect.right,
             });
@@ -95,17 +96,36 @@ const SuiteSelector = ({
 
     return (
         <>
-            <div className="relative ml-2 lg:ml-4">
+            {/* Mobile Layout - Icon only */}
+            <div className="relative ml-2 sm:hidden">
+                <Button
+                    ref={suiteSelectorButtonRef}
+                    variant="ghost"
+                    size="iconSm"
+                    onClick={toggleSuiteSelector}
+                    disabled={disabled}
+                    className="text-foreground hover:bg-accent/50 relative"
+                    title={activeSuite ? activeSuite.name : 'Select Suite'}
+                >
+                    <Building2 className="h-4 w-4 text-primary" />
+                    {activeSuite && (
+                        <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-background"></div>
+                    )}
+                </Button>
+            </div>
+
+            {/* Tablet and Desktop Layout */}
+            <div className="relative ml-2 lg:ml-4 hidden sm:block">
                 <Button
                     ref={suiteSelectorButtonRef}
                     variant="ghost"
                     onClick={toggleSuiteSelector}
                     disabled={disabled}
-                    leftIcon={<Building2 className="h-4 w-4 text-primary" />}
-                    rightIcon={<ChevronDownIcon className="h-4 w-4 text-muted-foreground" />}
-                    className="max-w-24 sm:max-w-32 lg:max-w-48 text-foreground hover:bg-accent/50"
+                    leftIcon={<Building2 className="h-4 w-4 text-primary flex-shrink-0" />}
+                    rightIcon={<ChevronDownIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                    className="max-w-32 md:max-w-40 lg:max-w-48 text-foreground hover:bg-accent/50 px-2 sm:px-3"
                 >
-                    <span className="truncate">
+                    <span className="truncate min-w-0 flex-1 text-left">
                         {activeSuite ? activeSuite.name : 'Select Suite'}
                     </span>
                 </Button>
@@ -120,8 +140,8 @@ const SuiteSelector = ({
                         top: `${suiteSelectorPosition.top}px`,
                         left: suiteSelectorPosition.left !== 'auto' ? `${suiteSelectorPosition.left}px` : 'auto',
                         right: suiteSelectorPosition.right !== 'auto' ? `${suiteSelectorPosition.right}px` : 'auto',
-                        minWidth: '300px',
-                        maxWidth: '400px',
+                        minWidth: window.innerWidth < 640 ? '280px' : '300px',
+                        maxWidth: window.innerWidth < 640 ? '90vw' : '400px',
                     }}
                 >
                     <div className="p-2">
@@ -130,7 +150,7 @@ const SuiteSelector = ({
                             onClick={handleCreateSuite}
                             fullWidth
                             leftIcon={<PlusIcon className="h-4 w-4" />}
-                            className="justify-start mb-2 border-b border-border rounded-none"
+                            className="justify-start mb-2 border-b border-border rounded-none pb-3"
                         >
                             Create New Suite
                         </Button>
@@ -150,22 +170,24 @@ const SuiteSelector = ({
                                             variant={activeSuite?.id === suite.id ? "secondary" : "ghost"}
                                             onClick={() => handleSelectSuite(suite)}
                                             fullWidth
-                                            className="justify-start text-left"
+                                            className="justify-start text-left h-auto py-2"
                                         >
-                                            <div
-                                                className={`w-2 h-2 rounded-full mr-3 flex-shrink-0 ${
-                                                    activeSuite?.id === suite.id ? 'bg-primary' : 'bg-muted'
-                                                }`}
-                                            ></div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="truncate" title={suite.name}>
-                                                    {suite.name}
-                                                </p>
-                                                {suite.description && (
-                                                    <p className="text-xs text-muted-foreground truncate" title={suite.description}>
-                                                        {suite.description}
+                                            <div className="flex items-center w-full">
+                                                <div
+                                                    className={`w-2 h-2 rounded-full mr-3 flex-shrink-0 ${
+                                                        activeSuite?.id === suite.id ? 'bg-primary' : 'bg-muted'
+                                                    }`}
+                                                ></div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="truncate font-medium" title={suite.name}>
+                                                        {suite.name}
                                                     </p>
-                                                )}
+                                                    {suite.description && (
+                                                        <p className="text-xs text-muted-foreground truncate mt-0.5" title={suite.description}>
+                                                            {suite.description}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </Button>
                                     ))}
@@ -184,5 +206,6 @@ const SuiteSelector = ({
         </>
     );
 };
+
 
 export default SuiteSelector;
