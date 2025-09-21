@@ -45,6 +45,10 @@ const BugList = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
     const handleSelectAll = useCallback((checked) => {
         if (checked) {
             onSelectBugs(bugs.map((bug) => bug.id));
@@ -466,6 +470,7 @@ const BugList = ({
 
     return (
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+
             {/* Enhanced Bulk Actions Bar */}
             <EnhancedBulkActionsBar 
                 selectedItems={selectedBugs}
@@ -614,6 +619,7 @@ const BugList = ({
                                             {/* Assignee */}
                                             <div className="space-y-1">
                                                 <div className="flex items-center gap-1 text-xs text-gray-500">
+
                                                     <User className="w-3 h-3" />
                                                     <span>Assigned To</span>
                                                 </div>
@@ -719,6 +725,7 @@ const BugList = ({
                                                     type="testCases"
                                                 />
                                             </div>
+                                                
                                         </div>
                                     </div>
                                 </div>
