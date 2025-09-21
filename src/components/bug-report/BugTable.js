@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import InlineEditCell from './InlineEditCell';
-import BulkActionsBar from './BulkActionsBar';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 
 const BugTable = ({
     bugs = [],
@@ -34,6 +34,7 @@ const BugTable = ({
 }) => {
     const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
+    const [loadingActions, setLoadingActions] = useState([]);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -62,6 +63,74 @@ const BugTable = ({
         }));
         setCurrentPage(1); // Reset to first page when sorting
     }, []);
+
+    // Enhanced bulk action handler with loading states
+    const handleBulkAction = useCallback(async (actionId, selectedItems) => {
+        setLoadingActions(prev => [...prev, actionId]);
+        
+        try {
+            // Call the original onBulkAction
+            await onBulkAction(actionId, selectedItems);
+            
+            // Show success notification based on action
+            const itemCount = selectedItems.length;
+            const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
+            
+            let successMessage = '';
+            switch (actionId) {
+                case 'resolve':
+                    successMessage = `Successfully resolved ${itemCount} ${itemLabel}`;
+                    break;
+                case 'close':
+                    successMessage = `Successfully closed ${itemCount} ${itemLabel}`;
+                    break;
+                case 'open':
+                    successMessage = `Successfully reopened ${itemCount} ${itemLabel}`;
+                    break;
+                case 'assign':
+                    successMessage = `Successfully assigned ${itemCount} ${itemLabel}`;
+                    break;
+                case 'priority':
+                    successMessage = `Successfully updated priority for ${itemCount} ${itemLabel}`;
+                    break;
+                case 'add-to-sprint':
+                    successMessage = `Successfully added ${itemCount} ${itemLabel} to sprint`;
+                    break;
+                case 'tag':
+                    successMessage = `Successfully tagged ${itemCount} ${itemLabel}`;
+                    break;
+                case 'group':
+                    successMessage = `Successfully grouped ${itemCount} ${itemLabel}`;
+                    break;
+                case 'archive':
+                    successMessage = `Successfully archived ${itemCount} ${itemLabel}`;
+                    break;
+                case 'delete':
+                    successMessage = `Successfully deleted ${itemCount} ${itemLabel}`;
+                    break;
+                default:
+                    successMessage = `Successfully processed ${itemCount} ${itemLabel}`;
+            }
+            
+            showNotification({
+                type: 'success',
+                title: 'Bulk Action Complete',
+                message: successMessage,
+                duration: 3000,
+            });
+            
+        } catch (error) {
+            console.error('Bulk action failed:', error);
+            showNotification({
+                type: 'error',
+                title: 'Bulk Action Failed',
+                message: error.message || `Failed to ${actionId} selected bugs. Please try again.`,
+                duration: 5000,
+            });
+        } finally {
+            setLoadingActions(prev => prev.filter(id => id !== actionId));
+        }
+    }, [onBulkAction, showNotification]);
 
     const sortedBugs = useMemo(() => {
         return [...bugs].sort((a, b) => {
@@ -383,7 +452,16 @@ const BugTable = ({
 
     return (
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
-            <BulkActionsBar selectedBugs={selectedBugs} onBulkAction={onBulkAction} />
+            {/* Enhanced Bulk Actions Bar */}
+            <EnhancedBulkActionsBar 
+                selectedItems={selectedBugs}
+                onClearSelection={() => onSelectBugs([])}
+                assetType="bugs" // Uses predefined bug configuration
+                pageTitle="bug"
+                onAction={handleBulkAction}
+                loadingActions={loadingActions}
+            />
+            
             <div className="relative overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0 z-20">
@@ -401,15 +479,6 @@ const BugTable = ({
                                             onClick={() => handleSelectAll(true)}
                                         />
                                     )}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-96 sticky left-12 bg-gray-50 z-30 whitespace-nowrap"
-                                onClick={() => handleSort('title')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Bug Title
-                                    {getSortIcon('title')}
                                 </div>
                             </th>
                             <th
@@ -584,7 +653,6 @@ const BugTable = ({
                                                 value={bug.status}
                                                 options={statusOptions}
                                                 onChange={(value) => handleUpdateBug(bug.id, { status: value })}
-                                                debug={true}
                                                 className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getStatusBadge(bug.status)}`}
                                                 noSearch
                                             />

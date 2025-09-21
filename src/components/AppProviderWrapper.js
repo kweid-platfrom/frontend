@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 
 // Persistent storage for tracking user interactions
 const STORAGE_KEY = 'userAppInteractions';
-const INTERACTION_THRESHOLD = 2; // Number of interactions needed to disable TipsMode
+const INTERACTION_THRESHOLD = 2;
 
 const AppProviderWrapper = ({ children }) => {
   const pathname = usePathname();
@@ -22,7 +22,7 @@ const AppProviderWrapper = ({ children }) => {
   const isPublicRoute = publicRoutes.includes(pathname);
 
   if (isPublicRoute) {
-    return <div className="public-route">{children}</div>;
+    return <PublicRouteContent>{children}</PublicRouteContent>;
   }
 
   return (
@@ -30,6 +30,11 @@ const AppProviderWrapper = ({ children }) => {
       <ProtectedRouteContent>{children}</ProtectedRouteContent>
     </AppProvider>
   );
+};
+
+// New component for public routes that still has access to global theme
+const PublicRouteContent = ({ children }) => {
+  return <div className="public-route">{children}</div>;
 };
 
 const ProtectedRouteContent = ({ children }) => {
@@ -52,6 +57,7 @@ const ProtectedRouteContent = ({ children }) => {
   const bypassTipsModeRoutes = ['/documents', '/documents/create'];
   const interactiveRoutes = ['/test-cases', '/bugs', '/sprints', '/dashboard'];
   const shouldBypassTipsMode = bypassTipsModeRoutes.some((route) => pathname.startsWith(route));
+
 
   // Track user interactions
   const trackInteraction = useCallback(() => {
@@ -150,7 +156,7 @@ const ProtectedRouteContent = ({ children }) => {
     [actions.suites, interactionCount, shouldBypassTipsMode, trackInteraction]
   );
 
-  // Main effect for authentication and suite handling
+  // Main effect for authentication and suite handling (rest of your existing logic remains the same)
   useEffect(() => {
     let mounted = true;
 
@@ -280,7 +286,7 @@ const ProtectedRouteContent = ({ children }) => {
 
   if (shouldShowAuthUI()) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50 dark:from-slate-900 dark:via-gray-900 dark:to-teal-900 transition-colors duration-200">
         {authMode === 'register' ? (
           <Register onSwitchToLogin={() => setAuthMode('login')} />
         ) : (

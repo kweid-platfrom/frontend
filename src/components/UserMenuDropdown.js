@@ -14,12 +14,12 @@ import {
 
 const UserMenuDropdown = ({ setShowUserMenu }) => {
     const router = useRouter();
-    const { 
-        state, 
-        actions, 
-        currentUser, 
+    const {
+        state,
+        actions,
+        currentUser,
         activeSuite,
-        profileSubscriptionActive 
+        profileSubscriptionActive
     } = useApp();
 
     const profileData = state.auth.profile;
@@ -30,21 +30,21 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
         if (profileData?.name?.trim()) return profileData.name.trim();
         if (currentUser?.displayName?.trim()) return currentUser.displayName.trim();
         if (currentUser?.name?.trim()) return currentUser.name.trim();
-        
+
         if (currentUser?.firstName || currentUser?.lastName) {
             const firstName = currentUser.firstName || '';
             const lastName = currentUser.lastName || '';
             const fullName = `${firstName} ${lastName}`.trim();
             if (fullName) return fullName;
         }
-        
+
         if (profileData?.first_name || profileData?.last_name) {
             const firstName = profileData.first_name || '';
             const lastName = profileData.last_name || '';
             const fullName = `${firstName} ${lastName}`.trim();
             if (fullName) return fullName;
         }
-        
+
         const email = profileData?.email || currentUser?.email;
         if (email) {
             const emailName = email.split('@')[0];
@@ -54,7 +54,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                 .join(' ');
         }
-        
+
         return 'User';
     };
 
@@ -64,7 +64,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
 
     const getOrganizationInfo = () => {
         if (accountType !== 'organization') return null;
-        
+
         return {
             name: profileData?.organizationName || currentUser?.organizationName || 'Organization',
             role: profileData?.role || currentUser?.role || 'member'
@@ -149,22 +149,22 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                                 {getUserEmail()}
                             </p>
                         </div>
-                        
+
                         <div className="flex-shrink-0 ml-2">
                             {profileSubscriptionActive ? (
-                                <CheckCircleIcon 
-                                    className="h-4 w-4 text-green-500" 
+                                <CheckCircleIcon
+                                    className="h-4 w-4 text-green-500"
                                     title="Profile synced"
                                 />
                             ) : (
-                                <ExclamationTriangleIcon 
-                                    className="h-4 w-4 text-yellow-500" 
+                                <ExclamationTriangleIcon
+                                    className="h-4 w-4 text-yellow-500"
                                     title="Profile sync offline"
                                 />
                             )}
                         </div>
                     </div>
-                    
+
                     {organizationInfo && (
                         <div className="flex items-center mt-2">
                             <BuildingOffice2Icon className="h-3 w-3 text-muted-foreground mr-1 flex-shrink-0" />
@@ -176,7 +176,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                             </span>
                         </div>
                     )}
-                    
+
                     <div className="mt-1">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
                             {accountType === 'organization' ? 'Team Account' : 'Individual Account'}
@@ -192,8 +192,16 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                 </div>
 
                 {/* Theme Switcher */}
-                <div className="px-3 flex justify-center">
+                {/* <div className="px-3 flex justify-center">
                     <ThemeToggle variant="menu" hideText onlyIcons />
+                </div> */}
+
+                {/* Theme Switcher */}
+                <div className="px-3 flex justify-center">
+                    <ThemeToggle
+                        variant="menu"
+                        className="w-full justify-center"
+                    />
                 </div>
 
                 {/* Menu Items */}
@@ -216,7 +224,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                             Archive & Trash
                         </button>
                     )}
-                    
+
                     <button
                         onClick={handleSupport}
                         className="w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors"
@@ -224,7 +232,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                         <LifebuoyIcon className="h-4 w-4 mr-2 text-muted-foreground" />
                         Support
                     </button>
-                    
+
                     <button
                         onClick={handleSignOut}
                         className="w-full flex items-center px-3 py-2 text-sm text-card-foreground hover:bg-muted rounded-md transition-colors border-t border-border mt-2 pt-3"
