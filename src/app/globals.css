@@ -96,9 +96,17 @@
     background-color: rgb(var(--color-background));
     color: rgb(var(--color-foreground));
   }
+  
+  /* Prevent theme transitions during initial load and theme switching */
+  .theme-loading,
   .theme-loading * {
     transition: none !important;
+    animation-duration: 0s !important;
   }
+  
+  /* Default smooth transitions for theme changes */
+  html,
+  body,
   * {
     transition: background-color 0.2s ease-in-out, 
                 color 0.2s ease-in-out, 

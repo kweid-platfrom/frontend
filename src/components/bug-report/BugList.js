@@ -2,28 +2,28 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
+import { useApp } from '@/context/AppProvider';
 import {
     CheckSquare,
     Square,
+    ChevronUp,
+    ChevronDown,
     Bug,
     Clock,
     MessageSquare,
-    Edit3,
-    Copy,
-    Trash2,
-    Link,
-    AlertTriangle,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     User,
     Calendar,
-    Tag,
-    ChevronDown,
-    ChevronUp,
-    SortAsc,
-    SortDesc,
+    AlertCircle,
+    Settings,
+    ExternalLink,
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import InlineEditCell from './InlineEditCell';
-import BulkActionsBar from './BulkActionsBar';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 
 const BugList = ({
     bugs = [],
@@ -34,14 +34,16 @@ const BugList = ({
     onView,
     selectedBugs,
     onSelectBugs,
-    onEdit,
-    onDelete,
-    onDuplicate,
     onLinkTestCase,
     onUpdateBug,
 }) => {
-    const [expandedBugs, setExpandedBugs] = useState(new Set());
+    const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
+    const [loadingActions, setLoadingActions] = useState([]);
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     const handleSelectAll = useCallback((checked) => {
         if (checked) {
@@ -59,24 +61,81 @@ const BugList = ({
         }
     }, [selectedBugs, onSelectBugs]);
 
-    const handleToggleExpand = useCallback((bugId) => {
-        setExpandedBugs((prev) => {
-            const newSet = new Set(prev);
-            if (newSet.has(bugId)) {
-                newSet.delete(bugId);
-            } else {
-                newSet.add(bugId);
-            }
-            return newSet;
-        });
-    }, []);
-
     const handleSort = useCallback((key) => {
         setSortConfig((prev) => ({
             key,
             direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
         }));
+        setCurrentPage(1); // Reset to first page when sorting
     }, []);
+
+    // Enhanced bulk action handler with loading states
+    const handleBulkAction = useCallback(async (actionId, selectedItems ) => {
+        setLoadingActions(prev => [...prev, actionId]);
+        
+        try {
+            // Call the original onBulkAction
+            await onBulkAction(actionId, selectedItems);
+            
+            // Show success notification based on action
+            const itemCount = selectedItems.length;
+            const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
+            
+            let successMessage = '';
+            switch (actionId) {
+                case 'resolve':
+                    successMessage = `Successfully resolved ${itemCount} ${itemLabel}`;
+                    break;
+                case 'close':
+                    successMessage = `Successfully closed ${itemCount} ${itemLabel}`;
+                    break;
+                case 'open':
+                    successMessage = `Successfully reopened ${itemCount} ${itemLabel}`;
+                    break;
+                case 'assign':
+                    successMessage = `Successfully assigned ${itemCount} ${itemLabel}`;
+                    break;
+                case 'priority':
+                    successMessage = `Successfully updated priority for ${itemCount} ${itemLabel}`;
+                    break;
+                case 'add-to-sprint':
+                    successMessage = `Successfully added ${itemCount} ${itemLabel} to sprint`;
+                    break;
+                case 'tag':
+                    successMessage = `Successfully tagged ${itemCount} ${itemLabel}`;
+                    break;
+                case 'group':
+                    successMessage = `Successfully grouped ${itemCount} ${itemLabel}`;
+                    break;
+                case 'archive':
+                    successMessage = `Successfully archived ${itemCount} ${itemLabel}`;
+                    break;
+                case 'delete':
+                    successMessage = `Successfully deleted ${itemCount} ${itemLabel}`;
+                    break;
+                default:
+                    successMessage = `Successfully processed ${itemCount} ${itemLabel}`;
+            }
+            
+            showNotification({
+                type: 'success',
+                title: 'Bulk Action Complete',
+                message: successMessage,
+                duration: 3000,
+            });
+            
+        } catch (error) {
+            console.error('Bulk action failed:', error);
+            showNotification({
+                type: 'error',
+                title: 'Bulk Action Failed',
+                message: error.message || `Failed to ${actionId} selected bugs. Please try again.`,
+                duration: 5000,
+            });
+        } finally {
+            setLoadingActions(prev => prev.filter(id => id !== actionId));
+        }
+    }, [onBulkAction, showNotification]);
 
     const sortedBugs = useMemo(() => {
         return [...bugs].sort((a, b) => {
@@ -102,6 +161,84 @@ const BugList = ({
         });
     }, [bugs, sortConfig]);
 
+    // Pagination calculations
+    const totalItems = sortedBugs.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedBugs = sortedBugs.slice(startIndex, endIndex);
+
+    // Pagination handlers
+    const handlePageChange = useCallback((page) => {
+        setCurrentPage(page);
+    }, []);
+
+    const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
+        setItemsPerPage(newItemsPerPage);
+        setCurrentPage(1); // Reset to first page
+    }, []);
+
+    // Generate page numbers for pagination
+    const getPageNumbers = useMemo(() => {
+        const pages = [];
+        const maxVisiblePages = 5;
+
+        if (totalPages <= maxVisiblePages) {
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+            for (let i = startPage; i <= endPage; i++) {
+                pages.push(i);
+            }
+        }
+
+        return pages;
+    }, [currentPage, totalPages]);
+
+    const handleLinkTestCase = useCallback((bugId, testCaseIds) => {
+        if (onLinkTestCase) {
+            onLinkTestCase(bugId, testCaseIds);
+        }
+    }, [onLinkTestCase]);
+
+    const handleUpdateBug = useCallback(async (bugId, updates) => {
+        if (typeof onUpdateBug === 'function') {
+            try {
+                const result = await onUpdateBug(bugId, updates);
+
+                if (result && !result.success) {
+                    console.warn('Update failed:', result.error?.message || 'Unknown error');
+                    return result;
+                }
+
+                return result;
+            } catch (error) {
+                console.error('Error in BugList handleUpdateBug:', error);
+
+                showNotification({
+                    type: 'error',
+                    title: 'Update Failed',
+                    message: error.message || 'Failed to update bug. Please try again.',
+                });
+
+                return { success: false, error: { message: error.message } };
+            }
+        } else {
+            console.warn('onUpdateBug is not a function', { bugId, updates });
+            showNotification({
+                type: 'error',
+                title: 'Configuration Error',
+                message: 'Update function not available. Please refresh the page.',
+                persistent: true,
+            });
+            return { success: false, error: { message: 'Update function not available' } };
+        }
+    }, [onUpdateBug, showNotification]);
+
     const getStatusBadge = useCallback((status) => {
         const statusConfig = {
             open: 'bg-red-100 text-red-800 border-red-200',
@@ -109,7 +246,7 @@ const BugList = ({
             resolved: 'bg-green-100 text-green-800 border-green-200',
             closed: 'bg-gray-100 text-gray-800 border-gray-200',
             duplicate: 'bg-purple-100 text-purple-800 border-purple-200',
-            "won't-fix": 'bg-orange-100 text-orange-800 border-orange-200',
+            'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200',
         };
         return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
     }, []);
@@ -135,6 +272,17 @@ const BugList = ({
         return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
     }, []);
 
+    const getDerivedPriority = useCallback((severity) => {
+        const priorityMap = {
+            critical: 'urgent',
+            high: 'high',
+            medium: 'medium',
+            low: 'low',
+            trivial: 'low'
+        };
+        return priorityMap[severity?.toLowerCase()] || 'medium';
+    }, []);
+
     const getSeverityIndicator = useCallback((severity) => {
         const severityColors = {
             critical: 'bg-red-500',
@@ -144,23 +292,44 @@ const BugList = ({
             trivial: 'bg-gray-400',
         };
         const color = severityColors[severity?.toLowerCase()] || 'bg-gray-400';
-        return <div className={`w-3 h-3 rounded-full ${color}`} />;
+        return <div className={`w-3 h-3 rounded-full flex-shrink-0 ${color}`} />;
+    }, []);
+
+    const getSortIcon = useCallback((columnKey) => {
+        if (sortConfig.key !== columnKey) {
+            return <ChevronUp className="w-4 h-4 text-gray-400" />;
+        }
+        return sortConfig.direction === 'asc' ? (
+            <ChevronUp className="w-4 h-4 text-gray-600" />
+        ) : (
+            <ChevronDown className="w-4 h-4 text-gray-600" />
+        );
+    }, [sortConfig]);
+
+    const isValidDate = useCallback((date) => {
+        return date instanceof Date && !isNaN(date.getTime());
     }, []);
 
     const formatEvidence = useCallback((evidence) => {
+        // Handle null, undefined, or empty values
         if (!evidence) return 'None';
 
+        // Handle string values
         if (typeof evidence === 'string') {
             return evidence.length > 100 ? evidence.slice(0, 100) + '...' : evidence;
         }
 
+        // Handle array values
         if (Array.isArray(evidence)) {
             return evidence.length ? `${evidence.length} item(s)` : 'None';
         }
 
+        // Handle object values (this is the critical part for AI-generated bugs)
         if (typeof evidence === 'object' && evidence !== null) {
             try {
                 const parts = [];
+
+                // Check for common evidence properties
                 if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
                 if (evidence.browserVersion || evidence.version) {
                     parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
@@ -172,18 +341,21 @@ const BugList = ({
                         const hostname = new URL(evidence.url).hostname;
                         parts.push(`URL: ${hostname}`);
                     } catch {
+                        // If URL parsing fails, just use the raw URL
                         parts.push(`URL: ${evidence.url}`);
                     }
                 }
 
+                // If we found standard properties, format them nicely
                 if (parts.length > 0) {
                     const result = parts.join(' | ');
                     return result.length > 100 ? result.slice(0, 100) + '...' : result;
                 }
 
+                // If no standard properties, try to create a summary from all properties
                 const allKeys = Object.keys(evidence);
                 if (allKeys.length > 0) {
-                    const summary = allKeys.map((key) => {
+                    const summary = allKeys.map(key => {
                         const value = evidence[key];
                         if (typeof value === 'string' && value.length > 0) {
                             return `${key}: ${value.length > 30 ? value.slice(0, 30) + '...' : value}`;
@@ -194,13 +366,16 @@ const BugList = ({
                     return summary.length > 100 ? summary.slice(0, 100) + '...' : summary;
                 }
 
+                // Fallback if object exists but has no meaningful properties
                 return 'Evidence data';
+
             } catch (error) {
                 console.error('Error formatting evidence object:', error);
                 return 'Evidence data (format error)';
             }
         }
 
+        // Handle any other data types by converting to string safely
         try {
             const stringValue = String(evidence);
             return stringValue.length > 100 ? stringValue.slice(0, 100) + '...' : stringValue;
@@ -211,22 +386,20 @@ const BugList = ({
     }, []);
 
     const formatReporter = useCallback((bug) => {
-        return (
-            bug.reportedBy ||
+        return bug.reportedBy ||
             bug.reportedByName ||
             bug.reporter ||
             bug.created_by_name ||
             bug.updatedByName ||
-            'Unknown'
-        );
+            'Unknown';
     }, []);
 
     const testCaseOptions = useMemo(() =>
         Array.isArray(testCases)
             ? testCases.map((testCase) => ({
-                  value: testCase.id || `tc_${Math.random().toString(36).slice(2)}`,
-                  label: testCase.title || `Test Case ${testCase.id?.slice(-6) || 'Unknown'}`,
-              }))
+                value: testCase.id || `tc_${Math.random().toString(36).slice(2)}`,
+                label: testCase.title || `Test Case ${testCase.id?.slice(-6) || 'Unknown'}`,
+            }))
             : [],
         [testCases]
     );
@@ -237,7 +410,7 @@ const BugList = ({
         { value: 'resolved', label: 'Resolved' },
         { value: 'closed', label: 'Closed' },
         { value: 'duplicate', label: 'Duplicate' },
-        { value: "won't-fix", label: "Won't Fix" },
+        { value: 'won\'t-fix', label: 'Won\'t Fix' },
     ], []);
 
     const severityOptions = useMemo(() => [
@@ -248,44 +421,37 @@ const BugList = ({
         { value: 'trivial', label: 'Trivial' },
     ], []);
 
+    const environmentOptions = useMemo(() => [
+        { value: 'production', label: 'Production' },
+        { value: 'staging', label: 'Staging' },
+        { value: 'development', label: 'Development' },
+        { value: 'testing', label: 'Testing' },
+    ], []);
+
+    const frequencyOptions = useMemo(() => [
+        { value: 'always', label: 'Always' },
+        { value: 'often', label: 'Often' },
+        { value: 'sometimes', label: 'Sometimes' },
+        { value: 'rarely', label: 'Rarely' },
+    ], []);
+
     const assigneeOptions = useMemo(() => [
         { value: '', label: 'Unassigned' },
         { value: 'user1', label: 'User 1' },
         { value: 'user2', label: 'User 2' },
     ], []);
 
+    const sortOptions = useMemo(() => [
+        { value: 'updated_at', label: 'Last Updated' },
+        { value: 'created_at', label: 'Created Date' },
+        { value: 'title', label: 'Title' },
+        { value: 'status', label: 'Status' },
+        { value: 'severity', label: 'Severity' },
+        { value: 'priority', label: 'Priority' },
+        { value: 'due_date', label: 'Due Date' },
+    ], []);
+
     const isAllSelected = selectedBugs.length === bugs.length && bugs.length > 0;
-
-    const handleLinkTestCase = useCallback(
-        (bugId, testCaseIds) => {
-            if (onLinkTestCase) {
-                onLinkTestCase(bugId, testCaseIds);
-            }
-        },
-        [onLinkTestCase]
-    );
-
-    const handleUpdateBug = useCallback(
-        async (bugId, updates) => {
-            if (typeof onUpdateBug === 'function') {
-                try {
-                    const result = await onUpdateBug(bugId, updates);
-                    return result;
-                } catch (error) {
-                    console.error('Error in BugList handleUpdateBug:', error);
-                    return { success: false, error: { message: error.message } };
-                }
-            } else {
-                console.warn('onUpdateBug is not a function', { bugId, updates });
-                return { success: false, error: { message: 'Update function not available' } };
-            }
-        },
-        [onUpdateBug]
-    );
-
-    const isValidDate = useCallback((date) => {
-        return date instanceof Date && !isNaN(date.getTime());
-    }, []);
 
     if (loading) {
         return (
@@ -300,372 +466,391 @@ const BugList = ({
 
     return (
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
-            <BulkActionsBar selectedBugs={selectedBugs} onBulkAction={onBulkAction} />
-
-            {/* Sort Controls */}
-            <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center">
-                        {isAllSelected ? (
-                            <CheckSquare
-                                className="w-4 h-4 text-teal-600 cursor-pointer"
-                                onClick={() => handleSelectAll(false)}
-                            />
-                        ) : (
-                            <Square
-                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
-                                onClick={() => handleSelectAll(true)}
-                            />
-                        )}
-                        <span className="ml-2 text-sm text-gray-600">
-                            {selectedBugs.length > 0 ? `${selectedBugs.length} selected` : 'Select all'}
-                        </span>
+            {/* Enhanced Bulk Actions Bar */}
+            <EnhancedBulkActionsBar 
+                selectedItems={selectedBugs}
+                onClearSelection={() => onSelectBugs([])}
+                assetType="bugs" // Uses predefined bug configuration
+                pageTitle="bug"
+                onAction={handleBulkAction}
+                loadingActions={loadingActions}
+            />
+            
+            {/* Header Controls */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    {/* Left side - Select all and count */}
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            {isAllSelected ? (
+                                <CheckSquare
+                                    className="w-4 h-4 text-teal-600 cursor-pointer"
+                                    onClick={() => handleSelectAll(false)}
+                                />
+                            ) : (
+                                <Square
+                                    className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                    onClick={() => handleSelectAll(true)}
+                                />
+                            )}
+                            <span className="text-sm text-gray-600">
+                                {selectedBugs.length > 0 ? `${selectedBugs.length} selected` : 'Select all'}
+                            </span>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                            {totalItems} {totalItems === 1 ? 'bug' : 'bugs'}
+                        </div>
                     </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-600">Sort by:</span>
-                    <select
-                        value={sortConfig.key}
-                        onChange={(e) => handleSort(e.target.value)}
-                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    >
-                        <option value="updated_at">Last Updated</option>
-                        <option value="created_at">Created Date</option>
-                        <option value="title">Title</option>
-                        <option value="status">Status</option>
-                        <option value="severity">Severity</option>
-                        <option value="priority">Priority</option>
-                        <option value="due_date">Due Date</option>
-                    </select>
-                    <button
-                        onClick={() => setSortConfig((prev) => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
-                        className="p-1 text-gray-600 hover:text-gray-900"
-                        title={`Sort ${sortConfig.direction === 'asc' ? 'descending' : 'ascending'}`}
-                    >
-                        {sortConfig.direction === 'asc' ? (
-                            <SortAsc className="w-4 h-4" />
-                        ) : (
-                            <SortDesc className="w-4 h-4" />
-                        )}
-                    </button>
+                    {/* Right side - Sort controls */}
+                    <div className="flex items-center gap-3">
+                        <label className="text-sm text-gray-600 whitespace-nowrap">Sort by:</label>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={sortConfig.key}
+                                onChange={(e) => handleSort(e.target.value)}
+                                className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white"
+                            >
+                                {sortOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
+                                className="p-1.5 rounded hover:bg-gray-100 border border-gray-300"
+                                title={`Sort ${sortConfig.direction === 'asc' ? 'descending' : 'ascending'}`}
+                            >
+                                {getSortIcon(sortConfig.key)}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            {/* Bug List */}
             <div className="divide-y divide-gray-200">
-                {sortedBugs.length === 0 ? (
-                    <div className="px-6 py-12 text-center">
-                        <Bug className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                        <p className="text-sm text-gray-500">No bugs found</p>
-                        <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                {paginatedBugs.length === 0 ? (
+                    <div className="px-6 py-12 text-center text-sm text-gray-500">
+                        <div className="flex flex-col items-center">
+                            <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                            <p>No bugs found</p>
+                            <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                        </div>
                     </div>
                 ) : (
-                    sortedBugs.map((bug) => {
+                    paginatedBugs.map((bug) => {
                         const linkedTestCases = relationships?.bugToTestCases?.[bug.id] || [];
                         const isSelected = selectedBugs.includes(bug.id);
-                        const isExpanded = expandedBugs.has(bug.id);
 
                         return (
-                            <div
-                                key={bug.id}
-                                className={`p-6 hover:bg-gray-50 transition-colors ${
-                                    isSelected ? 'bg-teal-50 border-l-4 border-teal-500' : ''
-                                }`}
-                            >
-                                {/* Bug Header */}
+                            <div key={bug.id} className={`p-6 hover:bg-gray-50 transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
+                                {/* Main content */}
                                 <div className="flex items-start gap-4">
-                                    {/* Selection Checkbox */}
-                                    <div className="flex items-center pt-1">
+                                    {/* Checkbox and severity indicator */}
+                                    <div className="flex items-center gap-3 pt-1">
                                         {isSelected ? (
                                             <CheckSquare
-                                                className="w-4 h-4 text-teal-600 cursor-pointer"
+                                                className="w-4 h-4 text-teal-600 cursor-pointer flex-shrink-0"
                                                 onClick={() => handleSelectItem(bug.id, false)}
                                             />
                                         ) : (
                                             <Square
-                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600 flex-shrink-0"
                                                 onClick={() => handleSelectItem(bug.id, true)}
                                             />
                                         )}
+                                        {getSeverityIndicator(bug.severity)}
                                     </div>
 
-                                    {/* Severity Indicator */}
-                                    <div className="flex items-center pt-1">{getSeverityIndicator(bug.severity)}</div>
-
-                                    {/* Main Content */}
+                                    {/* Content */}
                                     <div className="flex-1 min-w-0">
-                                        {/* Title and ID */}
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <h3 className="text-lg font-semibold text-gray-900 truncate">
-                                                {bug.title || 'Untitled Bug'}
-                                            </h3>
-                                            <span className="text-sm text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
-                                                #{bug.id?.slice(-8) || 'Unknown'}
-                                            </span>
+                                        {/* Header - Title and ID */}
+                                        <div className="flex items-start justify-between gap-4 mb-3">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="text-lg font-medium text-gray-900 mb-1 line-clamp-2">
+                                                    {bug.title || 'Untitled Bug'}
+                                                </h3>
+                                                <div className="text-sm text-gray-500">
+                                                    #{bug.id?.slice(-8) || 'Unknown'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => onView(bug)}
+                                                className="p-2 rounded-lg hover:bg-gray-100 border border-gray-200 flex-shrink-0 transition-colors"
+                                                title="View bug details"
+                                            >
+                                                <MessageSquare className="w-4 h-4" />
+                                            </button>
                                         </div>
 
-                                        {/* Status and Priority Badges */}
-                                        <div className="flex items-center gap-2 mb-3">
+                                        {/* Status badges */}
+                                        <div className="flex items-center gap-2 mb-4 flex-wrap">
                                             <InlineEditCell
                                                 value={bug.status}
                                                 options={statusOptions}
                                                 onChange={(value) => handleUpdateBug(bug.id, { status: value })}
-                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(
-                                                    bug.status
-                                                )}`}
+                                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${getStatusBadge(bug.status)}`}
                                                 noSearch
                                             />
                                             <InlineEditCell
                                                 value={bug.severity}
                                                 options={severityOptions}
-                                                onChange={(value) => handleUpdateBug(bug.id, { severity: value })}
-                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSeverityBadge(
-                                                    bug.severity
-                                                )}`}
-                                                noSearch
-                                            />
-                                            {bug.priority && (
-                                                <span
-                                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityBadge(
-                                                        bug.priority
-                                                    )}`}
-                                                >
-                                                    {bug.priority}
-                                                </span>
-                                            )}
-                                            {bug.tags && bug.tags.length > 0 && (
-                                                <div className="flex items-center gap-1">
-                                                    <Tag className="w-3 h-3 text-gray-400" />
-                                                    {bug.tags.slice(0, 3).map((tag, index) => (
-                                                        <span
-                                                            key={index}
-                                                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
-                                                        >
-                                                            {tag}
-                                                        </span>
-                                                    ))}
-                                                    {bug.tags.length > 3 && (
-                                                        <span className="text-xs text-gray-500">
-                                                            +{bug.tags.length - 3} more
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Description */}
-                                        {bug.description && (
-                                            <p className="text-sm text-gray-700 mb-3 line-clamp-2">{bug.description}</p>
-                                        )}
-
-                                        {/* Meta Information */}
-                                        <div className="flex items-center gap-6 text-xs text-gray-500">
-                                            <div className="flex items-center gap-1">
-                                                <User className="w-3 h-3" />
-                                                <span>Reporter: {formatReporter(bug)}</span>
-                                            </div>
-                                            {bug.assignee && (
-                                                <div className="flex items-center gap-1">
-                                                    <User className="w-3 h-3" />
-                                                    <span>Assigned to: {bug.assignee}</span>
-                                                </div>
-                                            )}
-                                            <div className="flex items-center gap-1">
-                                                <Calendar className="w-3 h-3" />
-                                                <span>
-                                                    Created:{' '}
-                                                    {bug.created_at && isValidDate(new Date(bug.created_at))
-                                                        ? format(new Date(bug.created_at), 'MMM d, yyyy')
-                                                        : 'Unknown'}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <Clock className="w-3 h-3" />
-                                                <span>
-                                                    Updated:{' '}
-                                                    {bug.updated_at && isValidDate(new Date(bug.updated_at))
-                                                        ? formatDistanceToNow(new Date(bug.updated_at), {
-                                                              addSuffix: true,
-                                                          })
-                                                        : 'Unknown'}
-                                                </span>
-                                            </div>
-                                            {bug.due_date && isValidDate(new Date(bug.due_date)) && (
-                                                <div className="flex items-center gap-1">
-                                                    <AlertTriangle className="w-3 h-3" />
-                                                    <span>Due: {format(new Date(bug.due_date), 'MMM d, yyyy')}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex items-start gap-2 pt-1">
-                                        <button
-                                            onClick={() => onView(bug)}
-                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                            title="View details"
-                                        >
-                                            <MessageSquare className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => onEdit(bug)}
-                                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                                            title="Edit bug"
-                                        >
-                                            <Edit3 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => onDuplicate(bug)}
-                                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                                            title="Duplicate bug"
-                                        >
-                                            <Copy className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => onDelete(bug.id)}
-                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                            title="Delete bug"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleToggleExpand(bug.id)}
-                                            className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
-                                            title={isExpanded ? 'Collapse details' : 'Expand details'}
-                                        >
-                                            {isExpanded ? (
-                                                <ChevronUp className="w-4 h-4" />
-                                            ) : (
-                                                <ChevronDown className="w-4 h-4" />
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Expanded Details */}
-                                {isExpanded && (
-                                    <div className="mt-4 pl-8 border-l-2 border-gray-200 space-y-4">
-                                    {/* Steps to Reproduce */}
-                                    {bug.steps_to_reproduce && (
-                                        <div>
-                                            <h4 className="text-sm font-medium text-gray-900 mb-2">Steps to Reproduce:</h4>
-                                            <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
-                                                {bug.steps_to_reproduce.split('\n').map((step, index) => (
-                                                    <div key={index} className="mb-1">
-                                                        {step.trim() && (
-                                                            <>
-                                                                <span className="font-medium text-gray-600">{index + 1}.</span>{' '}
-                                                                {step.trim()}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Expected vs Actual Results */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {bug.expected_result && (
-                                            <div>
-                                                <h4 className="text-sm font-medium text-gray-900 mb-2">Expected Result:</h4>
-                                                <p className="text-sm text-gray-700 bg-green-50 p-3 rounded border border-green-200">
-                                                    {bug.expected_result}
-                                                </p>
-                                            </div>
-                                        )}
-                                        {bug.actual_result && (
-                                            <div>
-                                                <h4 className="text-sm font-medium text-gray-900 mb-2">Actual Result:</h4>
-                                                <p className="text-sm text-gray-700 bg-red-50 p-3 rounded border border-red-200">
-                                                    {bug.actual_result}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Evidence */}
-                                    {bug.evidence && (
-                                        <div>
-                                            <h4 className="text-sm font-medium text-gray-900 mb-2">Evidence:</h4>
-                                            <div className="text-sm text-gray-700 bg-blue-50 p-3 rounded border border-blue-200">
-                                                {formatEvidence(bug.evidence)}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Environment and Frequency */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div>
-                                            <h4 className="text-sm font-medium text-gray-900 mb-2">Environment:</h4>
-                                            <p className="text-sm text-gray-700">{bug.environment || 'Not specified'}</p>
-                                        </div>
-                                        <div>
-                                            <h4 className="text-sm font-medium text-gray-900 mb-2">Frequency:</h4>
-                                            <p className="text-sm text-gray-700">{bug.frequency || 'Not specified'}</p>
-                                        </div>
-                                        <div>
-                                            <h4 className="text-sm font-medium text-gray-900 mb-2">Assignee:</h4>
-                                            <InlineEditCell
-                                                value={bug.assignee}
-                                                options={assigneeOptions}
-                                                onChange={(value) => handleUpdateBug(bug.id, { assignee: value })}
-                                                className="text-sm text-gray-700"
-                                                placeholder="Unassigned"
-                                                noSearch
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Test Cases Linking */}
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
-                                            <Link className="w-4 h-4" />
-                                            Linked Test Cases:
-                                        </h4>
-                                        <div className="w-full max-w-md">
-                                            <MultiSelectDropdown
-                                                options={testCaseOptions}
-                                                value={linkedTestCases}
-                                                onChange={(newTestCases) => handleLinkTestCase(bug.id, newTestCases)}
-                                                placeholder="Link test cases..."
-                                                type="testCases"
-                                            />
-                                        </div>
-                                        {linkedTestCases.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                {linkedTestCases.map((tcId) => {
-                                                    const testCase = testCases.find((tc) => tc.id === tcId);
-                                                    return (
-                                                        <span
-                                                            key={tcId}
-                                                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
-                                                        >
-                                                            {testCase?.title || `TC-${tcId.slice(-6)}`}
-                                                        </span>
-                                                    );
+                                                onChange={(value) => handleUpdateBug(bug.id, {
+                                                    severity: value,
+                                                    priority: getDerivedPriority(value)
                                                 })}
+                                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${getSeverityBadge(bug.severity)}`}
+                                                noSearch
+                                            />
+                                            <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${getPriorityBadge(bug.priority)}`}>
+                                                {bug.priority || 'Medium'}
+                                            </span>
+                                        </div>
+
+                                        {/* Details grid */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
+                                            {/* Assignee */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <User className="w-3 h-3" />
+                                                    <span>Assigned To</span>
+                                                </div>
+                                                <InlineEditCell
+                                                    value={bug.assignee}
+                                                    options={assigneeOptions}
+                                                    onChange={(value) => handleUpdateBug(bug.id, { assignee: value })}
+                                                    className="text-sm text-gray-700"
+                                                    noSearch
+                                                />
+                                            </div>
+
+                                            {/* Environment */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <Settings className="w-3 h-3" />
+                                                    <span>Environment</span>
+                                                </div>
+                                                <InlineEditCell
+                                                    value={bug.environment}
+                                                    options={environmentOptions}
+                                                    onChange={(value) => handleUpdateBug(bug.id, { environment: value })}
+                                                    className="text-sm text-gray-700"
+                                                    noSearch
+                                                />
+                                            </div>
+
+                                            {/* Frequency */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <AlertCircle className="w-3 h-3" />
+                                                    <span>Frequency</span>
+                                                </div>
+                                                <InlineEditCell
+                                                    value={bug.frequency}
+                                                    options={frequencyOptions}
+                                                    onChange={(value) => handleUpdateBug(bug.id, { frequency: value })}
+                                                    className="text-sm text-gray-700"
+                                                    noSearch
+                                                />
+                                            </div>
+
+                                            {/* Reporter */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <User className="w-3 h-3" />
+                                                    <span>Reporter</span>
+                                                </div>
+                                                <div className="text-sm text-gray-700">
+                                                    {formatReporter(bug)}
+                                                </div>
+                                            </div>
+
+                                            {/* Created Date */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <Calendar className="w-3 h-3" />
+                                                    <span>Created</span>
+                                                </div>
+                                                <div className="text-sm text-gray-700">
+                                                    {bug.due_date && isValidDate(new Date(bug.due_date))
+                                                        ? format(new Date(bug.due_date), 'MMM d, yyyy')
+                                                        : 'Not set'}
+                                                </div>
+                                            </div>
+
+                                            {/* Last Updated */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <Clock className="w-3 h-3" />
+                                                    <span>Updated</span>
+                                                </div>
+                                                <div className="text-sm text-gray-700">
+                                                    {bug.updated_at && isValidDate(new Date(bug.updated_at))
+                                                        ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
+                                                        : 'Unknown'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Evidence */}
+                                        {bug.evidence && (
+                                            <div className="mb-4">
+                                                <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                                                    <ExternalLink className="w-3 h-3" />
+                                                    <span>Evidence</span>
+                                                </div>
+                                                <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
+                                                    {formatEvidence(bug.evidence)}
+                                                </div>
                                             </div>
                                         )}
-                                    </div>
 
-                                    {/* Additional Notes */}
-                                    {bug.notes && (
-                                        <div>
-                                            <h4 className="text-sm font-medium text-gray-900 mb-2">Notes:</h4>
-                                            <p className="text-sm text-gray-700 bg-yellow-50 p-3 rounded border border-yellow-200">
-                                                {bug.notes}
-                                            </p>
+                                        {/* Test Cases */}
+                                        <div className="space-y-1">
+                                            <div className="text-xs text-gray-500">Linked Test Cases</div>
+                                            <div className="max-w-md">
+                                                <MultiSelectDropdown
+                                                    options={testCaseOptions}
+                                                    value={linkedTestCases}
+                                                    onChange={(newTestCases) => handleLinkTestCase(bug.id, newTestCases)}
+                                                    placeholder="Link test cases..."
+                                                    type="testCases"
+                                                />
+                                            </div>
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
-                                )}
                             </div>
                         );
                     })
                 )}
             </div>
+
+            {/* Pagination Component */}
+            {!loading && totalItems > 0 && (
+                <div className="bg-white px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-b-lg">
+                    {/* Left side - Results info and items per page */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="text-sm text-gray-600">
+                            <span className="font-medium">{startIndex + 1}</span> to{' '}
+                            <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
+                            <span className="font-medium">{totalItems}</span> results
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
+                                Rows per page:
+                            </label>
+                            <select
+                                id="itemsPerPage"
+                                value={itemsPerPage}
+                                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                                className="border border-gray-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
+                                style={{
+                                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+                                    backgroundPosition: 'right 0.5rem center',
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundSize: '1.25em 1.25em'
+                                }}
+                            >
+                                <option value={5}>5</option>
+                                <option value={10}>10</option>
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Right side - Pagination controls */}
+                    <div className="flex items-center justify-center sm:justify-start gap-3">
+                        {/* First page button */}
+                        <button
+                            onClick={() => handlePageChange(1)}
+                            disabled={currentPage === 1}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
+                            title="First page"
+                        >
+                            <ChevronsLeft className="h-4 w-4" />
+                        </button>
+
+                        {/* Previous page button */}
+                        <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
+                            title="Previous page"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+
+                        {/* Page numbers */}
+                        <div className="flex items-center gap-2">
+                            {getPageNumbers.map((pageNumber) => (
+                                <button
+                                    key={pageNumber}
+                                    onClick={() => handlePageChange(pageNumber)}
+                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${currentPage === pageNumber
+                                        ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
+                                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
+                                        }`}
+                                >
+                                    {pageNumber}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Show ellipsis and last page if needed */}
+                        {totalPages > 5 && currentPage < totalPages - 2 && (
+                            <>
+                                {currentPage < totalPages - 3 && (
+                                    <span className="px-2 text-gray-500 text-sm">...</span>
+                                )}
+                                <button
+                                    onClick={() => handlePageChange(totalPages)}
+                                    className="w-9 h-9 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
+                                >
+                                    {totalPages}
+                                </button>
+                            </>
+                        )}
+
+                        {/* Next page button */}
+                        <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
+                            title="Next page"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+
+                        {/* Last page button */}
+                        <button
+                            onClick={() => handlePageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
+                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                                }`}
+                            title="Last page"
+                        >
+                            <ChevronsRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

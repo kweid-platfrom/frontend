@@ -9,6 +9,7 @@ import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendEm
 import { auth } from "../../config/firebase";
 import BackgroundDecorations from "@/components/BackgroundDecorations";
 import Image from "next/image";
+import { toast } from "sonner";
 import "../../app/globals.css";
 
 const Login = () => {
@@ -21,7 +22,6 @@ const Login = () => {
     const [errors, setErrors] = useState({ email: "", password: "" });
     const [showVerificationHelper, setShowVerificationHelper] = useState(false);
     const [unverifiedUser, setUnverifiedUser] = useState(null);
-    const [toast, setToast] = useState({ type: "", message: "", duration: 3000 });
 
     const router = useRouter();
     const hasNavigated = useRef(false);
@@ -32,7 +32,7 @@ const Login = () => {
         const verified = urlParams.get("verified");
 
         if (verified === "true") {
-            setToast({ type: "success", message: "Email verified successfully! You can now sign in.", duration: 3000 });
+            toast.success("Email verified successfully! You can now sign in.");
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, []);
@@ -43,7 +43,7 @@ const Login = () => {
             console.log("Auth state changed:", { user, emailVerified: user?.emailVerified });
             if (user?.emailVerified && !hasNavigated.current) {
                 hasNavigated.current = true;
-                setToast({ type: "success", message: "Welcome back! You have successfully signed in.", duration: 3000 });
+                toast.success("Welcome back! You have successfully signed in.");
                 router.push("/dashboard");
             } else if (!user) {
                 hasNavigated.current = false;
@@ -84,7 +84,7 @@ const Login = () => {
 
         try {
             await sendEmailVerification(unverifiedUser);
-            setToast({ type: "success", message: "Verification email sent. Please check your inbox and spam folder.", duration: 5000 });
+            toast.success("Verification email sent. Please check your inbox and spam folder.");
             setShowVerificationHelper(false);
             setUnverifiedUser(null);
         } catch (error) {
@@ -92,7 +92,7 @@ const Login = () => {
                 'auth/too-many-requests': "Too many attempts. Please try again later.",
                 'auth/user-not-found': "User not found.",
             };
-            setToast({ type: "error", message: errorMessages[error.code] || "Failed to send verification email.", duration: 5000 });
+            toast.error(errorMessages[error.code] || "Failed to send verification email.");
         }
 
         setLoadingResendVerification(false);
@@ -111,13 +111,13 @@ const Login = () => {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             if (!user.emailVerified) {
-                setToast({ type: "warning", message: "Please verify your email before signing in. Check your inbox for the verification link.", duration: 5000 });
+                toast.warning("Please verify your email before signing in. Check your inbox for the verification link.");
                 setUnverifiedUser(user);
                 setShowVerificationHelper(true);
                 await auth.signOut();
                 return;
             }
-            setToast({ type: "success", message: "Login successful!", duration: 3000 });
+            toast.success("Login successful!");
         } catch (error) {
             const errorMessages = {
                 'auth/user-not-found': "No account found with this email.",
@@ -125,7 +125,7 @@ const Login = () => {
                 'auth/invalid-email': "Invalid email format.",
                 'auth/too-many-requests': "Too many attempts. Please try again later.",
             };
-            setToast({ type: "error", message: errorMessages[error.code] || error.message || "Login failed.", duration: 5000 });
+            toast.error(errorMessages[error.code] || error.message || "Login failed.");
         }
 
         setLoadingEmailLogin(false);
@@ -142,17 +142,17 @@ const Login = () => {
             const userCredential = await signInWithPopup(auth, provider);
             const isNewUser = userCredential._tokenResponse?.isNewUser;
             if (isNewUser) {
-                setToast({ type: "info", message: "Please complete your registration first.", duration: 3000 });
+                toast.info("Please complete your registration first.");
                 router.push("/register");
                 return;
             }
-            setToast({ type: "success", message: "Login successful!", duration: 3000 });
+            toast.success("Login successful!");
         } catch (error) {
             const errorMessages = {
                 'auth/popup-closed-by-user': "Google sign-in was cancelled.",
                 'auth/too-many-requests': "Too many attempts. Please try again later.",
             };
-            setToast({ type: "error", message: errorMessages[error.code] || error.message || "Google login failed.", duration: 5000 });
+            toast.error(errorMessages[error.code] || error.message || "Google login failed.");
         }
 
         setLoadingGoogleLogin(false);
@@ -165,32 +165,34 @@ const Login = () => {
     };
 
     const VerificationHelper = () => (
-        <div className="mt-6 p-4 bg-warning/10 border border-warning rounded-lg">
-            <div className="flex items-start space-x-3">
+        <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-warning/10 border border-warning rounded-lg">
+            <div className="flex items-start space-x-2 sm:space-x-3">
                 <div className="flex-shrink-0">
-                    <Mail className="w-5 h-5 text-warning mt-0.5" />
+                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-warning mt-0.5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground mb-1">Email Verification Required</h3>
-                    <p className="text-sm text-muted-foreground mb-3">
+                    <h3 className="text-xs sm:text-sm font-medium text-foreground mb-1">Email Verification Required</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3 leading-relaxed">
                         Your account exists but your email address hasn&apos;t been verified yet.
                         Please check your inbox for the verification link, or we can send you a new one.
                     </p>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex flex-col xs:flex-row gap-2">
                         <button
                             onClick={handleResendVerification}
                             disabled={loadingResendVerification}
-                            className="flex items-center justify-center gap-2 bg-warning text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            className="flex items-center justify-center gap-1 sm:gap-2 bg-warning text-white text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             {loadingResendVerification ? (
                                 <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Sending...
+                                    <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                                    <span className="hidden xs:inline">Sending...</span>
+                                    <span className="xs:hidden">...</span>
                                 </>
                             ) : (
                                 <>
-                                    <Mail className="w-4 h-4" />
-                                    Resend Verification
+                                    <Mail className="w-3 h-3 sm:w-4 sm:h-4" />
+                                    <span className="hidden xs:inline">Resend Verification</span>
+                                    <span className="xs:hidden">Resend</span>
                                 </>
                             )}
                         </button>
@@ -199,7 +201,7 @@ const Login = () => {
                                 setShowVerificationHelper(false);
                                 setUnverifiedUser(null);
                             }}
-                            className="text-warning text-sm px-4 py-2 rounded-lg border border-warning hover:bg-warning/10 transition-colors"
+                            className="text-warning text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-warning hover:bg-warning/10 transition-colors"
                         >
                             Cancel
                         </button>
@@ -213,8 +215,8 @@ const Login = () => {
         return (
             <div className="min-h-screen flex justify-center items-center bg-background">
                 <div className="text-center">
-                    <Loader2 className="animate-spin h-8 w-8 text-primary mx-auto mb-4" />
-                    <p className="text-muted-foreground">Signing you in...</p>
+                    <Loader2 className="animate-spin h-6 w-6 sm:h-8 sm:w-8 text-primary mx-auto mb-4" />
+                    <p className="text-muted-foreground text-sm sm:text-base">Signing you in...</p>
                 </div>
             </div>
         );
@@ -223,26 +225,33 @@ const Login = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-background via-card to-teal-50 relative overflow-hidden">
             <BackgroundDecorations />
-            <div className="flex items-center justify-center min-h-screen px-4 sm:px-6 relative z-10">
-                <div className="w-full max-w-md">
-                    <div className="text-center mb-4">
+            <div className="flex items-center justify-center min-h-screen px-3 sm:px-4 lg:px-6 relative z-10 py-6 sm:py-8">
+                <div className="w-full max-w-[320px] xs:max-w-[360px] sm:max-w-md">
+                    <div className="text-center mb-3 sm:mb-4">
                         <div className="inline-block">
-                             <div className="flex items-center mb-2">
-                                <div className="w-32 h-32 flex items-center justify-center">
-                                    <Image src="/logo.svg" alt="Assura Logo" width={128} height={128} className="w-32 h-32 object-contain" />
+                             <div className="flex items-center justify-center mb-2">
+                                <div className="w-16 h-16 xs:w-20 xs:h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex items-center justify-center">
+                                    <Image 
+                                        src="/logo.svg" 
+                                        alt="Assura Logo" 
+                                        width={128} 
+                                        height={128} 
+                                        className="w-full h-full object-contain" 
+                                        priority
+                                    />
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-card rounded-xl shadow-theme-xl border border-border p-8 relative">
+                    <div className="bg-card rounded-xl shadow-theme-xl border border-border p-4 xs:p-5 sm:p-6 md:p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-teal-500/10 rounded-2xl blur-xl -z-10"></div>
-                        <div className="text-center mb-8">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-card-foreground mb-2">Welcome back</h1>
-                            <p className="text-base sm:text-lg text-muted-foreground">Your testing hub awaits</p>
+                        <div className="text-center mb-6 sm:mb-8">
+                            <h1 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-card-foreground mb-2">Welcome back</h1>
+                            <p className="text-sm sm:text-base md:text-lg text-muted-foreground">Your testing hub awaits</p>
                         </div>
-                        <form className="space-y-6" onSubmit={handleLogin} noValidate>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-card-foreground block">Email address</label>
+                        <div className="space-y-4 sm:space-y-6">
+                            <div className="space-y-1.5 sm:space-y-2">
+                                <label className="text-xs sm:text-sm font-medium text-card-foreground block">Email address</label>
                                 <input
                                     className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${
                                         errors.email 
@@ -256,13 +265,14 @@ const Login = () => {
                                         setEmail(e.target.value);
                                         if (errors.email) setErrors({ ...errors, email: "" });
                                     }}
+                                    autoComplete="email"
                                 />
                                 {errors.email && (
-                                    <p className="text-destructive text-xs font-medium mt-2">{errors.email}</p>
+                                    <p className="text-destructive text-xs font-medium mt-1">{errors.email}</p>
                                 )}
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-card-foreground block">Password</label>
+                            <div className="space-y-1.5 sm:space-y-2">
+                                <label className="text-xs sm:text-sm font-medium text-card-foreground block">Password</label>
                                 <div className="relative">
                                     <input
                                         className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${
@@ -277,17 +287,18 @@ const Login = () => {
                                             setPassword(e.target.value);
                                             if (errors.password) setErrors({ ...errors, password: "" });
                                         }}
+                                        autoComplete="current-password"
                                     />
                                     <button
                                         type="button"
                                         className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
                                         onClick={() => setShowPassword(!showPassword)}
                                     >
-                                        {showPassword ? <EyeOff size={18} className="sm:w-5 sm:h-5" /> : <Eye size={18} className="sm:w-5 sm:h-5" />}
+                                        {showPassword ? <EyeOff size={16} className="sm:w-5 sm:h-5" /> : <Eye size={16} className="sm:w-5 sm:h-5" />}
                                     </button>
                                 </div>
                                 {errors.password && (
-                                    <p className="text-destructive text-xs font-medium mt-2">{errors.password}</p>
+                                    <p className="text-destructive text-xs font-medium mt-1">{errors.password}</p>
                                 )}
                             </div>
                             <div className="flex justify-end">
@@ -301,17 +312,17 @@ const Login = () => {
                             </div>
                             <button
                                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium sm:font-semibold rounded px-4 sm:px-6 py-2.5 sm:py-3 transition-all duration-200 flex justify-center items-center gap-2 shadow-theme-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
-                                type="submit"
+                                onClick={handleLogin}
                                 disabled={loadingEmailLogin}
                             >
                                 Sign In
                                 {loadingEmailLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
                             </button>
-                        </form>
+                        </div>
                         {showVerificationHelper && <VerificationHelper />}
-                        <div className="flex items-center my-8">
+                        <div className="flex items-center my-6 sm:my-8">
                             <div className="flex-grow border-t border-border"></div>
-                            <span className="px-4 text-sm text-muted-foreground font-medium bg-card">or continue with</span>
+                            <span className="px-3 sm:px-4 text-xs sm:text-sm text-muted-foreground font-medium bg-card">or continue with</span>
                             <div className="flex-grow border-t border-border"></div>
                         </div>
                         <button
@@ -333,16 +344,6 @@ const Login = () => {
                     </div>
                 </div>
             </div>
-            {toast.message && (
-                <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-theme-lg text-white ${
-                    toast.type === "success" ? "bg-success" : 
-                    toast.type === "error" ? "bg-error" : 
-                    toast.type === "warning" ? "bg-warning" :
-                    "bg-info"
-                }`}>
-                    {toast.message}
-                </div>
-            )}
         </div>
     );
 };

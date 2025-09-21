@@ -16,6 +16,8 @@ import {
     Lightbulb, 
     Minimize, 
     Maximize,
+    Menu,
+    X
 } from 'lucide-react';
 
 // Helper functions for localStorage
@@ -70,6 +72,9 @@ const setStoredPageMode = (mode) => {
 const BugTrackerPage = () => {
     const bugsHook = useBugs();
     const uiHook = useUI();
+
+    // Mobile menu state
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // FIXED: Use stable refs like the test cases page
     const bugsRef = useRef(bugsHook.bugs || []);
@@ -163,6 +168,7 @@ const BugTrackerPage = () => {
     const handlePageModeChange = useCallback((newPageMode) => {
         setPageMode(newPageMode);
         setStoredPageMode(newPageMode);
+        setIsMobileMenuOpen(false); // Close mobile menu on page change
     }, []);
 
     const handleBugViewTypeChange = useCallback((newBugViewType) => {
@@ -639,6 +645,7 @@ const BugTrackerPage = () => {
             onBulkAction={handleBulkAction}
             onView={handleViewBug}
             onLinkTestCase={handleLinkTestCase}
+            onUpdateBug={handleUpdateBug}
         />
     ), [
         filteredBugs,
@@ -649,16 +656,91 @@ const BugTrackerPage = () => {
         handleDuplicateBug,
         handleBulkAction,
         handleViewBug,
-        handleLinkTestCase
+        handleLinkTestCase,
+        handleUpdateBug
     ]);
+
+    // Mobile Action Menu Component
+    const MobileActionMenu = () => (
+        <div className={`
+            fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out
+            ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+        `}>
+            {/* Backdrop */}
+            <div 
+                className="absolute inset-0 bg-black bg-opacity-50"
+                onClick={() => setIsMobileMenuOpen(false)}
+            />
+            
+            {/* Menu Panel */}
+            <div className={`
+                absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-xl p-4 space-y-3
+                transform transition-transform duration-300 ease-in-out
+                ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'}
+            `}>
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b">
+                    <h3 className="text-lg font-semibold text-gray-900">Actions</h3>
+                    <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="p-2 hover:bg-gray-100 rounded-full"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-3">
+                    {bugViewType === 'full' && (
+                        <>
+                            <button
+                                onClick={() => {
+                                    setIsTraceabilityOpen(true);
+                                    setIsMobileMenuOpen(false);
+                                }}
+                                className="w-full flex items-center px-4 py-3 text-left text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <span className="mr-3">🔗</span>
+                                Traceability
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setIsImportModalOpen(true);
+                                    setIsMobileMenuOpen(false);
+                                }}
+                                className="w-full flex items-center px-4 py-3 text-left text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <span className="mr-3">📥</span>
+                                Import
+                            </button>
+                        </>
+                    )}
+                    
+                    <div className="pt-2">
+                        <BugReportButton
+                            bug={null}
+                            onSave={handleSaveBug}
+                            onClose={() => {
+                                handleCloseModal();
+                                setIsMobileMenuOpen(false);
+                            }}
+                            activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
+                            currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                            className="w-full"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 
     // Show locked state
     if (bugsHook.bugsLocked && pageMode === 'bugs') {
         return (
-            <div className="min-h-screen">
-                <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <div className="min-h-screen bg-gray-50">
+                <div className="max-w-7xl mx-auto py-4 px-4 sm:py-6 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between mb-6">
-                        <h1 className="text-2xl font-bold text-gray-900">Bugs Tracker</h1>
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bugs Tracker</h1>
                     </div>
                     <div className="bg-white shadow rounded-lg p-6">
                         <p className="text-gray-600">Bugs are locked. Upgrade to access.</p>
@@ -671,15 +753,16 @@ const BugTrackerPage = () => {
     // Show Recommendations page
     if (pageMode === 'recommendations') {
         return (
-            <div className="min-h-screen">
-                {/* Page Mode Toggle */}
+            <div className="min-h-screen bg-gray-50">
+                {/* Responsive Page Mode Toggle */}
                 <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                    <div className="max-w-full mx-auto px-6 py-3">
+                    <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-1">
+                            {/* Desktop Navigation */}
+                            <div className="hidden sm:flex items-center space-x-1">
                                 <button
                                     onClick={() => handlePageModeChange('bugs')}
-                                    className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                                         pageMode === 'bugs'
                                             ? 'bg-teal-100 text-teal-700'
                                             : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -690,7 +773,7 @@ const BugTrackerPage = () => {
                                 </button>
                                 <button
                                     onClick={() => handlePageModeChange('recommendations')}
-                                    className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                                         pageMode === 'recommendations'
                                             ? 'bg-teal-100 text-teal-700'
                                             : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -699,6 +782,18 @@ const BugTrackerPage = () => {
                                     <Lightbulb className="w-4 h-4 mr-2" />
                                     Feature Recommendations
                                 </button>
+                            </div>
+                            
+                            {/* Mobile Navigation */}
+                            <div className="flex sm:hidden items-center space-x-2">
+                                <select
+                                    value={pageMode}
+                                    onChange={(e) => handlePageModeChange(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                >
+                                    <option value="bugs">Bug Reports</option>
+                                    <option value="recommendations">Feature Recommendations</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -719,38 +814,53 @@ const BugTrackerPage = () => {
 
     // Main Bugs page
     return (
-        <div className="min-h-screen">
-            {/* Page Mode Toggle */}
+        <div className="min-h-screen bg-gray-50">
+            {/* Responsive Page Mode Toggle */}
             <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                <div className="max-w-full mx-auto px-6 py-3">
+                <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1">
+                        {/* Desktop Navigation */}
+                        <div className="hidden sm:flex items-center space-x-1">
                             <button
                                 onClick={() => handlePageModeChange('bugs')}
-                                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                                     pageMode === 'bugs'
                                         ? 'bg-teal-100 text-teal-700'
                                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                 }`}
                             >
                                 <Bug className="w-4 h-4 mr-2" />
-                                Bug Reports
+                                <span className="hidden md:inline">Bug Reports</span>
+                                <span className="md:hidden">Bugs</span>
                             </button>
                             <button
                                 onClick={() => handlePageModeChange('recommendations')}
-                                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                                     pageMode === 'recommendations'
                                         ? 'bg-teal-100 text-teal-700'
                                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                 }`}
                             >
                                 <Lightbulb className="w-4 h-4 mr-2" />
-                                Feature Recommendations
+                                <span className="hidden md:inline">Feature Recommendations</span>
+                                <span className="md:hidden">Features</span>
                             </button>
                         </div>
                         
-                        {/* Bug View Type Toggle */}
-                        <div className="flex items-center space-x-3">
+                        {/* Mobile Navigation */}
+                        <div className="flex sm:hidden items-center space-x-2">
+                            <select
+                                value={pageMode}
+                                onChange={(e) => handlePageModeChange(e.target.value)}
+                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            >
+                                <option value="bugs">Bug Reports</option>
+                                <option value="recommendations">Features</option>
+                            </select>
+                        </div>
+                        
+                        {/* Desktop Bug View Type Toggle */}
+                        <div className="hidden lg:flex items-center space-x-3">
                             <div className="flex items-center space-x-2">
                                 <span className="text-sm text-gray-600">View:</span>
                                 <button
@@ -775,74 +885,152 @@ const BugTrackerPage = () => {
                                 </button>
                             </div>
                         </div>
+
+                        {/* Mobile View Type Toggle */}
+                        <div className="flex lg:hidden items-center">
+                            <button
+                                onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
+                                className={`p-2 rounded-lg transition-all ${
+                                    bugViewType === 'minimal'
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                }`}
+                                title={`Switch to ${bugViewType === 'full' ? 'minimal' : 'full'} view`}
+                            >
+                                {bugViewType === 'minimal' ? (
+                                    <Minimize className="w-4 h-4" />
+                                ) : (
+                                    <Maximize className="w-4 h-4" />
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                    <div className="flex items-center">
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-                            Bug Tracker {bugViewType === 'minimal' ? '- Minimal View' : ''}
-                        </h1>
-                        <span className="ml-2 px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
-                            {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
-                        </span>
-                        {bugViewType === 'minimal' && (
-                            <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                Developer Focus Mode
-                            </span>
-                        )}
+            <div className="max-w-full mx-auto py-4 px-3 sm:py-6 sm:px-6 lg:px-4">
+                {/* Responsive Header */}
+                <div className="flex flex-col space-y-4 mb-6">
+                    {/* Title Row */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center flex-wrap">
+                            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
+                                <span className="hidden sm:inline">Bug Tracker</span>
+                                <span className="sm:hidden">Bugs</span>
+                                {bugViewType === 'minimal' && (
+                                    <span className="hidden sm:inline"> - Minimal View</span>
+                                )}
+                            </h1>
+                            <div className="flex items-center space-x-2 ml-2">
+                                <span className="px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                                    {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
+                                </span>
+                                {bugViewType === 'minimal' && (
+                                    <span className="hidden sm:inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                        Developer Focus Mode
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* Desktop Action Buttons */}
+                        <div className="hidden lg:flex items-center space-x-2">
+                            {bugViewType === 'full' && (
+                                <>
+                                    <button
+                                        onClick={() => setIsTraceabilityOpen(true)}
+                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                                    >
+                                        Traceability
+                                    </button>
+                                    <button
+                                        onClick={() => setIsImportModalOpen(true)}
+                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                                    >
+                                        Import
+                                    </button>
+                                </>
+                            )}
+                            <BugReportButton
+                                bug={null}
+                                onSave={handleSaveBug}
+                                onClose={handleCloseModal}
+                                activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
+                                currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                            />
+                        </div>
+
+                        {/* Mobile/Tablet Actions */}
+                        <div className="flex lg:hidden items-center space-x-2">
+                            {/* Quick Bug Report Button for mobile */}
+                            <div className="sm:block">
+                                <BugReportButton
+                                    bug={null}
+                                    onSave={handleSaveBug}
+                                    onClose={handleCloseModal}
+                                    activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
+                                    currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                                    compact={true}
+                                />
+                            </div>
+                            
+                            {/* Mobile Menu Button */}
+                            {bugViewType === 'full' && (
+                                <button
+                                    onClick={() => setIsMobileMenuOpen(true)}
+                                    className="p-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                    title="More actions"
+                                >
+                                    <Menu className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center space-x-2 overflow-x-auto">
-                        {bugViewType === 'full' && (
-                            <>
-                                <button
-                                    onClick={() => setIsTraceabilityOpen(true)}
-                                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
-                                >
-                                    Traceability
-                                </button>
-                                <button
-                                    onClick={() => setIsImportModalOpen(true)}
-                                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
-                                >
-                                    Import
-                                </button>
-                            </>
-                        )}
-                        <BugReportButton
-                            bug={null}
-                            onSave={handleSaveBug}
-                            onClose={handleCloseModal}
-                            activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
-                            currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                </div>
+
+                {/* Responsive Filter Bar */}
+                {bugViewType === 'full' && (
+                    <div className="mb-4">
+                        <BugFilterBar
+                            filters={filters}
+                            onFiltersChange={handleFiltersChange}
+                            bugs={bugsRef.current}
+                            viewMode={viewMode}
+                            setViewMode={handleViewModeChange}
                         />
                     </div>
-                </div>
-
-                {/* Show filter bar only for full view */}
-                {bugViewType === 'full' && (
-                    <BugFilterBar
-                        filters={filters}
-                        onFiltersChange={handleFiltersChange}
-                        bugs={bugsRef.current}
-                        viewMode={viewMode}
-                        setViewMode={handleViewModeChange}
-                    />
                 )}
 
-                <div className="transition-opacity duration-300">
-                    {viewMode === 'table' ? tableComponent : listComponent}
+                {/* Content with smooth transitions */}
+                <div className="transition-all duration-300 ease-in-out">
+                    <div className="overflow-hidden">
+                        {viewMode === 'table' ? (
+                            <div className="overflow-x-auto">
+                                {tableComponent}
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {listComponent}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
+                {/* Mobile Action Menu */}
+                <MobileActionMenu />
+
+                {/* Modals */}
                 {isDetailsModalOpen && selectedBug && (
-                    <BugDetailsModal
-                        bug={selectedBug}
-                        teamMembers={bugsHook.teamMembers || []}
-                        onUpdateBug={handleUpdateBug}
-                        onClose={handleCloseModal}
-                    />
+                    <div className="fixed inset-0 z-50 overflow-y-auto">
+                        <div className="flex min-h-screen items-center justify-center p-4">
+                            <BugDetailsModal
+                                bug={selectedBug}
+                                teamMembers={bugsHook.teamMembers || []}
+                                onUpdateBug={handleUpdateBug}
+                                onClose={handleCloseModal}
+                            />
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

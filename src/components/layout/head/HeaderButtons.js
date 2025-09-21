@@ -1,5 +1,8 @@
+
+// HeaderButtons.jsx - Fixed mobile dropdown styling consistency
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Target, FileText, MoreHorizontal } from 'lucide-react';
+import { Play, Target, FileText, MoreHorizontal, Plus as PlusIcon, Bug as BugIcon } from 'lucide-react';
+import { DocumentTextIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
 import BugReportButton from '../../modals/BugReportButton';
 import ScreenRecorderButton from '../../recorder/ScreenRecorderButton';
@@ -11,6 +14,7 @@ const HeaderButtons = ({
     onCreateDocument,
     activeSuite,
     firestoreService,
+    onReportBug,
     disabled = false
 }) => {
     const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -23,7 +27,6 @@ const HeaderButtons = ({
     const mobileMenuRef = useRef(null);
     const mobileMenuButtonRef = useRef(null);
 
-    // Handle mobile menu toggle
     const toggleMobileMenu = () => {
         if (disabled) return;
         if (!showMobileMenu) {
@@ -32,7 +35,6 @@ const HeaderButtons = ({
         setShowMobileMenu(!showMobileMenu);
     };
 
-    // Calculate mobile menu position
     const calculateMobileMenuPosition = () => {
         if (mobileMenuButtonRef.current) {
             const rect = mobileMenuButtonRef.current.getBoundingClientRect();
@@ -41,14 +43,13 @@ const HeaderButtons = ({
             const spaceOnRight = windowWidth - rect.left;
 
             setMobileMenuPosition({
-                top: rect.bottom + window.scrollY,
+                top: rect.bottom + window.scrollY + 4,
                 left: spaceOnRight >= dropdownWidth ? rect.left : 'auto',
                 right: spaceOnRight >= dropdownWidth ? 'auto' : windowWidth - rect.right,
             });
         }
     };
 
-    // Close mobile menu when clicking outside
     useEffect(() => {
         if (disabled) return;
         
@@ -67,10 +68,9 @@ const HeaderButtons = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [disabled]);
 
-    // Close mobile menu when window resizes to desktop
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 768) { // md breakpoint
+            if (window.innerWidth >= 768) {
                 setShowMobileMenu(false);
             }
         };
@@ -84,21 +84,39 @@ const HeaderButtons = ({
         setShowMobileMenu(false);
     };
 
+    const handleReportGeneration = (reportType) => {
+        console.log('Generate report:', reportType);
+        setShowMobileMenu(false);
+        // Add your report generation logic here
+    };
+
+    const handleTestCaseAction = (actionType) => {
+        console.log('Test case action:', actionType);
+        setShowMobileMenu(false);
+        // Add your test case logic here
+    };
+
+    const handleBugReport = () => {
+        setShowMobileMenu(false);
+        if (onReportBug) {
+            onReportBug();
+        }
+        // Bug report logic will be handled by the parent component
+    };
+
     return (
         <div className="flex items-center justify-end">
             {/* Mobile Layout (xs to md) */}
             <div className="flex items-center space-x-1 md:hidden">
-                {/* Priority Actions - Always Visible on Mobile */}
                 <ScreenRecorderButton
                     firestoreService={firestoreService}
                     activeSuite={activeSuite}
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     isPrimary={true}
                     iconOnly={true}
                 />
 
-                {/* Mobile Menu Button */}
                 <div className="relative">
                     <Button
                         ref={mobileMenuButtonRef}
@@ -106,12 +124,11 @@ const HeaderButtons = ({
                         size="iconSm"
                         onClick={toggleMobileMenu}
                         disabled={disabled}
-                        className="text-foreground hover:bg-accent/50"
+                        className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     >
                         <MoreHorizontal className="h-5 w-5" />
                     </Button>
 
-                    {/* Mobile Dropdown Menu */}
                     {showMobileMenu && !disabled && (
                         <div
                             ref={mobileMenuRef}
@@ -125,82 +142,75 @@ const HeaderButtons = ({
                             }}
                         >
                             <div className="py-2">
-                                {/* Create Sprint */}
+                                {/* Consistent button styling for mobile dropdown */}
                                 <button
                                     onClick={() => handleMobileAction(onCreateSprint)}
                                     disabled={!activeSuite}
-                                    className="w-full flex items-center px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <Target className="h-4 w-4 mr-3" />
-                                    Create Sprint
+                                    <Target className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Create Sprint</span>
                                 </button>
 
-                                {/* Create Document */}
                                 <button
                                     onClick={() => handleMobileAction(onCreateDocument)}
-                                    className="w-full flex items-center px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
                                 >
-                                    <FileText className="h-4 w-4 mr-3" />
-                                    Create Document
+                                    <FileText className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Create Document</span>
                                 </button>
 
-                                {/* Run Tests */}
                                 <button
                                     onClick={() => setShowMobileMenu(false)}
-                                    className="w-full flex items-center px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
                                 >
-                                    <Play className="h-4 w-4 mr-3" />
-                                    Run Tests
+                                    <Play className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Run Tests</span>
                                 </button>
 
                                 <div className="border-t border-border my-2"></div>
 
-                                {/* Report Dropdown - Mobile Version */}
-                                <div className="px-4 py-2">
-                                    <ReportDropdown
-                                        disabled={disabled}
-                                        className="w-full justify-start text-foreground hover:bg-accent/50"
-                                        variant="ghost"
-                                        isMobile={true}
-                                    />
-                                </div>
+                                {/* Simple buttons for mobile - consistent styling */}
+                                <button
+                                    onClick={() => handleReportGeneration('bug-summary')}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
+                                >
+                                    <DocumentTextIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Generate Report</span>
+                                </button>
 
-                                {/* Test Case Dropdown - Mobile Version */}
-                                <div className="px-4 py-2">
-                                    <TestCaseDropdown
-                                        disabled={disabled}
-                                        className="w-full justify-start text-foreground hover:bg-accent/50"
-                                        variant="ghost"
-                                        isMobile={true}
-                                    />
-                                </div>
+                                <button
+                                    onClick={() => handleTestCaseAction('new-test-case')}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
+                                >
+                                    <PlusIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Add Test Case</span>
+                                </button>
 
                                 <div className="border-t border-border my-2"></div>
 
-                                {/* Bug Report - Mobile Version */}
-                                <div className="px-4 py-2">
-                                    <BugReportButton
-                                        variant="ghost"
-                                        disabled={disabled}
-                                        className="w-full justify-start text-foreground hover:bg-accent/50"
-                                        isMobile={true}
-                                    />
-                                </div>
+                                <button
+                                    onClick={handleBugReport}
+                                    disabled={disabled}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <BugIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Report Bug</span>
+                                </button>
                             </div>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Tablet Layout (md to lg) */}
+            {/* Tablet Layout (md to lg) - Fixed icon visibility */}
             <div className="hidden md:flex lg:hidden items-center space-x-1">
-                {/* Core Actions with Icons Only */}
                 <Button
                     variant="ghost"
                     size="iconSm"
                     onClick={onCreateSprint}
                     disabled={disabled || !activeSuite}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     title="Create Sprint"
                 >
                     <Target className="h-4 w-4" />
@@ -211,7 +221,7 @@ const HeaderButtons = ({
                     size="iconSm"
                     onClick={onCreateDocument}
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     title="Create Document"
                 >
                     <FileText className="h-4 w-4" />
@@ -221,7 +231,7 @@ const HeaderButtons = ({
                     variant="ghost"
                     size="iconSm"
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     title="Run Tests"
                 >
                     <Play className="h-4 w-4" />
@@ -231,34 +241,33 @@ const HeaderButtons = ({
                     firestoreService={firestoreService}
                     activeSuite={activeSuite}
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     isPrimary={true}
                     iconOnly={true}
                 />
 
                 <ReportDropdown
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     iconOnly={true}
                 />
 
                 <TestCaseDropdown
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     iconOnly={true}
                 />
 
                 <BugReportButton
                     variant="ghost"
                     disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     iconOnly={true}
                 />
             </div>
 
             {/* Desktop Layout (lg and up) */}
             <div className="hidden lg:flex items-center space-x-2">
-                {/* Full Buttons with Text */}
                 <Button
                     variant="ghost"
                     onClick={onCreateSprint}
@@ -317,3 +326,4 @@ const HeaderButtons = ({
 };
 
 export default HeaderButtons;
+            
