@@ -623,150 +623,150 @@ const COLOR_CLASSES = {
   }
 };
 
-const BulkActionsBar = ({
-  // Selection props
-  selectedItems = [],
-  onClearSelection,
+// const BulkActionsBar = ({
+//   // Selection props
+//   selectedItems = [],
+//   onClearSelection,
   
-  // Display props
-  pageTitle = 'items',
-  pageIcon = 'TestTube',
-  pageColor = 'blue',
+//   // Display props
+//   pageTitle = 'items',
+//   pageIcon = 'TestTube',
+//   pageColor = 'blue',
   
-  // Actions configuration
-  actionGroups = [],
+//   // Actions configuration
+//   actionGroups = [],
   
-  // Action handler
-  onAction,
+//   // Action handler
+//   onAction,
   
-  // Portal configuration
-  portalId = 'bulk-actions-portal',
-  position = 'bottom', // 'top' | 'bottom'
+//   // Portal configuration
+//   portalId = 'bulk-actions-portal',
+//   position = 'bottom', // 'top' | 'bottom'
   
-  // Loading states
-  loadingActions = [],
-}) => {
-  const [confirmingAction, setConfirmingAction] = useState(null);
-  const [portalContainer, setPortalContainer] = useState(null);
+//   // Loading states
+//   loadingActions = [],
+// }) => {
+//   const [confirmingAction, setConfirmingAction] = useState(null);
+//   const [portalContainer, setPortalContainer] = useState(null);
 
-  useEffect(() => {
-    // Create or find portal container
-    let container = document.getElementById(portalId);
-    if (!container) {
-      container = document.createElement('div');
-      container.id = portalId;
-      container.className = `fixed ${position === 'top' ? 'top-0' : 'bottom-0'} left-0 right-0 z-50`;
-      document.body.appendChild(container);
-    }
-    setPortalContainer(container);
+//   useEffect(() => {
+//     // Create or find portal container
+//     let container = document.getElementById(portalId);
+//     if (!container) {
+//       container = document.createElement('div');
+//       container.id = portalId;
+//       container.className = `fixed ${position === 'top' ? 'top-0' : 'bottom-0'} left-0 right-0 z-50`;
+//       document.body.appendChild(container);
+//     }
+//     setPortalContainer(container);
 
-    return () => {
-      // Clean up portal if it's empty
-      const existingContainer = document.getElementById(portalId);
-      if (existingContainer && existingContainer.children.length === 0) {
-        document.body.removeChild(existingContainer);
-      }
-    };
-  }, [portalId, position]);
+//     return () => {
+//       // Clean up portal if it's empty
+//       const existingContainer = document.getElementById(portalId);
+//       if (existingContainer && existingContainer.children.length === 0) {
+//         document.body.removeChild(existingContainer);
+//       }
+//     };
+//   }, [portalId, position]);
 
-  // Don't render if no items selected or no portal container
-  if (!portalContainer || selectedItems.length === 0 || actionGroups.length === 0) {
-    return null;
-  }
+//   // Don't render if no items selected or no portal container
+//   if (!portalContainer || selectedItems.length === 0 || actionGroups.length === 0) {
+//     return null;
+//   }
 
-  const colorClass = COLOR_CLASSES[pageColor] || COLOR_CLASSES.blue;
-  const PageIcon = ICONS[pageIcon] || TestTube;
+//   const colorClass = COLOR_CLASSES[pageColor] || COLOR_CLASSES.blue;
+//   const PageIcon = ICONS[pageIcon] || TestTube;
 
-  const handleAction = async (actionId, actionConfig) => {
-    const requiresConfirm = actionConfig.requiresConfirm || actionConfig.destructive;
+//   const handleAction = async (actionId, actionConfig) => {
+//     const requiresConfirm = actionConfig.requiresConfirm || actionConfig.destructive;
     
-    if (requiresConfirm && confirmingAction !== actionId) {
-      setConfirmingAction(actionId);
-      // Reset confirmation after 3 seconds
-      setTimeout(() => {
-        setConfirmingAction(null);
-      }, 3000);
-      return;
-    }
+//     if (requiresConfirm && confirmingAction !== actionId) {
+//       setConfirmingAction(actionId);
+//       // Reset confirmation after 3 seconds
+//       setTimeout(() => {
+//         setConfirmingAction(null);
+//       }, 3000);
+//       return;
+//     }
 
-    try {
-      await onAction(actionId, selectedItems);
-      onClearSelection();
-      setConfirmingAction(null);
-    } catch (error) {
-      console.error(`Error executing bulk action ${actionId}:`, error);
-      setConfirmingAction(null);
-    }
-  };
+//     try {
+//       await onAction(actionId, selectedItems);
+//       onClearSelection();
+//       setConfirmingAction(null);
+//     } catch (error) {
+//       console.error(`Error executing bulk action ${actionId}:`, error);
+//       setConfirmingAction(null);
+//     }
+//   };
 
-  const handleCancel = () => {
-    onClearSelection();
-    setConfirmingAction(null);
-  };
+//   const handleCancel = () => {
+//     onClearSelection();
+//     setConfirmingAction(null);
+//   };
 
-  const borderClass = position === 'top' ? 'border-b' : 'border-t';
+//   const borderClass = position === 'top' ? 'border-b' : 'border-t';
 
-  return createPortal(
-    <div className={`${colorClass.bg} ${colorClass.border} ${borderClass} px-4 py-3 shadow-lg backdrop-blur-sm`}>
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        {/* Selection info */}
-        <div className="flex items-center space-x-3">
-          <PageIcon className={`w-5 h-5 ${colorClass.text}`} />
-          <span className={`text-sm font-medium ${colorClass.text}`}>
-            {selectedItems.length} {pageTitle}{selectedItems.length > 1 ? 's' : ''} selected
-          </span>
-        </div>
+//   return createPortal(
+//     <div className={`${colorClass.bg} ${colorClass.border} ${borderClass} px-4 py-3 shadow-lg backdrop-blur-sm`}>
+//       <div className="max-w-7xl mx-auto flex items-center justify-between">
+//         {/* Selection info */}
+//         <div className="flex items-center space-x-3">
+//           <PageIcon className={`w-5 h-5 ${colorClass.text}`} />
+//           <span className={`text-sm font-medium ${colorClass.text}`}>
+//             {selectedItems.length} {pageTitle}{selectedItems.length > 1 ? 's' : ''} selected
+//           </span>
+//         </div>
         
-        {/* Actions */}
-        <div className="flex items-center space-x-1 flex-wrap">
-          {actionGroups.map((group, groupIndex) => (
-            <div key={group.name || groupIndex} className="flex items-center space-x-1">
-              {group.actions.map((action) => {
-                const ActionIcon = ICONS[action.icon] || TestTube;
-                const actionColorClass = COLOR_CLASSES[action.color] || colorClass;
-                const isConfirming = confirmingAction === action.id;
-                const isLoading = loadingActions.includes(action.id);
-                const isDestructive = action.requiresConfirm || action.destructive;
+//         {/* Actions */}
+//         <div className="flex items-center space-x-1 flex-wrap">
+//           {actionGroups.map((group, groupIndex) => (
+//             <div key={group.name || groupIndex} className="flex items-center space-x-1">
+//               {group.actions.map((action) => {
+//                 const ActionIcon = ICONS[action.icon] || TestTube;
+//                 const actionColorClass = COLOR_CLASSES[action.color] || colorClass;
+//                 const isConfirming = confirmingAction === action.id;
+//                 const isLoading = loadingActions.includes(action.id);
+//                 const isDestructive = action.requiresConfirm || action.destructive;
                 
-                return (
-                  <button
-                    key={action.id}
-                    onClick={() => handleAction(action.id, action)}
-                    disabled={isLoading}
-                    className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      isDestructive
-                        ? isConfirming
-                          ? 'bg-red-700 text-white animate-pulse'
-                          : 'bg-red-600 hover:bg-red-700 text-white'
-                        : actionColorClass?.button || 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                    }`}
-                    title={isConfirming ? 'Click again to confirm' : action.label}
-                  >
-                    <ActionIcon className={`w-3 h-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
-                    {isLoading ? 'Processing...' : isConfirming ? 'Confirm' : action.label}
-                  </button>
-                );
-              })}
+//                 return (
+//                   <button
+//                     key={action.id}
+//                     onClick={() => handleAction(action.id, action)}
+//                     disabled={isLoading}
+//                     className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+//                       isDestructive
+//                         ? isConfirming
+//                           ? 'bg-red-700 text-white animate-pulse'
+//                           : 'bg-red-600 hover:bg-red-700 text-white'
+//                         : actionColorClass?.button || 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+//                     }`}
+//                     title={isConfirming ? 'Click again to confirm' : action.label}
+//                   >
+//                     <ActionIcon className={`w-3 h-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+//                     {isLoading ? 'Processing...' : isConfirming ? 'Confirm' : action.label}
+//                   </button>
+//                 );
+//               })}
               
-              {/* Group separator */}
-              {groupIndex < actionGroups.length - 1 && (
-                <div className={`w-px h-4 ${colorClass.border} border-l mx-1`} />
-              )}
-            </div>
-          ))}
+//               {/* Group separator */}
+//               {groupIndex < actionGroups.length - 1 && (
+//                 <div className={`w-px h-4 ${colorClass.border} border-l mx-1`} />
+//               )}
+//             </div>
+//           ))}
           
-          {/* Cancel button */}
-          <button
-            onClick={handleCancel}
-            className="ml-2 px-3 py-1 text-xs font-medium rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>,
-    portalContainer
-  );
-};
+//           {/* Cancel button */}
+//           <button
+//             onClick={handleCancel}
+//             className="ml-2 px-3 py-1 text-xs font-medium rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+//           >
+//             Cancel
+//           </button>
+//         </div>
+//       </div>
+//     </div>,
+//     portalContainer
+//   );
+// };
 
 export default EnhancedBulkActionsBar;

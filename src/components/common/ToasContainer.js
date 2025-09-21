@@ -73,16 +73,8 @@ const Toast = ({ toast }) => {
 };
 
 const ToastContainer = () => {
-    const { state, actions } = useApp();
+    const { state } = useApp();
     const { alerts } = state.app;
-
-    const handleRemoveToast = (toastId) => {
-        if (actions.alerts?.remove) {
-            actions.alerts.remove(toastId);
-        } else {
-            console.warn('remove alert action not found in context');
-        }
-    };
 
     if (!alerts?.length) return null;
 

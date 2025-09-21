@@ -1,4 +1,3 @@
-// providers/GlobalThemeProvider.jsx
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -9,6 +8,19 @@ export const GlobalThemeProvider = ({ children }) => {
     const [theme, setTheme] = useState('light');
     const [systemTheme, setSystemTheme] = useState('light');
     const [isInitialized, setIsInitialized] = useState(false);
+
+    // Function to apply theme to document
+    const applyThemeToDocument = useCallback((effectiveTheme) => {
+        const htmlElement = document.documentElement;
+        
+        if (effectiveTheme === 'dark') {
+            htmlElement.classList.add('dark');
+            htmlElement.setAttribute('data-theme', 'dark');
+        } else {
+            htmlElement.classList.remove('dark');
+            htmlElement.setAttribute('data-theme', 'light');
+        }
+    }, []);
 
     // Initialize theme on mount
     useEffect(() => {
@@ -31,7 +43,7 @@ export const GlobalThemeProvider = ({ children }) => {
         };
 
         initializeTheme();
-    }, []);
+    }, [applyThemeToDocument]); // Add applyThemeToDocument to dependency array
 
     // Listen for system theme changes
     useEffect(() => {
@@ -49,7 +61,7 @@ export const GlobalThemeProvider = ({ children }) => {
 
         mediaQuery.addEventListener('change', handleSystemThemeChange);
         return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
-    }, [theme]);
+    }, [theme, applyThemeToDocument]); // Add applyThemeToDocument to dependency array
 
     // Apply theme when theme state changes
     useEffect(() => {
@@ -58,20 +70,7 @@ export const GlobalThemeProvider = ({ children }) => {
         const effectiveTheme = theme === 'system' ? systemTheme : theme;
         applyThemeToDocument(effectiveTheme);
         localStorage.setItem('theme', theme);
-    }, [theme, systemTheme, isInitialized]);
-
-    // Function to apply theme to document (same logic as working standalone)
-    const applyThemeToDocument = useCallback((effectiveTheme) => {
-        const htmlElement = document.documentElement;
-        
-        if (effectiveTheme === 'dark') {
-            htmlElement.classList.add('dark');
-            htmlElement.setAttribute('data-theme', 'dark');
-        } else {
-            htmlElement.classList.remove('dark');
-            htmlElement.setAttribute('data-theme', 'light');
-        }
-    }, []);
+    }, [theme, systemTheme, isInitialized, applyThemeToDocument]); // Add applyThemeToDocument to dependency array
 
     // Theme setters
     const updateTheme = useCallback((newTheme) => {

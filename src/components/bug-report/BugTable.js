@@ -65,7 +65,7 @@ const BugTable = ({
     }, []);
 
     // Enhanced bulk action handler with loading states
-    const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig) => {
+    const handleBulkAction = useCallback(async (actionId, selectedItems) => {
         setLoadingActions(prev => [...prev, actionId]);
         
         try {
