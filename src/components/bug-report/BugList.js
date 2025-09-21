@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import InlineEditCell from './InlineEditCell';
-import BulkActionsBar from './BulkActionsBar';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 
 const BugList = ({
     bugs = [],
@@ -39,6 +39,7 @@ const BugList = ({
 }) => {
     const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
+    const [loadingActions, setLoadingActions] = useState([]);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -67,6 +68,74 @@ const BugList = ({
         }));
         setCurrentPage(1); // Reset to first page when sorting
     }, []);
+
+    // Enhanced bulk action handler with loading states
+    const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig) => {
+        setLoadingActions(prev => [...prev, actionId]);
+        
+        try {
+            // Call the original onBulkAction
+            await onBulkAction(actionId, selectedItems);
+            
+            // Show success notification based on action
+            const itemCount = selectedItems.length;
+            const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
+            
+            let successMessage = '';
+            switch (actionId) {
+                case 'resolve':
+                    successMessage = `Successfully resolved ${itemCount} ${itemLabel}`;
+                    break;
+                case 'close':
+                    successMessage = `Successfully closed ${itemCount} ${itemLabel}`;
+                    break;
+                case 'open':
+                    successMessage = `Successfully reopened ${itemCount} ${itemLabel}`;
+                    break;
+                case 'assign':
+                    successMessage = `Successfully assigned ${itemCount} ${itemLabel}`;
+                    break;
+                case 'priority':
+                    successMessage = `Successfully updated priority for ${itemCount} ${itemLabel}`;
+                    break;
+                case 'add-to-sprint':
+                    successMessage = `Successfully added ${itemCount} ${itemLabel} to sprint`;
+                    break;
+                case 'tag':
+                    successMessage = `Successfully tagged ${itemCount} ${itemLabel}`;
+                    break;
+                case 'group':
+                    successMessage = `Successfully grouped ${itemCount} ${itemLabel}`;
+                    break;
+                case 'archive':
+                    successMessage = `Successfully archived ${itemCount} ${itemLabel}`;
+                    break;
+                case 'delete':
+                    successMessage = `Successfully deleted ${itemCount} ${itemLabel}`;
+                    break;
+                default:
+                    successMessage = `Successfully processed ${itemCount} ${itemLabel}`;
+            }
+            
+            showNotification({
+                type: 'success',
+                title: 'Bulk Action Complete',
+                message: successMessage,
+                duration: 3000,
+            });
+            
+        } catch (error) {
+            console.error('Bulk action failed:', error);
+            showNotification({
+                type: 'error',
+                title: 'Bulk Action Failed',
+                message: error.message || `Failed to ${actionId} selected bugs. Please try again.`,
+                duration: 5000,
+            });
+        } finally {
+            setLoadingActions(prev => prev.filter(id => id !== actionId));
+        }
+    }, [onBulkAction, showNotification]);
 
     const sortedBugs = useMemo(() => {
         return [...bugs].sort((a, b) => {
@@ -397,7 +466,15 @@ const BugList = ({
 
     return (
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
-            <BulkActionsBar selectedBugs={selectedBugs} onBulkAction={onBulkAction} />
+            {/* Enhanced Bulk Actions Bar */}
+            <EnhancedBulkActionsBar 
+                selectedItems={selectedBugs}
+                onClearSelection={() => onSelectBugs([])}
+                assetType="bugs" // Uses predefined bug configuration
+                pageTitle="bug"
+                onAction={handleBulkAction}
+                loadingActions={loadingActions}
+            />
             
             {/* Header Controls */}
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
@@ -595,19 +672,6 @@ const BugList = ({
                                                 <div className="flex items-center gap-1 text-xs text-gray-500">
                                                     <Calendar className="w-3 h-3" />
                                                     <span>Created</span>
-                                                </div>
-                                                <div className="text-sm text-gray-700">
-                                                    {bug.created_at && isValidDate(new Date(bug.created_at))
-                                                        ? format(new Date(bug.created_at), 'MMM d, yyyy')
-                                                        : 'Unknown'}
-                                                </div>
-                                            </div>
-
-                                            {/* Due Date */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                    <Calendar className="w-3 h-3" />
-                                                    <span>Due Date</span>
                                                 </div>
                                                 <div className="text-sm text-gray-700">
                                                     {bug.due_date && isValidDate(new Date(bug.due_date))
