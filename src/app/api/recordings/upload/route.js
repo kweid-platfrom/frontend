@@ -1,7 +1,7 @@
-// app/api/recordings/upload/route.js - Enhanced with playlist support
+// app/api/recordings/upload/route.js - Simplified without playlist support
 import { NextRequest, NextResponse } from 'next/server';
 
-class EnhancedYouTubeService {
+class SimplifiedYouTubeService {
     constructor() {
         this.clientId = process.env.YOUTUBE_CLIENT_ID;
         this.clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
@@ -9,9 +9,6 @@ class EnhancedYouTubeService {
         this.accessToken = null;
         this.tokenExpiresAt = null;
         this.initialized = false;
-        
-        // Cache for playlists to avoid recreating
-        this.playlistCache = new Map();
     }
 
     async initialize() {
@@ -56,172 +53,16 @@ class EnhancedYouTubeService {
         }
     }
 
-    // Create or get playlist for test suite
-    async createOrGetPlaylist(suiteId, title, description = '') {
-        const cacheKey = `suite_${suiteId}`;
-        
-        // Check cache first
-        if (this.playlistCache.has(cacheKey)) {
-            const cached = this.playlistCache.get(cacheKey);
-            // Verify playlist still exists
-            const exists = await this.verifyPlaylistExists(cached.id);
-            if (exists) {
-                return { success: true, data: cached };
-            } else {
-                this.playlistCache.delete(cacheKey);
-            }
-        }
-
-        await this.ensureValidToken();
-
-        try {
-            const response = await fetch(
-                'https://www.googleapis.com/youtube/v3/playlists?part=snippet,status',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.accessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        snippet: {
-                            title: title,
-                            description: description
-                        },
-                        status: {
-                            privacyStatus: 'private'
-                        }
-                    })
-                }
-            );
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    await this.refreshAccessToken();
-                    return this.createOrGetPlaylist(suiteId, title, description);
-                }
-                
-                const error = await response.json().catch(() => ({}));
-                throw new Error(`Playlist creation failed: ${error.error?.message || response.statusText}`);
-            }
-
-            const playlist = await response.json();
-            const playlistData = {
-                id: playlist.id,
-                title: playlist.snippet.title,
-                description: playlist.snippet.description,
-                url: `https://www.youtube.com/playlist?list=${playlist.id}`,
-                createdAt: new Date().toISOString()
-            };
-
-            // Cache the playlist
-            this.playlistCache.set(cacheKey, playlistData);
-
-            return {
-                success: true,
-                data: playlistData
-            };
-
-        } catch (error) {
-            console.error('Playlist creation error:', error);
-            return {
-                success: false,
-                error: { message: error.message }
-            };
-        }
-    }
-
-    // Verify playlist exists
-    async verifyPlaylistExists(playlistId) {
-        try {
-            await this.ensureValidToken();
-            
-            const response = await fetch(
-                `https://www.googleapis.com/youtube/v3/playlists?part=id&id=${playlistId}`,
-                {
-                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
-                }
-            );
-
-            if (response.ok) {
-                const data = await response.json();
-                return data.items && data.items.length > 0;
-            }
-            
-            return false;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    // Add video to playlist
-    async addVideoToPlaylist(videoId, playlistId) {
-        if (!playlistId) return { success: true }; // Skip if no playlist
-
-        try {
-            await this.ensureValidToken();
-
-            const response = await fetch(
-                'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.accessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        snippet: {
-                            playlistId: playlistId,
-                            resourceId: {
-                                kind: 'youtube#video',
-                                videoId: videoId
-                            }
-                        }
-                    })
-                }
-            );
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({}));
-                throw new Error(`Failed to add video to playlist: ${error.error?.message || response.statusText}`);
-            }
-
-            return { success: true };
-        } catch (error) {
-            console.error('Error adding video to playlist:', error);
-            // Don't fail the entire upload if playlist addition fails
-            return { success: false, error: error.message };
-        }
-    }
-
-    // Enhanced upload with playlist support
-    async uploadVideoWithProgress(videoBlob, metadata = {}) {
+    // Simplified upload without playlist support
+    async uploadVideo(videoBlob, metadata = {}) {
         try {
             await this.initialize();
             await this.ensureValidToken();
 
             console.log('Starting YouTube upload with metadata:', {
                 title: metadata.title,
-                suiteId: metadata.suiteId,
-                playlistId: metadata.playlistId,
                 fileSize: videoBlob.size
             });
-
-            // Create playlist if needed
-            let playlistData = null;
-            if (metadata.suiteId && metadata.suiteName) {
-                const playlistResult = await this.createOrGetPlaylist(
-                    metadata.suiteId,
-                    `${metadata.suiteName} - Test Recordings`,
-                    `Automated test recordings for test suite: ${metadata.suiteName}`
-                );
-                
-                if (playlistResult.success) {
-                    playlistData = playlistResult.data;
-                } else {
-                    console.warn('Failed to create/get playlist:', playlistResult.error);
-                }
-            }
 
             const finalMetadata = {
                 snippet: {
@@ -236,31 +77,15 @@ class EnhancedYouTubeService {
                 }
             };
 
-            // Upload video
             const uploadResult = await this.performResumableUpload(videoBlob, finalMetadata);
             
             if (!uploadResult.success) {
                 return uploadResult;
             }
 
-            const videoId = uploadResult.data.videoId;
-
-            // Add to playlist if available
-            if (playlistData) {
-                const playlistResult = await this.addVideoToPlaylist(videoId, playlistData.id);
-                if (!playlistResult.success) {
-                    console.warn('Failed to add video to playlist:', playlistResult.error);
-                }
-            }
-
-            // Return enhanced result
             return {
                 success: true,
-                data: {
-                    ...uploadResult.data,
-                    playlistId: playlistData?.id || null,
-                    playlistUrl: playlistData?.url || null
-                }
+                data: uploadResult.data
             };
 
         } catch (error) {
@@ -314,7 +139,8 @@ class EnhancedYouTubeService {
                         description: result.snippet.description,
                         thumbnailUrl: result.snippet.thumbnails?.default?.url,
                         privacyStatus: result.status.privacyStatus,
-                        uploadedAt: new Date().toISOString()
+                        uploadedAt: new Date().toISOString(),
+                        provider: 'youtube'
                     }
                 };
             } else if (response.status === 401) {
@@ -361,12 +187,12 @@ class EnhancedYouTubeService {
             hasValidToken: this.isTokenValid(),
             tokenExpiresAt: this.tokenExpiresAt,
             hasCredentials: !!(this.clientId && this.clientSecret && this.refreshToken),
-            playlistsSupported: true
+            playlistsSupported: false
         };
     }
 }
 
-const youTubeService = new EnhancedYouTubeService();
+const youTubeService = new SimplifiedYouTubeService();
 
 export async function POST(request) {
     try {
@@ -393,20 +219,18 @@ export async function POST(request) {
         console.log('Processing upload:', {
             fileSize: videoFile.size,
             fileType: videoFile.type,
-            suiteId: metadata.suiteId,
-            suiteName: metadata.suiteName
+            title: metadata.title
         });
 
         const videoBlob = new Blob([await videoFile.arrayBuffer()], { 
             type: videoFile.type || 'video/webm' 
         });
 
-        const uploadResult = await youTubeService.uploadVideoWithProgress(videoBlob, metadata);
+        const uploadResult = await youTubeService.uploadVideo(videoBlob, metadata);
 
         if (uploadResult.success) {
             console.log('Upload successful:', {
-                videoId: uploadResult.data.videoId,
-                playlistId: uploadResult.data.playlistId
+                videoId: uploadResult.data.videoId
             });
             
             return NextResponse.json(uploadResult);

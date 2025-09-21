@@ -1,21 +1,40 @@
-import React from 'react';
+'use client';
+import React, { useEffect } from 'react';
+import { toast } from 'sonner';
 import RecorderControls from './RecorderControls';
 import RecorderPreviewModal from './RecorderPreviewModal';
 import { useRecording } from '../../hooks/useRecording';
 
-const EnhancedScreenRecorder = ({ 
+const EnhancedScreenRecorder = ({
   activeSuite,
   firestoreService,
   onClose,
   mode = 'recorder',
   existingRecording = null
 }) => {
-  const { 
-    state: recordingState, 
+  const {
+    state: recordingState,
     actions: recordingActions,
     hasPreview,
-    previewData 
+    previewData
   } = useRecording();
+
+  console.log('EnhancedScreenRecorder render:', {
+    mode,
+    hasPreview,
+    previewDataExists: !!previewData,
+    previewDataBlob: !!previewData?.blob,
+    previewDataDuration: previewData?.duration
+  });
+
+  // Cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      // Only cleanup if we're closing the entire recorder, not just switching views
+      console.log('EnhancedScreenRecorder unmounting, cleaning up resources');
+      recordingActions.cleanup();
+    };
+  }, []);
 
   // Viewer mode - show existing recording
   if (mode === 'viewer' && existingRecording) {
@@ -25,7 +44,8 @@ const EnhancedScreenRecorder = ({
         firestoreService={firestoreService}
         onClose={onClose}
         previewUrl={existingRecording.videoUrl}
-        duration={existingRecording.duration}
+        blob={null} // No blob for existing recordings
+        duration={existingRecording.durationSeconds || existingRecording.duration || 0}
         consoleLogs={existingRecording.consoleLogs || []}
         networkLogs={existingRecording.networkLogs || []}
         detectedIssues={existingRecording.detectedIssues || []}
@@ -36,20 +56,33 @@ const EnhancedScreenRecorder = ({
 
   // Recorder mode with preview
   if (hasPreview && previewData) {
+    console.log('EnhancedScreenRecorder: Rendering preview with data:', {
+      hasBlob: !!previewData.blob,
+      blobSize: previewData.blob?.size,
+      duration: previewData.duration,
+      dataKeys: Object.keys(previewData.data || {}),
+      issuesCount: previewData.data?.detectedIssues?.length,
+      previewDataKeys: Object.keys(previewData)
+    });
+
     return (
       <RecorderPreviewModal
         activeSuite={activeSuite}
         firestoreService={firestoreService}
-        onClose={() => {
+        onClose={(shouldCleanup = false) => {
           recordingActions.clearPreview();
+          if (shouldCleanup) {
+            recordingActions.cleanup();
+          }
           if (onClose) onClose();
         }}
         previewUrl={previewData.previewUrl}
+        blob={previewData.blob} // This should be the actual blob
         duration={previewData.duration}
-        consoleLogs={previewData.data.consoleLogs}
-        networkLogs={previewData.data.networkLogs}
-        detectedIssues={previewData.data.detectedIssues}
-        comments={previewData.data.comments}
+        consoleLogs={previewData.data?.consoleLogs || []}
+        networkLogs={previewData.data?.networkLogs || []}
+        detectedIssues={previewData.data?.detectedIssues || []}
+        comments={previewData.data?.comments || []}
       />
     );
   }
@@ -63,7 +96,7 @@ const EnhancedScreenRecorder = ({
       actions={recordingActions}
       onStart={async () => {
         if (!activeSuite?.id) {
-          alert('Please select a test suite first');
+          toast.error('Please select a test suite first');
           return;
         }
         await recordingActions.startRecording();

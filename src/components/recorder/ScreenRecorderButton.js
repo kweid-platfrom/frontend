@@ -196,7 +196,7 @@ class OptimizedRecordingStore {
 
         // Process data asynchronously to not block UI
         requestIdleCallback(() => {
-          this.processRecordingData(url);
+          this.processRecordingData(url, blob);
         });
       };
 
@@ -211,7 +211,7 @@ class OptimizedRecordingStore {
     }
   }
 
-  processRecordingData(url) {
+  processRecordingData(url, blob) {
     const video = document.createElement('video');
     video.src = url;
     video.onloadedmetadata = () => {
@@ -222,8 +222,11 @@ class OptimizedRecordingStore {
     const logData = this.logger.getData();
     const issues = this.detectIssues(logData);
     
-    // Store minimal data for preview
+    // Store complete data for preview including the blob
     this.previewData = {
+      previewUrl: url,
+      blob: blob, // Include the actual blob
+      duration: video.duration || 0,
       consoleLogs: logData.consoleLogs,
       networkLogs: logData.networkLogs,
       detectedIssues: issues,
@@ -347,12 +350,18 @@ class OptimizedRecordingStore {
     this.setState({ showPreview: value });
     // Clear preview data when closing to free memory
     if (!value) {
+      if (this.previewData?.previewUrl) {
+        URL.revokeObjectURL(this.previewData.previewUrl);
+      }
       this.previewData = null;
     }
   }
 
   getPreviewData() {
     return this.previewData || {
+      previewUrl: null,
+      blob: null,
+      duration: 0,
       consoleLogs: [],
       networkLogs: [],
       detectedIssues: [],
@@ -384,8 +393,8 @@ const useRecordingStore = () => {
 };
 
 const ScreenRecorderButton = ({ disabled = false, className = "", variant = "ghost", isPrimary = false }) => {
-  const { activeSuite, ui } = useApp();
-  const { state, actions } = useRecordingStore();
+  const { activeSuite, ui, actions } = useApp(); // Get actions from AppProvider
+  const { state, actions: recordingActions } = useRecordingStore();
 
   const handleStart = useCallback(async () => {
     if (!activeSuite?.id) {
@@ -397,8 +406,8 @@ const ScreenRecorderButton = ({ disabled = false, className = "", variant = "gho
       });
       return;
     }
-    actions.startRecording();
-  }, [activeSuite?.id, ui, actions]);
+    recordingActions.startRecording();
+  }, [activeSuite?.id, ui, recordingActions]);
 
   const previewData = store.getPreviewData();
 
@@ -411,7 +420,7 @@ const ScreenRecorderButton = ({ disabled = false, className = "", variant = "gho
         isPrimary={isPrimary}
         onStart={handleStart}
         recordingState={state}
-        actions={actions}
+        actions={recordingActions}
       />
       
       {isPrimary && state.showCountdown > 0 && (
@@ -425,31 +434,11 @@ const ScreenRecorderButton = ({ disabled = false, className = "", variant = "gho
       {isPrimary && state.showPreview && (
         <RecorderPreviewModal
           activeSuite={activeSuite}
-          firestoreService={{
-            createRecording: async (suiteId, data) => {
-              console.log('Creating recording for suite:', suiteId, data);
-              return { 
-                success: true, 
-                data: { 
-                  id: `rec_${Date.now()}`,
-                  ...data 
-                } 
-              };
-            },
-            createBug: async (suiteId, data) => {
-              console.log('Creating bug for suite:', suiteId, data);
-              return { 
-                success: true, 
-                data: { 
-                  id: `bug_${Date.now()}`,
-                  ...data 
-                } 
-              };
-            }
-          }}
-          onClose={() => actions.setShowPreview(false)}
-          previewUrl={state.previewUrl}
-          duration={state.duration}
+          firestoreService={actions} // Use real actions from AppProvider
+          onClose={() => recordingActions.setShowPreview(false)}
+          previewUrl={previewData.previewUrl}
+          blob={previewData.blob}
+          duration={previewData.duration}
           consoleLogs={previewData.consoleLogs}
           networkLogs={previewData.networkLogs}
           detectedIssues={previewData.detectedIssues}

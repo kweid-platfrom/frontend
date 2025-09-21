@@ -454,8 +454,6 @@ export class AssetService extends BaseFirestoreService {
                     
                     // Additional computed fields
                     recordingInfo: this.recordingService.getRecordingInfo(recording),
-                    isYouTube: recording.provider === 'youtube',
-                    isFirebase: recording.provider === 'firebase',
                     
                     // Format dates for display
                     createdAtFormatted: recording.created_at 

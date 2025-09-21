@@ -15,9 +15,9 @@ const RecorderLeftPanel = ({
   isPreviewMode = false,
   aiHighlightEnabled = false,
   onToggleAiHighlight,
-  onSaveInsights, // Add callback for saving insights
-  onCreateTestCaseFromInsight, // Add callback for creating test cases
-  onCreateBugFromInsight // Add callback for creating bugs
+  onSaveInsights,
+  onCreateTestCaseFromInsight,
+  onCreateBugFromInsight
 }) => {
   const [activeTab, setActiveTab] = useState(isPreviewMode ? 'comments' : 'console');
   const [commentText, setCommentText] = useState('');
@@ -300,7 +300,7 @@ const RecorderLeftPanel = ({
           ) : (
             <div className="p-6 text-center">
               <Bot className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-              <div className="text-sm text-gray-500 mb-2">AI Insights Disabled</div>
+              <div className="text-sm text-gray-500 mb-2">AI Insights</div>
               <div className="text-xs text-gray-400 mb-4">
                 Toggle AI Insights ON to view intelligent analysis of your recording
               </div>

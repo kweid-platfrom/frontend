@@ -1,4 +1,4 @@
-// services/BaseFirestoreService.js - ALIGNED WITH SECURITY RULES - NO REGISTRATION DUPLICATES
+// services/BaseFirestoreService.js - FIXED to preserve required fields
 import {
     doc,
     getDoc,
@@ -12,8 +12,9 @@ import {
     orderBy,
     limit,
     onSnapshot,
-    serverTimestamp,
-    writeBatch
+    writeBatch,
+    Timestamp,
+    serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
@@ -23,37 +24,10 @@ export class BaseFirestoreService {
         this.db = db;
         this.auth = auth;
         this.unsubscribes = new Map();
-
-        // Suite state management
         this._currentSuiteId = null;
         this._suiteStateCallbacks = new Set();
     }
 
-    // =================== REMOVED REGISTRATION METHODS ===================
-    // Registration methods removed - use RegistrationService instead:
-    // - completeUserRegistration() -> Use RegistrationService
-    // - upgradeToOrganizationAccount() -> Use RegistrationService
-    // - activateUserAccount() -> Use RegistrationService
-    // - cleanupPartialRegistration() -> Use RegistrationService
-
-    async getAutomationsBySuite(suiteId) {
-        try {
-            const validSuiteId = this.validateDocId(suiteId);
-            if (!validSuiteId) {
-                return { success: false, error: { message: 'Invalid suite ID' } };
-            }
-
-            const result = await this.queryDocuments('automations', [
-                ['suiteId', '==', validSuiteId]
-            ]);
-
-            return result;
-        } catch (error) {
-            return this.handleFirestoreError(error, 'get automations by suite');
-        }
-    }
-
-    // =================== CORE FIRESTORE METHODS ===================
     getCurrentUserId() {
         return this.auth.currentUser?.uid || null;
     }
@@ -111,13 +85,23 @@ export class BaseFirestoreService {
         };
     }
 
+    // FIXED: Preserve required fields and handle suite_id correctly
     addCommonFields(data, isUpdate = false) {
         const userId = this.getCurrentUserId();
+        
+        // Clean data but preserve required fields like suite_id
         const cleanData = JSON.parse(JSON.stringify(data, (key, value) => {
+            // Preserve important fields even if null
+            const preserveFields = ['suite_id', 'suiteId', 'sprint_id', 'sprintId', 'status', 'title', 'description'];
+            if (preserveFields.includes(key)) {
+                return value; // Keep these fields even if null/empty
+            }
+            // Filter out null/undefined for other fields
             if (value === null || value === undefined) return undefined;
             return value;
         }));
 
+        // Use serverTimestamp for better consistency with security rules
         const commonFields = {
             updated_at: serverTimestamp(),
             ...(userId && { updated_by: userId })
@@ -130,14 +114,61 @@ export class BaseFirestoreService {
             }
         }
 
-        return { ...cleanData, ...commonFields };
+        // CRITICAL: Ensure suite_id is always present for recordings
+        const finalData = { ...cleanData, ...commonFields };
+        
+        // For recordings, ensure suite_id is preserved
+        if (cleanData.suite_id && !finalData.suite_id) {
+            finalData.suite_id = cleanData.suite_id;
+        }
+        if (cleanData.suiteId && !finalData.suite_id) {
+            finalData.suite_id = cleanData.suiteId;
+        }
+
+        console.log('BaseFirestoreService.addCommonFields result:', {
+            operation: isUpdate ? 'update' : 'create',
+            hasSuiteId: !!finalData.suite_id,
+            suite_id: finalData.suite_id,
+            hasCreatedAt: !!finalData.created_at,
+            hasUserId: !!userId,
+            keys: Object.keys(finalData)
+        });
+
+        return finalData;
     }
 
     async createDocument(collectionPath, data, customDocId = null) {
         try {
+            console.log('BaseFirestoreService.createDocument called:', {
+                collectionPath,
+                customDocId,
+                dataKeys: Object.keys(data),
+                hasSuiteId: !!data.suite_id,
+                suite_id: data.suite_id,
+                hasUserId: !!this.getCurrentUserId()
+            });
+
             const collectionRef = this.createCollectionRef(collectionPath);
             let docRef;
             const validatedData = this.addCommonFields(data);
+
+            // CRITICAL: Log the final data being sent to Firestore
+            console.log('Final data for Firestore:', {
+                collectionPath,
+                hasSuiteId: !!validatedData.suite_id,
+                suite_id: validatedData.suite_id,
+                hasCreatedAt: !!validatedData.created_at,
+                hasCreatedBy: !!validatedData.created_by,
+                dataStructure: {
+                    title: validatedData.title,
+                    suite_id: validatedData.suite_id,
+                    status: validatedData.status,
+                    created_by: validatedData.created_by,
+                    // Show other key fields
+                    youtubeId: validatedData.youtubeId,
+                    videoUrl: validatedData.videoUrl
+                }
+            });
 
             if (customDocId) {
                 const validDocId = this.validateDocId(customDocId);
@@ -150,8 +181,26 @@ export class BaseFirestoreService {
                 docRef = await addDoc(collectionRef, validatedData);
             }
 
+            console.log('Document created successfully:', {
+                docId: docRef.id,
+                collectionPath,
+                finalSuiteId: validatedData.suite_id
+            });
+
             return { success: true, data: { id: docRef.id, ...validatedData }, docId: docRef.id };
         } catch (error) {
+            console.error('createDocument error:', error);
+            
+            // Log specific details for debugging
+            if (error.code === 'permission-denied') {
+                console.error('Permission denied details:', {
+                    collectionPath,
+                    userId: this.getCurrentUserId(),
+                    suite_id: data.suite_id,
+                    errorMessage: error.message
+                });
+            }
+            
             return this.handleFirestoreError(error, 'create document');
         }
     }
@@ -162,12 +211,14 @@ export class BaseFirestoreService {
             if (!validDocId) {
                 return { success: false, error: { message: 'Invalid or missing document ID' } };
             }
+
             const docRef = this.createDocRef(collectionPath, validDocId);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
             }
+
             return { success: false, error: { message: 'Document not found' } };
         } catch (error) {
             return this.handleFirestoreError(error, 'get document');
@@ -180,11 +231,21 @@ export class BaseFirestoreService {
             if (!validDocId) {
                 return { success: false, error: { message: 'Invalid or missing document ID' } };
             }
+
             const docRef = this.createDocRef(collectionPath, validDocId);
             const updateData = this.addCommonFields(data, true);
+            
+            console.log('Updating document:', {
+                collectionPath,
+                docId: validDocId,
+                updateKeys: Object.keys(updateData),
+                hasSuiteId: !!updateData.suite_id
+            });
+            
             await updateDoc(docRef, updateData);
             return { success: true, data: updateData };
         } catch (error) {
+            console.error('updateDocument error:', error);
             return this.handleFirestoreError(error, 'update document');
         }
     }
@@ -195,6 +256,7 @@ export class BaseFirestoreService {
             if (!validDocId) {
                 return { success: false, error: { message: 'Invalid or missing document ID' } };
             }
+
             const docRef = this.createDocRef(collectionPath, validDocId);
             await deleteDoc(docRef);
             return { success: true };
@@ -205,15 +267,24 @@ export class BaseFirestoreService {
 
     async queryDocuments(collectionPath, constraints = [], orderByField = null, limitCount = null) {
         try {
+            console.log('Querying documents:', {
+                collectionPath,
+                constraintsCount: constraints.length,
+                orderByField,
+                limitCount
+            });
+
             const colRef = this.createCollectionRef(collectionPath);
             let q = colRef;
 
             if (constraints.length > 0) {
                 q = query(q, ...constraints);
             }
+
             if (orderByField) {
                 q = query(q, orderBy(orderByField));
             }
+
             if (limitCount) {
                 q = query(q, limit(limitCount));
             }
@@ -224,8 +295,19 @@ export class BaseFirestoreService {
                 documents.push({ id: doc.id, ...doc.data() });
             });
 
+            console.log('Query results:', {
+                collectionPath,
+                documentsFound: documents.length,
+                sampleDoc: documents[0] ? {
+                    id: documents[0].id,
+                    hasSuiteId: !!documents[0].suite_id,
+                    hasTitle: !!documents[0].title
+                } : null
+            });
+
             return { success: true, data: documents };
         } catch (error) {
+            console.error('queryDocuments error:', error);
             return this.handleFirestoreError(error, 'query documents');
         }
     }
@@ -248,6 +330,7 @@ export class BaseFirestoreService {
                 }
             },
             (error) => {
+                console.error('Document subscription error:', error);
                 errorCallback?.(this.handleFirestoreError(error, 'subscribe to document'));
             }
         );
@@ -258,6 +341,11 @@ export class BaseFirestoreService {
     }
 
     subscribeToCollection(collectionPath, constraints = [], callback, errorCallback = null) {
+        console.log('Setting up collection subscription:', {
+            collectionPath,
+            constraintsCount: constraints.length
+        });
+
         const colRef = this.createCollectionRef(collectionPath);
         let q = colRef;
 
@@ -272,9 +360,21 @@ export class BaseFirestoreService {
                 querySnapshot.forEach((doc) => {
                     documents.push({ id: doc.id, ...doc.data() });
                 });
+                
+                console.log('Collection subscription update:', {
+                    collectionPath,
+                    documentsReceived: documents.length,
+                    sampleDoc: documents[0] ? {
+                        id: documents[0].id,
+                        hasSuiteId: !!documents[0].suite_id,
+                        hasTitle: !!documents[0].title
+                    } : null
+                });
+                
                 callback(documents);
             },
             (error) => {
+                console.error('Collection subscription error:', error);
                 errorCallback?.(this.handleFirestoreError(error, 'subscribe to collection'));
             }
         );
@@ -287,6 +387,7 @@ export class BaseFirestoreService {
     async executeBatch(operations) {
         try {
             const batch = writeBatch(this.db);
+
             operations.forEach(operation => {
                 const { type, ref, data } = operation;
                 switch (type) {
@@ -301,6 +402,7 @@ export class BaseFirestoreService {
                         break;
                 }
             });
+
             await batch.commit();
             return { success: true };
         } catch (error) {
@@ -316,6 +418,7 @@ export class BaseFirestoreService {
     }
 
     // =================== SUITE STATE MANAGEMENT ===================
+
     getCurrentSuiteId() {
         if (this._currentSuiteId) {
             return this._currentSuiteId;
@@ -384,9 +487,96 @@ export class BaseFirestoreService {
     }
 
     // =================== CLEANUP ===================
+
     cleanup() {
         this.unsubscribeAll();
         this._suiteStateCallbacks.clear();
         this._currentSuiteId = null;
+    }
+
+    // =================== DEBUGGING UTILITIES ===================
+
+    async testFirestoreConnection() {
+        try {
+            const userId = this.getCurrentUserId();
+            console.log('Testing Firestore connection:', {
+                hasAuth: !!this.auth.currentUser,
+                userId,
+                hasDb: !!this.db
+            });
+
+            // Test with a simple read operation
+            const testQuery = query(collection(this.db, 'testSuites'), limit(1));
+            const testSnapshot = await getDocs(testQuery);
+            
+            console.log('Firestore connection test result:', {
+                success: true,
+                canRead: true,
+                docsFound: testSnapshot.size
+            });
+
+            return { success: true, message: 'Firestore connection successful' };
+        } catch (error) {
+            console.error('Firestore connection test failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async debugRecordingCreation(suiteId, sampleData) {
+        console.log('=== DEBUG: Recording Creation ===');
+        
+        const userId = this.getCurrentUserId();
+        console.log('1. Auth Status:', {
+            hasUser: !!this.auth.currentUser,
+            userId,
+            userEmail: this.auth.currentUser?.email
+        });
+
+        console.log('2. Input Data:', {
+            suiteId,
+            hasSuiteId: !!sampleData.suite_id,
+            suite_id: sampleData.suite_id,
+            title: sampleData.title,
+            inputKeys: Object.keys(sampleData)
+        });
+
+        const processedData = this.addCommonFields(sampleData);
+        console.log('3. Processed Data:', {
+            hasSuiteId: !!processedData.suite_id,
+            suite_id: processedData.suite_id,
+            hasCreatedAt: !!processedData.created_at,
+            hasCreatedBy: !!processedData.created_by,
+            processedKeys: Object.keys(processedData)
+        });
+
+        const collectionPath = `testSuites/${suiteId}/recordings`;
+        console.log('4. Collection Path:', collectionPath);
+
+        try {
+            // Test if we can access the collection
+            const collectionRef = collection(this.db, collectionPath);
+            const testQuery = query(collectionRef, limit(1));
+            const testSnapshot = await getDocs(testQuery);
+            
+            console.log('5. Collection Access Test:', {
+                success: true,
+                existingDocs: testSnapshot.size
+            });
+
+            return {
+                success: true,
+                canAccess: true,
+                processedData,
+                collectionPath
+            };
+        } catch (error) {
+            console.error('6. Collection Access Error:', error);
+            return {
+                success: false,
+                error: error.message,
+                processedData,
+                collectionPath
+            };
+        }
     }
 }

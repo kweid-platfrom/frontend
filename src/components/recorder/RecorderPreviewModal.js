@@ -11,6 +11,7 @@ const RecorderPreviewModal = ({
   firestoreService,
   onClose,
   previewUrl,
+  blob, // The Blob object
   duration,
   consoleLogs = [],
   networkLogs = [],
@@ -21,6 +22,16 @@ const RecorderPreviewModal = ({
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   const [comments, setComments] = useState(initialComments);
 
+  console.log('RecorderPreviewModal rendered with:', {
+    hasBlob: !!blob,
+    blobSize: blob?.size,
+    duration,
+    consoleLogsCount: consoleLogs.length,
+    networkLogsCount: networkLogs.length,
+    detectedIssuesCount: detectedIssues.length,
+    hasPreviewUrl: !!previewUrl
+  });
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -29,19 +40,35 @@ const RecorderPreviewModal = ({
     const onPause = () => setPlayerOverlayHidden(false);
     const onEnded = () => setPlayerOverlayHidden(false);
 
-    video.addEventListener("play", onPlay);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('ended', onEnded);
 
     return () => {
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onEnded);
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onEnded);
     };
   }, [previewUrl]);
 
+  // Manage blob URL lifecycle more carefully
+  useEffect(() => {
+    return () => {
+      // Don't revoke blob URL here at all - let the parent component handle it
+      // The save operation might still need access to the blob URL
+      console.log('Modal cleanup - not revoking blob URL to prevent save issues');
+    };
+  }, []);
+
   const addComment = (comment) => {
     setComments(prev => [...prev, comment]);
+  };
+
+  // Handle the close function to ensure proper cleanup
+  const handleClose = () => {
+    // Don't revoke the blob URL here - let the cleanup effect handle it
+    // or let the parent component manage the lifecycle
+    onClose();
   };
 
   return (
@@ -56,7 +83,7 @@ const RecorderPreviewModal = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0 ml-2"
           >
             <X className="w-5 h-5" />
@@ -132,8 +159,24 @@ const RecorderPreviewModal = ({
                 previewUrl={previewUrl}
                 activeSuite={activeSuite}
                 firestoreService={firestoreService}
-                onClose={onClose}
-                recordingData={{ duration, consoleLogs, networkLogs, comments, detectedIssues }}
+                onClose={handleClose}
+                recordingData={(() => {
+                  const recordingDataObj = { 
+                    duration: duration, 
+                    consoleLogs: consoleLogs, 
+                    networkLogs: networkLogs, 
+                    comments: comments, 
+                    detectedIssues: detectedIssues, 
+                    blob: blob // Make sure to pass the blob
+                  };
+                  console.log('RecorderPreviewModal: Creating recordingData object:', {
+                    hasBlob: !!recordingDataObj.blob,
+                    blobSize: recordingDataObj.blob?.size,
+                    duration: recordingDataObj.duration,
+                    keys: Object.keys(recordingDataObj)
+                  });
+                  return recordingDataObj;
+                })()}
               />
             </div>
           </div>
