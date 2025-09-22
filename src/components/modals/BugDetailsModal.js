@@ -3,7 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, User, Paperclip, Tag, Clock, CheckCircle, History, Eye, Folder, Terminal, Video, Network, MessageSquare, Smartphone } from 'lucide-react';
+import { 
+    X, Calendar, User, Paperclip, Clock, CheckCircle, History, Eye, Folder, 
+    Terminal, Video, Network, MessageSquare, AlertTriangle, Info,
+    Settings, Activity, FileText, Monitor, Bug, Users, TrendingUp, ChevronDown,
+    ChevronUp, ExternalLink, Copy,
+} from 'lucide-react';
 import EditableField from '../bugview/EditableField';
 import BugComments from '../bug-report/BugComments';
 import AttachmentsList from '../bugview/AttachmentsList';
@@ -12,11 +17,9 @@ import {
     getStatusColor,
     getSeverityColor,
     getPriorityColor,
-    getFrequencyColor,
-    getSourceColor,
     formatDate,
     VALID_BUG_STATUSES,
-    VALID_BUG_SEVERITIES,
+    getPriorityFromSeverity,
 } from '../../utils/bugUtils';
 
 const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
@@ -25,6 +28,9 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
     const [editingField, setEditingField] = useState(null);
     const [tempValues, setTempValues] = useState({});
     const [mounted, setMounted] = useState(false);
+    const [activeTab, setActiveTab] = useState('overview');
+    const [collapsedSections, setCollapsedSections] = useState(new Set());
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -72,11 +78,15 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
             if (field === 'tags') {
                 updateData[field] = tempValues[field].split(',').map(item => item.trim()).filter(item => item);
             }
+
+            if (field === 'severity') {
+                const newPriority = getPriorityFromSeverity(tempValues[field]);
+                updateData.priority = newPriority;
+            }
             
             const updatedBug = { ...editedBug, ...updateData };
             setEditedBug(updatedBug);
             
-            // Call onUpdateBug with the bug ID and updates object
             await onUpdateBug(editedBug.id, updateData);
             
             setEditingField(null);
@@ -111,6 +121,20 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         }
     };
 
+    const toggleSection = (sectionId) => {
+        const newCollapsed = new Set(collapsedSections);
+        if (newCollapsed.has(sectionId)) {
+            newCollapsed.delete(sectionId);
+        } else {
+            newCollapsed.add(sectionId);
+        }
+        setCollapsedSections(newCollapsed);
+    };
+
+    const copyBugId = () => {
+        navigator.clipboard.writeText(editedBug.id);
+    };
+
     // Utility function to safely format device info
     const formatDeviceInfo = (bug) => {
         const browserInfo = bug.browserInfo || 'Unknown';
@@ -130,11 +154,6 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
     };
 
     const statusOptions = VALID_BUG_STATUSES.map(status => ({ value: status, label: status }));
-    const severityOptions = VALID_BUG_SEVERITIES.map(severity => ({ value: severity, label: severity }));
-    const priorityOptions = ['low', 'medium', 'high', 'critical'].map(priority => ({
-        value: priority,
-        label: priority.charAt(0).toUpperCase() + priority.slice(1),
-    }));
     const assigneeOptions = teamMembers?.map(member => ({
         value: member.id || member.email,
         label: member.name || member.email?.split('@')[0] || 'Unknown',
@@ -152,7 +171,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         label: category,
     }));
 
-    const editableFieldProps = (isSelect = false) => ({
+    const editableFieldProps = () => ({
         editingField,
         tempValues,
         onEdit: handleFieldEdit,
@@ -160,8 +179,24 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         onCancel: handleFieldCancel,
         setTempValues,
         disabled: !onUpdateBug || typeof onUpdateBug !== 'function',
-        showEditIcon: !isSelect, // Only show edit icon for non-select fields
+        showEditIcon: true,  // Always show edit icon by default
     });
+
+    const getSeverityIcon = (severity) => {
+        switch (severity?.toLowerCase()) {
+            case 'critical': return <AlertTriangle className="h-4 w-4" />;
+            case 'high': return <AlertTriangle className="h-4 w-4" />;
+            case 'medium': return <Info className="h-4 w-4" />;
+            default: return <Info className="h-4 w-4" />;
+        }
+    };
+
+    const tabs = [
+        { id: 'overview', label: 'Overview', icon: FileText },
+        { id: 'details', label: 'Details', icon: Settings },
+        { id: 'comments', label: 'Comments', icon: MessageSquare, badge: comments.length },
+        { id: 'activity', label: 'Activity', icon: Activity },
+    ];
 
     if (!mounted || !bug) return null;
 
@@ -174,369 +209,517 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                     animate={{ x: 0 }}
                     exit={{ x: '100%' }}
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    className="fixed inset-y-0 right-0 w-1/2 bg-white shadow-2xl z-50 overflow-y-auto border-l border-gray-200"
+                    className={`fixed inset-y-0 right-0 ${isFullscreen ? 'w-full' : 'w-3/4 max-w-4xl'} bg-background shadow-2xl z-50 overflow-hidden border-l border-border`}
                 >
-                    <div className="flex flex-col h-full p-6">
-                        <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 p-6">
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1 min-w-0">
-                                    <EditableField
-                                        field="title"
-                                        value={editedBug.title || 'Untitled Bug'}
-                                        type="text"
-                                        className="text-3xl font-bold text-gray-900 mb-2 leading-tight"
-                                        {...editableFieldProps()}
-                                    />
-                                    <div className="flex flex-wrap gap-2 text-sm text-gray-500">
-                                        <span className="px-2 py-1 bg-teal-100 text-teal-800 rounded-full">
-                                            Bug #{editedBug.id?.slice(-6) || 'N/A'}
-                                        </span>
-                                        <span className="flex items-center">
-                                            <Clock className="h-4 w-4 mr-1" />
-                                            Created {formatDate(editedBug.createdAt) || 'Unknown'}
-                                        </span>
-                                        <span className="flex items-center">
-                                            <User className="h-4 w-4 mr-1" />
-                                            Reporter: {editedBug.reportedBy || editedBug.reportedByEmail?.split('@')[0] || 'Unknown'}
-                                        </span>
-                                        <span className="flex items-center">
-                                            <Eye className="h-4 w-4 mr-1" />
-                                            Views: {editedBug.viewCount || 0}
-                                        </span>
-                                        <span className="flex items-center">
-                                            <MessageSquare className="h-4 w-4 mr-1" />
-                                            {editedBug.commentCount || 0} Comment{editedBug.commentCount !== 1 ? 's' : ''}
-                                        </span>
+                    <div className="flex flex-col h-full">
+                        {/* Header */}
+                        <div className="flex-shrink-0 border-b border-border bg-background">
+                            <div className="px-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                                        <div className="flex-shrink-0">
+                                            <div className={`p-2.5 rounded-lg ${getSeverityColor(editedBug.severity)} flex items-center justify-center`}>
+                                                {getSeverityIcon(editedBug.severity)}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center space-x-3">
+                                                <EditableField
+                                                    field="title"
+                                                    value={editedBug.title || 'Untitled Bug'}
+                                                    type="text"
+                                                    className="text-2xl md:text-3xl font-bold text-foreground leading-tight"
+                                                    isTitle={true}
+                                                    {...editableFieldProps()}
+                                                />
+                                            </div>
+                                            <div className="flex items-center space-x-4 mt-2">
+                                                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                                                    <Bug className="h-4 w-4" />
+                                                    <span className="font-mono bg-muted px-2 py-1 rounded text-xs">
+                                                        #{editedBug.id?.slice(-8) || 'N/A'}
+                                                    </span>
+                                                    <button onClick={copyBugId} className="hover:text-foreground">
+                                                        <Copy className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                                <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                                                    <Clock className="h-4 w-4" />
+                                                    <span>Created {formatDate(editedBug.createdAt) || 'Unknown'}</span>
+                                                </div>
+                                                <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                                                    <User className="h-4 w-4" />
+                                                    <span>{editedBug.reportedBy || editedBug.reportedByEmail?.split('@')[0] || 'Unknown'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={() => setIsFullscreen(!isFullscreen)}
+                                            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                                            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                                        >
+                                            <ExternalLink className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={onClose}
+                                            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                                        >
+                                            <X className="h-5 w-5" />
+                                        </button>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={onClose}
-                                    className="p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 rounded-full"
-                                >
-                                    <X className="h-5 w-5" />
-                                </button>
+
+                                {/* Status Bar */}
+                                <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                                    <div className="flex items-center space-x-4">
+                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(editedBug.status)}`}>
+                                            <div className="w-2 h-2 rounded-full bg-current mr-2"></div>
+                                            {editedBug.status || 'New'}
+                                        </div>
+                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getSeverityColor(editedBug.severity)}`}>
+                                            {getSeverityIcon(editedBug.severity)}
+                                            <span className="ml-1">{editedBug.severity || 'Low'}</span>
+                                        </div>
+                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(editedBug.priority)}`}>
+                                            <TrendingUp className="h-3 w-3 mr-1" />
+                                            {editedBug.priority || 'Low'} Priority
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                        <div className="flex items-center space-x-1">
+                                            <Eye className="h-4 w-4" />
+                                            <span>{editedBug.viewCount || 0}</span>
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                            <MessageSquare className="h-4 w-4" />
+                                            <span>{comments.length}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tabs */}
+                            <div className="px-6 border-b border-border">
+                                <nav className="flex space-x-8" aria-label="Tabs">
+                                    {tabs.map((tab) => {
+                                        const Icon = tab.icon;
+                                        return (
+                                            <button
+                                                key={tab.id}
+                                                onClick={() => setActiveTab(tab.id)}
+                                                className={`${
+                                                    activeTab === tab.id
+                                                        ? 'border-primary text-primary bg-accent'
+                                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                                                } whitespace-nowrap flex items-center py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all`}
+                                            >
+                                                <Icon className="h-4 w-4 mr-2" />
+                                                {tab.label}
+                                                {tab.badge > 0 && (
+                                                    <span className="ml-2 bg-primary/10 text-primary py-0.5 px-2 rounded-full text-xs">
+                                                        {tab.badge}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </nav>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Description</h3>
-                                <EditableField
-                                    field="description"
-                                    value={editedBug.description || 'No description provided'}
-                                    type="textarea"
-                                    placeholder="Enter bug description..."
-                                    className="bg-gray-50 rounded-md p-3 text-sm w-full"
-                                    {...editableFieldProps()}
-                                />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Actual Behavior</h3>
-                                <EditableField
-                                    field="actualBehavior"
-                                    value={editedBug.actualBehavior || 'No actual behavior provided'}
-                                    type="textarea"
-                                    placeholder="Describe the actual behavior..."
-                                    className="bg-gray-50 rounded-md p-3 text-sm w-full"
-                                    {...editableFieldProps()}
-                                />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Steps to Reproduce</h3>
-                                <EditableField
-                                    field="stepsToReproduce"
-                                    value={editedBug.stepsToReproduce || 'No steps provided'}
-                                    type="textarea"
-                                    placeholder="List steps to reproduce the bug..."
-                                    className="bg-gray-50 rounded-md p-3 text-sm w-full"
-                                    {...editableFieldProps()}
-                                />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Expected Behavior</h3>
-                                <EditableField
-                                    field="expectedBehavior"
-                                    value={editedBug.expectedBehavior || 'No expected behavior provided'}
-                                    type="textarea"
-                                    placeholder="Describe the expected behavior..."
-                                    className="bg-gray-50 rounded-md p-3 text-sm w-full"
-                                    {...editableFieldProps()}
-                                />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Workaround</h3>
-                                <EditableField
-                                    field="workaround"
-                                    value={editedBug.workaround || 'No workaround provided'}
-                                    type="textarea"
-                                    placeholder="Describe any workarounds..."
-                                    className="bg-gray-50 rounded-md p-3 text-sm w-full"
-                                    {...editableFieldProps()}
-                                />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Resolution</h3>
-                                <EditableField
-                                    field="resolution"
-                                    value={editedBug.resolution || 'Not resolved'}
-                                    type="textarea"
-                                    placeholder="Describe the resolution..."
-                                    className="bg-gray-50 rounded-md p-3 text-sm w-full"
-                                    {...editableFieldProps()}
-                                />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Details</h3>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Status</h4>
-                                        <EditableField
-                                            field="status"
-                                            value={editedBug.status || 'New'}
-                                            type="select"
-                                            options={statusOptions}
-                                            className={`text-sm rounded ${getStatusColor(editedBug.status)} w-full`}
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Severity</h4>
-                                        <EditableField
-                                            field="severity"
-                                            value={editedBug.severity || 'Low'}
-                                            type="select"
-                                            options={severityOptions}
-                                            className={`text-sm rounded ${getSeverityColor(editedBug.severity)} w-full`}
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Priority</h4>
-                                        <EditableField
-                                            field="priority"
-                                            value={editedBug.priority || 'Low'}
-                                            type="select"
-                                            options={priorityOptions}
-                                            className={`text-sm rounded ${getPriorityColor(editedBug.priority)} w-full`}
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Assignee</h4>
-                                        <EditableField
-                                            field="assignedTo"
-                                            value={editedBug.assignedTo || 'Unassigned'}
-                                            type="select"
-                                            options={assigneeOptions}
-                                            className="text-sm rounded w-full"
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Category</h4>
-                                        <EditableField
-                                            field="category"
-                                            value={editedBug.category || 'Other'}
-                                            type="select"
-                                            options={categoryOptions}
-                                            className="text-sm rounded w-full"
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Environment</h4>
-                                        <EditableField
-                                            field="environment"
-                                            value={editedBug.environment || 'Unknown'}
-                                            type="select"
-                                            options={environmentOptions}
-                                            className="text-sm rounded w-full"
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Source</h4>
-                                        <EditableField
-                                            field="source"
-                                            value={editedBug.source || 'Unknown'}
-                                            type="select"
-                                            options={sourceOptions}
-                                            className={`text-sm rounded ${getSourceColor(editedBug.source)} w-full`}
-                                            {...editableFieldProps(true)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Suite ID</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <Folder className="h-4 w-4 mr-1" />
-                                            {editedBug.suite_id || 'Unknown'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Created By</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <User className="h-4 w-4 mr-1" />
-                                            {editedBug.created_by || 'Unknown'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Updated By</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <User className="h-4 w-4 mr-1" />
-                                            {editedBug.updatedByName || editedBug.updated_by || 'Unknown'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Last Updated</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <Clock className="h-4 w-4 mr-1" />
-                                            {formatDate(editedBug.updated_at) || 'Unknown'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Last Activity</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <Clock className="h-4 w-4 mr-1" />
-                                            {formatDate(editedBug.lastActivity) || 'Unknown'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Version</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <History className="h-4 w-4 mr-1" />
-                                            {editedBug.version || '1'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Resolved By</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <User className="h-4 w-4 mr-1" />
-                                            {editedBug.resolvedByName || editedBug.resolvedBy || 'Not resolved'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Resolved At</h4>
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <Calendar className="h-4 w-4 mr-1" />
-                                            {editedBug.resolvedAt ? formatDate(editedBug.resolvedAt) : 'Not resolved'}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Frequency</h4>
-                                        <EditableField
-                                            field="frequency"
-                                            value={editedBug.frequency || 'Unknown'}
-                                            type="text"
-                                            icon={Clock}
-                                            className={`text-sm rounded ${getFrequencyColor(editedBug.frequency)} w-full`}
-                                            {...editableFieldProps()}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Tags</h4>
-                                        <EditableField
-                                            field="tags"
-                                            value={Array.isArray(editedBug.tags) ? editedBug.tags.join(', ') : 'None'}
-                                            type="text"
-                                            icon={Tag}
-                                            placeholder="Enter tags (comma-separated)"
-                                            className="text-sm rounded w-full"
-                                            {...editableFieldProps()}
-                                        />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-gray-700 mb-1">Device/Browser</h4>
-                                        <EditableField
-                                            field="deviceInfo"
-                                            value={formatDeviceInfo(editedBug)}
-                                            type="text"
-                                            icon={Smartphone}
-                                            className="text-sm rounded w-full"
-                                            {...editableFieldProps()}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center">
-                                    <Paperclip className="h-4 w-4 mr-1" />
-                                    Attachments
-                                </h3>
-                                <div className="bg-gray-50 rounded-md p-3 text-sm w-full flex items-center justify-center">
-                                    {editedBug.attachments?.length > 0 ? (
-                                        <AttachmentsList attachments={editedBug.attachments} />
-                                    ) : (
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <Paperclip className="h-4 w-4 mr-1 text-gray-400" />
-                                            No attachments available
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center">
-                                    <Paperclip className="h-4 w-4 mr-1" />
-                                    Evidence
-                                </h3>
-                                <div className="bg-gray-50 rounded-md p-3 text-sm w-full flex items-center justify-center">
-                                    {editedBug.attachments?.length > 0 || editedBug.hasVideoEvidence || editedBug.hasNetworkLogs || editedBug.hasConsoleLogs ? (
-                                        <div className="space-y-2 w-full">
-                                            {editedBug.attachments?.length > 0 && (
-                                                <AttachmentsList attachments={editedBug.attachments} />
-                                            )}
-                                            {editedBug.hasVideoEvidence && (
-                                                <p className="text-sm text-gray-600 flex items-center">
-                                                    <Video className="h-4 w-4 mr-1 text-purple-600" />
-                                                    Video Evidence Available
-                                                </p>
-                                            )}
-                                            {editedBug.hasNetworkLogs && (
-                                                <p className="text-sm text-gray-600 flex items-center">
-                                                    <Network className="h-4 w-4 mr-1 text-orange-600" />
-                                                    Network Logs Available
-                                                </p>
-                                            )}
-                                            {editedBug.hasConsoleLogs && (
-                                                <p className="text-sm text-gray-600 flex items-center">
-                                                    <Terminal className="h-4 w-4 mr-1 text-green-600" />
-                                                    Console Logs Available
-                                                </p>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="text-sm text-gray-600 flex items-center">
-                                            <Paperclip className="h-4 w-4 mr-1 text-gray-400" />
-                                            No evidence available
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            {editedBug.resolutionHistory?.length > 0 && (
-                                <div>
-                                    <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center">
-                                        <History className="h-4 w-4 mr-1" />
-                                        Resolution History
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {editedBug.resolutionHistory.map((entry, index) => (
-                                            <div key={index} className="text-sm text-gray-600 flex items-center">
-                                                <CheckCircle className="h-4 w-4 mr-1" />
-                                                {entry.resolution || 'Resolution updated'} by {entry.resolvedByName || entry.resolvedBy || 'Unknown'} on {formatDate(entry.resolvedAt) || 'Unknown'}
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="p-6">
+                                {activeTab === 'overview' && (
+                                    <div className="space-y-6">
+                                        {/* Quick Actions */}
+                                        <div className="grid grid-cols-4 gap-4">
+                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                                <EditableField
+                                                    field="status"
+                                                    value={editedBug.status || 'New'}
+                                                    type="select"
+                                                    options={statusOptions}
+                                                    className="text-sm font-medium"
+                                                    {...editableFieldProps()}
+                                                />
+                                                <p className="text-xs text-muted-foreground mt-1">Status</p>
                                             </div>
-                                        ))}
+                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                                <EditableField
+                                                    field="assignedTo"
+                                                    value={editedBug.assignedTo || 'Unassigned'}
+                                                    type="select"
+                                                    options={assigneeOptions}
+                                                    className="text-sm font-medium"
+                                                    {...editableFieldProps()}
+                                                />
+                                                <p className="text-xs text-muted-foreground mt-1">Assignee</p>
+                                            </div>
+                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                                <div className="text-sm font-medium text-foreground">
+                                                    {editedBug.priority || 'Low'}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground mt-1">Priority (Auto-derived from Severity)</p>
+                                            </div>
+                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                                <EditableField
+                                                    field="environment"
+                                                    value={editedBug.environment || 'Unknown'}
+                                                    type="select"
+                                                    options={environmentOptions}
+                                                    className="text-sm font-medium"
+                                                    {...editableFieldProps()}
+                                                />
+                                                <p className="text-xs text-muted-foreground mt-1">Environment</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Description */}
+                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-lg font-semibold text-foreground flex items-center">
+                                                    <FileText className="h-5 w-5 mr-2 text-primary" />
+                                                    Description
+                                                </h3>
+                                                <button
+                                                    onClick={() => toggleSection('description')}
+                                                    className="text-muted-foreground hover:text-foreground"
+                                                >
+                                                    {collapsedSections.has('description') ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                            {!collapsedSections.has('description') && (
+                                                <EditableField
+                                                    field="description"
+                                                    value={editedBug.description || 'No description provided'}
+                                                    type="textarea"
+                                                    placeholder="Enter bug description..."
+                                                    className="w-full min-h-[100px] text-foreground leading-relaxed"
+                                                    {...editableFieldProps()}
+                                                />
+                                            )}
+                                        </div>
+
+                                        {/* Reproduction Steps */}
+                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-lg font-semibold text-foreground flex items-center">
+                                                    <Settings className="h-5 w-5 mr-2 text-success" />
+                                                    Steps to Reproduce
+                                                </h3>
+                                                <button
+                                                    onClick={() => toggleSection('steps')}
+                                                    className="text-muted-foreground hover:text-foreground"
+                                                >
+                                                    {collapsedSections.has('steps') ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                            {!collapsedSections.has('steps') && (
+                                                <EditableField
+                                                    field="stepsToReproduce"
+                                                    value={editedBug.stepsToReproduce || 'No steps provided'}
+                                                    type="textarea"
+                                                    placeholder="List steps to reproduce the bug..."
+                                                    className="w-full min-h-[100px] text-foreground leading-relaxed"
+                                                    {...editableFieldProps()}
+                                                />
+                                            )}
+                                        </div>
+
+                                        {/* Expected vs Actual Behavior */}
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <CheckCircle className="h-5 w-5 mr-2 text-success" />
+                                                    Expected Behavior
+                                                </h3>
+                                                <EditableField
+                                                    field="expectedBehavior"
+                                                    value={editedBug.expectedBehavior || 'No expected behavior provided'}
+                                                    type="textarea"
+                                                    placeholder="Describe the expected behavior..."
+                                                    className="w-full min-h-[80px] text-foreground leading-relaxed"
+                                                    {...editableFieldProps()}
+                                                />
+                                            </div>
+                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <AlertTriangle className="h-5 w-5 mr-2 text-destructive" />
+                                                    Actual Behavior
+                                                </h3>
+                                                <EditableField
+                                                    field="actualBehavior"
+                                                    value={editedBug.actualBehavior || 'No actual behavior provided'}
+                                                    type="textarea"
+                                                    placeholder="Describe the actual behavior..."
+                                                    className="w-full min-h-[80px] text-foreground leading-relaxed"
+                                                    {...editableFieldProps()}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Evidence */}
+                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                <Paperclip className="h-5 w-5 mr-2 text-primary/70" />
+                                                Evidence & Attachments
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                {editedBug.hasVideoEvidence && (
+                                                    <div className="flex items-center p-3 bg-accent rounded-lg border border-accent/30">
+                                                        <Video className="h-5 w-5 mr-3 text-primary/70" />
+                                                        <span className="text-sm font-medium text-foreground">Video Evidence</span>
+                                                    </div>
+                                                )}
+                                                {editedBug.hasNetworkLogs && (
+                                                    <div className="flex items-center p-3 bg-warning/10 rounded-lg border border-warning/30">
+                                                        <Network className="h-5 w-5 mr-3 text-warning/70" />
+                                                        <span className="text-sm font-medium text-foreground">Network Logs</span>
+                                                    </div>
+                                                )}
+                                                {editedBug.hasConsoleLogs && (
+                                                    <div className="flex items-center p-3 bg-success/10 rounded-lg border border-success/30">
+                                                        <Terminal className="h-5 w-5 mr-3 text-success/70" />
+                                                        <span className="text-sm font-medium text-foreground">Console Logs</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {editedBug.attachments?.length > 0 && (
+                                                <div className="mt-4">
+                                                    <AttachmentsList attachments={editedBug.attachments} />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                            {editedBug.activities?.length > 0 && (
-                                <ActivityLog activities={editedBug.activities} formatDate={formatDate} />
-                            )}
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-900 mb-2">Comments</h3>
-                                <BugComments
-                                    comments={comments}
-                                    onAddComment={handleAddComment}
-                                    formatDate={formatDate}
-                                    teamMembers={teamMembers}
-                                />
+                                )}
+
+                                {activeTab === 'details' && (
+                                    <div className="space-y-6">
+                                        {/* Technical Details */}
+                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                <Monitor className="h-5 w-5 mr-2 text-primary" />
+                                                Technical Information
+                                            </h3>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Category</label>
+                                                    <EditableField
+                                                        field="category"
+                                                        value={editedBug.category || 'Other'}
+                                                        type="select"
+                                                        options={categoryOptions}
+                                                        className="text-sm w-full"
+                                                        {...editableFieldProps()}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Source</label>
+                                                    <EditableField
+                                                        field="source"
+                                                        value={editedBug.source || 'Unknown'}
+                                                        type="select"
+                                                        options={sourceOptions}
+                                                        className="text-sm w-full"
+                                                        {...editableFieldProps()}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Frequency</label>
+                                                    <EditableField
+                                                        field="frequency"
+                                                        value={editedBug.frequency || 'Unknown'}
+                                                        type="text"
+                                                        className="text-sm w-full"
+                                                        {...editableFieldProps()}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Device/Browser</label>
+                                                    <EditableField
+                                                        field="deviceInfo"
+                                                        value={formatDeviceInfo(editedBug)}
+                                                        type="text"
+                                                        className="text-sm w-full"
+                                                        {...editableFieldProps()}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Tags</label>
+                                                    <EditableField
+                                                        field="tags"
+                                                        value={Array.isArray(editedBug.tags) ? editedBug.tags.join(', ') : 'None'}
+                                                        type="text"
+                                                        placeholder="Enter tags (comma-separated)"
+                                                        className="text-sm w-full"
+                                                        {...editableFieldProps()}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Version</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border">
+                                                        {editedBug.version || '1'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Workflow Information */}
+                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                <Users className="h-5 w-5 mr-2 text-success" />
+                                                Workflow Information
+                                            </h3>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Created By</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                        <User className="h-4 w-4 mr-2" />
+                                                        {editedBug.created_by || 'Unknown'}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Updated By</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                        <User className="h-4 w-4 mr-2" />
+                                                        {editedBug.updatedByName || editedBug.updated_by || 'Unknown'}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Last Updated</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                        <Clock className="h-4 w-4 mr-2" />
+                                                        {formatDate(editedBug.updated_at) || 'Unknown'}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Suite ID</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                        <Folder className="h-4 w-4 mr-2" />
+                                                        {editedBug.suite_id || 'Unknown'}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Resolved By</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                        <User className="h-4 w-4 mr-2" />
+                                                        {editedBug.resolvedByName || editedBug.resolvedBy || 'Not resolved'}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Resolved At</label>
+                                                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                        <Calendar className="h-4 w-4 mr-2" />
+                                                        {editedBug.resolvedAt ? formatDate(editedBug.resolvedAt) : 'Not resolved'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Resolution & Workaround */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <CheckCircle className="h-5 w-5 mr-2 text-success" />
+                                                    Resolution
+                                                </h3>
+                                                <EditableField
+                                                    field="resolution"
+                                                    value={editedBug.resolution || 'Not resolved'}
+                                                    type="textarea"
+                                                    placeholder="Describe the resolution..."
+                                                    className="w-full min-h-[100px] text-foreground leading-relaxed"
+                                                    {...editableFieldProps()}
+                                                />
+                                            </div>
+                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <Settings className="h-5 w-5 mr-2 text-primary" />
+                                                    Workaround
+                                                </h3>
+                                                <EditableField
+                                                    field="workaround"
+                                                    value={editedBug.workaround || 'No workaround provided'}
+                                                    type="textarea"
+                                                    placeholder="Describe any workarounds..."
+                                                    className="w-full min-h-[100px] text-foreground leading-relaxed"
+                                                    {...editableFieldProps()}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Resolution History */}
+                                        {editedBug.resolutionHistory?.length > 0 && (
+                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <History className="h-5 w-5 mr-2 text-muted-foreground" />
+                                                    Resolution History
+                                                </h3>
+                                                <div className="space-y-3">
+                                                    {editedBug.resolutionHistory.map((entry, index) => (
+                                                        <div key={index} className="flex items-start space-x-3 p-3 bg-muted rounded-lg">
+                                                            <CheckCircle className="h-5 w-5 mt-0.5 text-success flex-shrink-0" />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm text-foreground">{entry.resolution || 'Resolution updated'}</p>
+                                                                <p className="text-xs text-muted-foreground mt-1">
+                                                                    by {entry.resolvedByName || entry.resolvedBy || 'Unknown'} on {formatDate(entry.resolvedAt) || 'Unknown'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'comments' && (
+                                    <div className="space-y-6">
+                                        {/* Comments Section */}
+                                        <div className="bg-card border border-border rounded-lg shadow-theme-sm">
+                                            <div className="p-6">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <MessageSquare className="h-5 w-5 mr-2 text-primary" />
+                                                    Comments & Discussion
+                                                    <span className="ml-2 bg-primary/10 text-primary py-1 px-2 rounded-full text-xs">
+                                                        {comments.length}
+                                                    </span>
+                                                </h3>
+                                                <BugComments
+                                                    comments={comments}
+                                                    onAddComment={handleAddComment}
+                                                    formatDate={formatDate}
+                                                    teamMembers={teamMembers}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'activity' && (
+                                    <div className="space-y-6">
+                                        {/* Activity Log Section */}
+                                        <div className="bg-card border border-border rounded-lg shadow-theme-sm">
+                                            <div className="p-6">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <Activity className="h-5 w-5 mr-2 text-success" />
+                                                    Activity Log
+                                                </h3>
+                                                {editedBug.activities?.length > 0 ? (
+                                                    <ActivityLog activities={editedBug.activities} formatDate={formatDate} />
+                                                ) : (
+                                                    <div className="text-center py-12">
+                                                        <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                                                        <p className="text-muted-foreground">No activity recorded yet</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
