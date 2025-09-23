@@ -66,7 +66,7 @@ const getEffortIndicator = (effort) => {
     );
 };
 
-// Table Row Component with Actions
+// Table Row Component with Actions and Selection
 const RecommendationTableRow = ({ 
     recommendation, 
     onEdit, 
@@ -74,11 +74,14 @@ const RecommendationTableRow = ({
     onDelete,
     onArchive,
     currentUser,
-    safeFormatDate
+    safeFormatDate,
+    selectedRecommendations,
+    onSelectRecommendation
 }) => {
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [actionLoading, setActionLoading] = useState(null);
     
+    const isSelected = selectedRecommendations.includes(recommendation.id);
     const netVotes = (recommendation.upvotes || 0) - (recommendation.downvotes || 0);
     const hasUserVoted = recommendation.userVotes && currentUser && 
         recommendation.userVotes[currentUser.uid];
@@ -105,8 +108,25 @@ const RecommendationTableRow = ({
         }
     };
 
+    const handleSelectChange = (e) => {
+        onSelectRecommendation(recommendation.id, e.target.checked);
+    };
+
     return (
-        <tr className="hover:bg-gray-50">
+        <tr className={`transition-colors ${
+            isSelected 
+                ? 'bg-teal-50 border-teal-200' 
+                : 'hover:bg-gray-50'
+        }`}>
+            {/* Selection Checkbox Column */}
+            <td className="px-6 py-4">
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={handleSelectChange}
+                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                />
+            </td>
             <td className="px-6 py-4">
                 <div className="max-w-xs">
                     <div className="text-sm font-medium text-gray-900 truncate">
@@ -223,6 +243,9 @@ const RecommendationTableRow = ({
 // Main Recommendation Table Component
 const RecommendationTable = ({ 
     recommendations, 
+    selectedRecommendations,
+    onSelectRecommendation,
+    onSelectAll,
     onEdit, 
     onVote,
     onDelete,
@@ -243,6 +266,15 @@ const RecommendationTable = ({
         );
     };
 
+    // Calculate select all state
+    const allSelected = recommendations.length > 0 && 
+        recommendations.every(rec => selectedRecommendations.includes(rec.id));
+    const someSelected = selectedRecommendations.length > 0 && !allSelected;
+
+    const handleSelectAllChange = (e) => {
+        onSelectAll(e.target.checked);
+    };
+
     if (recommendations.length === 0) {
         return (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
@@ -259,6 +291,18 @@ const RecommendationTable = ({
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
+                            {/* Select All Checkbox */}
+                            <th className="px-6 py-3 text-left">
+                                <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    ref={input => {
+                                        if (input) input.indeterminate = someSelected;
+                                    }}
+                                    onChange={handleSelectAllChange}
+                                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                />
+                            </th>
                             <th 
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                                 onClick={() => onSort('title')}
@@ -323,6 +367,8 @@ const RecommendationTable = ({
                                 onArchive={onArchive}
                                 currentUser={currentUser}
                                 safeFormatDate={safeFormatDate}
+                                selectedRecommendations={selectedRecommendations}
+                                onSelectRecommendation={onSelectRecommendation}
                             />
                         ))}
                     </tbody>

@@ -13,8 +13,8 @@ import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
 
 // Import bulk actions components and utilities
-import {  
-  createBulkActionHandlers 
+import {
+    createBulkActionHandlers
 } from './BulkActionsProvider';
 
 const AppContext = createContext();
@@ -64,9 +64,9 @@ export const AppProvider = ({ children }) => {
 
     // Always call useRecommendations hook, but conditionally use its return values
     const recommendationsHook = useRecommendations(
-        hasRecommendationsSlice ? slices.recommendations : null, 
-        slices.auth, 
-        slices.suites, 
+        hasRecommendationsSlice ? slices.recommendations : null,
+        slices.auth,
+        slices.suites,
         slices.ui
     );
 
@@ -77,13 +77,13 @@ export const AppProvider = ({ children }) => {
         voteOnRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         addComment = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         removeComment = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
-        setFilters = () => {},
-        setSortConfig = () => {},
-        setViewMode = () => {},
-        openModal = () => {},
-        closeModal = () => {},
-        resetFilters = () => {},
-        cleanup: cleanupRecommendations = () => {}
+        setFilters = () => { },
+        setSortConfig = () => { },
+        setViewMode = () => { },
+        openModal = () => { },
+        closeModal = () => { },
+        resetFilters = () => { },
+        cleanup: cleanupRecommendations = () => { }
     } = hasRecommendationsSlice ? recommendationsHook : {};
 
     // Archive/trash functionality using FirestoreService directly
@@ -123,87 +123,111 @@ export const AppProvider = ({ children }) => {
 
     // Wrapped archive operations
     const archiveItem = createArchiveOperation((suiteId, assetType, assetId, sprintId = null, reason = null) => {
-        const methodMap = {
-            testCases: 'archiveTestCase',
-            bugs: 'archiveBug',
-            recordings: 'archiveRecording',
-            sprints: 'archiveSprint',
-            recommendations: 'archiveRecommendation'
-        };
-        const method = methodMap[assetType];
-        if (!method) throw new Error(`Unknown asset type: ${assetType}`);
-        return FirestoreService[method](suiteId, assetId, sprintId, reason);
+        console.log('Archive operation called:', { suiteId, assetType, assetId, sprintId, reason });
+
+        switch (assetType) {
+            case 'testCases':
+                return FirestoreService.archiveTrash.archiveTestCase(suiteId, assetId, sprintId, reason);
+            case 'bugs':
+                return FirestoreService.archiveTrash.archiveBug(suiteId, assetId, sprintId, reason);
+            case 'recordings':
+                return FirestoreService.archiveTrash.archiveRecording(suiteId, assetId, sprintId, reason);
+            case 'sprints':
+                return FirestoreService.archiveTrash.archiveSprint(suiteId, assetId, reason);
+            case 'recommendations':
+                return FirestoreService.archiveTrash.archiveRecommendation(suiteId, assetId, sprintId, reason);
+            default:
+                throw new Error(`Unknown asset type: ${assetType}`);
+        }
     });
 
     const unarchiveItem = createArchiveOperation((suiteId, assetType, assetId, sprintId = null) => {
-        const methodMap = {
-            testCases: 'unarchiveTestCase',
-            bugs: 'unarchiveBug',
-            recordings: 'unarchiveRecording',
-            sprints: 'unarchiveSprint',
-            recommendations: 'unarchiveRecommendation'
-        };
-        const method = methodMap[assetType];
-        if (!method) throw new Error(`Unknown asset type: ${assetType}`);
-        return FirestoreService[method](suiteId, assetId, sprintId);
+        console.log('Unarchive called:', { suiteId, assetType, assetId, sprintId });
+
+        switch (assetType) {
+            case 'testCases':
+                return FirestoreService.archiveTrash.unarchiveTestCase(suiteId, assetId, sprintId);
+            case 'bugs':
+                return FirestoreService.archiveTrash.unarchiveBug(suiteId, assetId, sprintId);
+            case 'recordings':
+                return FirestoreService.archiveTrash.unarchiveRecording(suiteId, assetId, sprintId);
+            case 'sprints':
+                return FirestoreService.archiveTrash.unarchiveSprint(suiteId, assetId);
+            case 'recommendations':
+                return FirestoreService.archiveTrash.unarchiveRecommendation(suiteId, assetId, sprintId);
+            default:
+                throw new Error(`Unknown asset type: ${assetType}`);
+        }
     });
 
     const moveToTrash = createArchiveOperation((suiteId, assetType, assetId, sprintId = null, reason = null) => {
-        const methodMap = {
-            testCases: 'moveTestCaseToTrash',
-            bugs: 'moveBugToTrash',
-            recordings: 'moveRecordingToTrash',
-            sprints: 'moveSprintToTrash',
-            recommendations: 'moveRecommendationToTrash'
-        };
-        const method = methodMap[assetType];
-        if (!method) throw new Error(`Unknown asset type: ${assetType}`);
-        return FirestoreService[method](suiteId, assetId, sprintId, reason);
+        switch (assetType) {
+            case 'testCases':
+                return FirestoreService.archiveTrash.deleteTestCase(suiteId, assetId, sprintId, reason);
+            case 'bugs':
+                return FirestoreService.archiveTrash.deleteBug(suiteId, assetId, sprintId, reason);
+            case 'recordings':
+                return FirestoreService.archiveTrash.deleteRecording(suiteId, assetId, sprintId, reason);
+            case 'sprints':
+                return FirestoreService.archiveTrash.deleteSprint(suiteId, assetId, reason);
+            case 'recommendations':
+                return FirestoreService.archiveTrash.deleteRecommendation(suiteId, assetId, sprintId, reason);
+            default:
+                throw new Error(`Unknown asset type: ${assetType}`);
+        }
     });
 
     const restoreFromTrash = createArchiveOperation((suiteId, assetType, assetId, sprintId = null) => {
-        const methodMap = {
-            testCases: 'restoreTestCaseFromTrash',
-            bugs: 'restoreBugFromTrash',
-            recordings: 'restoreRecordingFromTrash',
-            sprints: 'restoreSprintFromTrash',
-            recommendations: 'restoreRecommendationFromTrash'
-        };
-        const method = methodMap[assetType];
-        if (!method) throw new Error(`Unknown asset type: ${assetType}`);
-        return FirestoreService[method](suiteId, assetId, sprintId);
+        console.log('Restore from trash called:', { suiteId, assetType, assetId, sprintId });
+
+        switch (assetType) {
+            case 'testCases':
+                return FirestoreService.archiveTrash.restoreTestCase(suiteId, assetId, sprintId);
+            case 'bugs':
+                return FirestoreService.archiveTrash.restoreBug(suiteId, assetId, sprintId);
+            case 'recordings':
+                return FirestoreService.archiveTrash.restoreRecording(suiteId, assetId, sprintId);
+            case 'sprints':
+                return FirestoreService.archiveTrash.restoreSprint(suiteId, assetId);
+            case 'recommendations':
+                return FirestoreService.archiveTrash.restoreRecommendation(suiteId, assetId, sprintId);
+            default:
+                throw new Error(`Unknown asset type: ${assetType}`);
+        }
     });
 
     const permanentlyDelete = createArchiveOperation((suiteId, assetType, assetId, sprintId = null) => {
-        const methodMap = {
-            testCases: 'permanentlyDeleteTestCase',
-            bugs: 'permanentlyDeleteBug',
-            recordings: 'permanentlyDeleteRecording',
-            sprints: 'permanentlyDeleteSprint',
-            recommendations: 'permanentlyDeleteRecommendation'
-        };
-        const method = methodMap[assetType];
-        if (!method) throw new Error(`Unknown asset type: ${assetType}`);
-        return FirestoreService[method](suiteId, assetId, sprintId);
+        switch (assetType) {
+            case 'testCases':
+                return FirestoreService.archiveTrash.permanentlyDeleteTestCase(suiteId, assetId, sprintId);
+            case 'bugs':
+                return FirestoreService.archiveTrash.permanentlyDeleteBug(suiteId, assetId, sprintId);
+            case 'recordings':
+                return FirestoreService.archiveTrash.permanentlyDeleteRecording(suiteId, assetId, sprintId);
+            case 'sprints':
+                return FirestoreService.archiveTrash.permanentlyDeleteSprint(suiteId, assetId);
+            case 'recommendations':
+                return FirestoreService.archiveTrash.permanentlyDeleteRecommendation(suiteId, assetId, sprintId);
+            default:
+                throw new Error(`Unknown asset type: ${assetType}`);
+        }
     });
 
     const bulkArchive = createArchiveOperation((suiteId, assetType, assetIds, sprintId = null, reason = null) => {
-        return FirestoreService.batchArchiveAssets(suiteId, assetType, assetIds, sprintId, reason);
+        return FirestoreService.archiveTrash.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
     });
 
     const bulkRestore = createArchiveOperation((suiteId, assetType, assetIds, sprintId = null, fromTrash = false) => {
-        return fromTrash 
-            ? FirestoreService.batchRestoreFromTrash(suiteId, assetType, assetIds, sprintId)
-            : FirestoreService.batchRestoreFromArchive(suiteId, assetType, assetIds, sprintId);
+        return FirestoreService.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, fromTrash);
     });
 
     const bulkPermanentDelete = createArchiveOperation((suiteId, assetType, assetIds, sprintId = null) => {
-        return FirestoreService.batchPermanentDeleteAssets(suiteId, assetType, assetIds, sprintId);
+        return FirestoreService.archiveTrash.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
     });
 
     const loadArchivedItems = async (suiteId, assetType, sprintId = null) => {
         try {
-            const result = await FirestoreService.getArchivedItems(suiteId, assetType, sprintId);
+            const result = await FirestoreService.archiveTrash.getArchivedAssets(suiteId, assetType, sprintId);
             if (result.success) {
                 setArchivedItems(prev => ({
                     ...prev,
@@ -225,7 +249,7 @@ export const AppProvider = ({ children }) => {
 
     const loadTrashedItems = async (suiteId, assetType, sprintId = null) => {
         try {
-            const result = await FirestoreService.getTrashedItems(suiteId, assetType, sprintId);
+            const result = await FirestoreService.archiveTrash.getTrashedAssets(suiteId, assetType, sprintId);
             if (result.success) {
                 setTrashedItems(prev => ({
                     ...prev,
@@ -409,31 +433,31 @@ export const AppProvider = ({ children }) => {
 
             // Clear all slices safely
             try { slices.auth.actions.clearAuthState(); } catch (e) { console.warn('Auth clear error:', e.message); }
-            
-            try { 
+
+            try {
                 if (slices.suites.actions.loadSuitesSuccess) {
-                    slices.suites.actions.loadSuitesSuccess([]); 
+                    slices.suites.actions.loadSuitesSuccess([]);
                 }
             } catch (e) { console.warn('Suites clear error:', e.message); }
-            
-            try { 
+
+            try {
                 if (slices.testCases.actions.loadTestCasesSuccess) {
-                    slices.testCases.actions.loadTestCasesSuccess([]); 
+                    slices.testCases.actions.loadTestCasesSuccess([]);
                 }
             } catch (e) { console.warn('TestCases clear error:', e.message); }
-            
-            try { 
+
+            try {
                 if (slices.bugs.actions.loadBugsSuccess) {
-                    slices.bugs.actions.loadBugsSuccess([]); 
+                    slices.bugs.actions.loadBugsSuccess([]);
                 }
             } catch (e) { console.warn('Bugs clear error:', e.message); }
-            
-            try { 
+
+            try {
                 if (slices.recordings.actions.loadRecordingsSuccess) {
-                    slices.recordings.actions.loadRecordingsSuccess([]); 
+                    slices.recordings.actions.loadRecordingsSuccess([]);
                 }
             } catch (e) { console.warn('Recordings clear error:', e.message); }
-            
+
             try { slices.subscription.actions.clearSubscription?.(); } catch (e) { console.warn('Subscription clear error:', e.message); }
             try { slices.team.actions.clearTeam?.(); } catch (e) { console.warn('Team clear error:', e.message); }
             try { slices.automation.actions.clearAutomation?.(); } catch (e) { console.warn('Automation clear error:', e.message); }
@@ -442,9 +466,9 @@ export const AppProvider = ({ children }) => {
 
             // Clear recommendations safely
             if (hasRecommendationsSlice) {
-                try { 
+                try {
                     if (slices.recommendations.actions.clearRecommendations) {
-                        slices.recommendations.actions.clearRecommendations(); 
+                        slices.recommendations.actions.clearRecommendations();
                     }
                 } catch (e) { console.warn('Recommendations clear error:', e.message); }
             }
@@ -675,13 +699,9 @@ export const AppProvider = ({ children }) => {
             !suitesLoaded ||
             !suiteSubscriptionActive
         ) {
-            console.log('Clearing assets - conditions not met:', {
-                authenticated: slices.auth.state.isAuthenticated,
-                activeSuite: !!slices.suites.state.activeSuite?.id,
-                suitesLoaded,
-                suiteSubscriptionActive,
-            });
+            console.log('Clearing assets - conditions not met');
 
+            // Clear existing subscriptions
             Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribe();
@@ -689,37 +709,30 @@ export const AppProvider = ({ children }) => {
             });
             assetUnsubscribersRef.current = {};
 
+            // Clear asset data
             try {
                 if (slices.testCases.actions.loadTestCasesSuccess) {
                     slices.testCases.actions.loadTestCasesSuccess([]);
                 }
-            } catch (e) { console.warn('TestCases clear error:', e.message); }
-            
-            try {
                 if (slices.bugs.actions.loadBugsSuccess) {
                     slices.bugs.actions.loadBugsSuccess([]);
                 }
-            } catch (e) { console.warn('Bugs clear error:', e.message); }
-            
-            try {
                 if (slices.recordings.actions.loadRecordingsSuccess) {
                     slices.recordings.actions.loadRecordingsSuccess([]);
                 }
-            } catch (e) { console.warn('Recordings clear error:', e.message); }
-            
-            if (hasRecommendationsSlice) {
-                try {
-                    if (slices.recommendations.actions.loadRecommendationsSuccess) {
-                        slices.recommendations.actions.loadRecommendationsSuccess([]);
-                    }
-                } catch (e) { console.warn('Recommendations clear error:', e.message); }
+                if (hasRecommendationsSlice && slices.recommendations.actions.loadRecommendationsSuccess) {
+                    slices.recommendations.actions.loadRecommendationsSuccess([]);
+                }
+            } catch (e) {
+                console.warn('Asset clear error:', e.message);
             }
             return;
         }
 
         const suiteId = slices.suites.state.activeSuite.id;
-        console.log('Setting up asset subscriptions for suite:', suiteId);
+        console.log('Setting up FILTERED asset subscriptions for suite:', suiteId);
 
+        // Clear existing subscriptions
         Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
             if (typeof unsubscribe === 'function') {
                 unsubscribe();
@@ -727,31 +740,33 @@ export const AppProvider = ({ children }) => {
         });
         assetUnsubscribersRef.current = {};
 
-        const subscribeAsset = (type, loadSuccess) => {
+        // FIXED: Subscribe with explicit filtering
+        const subscribeAssetWithFiltering = (type, loadSuccess, methodName) => {
             try {
-                const methodName = `subscribeTo${type}`;
                 if (typeof FirestoreService[methodName] !== 'function') {
                     console.error(`FirestoreService.${methodName} is not a function`);
                     loadSuccess([]);
                     return;
                 }
 
+                console.log(`Setting up filtered subscription for ${type}`);
                 assetUnsubscribersRef.current[type] = FirestoreService[methodName](
                     suiteId,
                     (assets) => {
+                        // CRITICAL: Filter out deleted and archived items in real-time
                         const safeAssets = Array.isArray(assets) ? assets : [];
-                        console.log(`${type} loaded:`, safeAssets.length);
-                        loadSuccess(safeAssets);
+                        const activeAssets = safeAssets.filter(asset =>
+                            asset.status !== 'deleted' && asset.status !== 'archived'
+                        );
+
+                        console.log(`${type} update - Total: ${safeAssets.length}, Active: ${activeAssets.length}, Filtered out: ${safeAssets.length - activeAssets.length}`);
+                        loadSuccess(activeAssets);
                     },
                     (error) => {
-                        let actualError = error;
-                        if (!error || (typeof error === 'object' && Object.keys(error).length === 0)) {
-                            actualError = new Error(`Unknown error in ${type} subscription`);
-                        }
+                        console.error(`${type} subscription error:`, error);
+                        const errorMessage = getFirebaseErrorMessage(error);
 
-                        const errorMessage = getFirebaseErrorMessage(actualError);
-
-                        if (actualError?.code !== 'permission-denied') {
+                        if (error?.code !== 'permission-denied') {
                             slices.ui.actions.showNotification?.({
                                 id: `${type.toLowerCase()}-subscription-error`,
                                 type: 'error',
@@ -759,7 +774,6 @@ export const AppProvider = ({ children }) => {
                                 duration: 5000,
                             });
                         }
-
                         loadSuccess([]);
                     }
                 );
@@ -769,36 +783,37 @@ export const AppProvider = ({ children }) => {
             }
         };
 
-        // Subscribe to existing assets
+        // Set up filtered subscriptions
         if (slices.testCases.actions.loadTestCasesSuccess) {
-            subscribeAsset('TestCases', slices.testCases.actions.loadTestCasesSuccess);
+            subscribeAssetWithFiltering('TestCases', slices.testCases.actions.loadTestCasesSuccess, 'subscribeToTestCases');
         }
         if (slices.bugs.actions.loadBugsSuccess) {
-            subscribeAsset('Bugs', slices.bugs.actions.loadBugsSuccess);
+            subscribeAssetWithFiltering('Bugs', slices.bugs.actions.loadBugsSuccess, 'subscribeToBugs');
         }
         if (slices.recordings.actions.loadRecordingsSuccess) {
-            subscribeAsset('Recordings', slices.recordings.actions.loadRecordingsSuccess);
+            subscribeAssetWithFiltering('Recordings', slices.recordings.actions.loadRecordingsSuccess, 'subscribeToRecordings');
+        }
+        if (hasRecommendationsSlice && slices.recommendations.actions.loadRecommendationsSuccess) {
+            subscribeAssetWithFiltering('Recommendations', slices.recommendations.actions.loadRecommendationsSuccess, 'subscribeToRecommendations');
         }
 
-        // For sprints subscription
+        // Sprints subscription with filtering
         try {
-            const methodName = 'subscribeToSprints';
-            if (typeof FirestoreService[methodName] === 'function') {
-                assetUnsubscribersRef.current['Sprints'] = FirestoreService[methodName](
+            if (typeof FirestoreService.subscribeToSprints === 'function') {
+                assetUnsubscribersRef.current['Sprints'] = FirestoreService.subscribeToSprints(
                     suiteId,
                     (sprints) => {
                         const safeSprints = Array.isArray(sprints) ? sprints : [];
-                        console.log('Sprints loaded:', safeSprints.length);
+                        const activeSprints = safeSprints.filter(sprint =>
+                            sprint.status !== 'deleted' && sprint.status !== 'archived'
+                        );
+                        console.log(`Sprints update - Total: ${safeSprints.length}, Active: ${activeSprints.length}`);
+                        // Store sprints if you have a slice for them
                     },
                     (error) => {
-                        let actualError = error;
-                        if (!error || (typeof error === 'object' && Object.keys(error).length === 0)) {
-                            actualError = new Error('Unknown error in Sprints subscription');
-                        }
-
-                        const errorMessage = getFirebaseErrorMessage(actualError);
-
-                        if (actualError?.code !== 'permission-denied') {
+                        console.error('Sprints subscription error:', error);
+                        const errorMessage = getFirebaseErrorMessage(error);
+                        if (error?.code !== 'permission-denied') {
                             slices.ui.actions.showNotification?.({
                                 id: 'sprints-subscription-error',
                                 type: 'error',
@@ -813,13 +828,8 @@ export const AppProvider = ({ children }) => {
             console.error('Error setting up Sprints subscription:', error);
         }
 
-        // Subscribe to recommendations if slice exists
-        if (hasRecommendationsSlice && slices.recommendations.actions.loadRecommendationsSuccess) {
-            subscribeAsset('Recommendations', slices.recommendations.actions.loadRecommendationsSuccess);
-        }
-
         return () => {
-            console.log('Cleaning up asset subscriptions');
+            console.log('Cleaning up filtered asset subscriptions');
             Object.values(assetUnsubscribersRef.current).forEach((unsubscribe) => {
                 if (typeof unsubscribe === 'function') {
                     unsubscribe();
@@ -868,24 +878,116 @@ export const AppProvider = ({ children }) => {
 
     // Enhanced delete methods that use the FirestoreService's soft delete (move to trash)
     const enhancedDeleteTestCase = async (testCaseId, suiteId, sprintId = null) => {
-        return await moveToTrash(suiteId, 'testCases', testCaseId, sprintId, 'User deletion');
+        try {
+            const result = await moveToTrash(suiteId, 'testCases', testCaseId, sprintId, 'User deletion');
+
+            // The real-time subscription in AssetService will automatically filter this out
+            // because it now excludes 'deleted' status by default
+
+            return result;
+        } catch (error) {
+            console.error('Error deleting test case:', error);
+            return { success: false, error: { message: error.message } };
+        }
     };
 
     const enhancedDeleteBug = async (bugId, suiteId, sprintId = null) => {
-        return await moveToTrash(suiteId, 'bugs', bugId, sprintId, 'User deletion');
+        try {
+            const result = await moveToTrash(suiteId, 'bugs', bugId, sprintId, 'User deletion');
+            return result;
+        } catch (error) {
+            console.error('Error deleting bug:', error);
+            return { success: false, error: { message: error.message } };
+        }
     };
 
     const enhancedDeleteRecording = async (recordingId, suiteId, sprintId = null) => {
-        return await moveToTrash(suiteId, 'recordings', recordingId, sprintId, 'User deletion');
+        try {
+            const result = await moveToTrash(suiteId, 'recordings', recordingId, sprintId, 'User deletion');
+            return result;
+        } catch (error) {
+            console.error('Error deleting recording:', error);
+            return { success: false, error: { message: error.message } };
+        }
     };
 
+
     const enhancedDeleteSprint = async (sprintId, suiteId) => {
-        return await moveToTrash(suiteId, 'sprints', sprintId, null, 'User deletion');
+        try {
+            const result = await moveToTrash(suiteId, 'sprints', sprintId, null, 'User deletion');
+            return result;
+        } catch (error) {
+            console.error('Error deleting sprint:', error);
+            return { success: false, error: { message: error.message } };
+        }
     };
 
     const enhancedDeleteRecommendation = async (recommendationId, suiteId, sprintId = null) => {
-        return await moveToTrash(suiteId, 'recommendations', recommendationId, sprintId, 'User deletion');
+        try {
+            const result = await moveToTrash(suiteId, 'recommendations', recommendationId, sprintId, 'User deletion');
+            return result;
+        } catch (error) {
+            console.error('Error deleting recommendation:', error);
+            return { success: false, error: { message: error.message } };
+        }
     };
+
+    const enhancedArchiveTestCase = async (testCaseId, suiteId, sprintId = null, reason = 'User archive') => {
+        console.log('Enhanced archive test case called:', { testCaseId, suiteId, sprintId, reason });
+        try {
+            const result = await archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason);
+            console.log('Archive test case result:', result);
+            return result;
+        } catch (error) {
+            console.error('Error archiving test case:', error);
+            return { success: false, error: { message: error.message } };
+        }
+    };
+
+    const enhancedArchiveBug = async (bugId, suiteId, sprintId = null, reason = 'User archive') => {
+        console.log('Enhanced archive bug called:', { bugId, suiteId, sprintId, reason });
+        try {
+            const result = await archiveItem(suiteId, 'bugs', bugId, sprintId, reason);
+            console.log('Archive bug result:', result);
+            return result;
+        } catch (error) {
+            console.error('Error archiving bug:', error);
+            return { success: false, error: { message: error.message } };
+        }
+    };
+
+    const enhancedArchiveRecording = async (recordingId, suiteId, sprintId = null, reason = 'User archive') => {
+        console.log('Enhanced archive recording called:', { recordingId, suiteId, sprintId, reason });
+        try {
+            const result = await archiveItem(suiteId, 'recordings', recordingId, sprintId, reason);
+            console.log('Archive recording result:', result);
+            return result;
+        } catch (error) {
+            console.error('Error archiving recording:', error);
+            return { success: false, error: { message: error.message } };
+        }
+    };
+
+    const enhancedArchiveSprint = async (sprintId, suiteId, reason = 'User archive') => {
+        try {
+            const result = await archiveItem(suiteId, 'sprints', sprintId, null, reason);
+            return result;
+        } catch (error) {
+            console.error('Error archiving sprint:', error);
+            return { success: false, error: { message: error.message } };
+        }
+    };
+
+    const enhancedArchiveRecommendation = async (recommendationId, suiteId, sprintId = null, reason = 'User archive') => {
+        try {
+            const result = await archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason);
+            return result;
+        } catch (error) {
+            console.error('Error archiving recommendation:', error);
+            return { success: false, error: { message: error.message } };
+        }
+    };
+
 
     // Enhanced organization methods
     const createOrganization = async (orgData) => {
@@ -1042,157 +1144,174 @@ export const AppProvider = ({ children }) => {
     };
 
 
-        // Bulk actions methods
-        const bulkActionMethods = useMemo(() => {
-            // Create a reference object for the current app actions
-            const appActionsRef = {
-                get current() {
-                    return {
-                        testCases: {
-                            ...slices.testCases.actions,
-                            createTestCase: wrappedCreateTestCase,
-                            updateTestCase: wrappedUpdateTestCase,
-                            deleteTestCase: enhancedDeleteTestCase
+    // Bulk actions methods
+    const bulkActionMethods = useMemo(() => {
+        // Create a reference object for the current app actions
+        const appActionsRef = {
+            get current() {
+                return {
+                    testCases: {
+                        ...slices.testCases.actions,
+                        createTestCase: wrappedCreateTestCase,
+                        updateTestCase: wrappedUpdateTestCase,
+                        deleteTestCase: enhancedDeleteTestCase,        // Soft delete to trash
+                        archiveTestCase: enhancedArchiveTestCase       // Archive (stays visible until filtered)
+                    },
+                    bugs: {
+                        ...slices.bugs.actions,
+                        deleteBug: enhancedDeleteBug,                  // Soft delete to trash
+                        archiveBug: enhancedArchiveBug                 // Archive (stays visible until filtered)
+                    },
+                    recordings: {
+                        ...slices.recordings.actions,
+                        saveRecording,
+                        linkRecordingToBug,
+                        deleteRecording: enhancedDeleteRecording,      // Soft delete to trash
+                        archiveRecording: enhancedArchiveRecording     // Archive (stays visible until filtered)
+                    },
+
+                    // UPDATED: Archive actions with debug logging
+                    archive: {
+                        archiveItem: async (suiteId, assetType, assetId, sprintId, reason) => {
+                            console.log('Archive action called from context:', { suiteId, assetType, assetId, sprintId, reason });
+                            const result = await archiveItem(suiteId, assetType, assetId, sprintId, reason);
+                            console.log('Archive action result:', result);
+                            return result;
                         },
-                        bugs: {
-                            ...slices.bugs.actions,
-                            deleteBug: enhancedDeleteBug
+                        unarchiveItem: async (suiteId, assetType, assetId, sprintId) => {
+                            console.log('Unarchive action called from context:', { suiteId, assetType, assetId, sprintId });
+                            const result = await unarchiveItem(suiteId, assetType, assetId, sprintId);
+                            console.log('Unarchive action result:', result);
+                            return result;
                         },
-                        recordings: { 
-                            ...slices.recordings.actions, 
-                            saveRecording, 
-                            linkRecordingToBug,
-                            deleteRecording: enhancedDeleteRecording
+                        moveToTrash,
+                        restoreFromTrash: async (suiteId, assetType, assetId, sprintId) => {
+                            console.log('Restore action called from context:', { suiteId, assetType, assetId, sprintId });
+                            const result = await restoreFromTrash(suiteId, assetType, assetId, sprintId);
+                            console.log('Restore action result:', result);
+                            return result;
                         },
-                        sprints: {
-                            ...slices.sprints.actions,
-                            deleteSprint: enhancedDeleteSprint
+                        permanentlyDelete,
+                        bulkArchive,
+                        bulkRestore,
+                        bulkPermanentDelete,
+                        loadArchivedItems: async (suiteId, assetType, sprintId) => {
+                            console.log('Load archived items called:', { suiteId, assetType, sprintId });
+                            const result = await loadArchivedItems(suiteId, assetType, sprintId);
+                            console.log('Load archived result:', result);
+                            return result;
                         },
-                        recommendations: {
-                            createRecommendation,
-                            updateRecommendation,
-                            deleteRecommendation: enhancedDeleteRecommendation,
-                            voteOnRecommendation,
-                            addComment,
-                            removeComment,
+                        loadTrashedItems: async (suiteId, assetType, sprintId) => {
+                            console.log('Load trashed items called:', { suiteId, assetType, sprintId });
+                            const result = await loadTrashedItems(suiteId, assetType, sprintId);
+                            console.log('Load trashed result:', result);
+                            return result;
                         },
-                        archive: {
-                            archiveItem,
-                            unarchiveItem,
-                            moveToTrash,
-                            restoreFromTrash,
-                            permanentlyDelete,
-                            bulkArchive,
-                            bulkRestore,
-                            bulkPermanentDelete,
-                            archiveTestCase: (suiteId, testCaseId, sprintId, reason) => 
-                                archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason),
-                            archiveBug: (suiteId, bugId, sprintId, reason) => 
-                                archiveItem(suiteId, 'bugs', bugId, sprintId, reason),
-                            archiveRecording: (suiteId, recordingId, sprintId, reason) => 
-                                archiveItem(suiteId, 'recordings', recordingId, sprintId, reason),
-                            archiveSprint: (suiteId, sprintId, reason) => 
-                                archiveItem(suiteId, 'sprints', sprintId, null, reason),
-                            archiveRecommendation: (suiteId, recommendationId, sprintId, reason) => 
-                                archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason),
-                        },
-                        reports: {
-                            getReports,
-                            saveReport,
-                            deleteReport,
-                            generatePDF,
-                        },
-                        ui: slices.ui.actions
-                    };
+
+                        // Direct convenience methods
+                        archiveTestCase: enhancedArchiveTestCase,
+                        archiveBug: enhancedArchiveBug,
+                        archiveRecording: enhancedArchiveRecording,
+                        archiveSprint: enhancedArchiveSprint,
+                        archiveRecommendation: enhancedArchiveRecommendation    
+                    },
+                    reports: {
+                        getReports,
+                        saveReport,
+                        deleteReport,
+                        generatePDF,
+                    },
+                    ui: slices.ui.actions
+                };
+            }
+        };
+
+        return {
+            registerPageBulkActions: (pageType, onBulkAction) => {
+                setBulkActions(prev => ({
+                    ...prev,
+                    currentPageType: pageType,
+                    onBulkAction
+                }));
+            },
+
+            updateBulkSelection: (items) => {
+                setBulkActions(prev => ({
+                    ...prev,
+                    selectedItems: Array.isArray(items) ? items : []
+                }));
+            },
+
+            clearBulkSelection: () => {
+                setBulkActions(prev => ({
+                    ...prev,
+                    selectedItems: []
+                }));
+            },
+
+            executeBulkAction: async (actionId, items) => {
+                const { currentPageType, onBulkAction } = bulkActions;
+
+                // Use custom bulk action handler if provided
+                if (onBulkAction) {
+                    await onBulkAction(actionId, items);
+                    return;
                 }
-            };
-    
-            return {
-                registerPageBulkActions: (pageType, onBulkAction) => {
-                    setBulkActions(prev => ({
-                        ...prev,
-                        currentPageType: pageType,
-                        onBulkAction
-                    }));
-                },
-    
-                updateBulkSelection: (items) => {
-                    setBulkActions(prev => ({
-                        ...prev,
-                        selectedItems: Array.isArray(items) ? items : []
-                    }));
-                },
-    
-                clearBulkSelection: () => {
-                    setBulkActions(prev => ({
-                        ...prev,
-                        selectedItems: []
-                    }));
-                },
-    
-                executeBulkAction: async (actionId, items) => {
-                    const { currentPageType, onBulkAction } = bulkActions;
-                    
-                    // Use custom bulk action handler if provided
-                    if (onBulkAction) {
-                        await onBulkAction(actionId, items);
-                        return;
-                    }
-    
-                    // Use default bulk action handlers
-                    const activeSuite = slices.suites.state.activeSuite;
-                    if (!activeSuite) {
-                        slices.ui.actions.showNotification?.({
-                            id: 'bulk-no-suite',
-                            type: 'error',
-                            message: 'No active suite selected',
-                            duration: 3000,
-                        });
-                        return;
-                    }
-    
-                    const bulkHandlers = createBulkActionHandlers(appActionsRef.current, activeSuite);
-                    const handler = bulkHandlers[currentPageType];
-                    
-                    if (handler) {
-                        await handler(actionId, items);
-                    } else {
-                        console.warn(`No bulk action handler for page type: ${currentPageType}`);
-                        slices.ui.actions.showNotification?.({
-                            id: 'bulk-unsupported',
-                            type: 'warning',
-                            message: `Bulk actions not supported for ${currentPageType}`,
-                            duration: 3000,
-                        });
-                    }
+
+                // Use default bulk action handlers
+                const activeSuite = slices.suites.state.activeSuite;
+                if (!activeSuite) {
+                    slices.ui.actions.showNotification?.({
+                        id: 'bulk-no-suite',
+                        type: 'error',
+                        message: 'No active suite selected',
+                        duration: 3000,
+                    });
+                    return;
                 }
-            };
-        }, [
-            bulkActions,
-            slices,
-            wrappedCreateTestCase,
-            wrappedUpdateTestCase,
-            saveRecording,
-            linkRecordingToBug,
-            createRecommendation,
-            updateRecommendation,
-            voteOnRecommendation,
-            addComment,
-            removeComment,
-            archiveItem,
-            unarchiveItem,
-            moveToTrash,
-            restoreFromTrash,
-            permanentlyDelete,
-            bulkArchive,
-            bulkRestore,
-            bulkPermanentDelete,
-            getReports,
-            saveReport,
-            deleteReport,
-            generatePDF
-        ]);
-    
+
+                const bulkHandlers = createBulkActionHandlers(appActionsRef.current, activeSuite);
+                const handler = bulkHandlers[currentPageType];
+
+                if (handler) {
+                    await handler(actionId, items);
+                } else {
+                    console.warn(`No bulk action handler for page type: ${currentPageType}`);
+                    slices.ui.actions.showNotification?.({
+                        id: 'bulk-unsupported',
+                        type: 'warning',
+                        message: `Bulk actions not supported for ${currentPageType}`,
+                        duration: 3000,
+                    });
+                }
+            }
+        };
+    }, [
+        bulkActions,
+        slices,
+        wrappedCreateTestCase,
+        wrappedUpdateTestCase,
+        saveRecording,
+        linkRecordingToBug,
+        createRecommendation,
+        updateRecommendation,
+        voteOnRecommendation,
+        addComment,
+        removeComment,
+        archiveItem,
+        unarchiveItem,
+        moveToTrash,
+        restoreFromTrash,
+        permanentlyDelete,
+        bulkArchive,
+        bulkRestore,
+        bulkPermanentDelete,
+        getReports,
+        saveReport,
+        deleteReport,
+        generatePDF
+    ]);
+
 
     // Asset counts functionality
     const getAssetCounts = async (suiteId) => {
@@ -1235,9 +1354,9 @@ export const AppProvider = ({ children }) => {
                     ...slices.bugs.actions,
                     deleteBug: enhancedDeleteBug
                 },
-                recordings: { 
-                    ...slices.recordings.actions, 
-                    saveRecording, 
+                recordings: {
+                    ...slices.recordings.actions,
+                    saveRecording,
                     linkRecordingToBug,
                     deleteRecording: enhancedDeleteRecording
                 },
@@ -1251,7 +1370,7 @@ export const AppProvider = ({ children }) => {
                 ui: slices.ui.actions,
                 ai: { ...slices.ai.actions, generateTestCasesWithAI, getAIAnalytics, updateAISettings },
                 theme: { ...slices.theme.actions, setTheme, toggleTheme },
-                
+
                 // Organization actions
                 organization: {
                     createOrganization,
@@ -1273,7 +1392,7 @@ export const AppProvider = ({ children }) => {
                     toggleSchedule: FirestoreService.reports.toggleSchedule.bind(FirestoreService.reports),
                     subscribeToTriggers: FirestoreService.reports.subscribeToTriggers.bind(FirestoreService.reports),
                 },
-                
+
                 // Recommendations actions (with fallbacks if slice doesn't exist)
                 recommendations: {
                     createRecommendation,
@@ -1306,15 +1425,15 @@ export const AppProvider = ({ children }) => {
                     cleanupExpiredItems,
                     getAssetCounts,
                     // Convenience methods
-                    archiveTestCase: (suiteId, testCaseId, sprintId, reason) => 
+                    archiveTestCase: (suiteId, testCaseId, sprintId, reason) =>
                         archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason),
-                    archiveBug: (suiteId, bugId, sprintId, reason) => 
+                    archiveBug: (suiteId, bugId, sprintId, reason) =>
                         archiveItem(suiteId, 'bugs', bugId, sprintId, reason),
-                    archiveRecording: (suiteId, recordingId, sprintId, reason) => 
+                    archiveRecording: (suiteId, recordingId, sprintId, reason) =>
                         archiveItem(suiteId, 'recordings', recordingId, sprintId, reason),
-                    archiveSprint: (suiteId, sprintId, reason) => 
+                    archiveSprint: (suiteId, sprintId, reason) =>
                         archiveItem(suiteId, 'sprints', sprintId, null, reason),
-                    archiveRecommendation: (suiteId, recommendationId, sprintId, reason) => 
+                    archiveRecommendation: (suiteId, recommendationId, sprintId, reason) =>
                         archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason),
                 },
 
@@ -1342,7 +1461,7 @@ export const AppProvider = ({ children }) => {
 
                 clearState,
             },
-            
+
             // Direct state access for convenience
             isAuthenticated: slices.auth.state.isAuthenticated,
             currentUser: slices.auth.state.currentUser,
@@ -1464,9 +1583,9 @@ export const AppProvider = ({ children }) => {
 
     return (
         <AppContext.Provider value={value}>
-          {children}
+            {children}
         </AppContext.Provider>
-      )
+    )
 };
 
 export const useApp = () => {

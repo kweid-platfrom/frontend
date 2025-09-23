@@ -7,9 +7,9 @@ import { FilterControls } from '../../components/archiveTrash/FilterControls';
 import { EmptyState } from '../../components/archiveTrash/EmptyState';
 
 const ArchiveTrashPage = () => {
-  const { 
-    actions, 
-    activeSuite, 
+  const {
+    actions,
+    activeSuite,
     isAuthenticated
   } = useApp();
 
@@ -37,7 +37,7 @@ const ArchiveTrashPage = () => {
   const loadData = useCallback(async () => {
     const currentSuiteId = suiteIdRef.current;
     const currentActions = actionsRef.current;
-    
+
     if (!isAuthenticated || !currentSuiteId) {
       setLocalArchivedItems([]);
       setLocalTrashedItems([]);
@@ -48,19 +48,19 @@ const ArchiveTrashPage = () => {
     setIsLoading(true);
     setError(null);
     setDataLoaded(false);
-    
+
     try {
       console.log('Loading archive/trash data for suite:', currentSuiteId);
-      
+
       const assetTypes = ['testCases', 'bugs', 'recordings', 'sprints'];
       const results = { archived: [], trashed: [] };
-      
+
       // Load each asset type individually with better error handling
       for (const assetType of assetTypes) {
         try {
           console.log(`Loading archived ${assetType}...`);
           const archivedResult = await currentActions.archive.loadArchivedItems(currentSuiteId, assetType);
-          
+
           if (archivedResult?.success && Array.isArray(archivedResult.data)) {
             const items = archivedResult.data.map(item => ({
               ...item,
@@ -75,7 +75,7 @@ const ArchiveTrashPage = () => {
 
           console.log(`Loading trashed ${assetType}...`);
           const trashedResult = await currentActions.archive.loadTrashedItems(currentSuiteId, assetType);
-          
+
           if (trashedResult?.success && Array.isArray(trashedResult.data)) {
             const items = trashedResult.data.map(item => ({
               ...item,
@@ -112,7 +112,7 @@ const ArchiveTrashPage = () => {
       setLocalArchivedItems([]);
       setLocalTrashedItems([]);
       setDataLoaded(true);
-      
+
       // Only show notification if it's not a permission error
       if (!error.message?.includes('permission') && !error.message?.includes('access')) {
         currentActions.ui?.showNotification?.({
@@ -130,13 +130,13 @@ const ArchiveTrashPage = () => {
   // Load data effect with stable dependencies
   useEffect(() => {
     let mounted = true;
-    
+
     const loadDataAsync = async () => {
       if (mounted) {
         await loadData();
       }
     };
-    
+
     // Only load if we have both authentication and suite ID
     if (isAuthenticated && suiteId) {
       loadDataAsync();
@@ -147,7 +147,7 @@ const ArchiveTrashPage = () => {
       setDataLoaded(true);
       setError(null);
     }
-    
+
     return () => {
       mounted = false;
     };
@@ -158,9 +158,9 @@ const ArchiveTrashPage = () => {
     setSelectedItems([]);
   }, [activeTab]);
 
-  const currentItems = useMemo(() => 
+  const currentItems = useMemo(() =>
     activeTab === 'archived' ? localArchivedItems : localTrashedItems
-  , [activeTab, localArchivedItems, localTrashedItems]);
+    , [activeTab, localArchivedItems, localTrashedItems]);
 
   const filteredItems = useMemo(() => {
     if (!Array.isArray(currentItems)) return [];
@@ -178,8 +178,8 @@ const ArchiveTrashPage = () => {
     if (showExpiredOnly) {
       items = items.filter(item => {
         try {
-          const retentionDate = activeTab === 'archived' 
-            ? item.archive_retention_until 
+          const retentionDate = activeTab === 'archived'
+            ? item.archive_retention_until
             : item.delete_retention_until;
           if (!retentionDate) return false;
           const retentionDateObj = retentionDate?.toDate ? retentionDate.toDate() : new Date(retentionDate);
@@ -195,11 +195,11 @@ const ArchiveTrashPage = () => {
 
   const expiredCount = useMemo(() => {
     if (!Array.isArray(filteredItems)) return 0;
-    
+
     return filteredItems.filter(item => {
       try {
-        const retentionDate = activeTab === 'archived' 
-          ? item.archive_retention_until 
+        const retentionDate = activeTab === 'archived'
+          ? item.archive_retention_until
           : item.delete_retention_until;
         if (!retentionDate) return false;
         const retentionDateObj = retentionDate?.toDate ? retentionDate.toDate() : new Date(retentionDate);
@@ -211,8 +211,8 @@ const ArchiveTrashPage = () => {
   }, [filteredItems, activeTab]);
 
   const handleSelectItem = useCallback((itemId) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
+    setSelectedItems(prev =>
+      prev.includes(itemId)
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId]
     );
@@ -220,8 +220,8 @@ const ArchiveTrashPage = () => {
 
   const handleSelectAll = useCallback(() => {
     setSelectedItems(prev =>
-      prev.length === filteredItems.length 
-        ? [] 
+      prev.length === filteredItems.length
+        ? []
         : filteredItems.map(item => item.id)
     );
   }, [filteredItems]);
@@ -238,29 +238,31 @@ const ArchiveTrashPage = () => {
   const handleRestore = useCallback(async (item) => {
     const currentSuiteId = suiteIdRef.current;
     const currentActions = actionsRef.current;
-    
+
     if (!currentSuiteId || !item?.id) return;
 
     try {
       const result = activeTab === 'archived'
-        ? await currentActions.archive.unarchiveItem(currentSuiteId, item.type, item.id)
-        : await currentActions.archive.restoreFromTrash(currentSuiteId, item.type, item.id);
-      
+        ? await currentActions.archive.unarchiveItem(currentSuiteId, item.type, item.id, item.sprint_id)
+        : await currentActions.archive.restoreFromTrash(currentSuiteId, item.type, item.id, item.sprint_id);
+
       if (result?.success) {
         removeFromLocalState(item.id);
         currentActions.ui?.showNotification?.({
           id: `restore-${item.id}`,
           type: 'success',
-          message: `Item restored successfully`,
+          message: `${item.type.slice(0, -1)} restored successfully`,
           duration: 3000,
         });
+      } else {
+        throw new Error(result?.error?.message || 'Restore operation failed');
       }
     } catch (error) {
       console.error('Failed to restore item:', error);
       actionsRef.current.ui?.showNotification?.({
         id: 'restore-error',
         type: 'error',
-        message: 'Failed to restore item',
+        message: `Failed to restore item: ${error.message}`,
         duration: 5000,
       });
     }
@@ -269,29 +271,31 @@ const ArchiveTrashPage = () => {
   const handlePermanentDelete = useCallback(async (item) => {
     const currentSuiteId = suiteIdRef.current;
     const currentActions = actionsRef.current;
-    
+
     if (!currentSuiteId || !item?.id) return;
 
-    const itemName = item.name || item.title || `${item.type} #${item.id}`;
+    const itemName = item.name || item.title || `${item.type.slice(0, -1)} #${item.id}`;
     if (!window.confirm(`Permanently delete "${itemName}"? This cannot be undone.`)) return;
 
     try {
-      const result = await currentActions.archive.permanentlyDelete(currentSuiteId, item.type, item.id);
+      const result = await currentActions.archive.permanentlyDelete(currentSuiteId, item.type, item.id, item.sprint_id);
       if (result?.success) {
         removeFromLocalState(item.id);
         currentActions.ui?.showNotification?.({
           id: `delete-${item.id}`,
           type: 'success',
-          message: `Item permanently deleted`,
+          message: `${item.type.slice(0, -1)} permanently deleted`,
           duration: 3000,
         });
+      } else {
+        throw new Error(result?.error?.message || 'Delete operation failed');
       }
     } catch (error) {
       console.error('Failed to delete item:', error);
       actionsRef.current.ui?.showNotification?.({
         id: 'delete-error',
         type: 'error',
-        message: 'Failed to permanently delete item',
+        message: `Failed to permanently delete item: ${error.message}`,
         duration: 5000,
       });
     }
@@ -324,7 +328,7 @@ const ArchiveTrashPage = () => {
           <p className="text-red-800 text-sm">
             Error loading data: {error}
           </p>
-          <button 
+          <button
             onClick={loadData}
             className="mt-2 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
           >
@@ -342,11 +346,10 @@ const ArchiveTrashPage = () => {
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              activeTab === key
-                ? `bg-${color}-50 text-${color}-700 border-b-2 border-${color}-700 dark:bg-${color}-900/20 dark:text-${color}-300`
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-            }`}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === key
+              ? `bg-${color}-50 text-${color}-700 border-b-2 border-${color}-700 dark:bg-${color}-900/20 dark:text-${color}-300`
+              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              }`}
             type="button"
           >
             <div className="flex items-center space-x-2">
@@ -380,8 +383,8 @@ const ArchiveTrashPage = () => {
       )}
 
       {!isLoading && dataLoaded && filteredItems.length === 0 && !error && (
-        <EmptyState 
-          type="items" 
+        <EmptyState
+          type="items"
           activeTab={activeTab}
           hasFilters={searchTerm || filterType !== 'all' || showExpiredOnly}
         />
@@ -410,7 +413,7 @@ const ArchiveTrashPage = () => {
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <p className="font-medium mb-1">Retention Policy</p>
             <p>
-              Archived items are kept for 1 year, deleted items are kept for 30 days. 
+              Archived items are kept for 1 year, deleted items are kept for 30 days.
               After the retention period expires, items will be permanently deleted and cannot be recovered.
             </p>
           </div>
