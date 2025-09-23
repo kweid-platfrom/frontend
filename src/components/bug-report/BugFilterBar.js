@@ -43,7 +43,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
             assignee: 'all',
             reporter: 'all',
             tags: [],
-            search: ''
+            search: '',
+            lastUpdated: 'all',
+            bugType: 'all'
         });
     };
 
@@ -54,7 +56,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                filters.assignee !== 'all' || 
                filters.reporter !== 'all' || 
                (filters.tags && filters.tags.length > 0) || 
-               filters.search !== '';
+               filters.search !== '' ||
+               filters.lastUpdated !== 'all' ||
+               filters.bugType !== 'all';
     };
 
     const getActiveFiltersCount = () => {
@@ -66,6 +70,8 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
         if (filters.reporter !== 'all') count++;
         if (filters.tags && filters.tags.length > 0) count++;
         if (filters.search !== '') count++;
+        if (filters.lastUpdated !== 'all') count++;
+        if (filters.bugType !== 'all') count++;
         return count;
     };
 
@@ -663,6 +669,30 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         <button
                                             onClick={() => handleFilterChange('reporter', 'all')}
                                             className="ml-1 text-indigo-600 hover:text-indigo-800"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                )}
+                                
+                                {filters.lastUpdated !== 'all' && (
+                                    <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
+                                        Last Updated: {filters.lastUpdated}
+                                        <button
+                                            onClick={() => handleFilterChange('lastUpdated', 'all')}
+                                            className="ml-1 text-orange-600 hover:text-orange-800"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                )}
+                                
+                                {filters.bugType !== 'all' && (
+                                    <span className="inline-flex items-center px-2 py-1 bg-pink-100 text-pink-800 text-xs rounded-full">
+                                        Bug Type: {filters.bugType}
+                                        <button
+                                            onClick={() => handleFilterChange('bugType', 'all')}
+                                            className="ml-1 text-pink-600 hover:text-pink-800"
                                         >
                                             ×
                                         </button>

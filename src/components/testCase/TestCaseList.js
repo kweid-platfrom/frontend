@@ -1,454 +1,553 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { toast } from 'sonner';
+import { useApp } from '@/context/AppProvider';
 import {
-    Edit3,
-    Copy,
-    Trash2,
-    Play,
-    Eye,
     CheckSquare,
     Square,
     ChevronUp,
     ChevronDown,
+    Bot,
+    User,
+    MessageSquare,
+    CheckCircle,
+    XCircle,
+    Shield,
+    Clock,
+    Filter,
+    ArrowUpDown,
+    Play,
+    Calendar,
+    User as UserIcon,
+    Tag,
+    Settings,
+    MoreHorizontal,
+    Eye,
 } from 'lucide-react';
-
-const MultiSelectDropdown = ({ options, value = [], onChange, placeholder }) => {
-    const [isOpen, setIsOpen] = useState(false);
-
-    const validOptions = Array.isArray(options) ? options.filter((opt) => opt?.value && opt?.label) : [];
-
-    const handleToggle = (optionValue) => {
-        const newValue = value.includes(optionValue)
-            ? value.filter((v) => v !== optionValue)
-            : [...value, optionValue];
-        onChange(newValue);
-    };
-
-    return (
-        <div className="relative w-full">
-            <div
-                className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer w-full bg-white flex items-center justify-between"
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                <span className="truncate">
-                    {value.length > 0 && validOptions.length > 0
-                        ? value.map((v) => validOptions.find((o) => o.value === v)?.label).filter(Boolean).join(', ')
-                        : placeholder}
-                </span>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
-            </div>
-            {isOpen && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
-                    {validOptions.length > 0 ? (
-                        validOptions.map((option) => (
-                            <div
-                                key={option.value}
-                                className="flex items-center px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
-                                onClick={() => handleToggle(option.value)}
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={value.includes(option.value)}
-                                    onChange={() => { }}
-                                    className="mr-2"
-                                />
-                                <span className="truncate">{option.label}</span>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="px-3 py-2 text-xs text-gray-500">No bugs available</div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
+import MultiSelectDropdown from '../MultiSelectDropdown';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import Pagination from '../common/Pagination';
+import TestCaseSideModal from '../testCase/TestCaseSideModal';
 
 const TestCaseList = ({
     testCases = [],
     bugs = [],
-    relationships = {},
-    filters = {},
+    relationships = { testCaseToBugs: {} },
     loading,
     onEdit,
-    onDelete,
-    onDuplicate,
     onBulkAction,
-    onView,
-    onRun,
+    selectedTestCases,
+    onSelectTestCases,
     onLinkBug,
+    onUpdateExecutionStatus,
 }) => {
-    const [selectedIds, setSelectedIds] = useState([]);
+    const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
+    const [sideModalOpen, setSideModalOpen] = useState(false);
+    const [selectedTestCase, setSelectedTestCase] = useState(null);
+    const [showSortMenu, setShowSortMenu] = useState(false);
 
-    const handleSelectAll = (checked) => {
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    const handleSelectAll = useCallback((checked) => {
         if (checked) {
-            setSelectedIds(testCases.map((tc) => tc.id));
-            toast.info(`Selected all ${testCases.length} test cases`);
+            onSelectTestCases(testCases.map((tc) => tc.id));
         } else {
-            setSelectedIds([]);
-            toast.info('Cleared selection');
+            onSelectTestCases([]);
         }
-    };
+    }, [testCases, onSelectTestCases]);
 
-    const handleSelectItem = (id, checked) => {
+    const handleSelectItem = useCallback((id, checked) => {
         if (checked) {
-            setSelectedIds((prev) => {
-                const newSelection = [...prev, id];
-                if (newSelection.length === 1) {
-                    toast.info('1 test case selected');
+            onSelectTestCases([...selectedTestCases, id]);
+        } else {
+            onSelectTestCases(selectedTestCases.filter((selectedId) => selectedId !== id));
+        }
+    }, [selectedTestCases, onSelectTestCases]);
+
+    const handleSort = useCallback((key) => {
+        setSortConfig((prev) => ({
+            key,
+            direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+        }));
+        setCurrentPage(1);
+        setShowSortMenu(false);
+    }, []);
+
+    const sortedTestCases = useMemo(() => {
+        return [...testCases].sort((a, b) => {
+            if (sortConfig.key) {
+                const aValue = a[sortConfig.key];
+                const bValue = b[sortConfig.key];
+                if (sortConfig.key === 'updated_at' || sortConfig.key === 'lastExecuted') {
+                    const aDate = aValue instanceof Date ? aValue : new Date(aValue);
+                    const bDate = bValue instanceof Date ? bValue : new Date(bValue);
+                    if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
+                    if (isNaN(aDate.getTime())) return 1;
+                    if (isNaN(bDate.getTime())) return -1;
+                    return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
                 }
-                return newSelection;
-            });
-        } else {
-            setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id));
-        }
-    };
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'asc' ? 1 : -1;
+                }
+            }
+            return 0;
+        });
+    }, [testCases, sortConfig]);
 
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-        toast.info(`Sorted by ${key} (${direction}ending)`);
-    };
+    // Pagination calculations
+    const totalItems = sortedTestCases.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedTestCases = sortedTestCases.slice(startIndex, endIndex);
 
-    // Apply filters to test cases
-    const filteredTestCases = testCases.filter((testCase) => {
-        const matchesStatus = filters.status === 'all' || testCase.status === filters.status;
-        const matchesPriority = filters.priority === 'all' || testCase.priority === filters.priority;
-        const matchesAssignee = filters.assignee === 'all' || testCase.assignee === filters.assignee || (!testCase.assignee && filters.assignee === '');
-        const matchesTags = !filters.tags || filters.tags.length === 0 || (testCase.tags && filters.tags.every((tag) => testCase.tags.includes(tag)));
-        const matchesSearch = !filters.search || testCase.title.toLowerCase().includes(filters.search.toLowerCase());
-        const matchesExecutionType = !filters.executionType || filters.executionType === 'all' || testCase.executionType === filters.executionType;
-        const matchesAutomationStatus = !filters.automationStatus || filters.automationStatus === 'all' || testCase.automationStatus === filters.automationStatus;
-        const matchesLastUpdated = !filters.lastUpdated || filters.lastUpdated === 'all' || (() => {
-            const updatedAt = new Date(testCase.updated_at);
-            const now = new Date();
-            if (filters.lastUpdated === 'today') return updatedAt.toDateString() === now.toDateString();
-            if (filters.lastUpdated === 'week') return updatedAt >= new Date(now.setDate(now.getDate() - 7));
-            if (filters.lastUpdated === 'month') return updatedAt >= new Date(now.setDate(now.getDate() - 30));
-            if (filters.lastUpdated === 'quarter') return updatedAt >= new Date(now.setDate(now.getDate() - 90));
-            return true;
-        })();
+    const handlePageChange = useCallback((page) => {
+        setCurrentPage(page);
+    }, []);
+
+    const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
+        setItemsPerPage(newItemsPerPage);
+        setCurrentPage(1);
+    }, []);
+
+    const handleChatClick = useCallback((testCase) => {
+        setSelectedTestCase(testCase);
+        setSideModalOpen(true);
+    }, []);
+
+    const handleSideModalClose = useCallback(() => {
+        setSideModalOpen(false);
+        setSelectedTestCase(null);
+    }, []);
+
+    const handleSideModalSave = useCallback((updatedTestCase) => {
+        if (onEdit) {
+            onEdit(updatedTestCase);
+        }
+        setSideModalOpen(false);
+        setSelectedTestCase(null);
+    }, [onEdit]);
+
+    const handleExecutionStatusChange = useCallback((testCaseId, status) => {
+        if (onUpdateExecutionStatus) {
+            onUpdateExecutionStatus(testCaseId, status);
+        }
+    }, [onUpdateExecutionStatus]);
+
+    const getStatusBadge = useCallback((status) => {
+        const statusConfig = {
+            active: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+            draft: 'bg-amber-50 text-amber-700 border border-amber-200',
+            archived: 'bg-slate-50 text-slate-700 border border-slate-200',
+            deprecated: 'bg-rose-50 text-rose-700 border border-rose-200',
+        };
+        return statusConfig[status?.toLowerCase()] || 'bg-slate-50 text-slate-700 border border-slate-200';
+    }, []);
+
+    const getPriorityBadge = useCallback((priority) => {
+        const priorityConfig = {
+            high: 'bg-rose-50 text-rose-700 border border-rose-200',
+            medium: 'bg-amber-50 text-amber-700 border border-amber-200',
+            low: 'bg-blue-50 text-blue-700 border border-blue-200',
+        };
+        return priorityConfig[priority?.toLowerCase()] || 'bg-slate-50 text-slate-700 border border-slate-200';
+    }, []);
+
+    const getSeverityBadge = useCallback((severity) => {
+        const severityConfig = {
+            critical: 'bg-red-50 text-red-700 border border-red-200',
+            high: 'bg-orange-50 text-orange-700 border border-orange-200',
+            medium: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+            low: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+        };
+        return severityConfig[severity?.toLowerCase()] || 'bg-slate-50 text-slate-700 border border-slate-200';
+    }, []);
+
+    const getExecutionStatusBadge = useCallback((status) => {
+        const statusConfig = {
+            passed: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: CheckCircle },
+            failed: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: XCircle },
+            blocked: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: Shield },
+            not_executed: { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', icon: Clock },
+        };
+        const config = statusConfig[status] || statusConfig.not_executed;
+        const IconComponent = config.icon;
 
         return (
-            matchesStatus &&
-            matchesPriority &&
-            matchesAssignee &&
-            matchesTags &&
-            matchesSearch &&
-            matchesExecutionType &&
-            matchesAutomationStatus &&
-            matchesLastUpdated
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${config.bg} ${config.text} ${config.border}`}>
+                <IconComponent className="w-3.5 h-3.5" />
+                <span>{status?.replace('_', ' ') || 'Not Executed'}</span>
+            </div>
         );
-    });
+    }, []);
 
-    const sortedTestCases = [...filteredTestCases].sort((a, b) => {
-        if (sortConfig.key) {
-            const aValue = a[sortConfig.key];
-            const bValue = b[sortConfig.key];
-            if (sortConfig.key === 'updated_at') {
-                const aDate = aValue instanceof Date ? aValue : new Date(aValue);
-                const bDate = bValue instanceof Date ? bValue : new Date(bValue);
-                if (isNaN(aDate.getTime()) && isNaN(bDate.getTime())) return 0;
-                if (isNaN(aDate.getTime())) return 1;
-                if (isNaN(bDate.getTime())) return -1;
-                return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
-            }
-            if (aValue < bValue) {
-                return sortConfig.direction === 'asc' ? -1 : 1;
-            }
-            if (aValue > bValue) {
-                return sortConfig.direction === 'asc' ? 1 : -1;
-            }
-        }
-        return 0;
-    });
-
-    const handleDelete = (testCaseId, testCaseTitle) => {
-        toast.custom(
-            (t) => (
-                <div className="flex flex-col gap-2 p-4 bg-white border border-gray-300 rounded-lg shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                        <span className="font-medium text-gray-900">Delete Test Case</span>
-                    </div>
-                    <p className="text-sm text-gray-600">Are you sure you want to delete `{testCaseTitle}`?</p>
-                    <div className="flex gap-2 mt-2">
-                        <button
-                            onClick={() => {
-                                toast.dismiss(t);
-                                if (onDelete) onDelete(testCaseId);
-                            }}
-                            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                        >
-                            Delete
-                        </button>
-                        <button
-                            onClick={() => toast.dismiss(t)}
-                            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                        >
-                            Cancel
-                        </button>
-                    </div>
+    const getAutomationBadge = useCallback((isAutomated) => {
+        if (isAutomated) {
+            return (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border bg-indigo-50 text-indigo-700 border-indigo-200">
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>Automated</span>
                 </div>
-            ),
-            { duration: Infinity }
-        );
-    };
-
-    const handleDuplicate = (testCase) => {
-        if (onDuplicate) onDuplicate(testCase);
-    };
-
-    const handleBulkActionClick = (action) => {
-        if (onBulkAction) onBulkAction(action, selectedIds);
-    };
-
-    const getStatusBadge = (status) => {
-        const statusConfig = {
-            active: 'bg-green-100 text-green-800 border-green-200',
-            draft: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            archived: 'bg-gray-100 text-gray-800 border-gray-200',
-            deprecated: 'bg-red-100 text-red-800 border-red-200',
-        };
-        return statusConfig[status] || 'bg-gray-100 text-gray-800 border-gray-200';
-    };
-
-    const getPriorityBadge = (priority) => {
-        const priorityConfig = {
-            high: 'bg-red-100 text-red-800 border-red-200',
-            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            low: 'bg-blue-100 text-blue-800 border-blue-200',
-        };
-        return priorityConfig[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
-    };
-
-    const getSortIcon = (columnKey) => {
-        if (sortConfig.key !== columnKey) {
-            return <ChevronUp className="w-3 h-3 text-gray-400" />;
+            );
         }
-        return sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-3 h-3 text-gray-600" />
-        ) : (
-            <ChevronDown className="w-3 h-3 text-gray-600" />
+        return (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200">
+                <User className="w-3.5 h-3.5" />
+                <span>Manual</span>
+            </div>
         );
-    };
+    }, []);
 
-    const isValidDate = (date) => {
+    const isValidDate = useCallback((date) => {
         return date instanceof Date && !isNaN(date.getTime());
-    };
+    }, []);
 
-    const bugOptions = Array.isArray(bugs)
-        ? bugs.map((bug) => ({
-            value: bug.id || bug.bugId || `bug_${Math.random().toString(36).slice(2)}`,
-            label: bug.title || `Bug ${bug.id?.slice(-6) || bug.bugId?.slice(-6) || 'Unknown'}`,
-        }))
-        : [];
+    const bugOptions = useMemo(() =>
+        Array.isArray(bugs)
+            ? bugs.map((bug) => ({
+                value: bug.id || `bug_${Math.random().toString(36).slice(2)}`,
+                label: bug.title || `Bug ${bug.id?.slice(-6) || 'Unknown'}`,
+            }))
+            : [],
+        [bugs]
+    );
+
+    const isAllSelected = selectedTestCases.length === testCases.length && testCases.length > 0;
+
+    const sortOptions = [
+        { key: 'title', label: 'Title' },
+        { key: 'status', label: 'Status' },
+        { key: 'priority', label: 'Priority' },
+        { key: 'severity', label: 'Severity' },
+        { key: 'executionStatus', label: 'Execution Status' },
+        { key: 'assignee', label: 'Assignee' },
+        { key: 'lastExecuted', label: 'Last Run' },
+        { key: 'updated_at', label: 'Last Updated' },
+    ];
 
     return (
-        <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-4">
-            {selectedIds.length > 0 && (
-                <div className="bg-teal-50 border-b border-teal-200 px-6 py-3 mb-4">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-teal-700 font-medium">
-                            {selectedIds.length} test case{selectedIds.length > 1 ? 's' : ''} selected
-                        </span>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => handleBulkActionClick('activate')}
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                            >
-                                Activate
-                            </button>
-                            <button
-                                onClick={() => handleBulkActionClick('archive')}
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                            >
-                                Archive
-                            </button>
-                            <button
-                                onClick={() => handleBulkActionClick('delete')}
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                            >
-                                Delete
-                            </button>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+            {/* Enhanced Bulk Actions Bar */}
+            <EnhancedBulkActionsBar
+                selectedItems={selectedTestCases}
+                onClearSelection={() => onSelectTestCases([])}
+                assetType="testCases"
+                pageTitle="test case"
+                onAction={onBulkAction}
+                loadingActions={[]}
+            />
+
+            <div className="max-w-7xl mx-auto">
+                {/* Modern Header */}
+                <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
+                    <div className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            {/* Selection Controls */}
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
+                                    {isAllSelected ? (
+                                        <CheckSquare
+                                            className="w-5 h-5 text-teal-600 cursor-pointer hover:text-teal-700 transition-colors"
+                                            onClick={() => handleSelectAll(false)}
+                                        />
+                                    ) : (
+                                        <Square
+                                            className="w-5 h-5 text-slate-400 cursor-pointer hover:text-teal-600 transition-colors"
+                                            onClick={() => handleSelectAll(true)}
+                                        />
+                                    )}
+                                    <span className="text-sm font-medium text-slate-700">
+                                        {selectedTestCases.length > 0 
+                                            ? `${selectedTestCases.length} selected` 
+                                            : 'Select All'
+                                        }
+                                    </span>
+                                </div>
+                                {totalItems > 0 && (
+                                    <div className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                                        {totalItems} test cases
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Sort Controls */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowSortMenu(!showSortMenu)}
+                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+                                >
+                                    <ArrowUpDown className="w-4 h-4" />
+                                    Sort by {sortOptions.find(opt => opt.key === sortConfig.key)?.label || 'Updated'}
+                                    <ChevronDown className="w-4 h-4" />
+                                </button>
+
+                                {showSortMenu && (
+                                    <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-40">
+                                        <div className="py-2">
+                                            {sortOptions.map((option) => (
+                                                <button
+                                                    key={option.key}
+                                                    onClick={() => handleSort(option.key)}
+                                                    className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center justify-between ${
+                                                        sortConfig.key === option.key ? 'text-teal-600 bg-teal-50' : 'text-slate-700'
+                                                    }`}
+                                                >
+                                                    <span>{option.label}</span>
+                                                    {sortConfig.key === option.key && (
+                                                        sortConfig.direction === 'asc' ? 
+                                                        <ChevronUp className="w-3 h-3" /> : 
+                                                        <ChevronDown className="w-3 h-3" />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
-            )}
 
-            <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center">
-                    {selectedIds.length === filteredTestCases.length ? (
-                        <CheckSquare
-                            className="w-4 h-4 text-teal-600 cursor-pointer"
-                            onClick={() => handleSelectAll(false)}
-                        />
+                {/* Content Area */}
+                <div className="px-6 py-6">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+                                <div className="text-slate-600">Loading test cases...</div>
+                            </div>
+                        </div>
+                    ) : paginatedTestCases.length === 0 ? (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="text-center">
+                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Settings className="w-8 h-8 text-slate-400" />
+                                </div>
+                                <div className="text-slate-600 text-lg font-medium mb-2">No test cases found</div>
+                                <div className="text-slate-500">Try adjusting your filters or create a new test case</div>
+                            </div>
+                        </div>
                     ) : (
-                        <Square
-                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
-                            onClick={() => handleSelectAll(true)}
-                        />
+                        <div className="grid gap-4">
+                            {paginatedTestCases.map((testCase) => {
+                                const updatedAt = testCase.updated_at instanceof Date ? testCase.updated_at : new Date(testCase.updated_at);
+                                const lastExecuted = testCase.lastExecuted instanceof Date ? testCase.lastExecuted : new Date(testCase.lastExecuted);
+                                const linkedBugs = relationships.testCaseToBugs[testCase.id] || [];
+
+                                return (
+                                    <div
+                                        key={testCase.id}
+                                        className="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-200"
+                                    >
+                                        {/* Card Header */}
+                                        <div className="p-6 border-b border-slate-100">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex items-start gap-4 flex-1 min-w-0">
+                                                    {selectedTestCases.includes(testCase.id) ? (
+                                                        <CheckSquare
+                                                            className="w-5 h-5 text-teal-600 cursor-pointer mt-0.5 flex-shrink-0"
+                                                            onClick={() => handleSelectItem(testCase.id, false)}
+                                                        />
+                                                    ) : (
+                                                        <Square
+                                                            className="w-5 h-5 text-slate-400 cursor-pointer hover:text-teal-600 transition-colors mt-0.5 flex-shrink-0"
+                                                            onClick={() => handleSelectItem(testCase.id, true)}
+                                                        />
+                                                    )}
+                                                    
+                                                    <div className="flex-1 min-w-0">
+                                                        <h3 className="text-lg font-semibold text-slate-900 mb-2 truncate" title={testCase.title}>
+                                                            {testCase.title || 'Untitled Test Case'}
+                                                        </h3>
+                                                        
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(testCase.status)}`}>
+                                                                {testCase.status || 'Draft'}
+                                                            </span>
+                                                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityBadge(testCase.priority)}`}>
+                                                                {testCase.priority || 'Low'} Priority
+                                                            </span>
+                                                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getSeverityBadge(testCase.severity)}`}>
+                                                                {testCase.severity || 'Low'} Severity
+                                                            </span>
+                                                            {getAutomationBadge(testCase.is_automated || testCase.automation_status === 'automated')}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={() => handleChatClick(testCase)}
+                                                    className="p-2.5 rounded-lg bg-slate-50 hover:bg-teal-50 text-slate-600 hover:text-teal-600 transition-all duration-200 group-hover:bg-teal-50"
+                                                    title="View/Edit Test Case"
+                                                >
+                                                    <MessageSquare className="h-5 w-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Execution Status Section */}
+                                        <div className="px-6 py-4 bg-slate-50/50">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-sm font-medium text-slate-700">Execution Status:</span>
+                                                    {getExecutionStatusBadge(testCase.executionStatus)}
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-slate-500 mr-2">Quick Update:</span>
+                                                    <button
+                                                        onClick={() => handleExecutionStatusChange(testCase.id, 'passed')}
+                                                        className="p-2 rounded-lg bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-all duration-200"
+                                                        title="Mark as Passed"
+                                                    >
+                                                        <CheckCircle className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleExecutionStatusChange(testCase.id, 'failed')}
+                                                        className="p-2 rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-all duration-200"
+                                                        title="Mark as Failed"
+                                                    >
+                                                        <XCircle className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleExecutionStatusChange(testCase.id, 'blocked')}
+                                                        className="p-2 rounded-lg bg-white border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all duration-200"
+                                                        title="Mark as Blocked"
+                                                    >
+                                                        <Shield className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Details Grid */}
+                                        <div className="p-6 pt-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        <UserIcon className="w-3.5 h-3.5" />
+                                                        Assignee
+                                                    </div>
+                                                    <div className="text-sm text-slate-900 font-medium truncate" title={testCase.assignee}>
+                                                        {testCase.assignee || 'Unassigned'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        <Tag className="w-3.5 h-3.5" />
+                                                        Component
+                                                    </div>
+                                                    <div className="text-sm text-slate-900 font-medium truncate" title={testCase.component}>
+                                                        {testCase.component || 'N/A'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Test Type</div>
+                                                    <div className="text-sm text-slate-900 font-medium truncate">
+                                                        {testCase.testType || 'Functional'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Environment</div>
+                                                    <div className="text-sm text-slate-900 font-medium truncate">
+                                                        {testCase.environment || 'Testing'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        <Clock className="w-3.5 h-3.5" />
+                                                        Est. Time
+                                                    </div>
+                                                    <div className="text-sm text-slate-900 font-medium">
+                                                        {testCase.estimatedTime ? `${testCase.estimatedTime} min` : 'N/A'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        <Calendar className="w-3.5 h-3.5" />
+                                                        Last Run
+                                                    </div>
+                                                    <div className="text-sm text-slate-600">
+                                                        {isValidDate(lastExecuted) && testCase.lastExecuted
+                                                            ? formatDistanceToNow(lastExecuted, { addSuffix: true })
+                                                            : 'Never'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Last Updated</div>
+                                                    <div className="text-sm text-slate-600">
+                                                        {isValidDate(updatedAt)
+                                                            ? formatDistanceToNow(updatedAt, { addSuffix: true })
+                                                            : 'Invalid Date'}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Linked Bugs Section */}
+                                            <div className="pt-4 border-t border-slate-100">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        Linked Bugs ({linkedBugs.length})
+                                                    </label>
+                                                    <MultiSelectDropdown
+                                                        options={bugOptions}
+                                                        value={linkedBugs}
+                                                        onChange={(newBugs) => onLinkBug(testCase.id, newBugs)}
+                                                        placeholder="Link bugs to this test case..."
+                                                        type="bugs"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
-                    <span className="ml-2 text-sm font-medium text-gray-700">Select All</span>
-                </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => handleSort('title')}
-                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
-                    >
-                        Title {getSortIcon('title')}
-                    </button>
-                    <button
-                        onClick={() => handleSort('status')}
-                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
-                    >
-                        Status {getSortIcon('status')}
-                    </button>
-                    <button
-                        onClick={() => handleSort('priority')}
-                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
-                    >
-                        Priority {getSortIcon('priority')}
-                    </button>
-                    <button
-                        onClick={() => handleSort('assignee')}
-                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
-                    >
-                        Assignee {getSortIcon('assignee')}
-                    </button>
-                    <button
-                        onClick={() => handleSort('updated_at')}
-                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
-                    >
-                        Last Updated {getSortIcon('updated_at')}
-                    </button>
+
+                    {/* Pagination */}
+                    {!loading && totalItems > 0 && (
+                        <div className="mt-8">
+                            <Pagination
+                                currentPage={currentPage}
+                                totalItems={totalItems}
+                                itemsPerPage={itemsPerPage}
+                                onPageChange={handlePageChange}
+                                onItemsPerPageChange={handleItemsPerPageChange}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {loading ? (
-                <div className="text-center text-sm text-gray-500 py-4">Loading test cases...</div>
-            ) : filteredTestCases.length === 0 ? (
-                <div className="text-center text-sm text-gray-500 py-4">No test cases found</div>
-            ) : (
-                <div className="grid gap-4">
-                    {sortedTestCases.map((testCase) => {
-                        const updatedAt = testCase.updated_at instanceof Date ? testCase.updated_at : new Date(testCase.updated_at);
-                        const linkedBugs = relationships[testCase.id] || [];
-
-                        return (
-                            <div
-                                key={testCase.id}
-                                className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedIds.includes(testCase.id)}
-                                            onChange={(e) => handleSelectItem(testCase.id, e.target.checked)}
-                                            className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-                                        />
-                                        <div className="text-sm font-medium text-gray-900 truncate max-w-md" title={testCase.title}>
-                                            {testCase.title || 'Untitled Test Case'}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <button
-                                            onClick={() => onView && onView(testCase)}
-                                            className="text-gray-400 hover:text-teal-600"
-                                            title="View"
-                                        >
-                                            <Eye className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => onEdit && onEdit(testCase)}
-                                            className="text-gray-400 hover:text-teal-600"
-                                            title="Edit"
-                                        >
-                                            <Edit3 className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDuplicate(testCase)}
-                                            className="text-gray-400 hover:text-teal-600"
-                                            title="Duplicate"
-                                        >
-                                            <Copy className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(testCase.id, testCase.title)}
-                                            className="text-gray-400 hover:text-red-600"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => onRun && onRun(testCase)}
-                                            className="text-gray-400 hover:text-teal-600"
-                                            title="Run"
-                                        >
-                                            <Play className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                                    <div>
-                                        <span className="text-xs font-medium text-gray-500">Status:</span>
-                                        <span
-                                            className={`ml-2 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
-                                                testCase.status
-                                            )}`}
-                                        >
-                                            {testCase.status || 'Draft'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-xs font-medium text-gray-500">Priority:</span>
-                                        <span
-                                            className={`ml-2 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityBadge(
-                                                testCase.priority
-                                            )}`}
-                                        >
-                                            {testCase.priority || 'Low'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-xs font-medium text-gray-500">Assignee:</span>
-                                        <span className="ml-2 text-sm text-gray-900 truncate" title={testCase.assignee}>
-                                            {testCase.assignee || 'Unassigned'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-xs font-medium text-gray-500">Last Updated:</span>
-                                        <span className="ml-2 text-sm text-gray-500">
-                                            {isValidDate(updatedAt)
-                                                ? formatDistanceToNow(updatedAt, { addSuffix: true })
-                                                : 'Invalid Date'}
-                                        </span>
-                                    </div>
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                                        <span className="text-xs font-medium text-gray-500">Linked Bugs:</span>
-                                        <div className="mt-1">
-                                            <MultiSelectDropdown
-                                                options={bugOptions}
-                                                value={linkedBugs}
-                                                onChange={(newBugs) => onLinkBug && onLinkBug(testCase.id, newBugs)}
-                                                placeholder="Link Bugs..."
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+            {/* Click outside to close sort menu */}
+            {showSortMenu && (
+                <div 
+                    className="fixed inset-0 z-30" 
+                    onClick={() => setShowSortMenu(false)}
+                />
             )}
+
+            <TestCaseSideModal
+                isOpen={sideModalOpen}
+                testCase={selectedTestCase}
+                onClose={handleSideModalClose}
+                onSave={handleSideModalSave}
+            />
         </div>
     );
 };

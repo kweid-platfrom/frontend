@@ -10,16 +10,13 @@ import {
     ChevronDown,
     Bug,
     Clock,
-    ChevronLeft,
-    ChevronRight,
-    ChevronsLeft,
-    ChevronsRight,
     Code,
     Terminal,
     FileText,
 } from 'lucide-react';
 import InlineEditCell from './InlineEditCell';
-import BulkActionsBar from './BulkActionsBar';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import Pagination from '../common/Pagination';
 
 const MinimalBugTable = ({
     bugs = [],
@@ -101,7 +98,6 @@ const MinimalBugTable = ({
 
     // Pagination calculations
     const totalItems = sortedBugs.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedBugs = sortedBugs.slice(startIndex, endIndex);
@@ -114,26 +110,6 @@ const MinimalBugTable = ({
         setItemsPerPage(newItemsPerPage);
         setCurrentPage(1);
     }, []);
-
-    const getPageNumbers = useMemo(() => {
-        const pages = [];
-        const maxVisiblePages = 5;
-        
-        if (totalPages <= maxVisiblePages) {
-            for (let i = 1; i <= totalPages; i++) {
-                pages.push(i);
-            }
-        } else {
-            const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-            const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-            
-            for (let i = startPage; i <= endPage; i++) {
-                pages.push(i);
-            }
-        }
-        
-        return pages;
-    }, [currentPage, totalPages]);
 
     const handleUpdateBug = useCallback(async (bugId, updates) => {
         if (typeof onUpdateBug === 'function') {
@@ -242,7 +218,14 @@ const MinimalBugTable = ({
 
     return (
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
-            <BulkActionsBar selectedBugs={selectedBugs} onBulkAction={onBulkAction} />
+            <EnhancedBulkActionsBar
+                selectedItems={selectedBugs}
+                onClearSelection={() => onSelectBugs([])}
+                assetType="bugs"
+                pageTitle="bug"
+                onAction={onBulkAction}
+                loadingActions={[]}
+            />
             
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200">
@@ -420,100 +403,15 @@ const MinimalBugTable = ({
                 </table>
             </div>
 
-            {/* Pagination Component */}
+            {/* Global Pagination Component */}
             {!loading && totalItems > 0 && (
-                <div className="bg-white px-6 py-4 border-t border-gray-200 flex items-center justify-between rounded-b-lg">
-                    <div className="flex items-center gap-6">
-                        <div className="text-sm text-gray-600">
-                            <span className="font-medium">{startIndex + 1}</span> to{' '}
-                            <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
-                            <span className="font-medium">{totalItems}</span> results
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                            <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
-                                Rows per page:
-                            </label>
-                            <select
-                                id="itemsPerPage"
-                                value={itemsPerPage}
-                                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                                className="border border-gray-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
-                            >
-                                <option value={10}>10</option>
-                                <option value={15}>15</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => handlePageChange(1)}
-                            disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === 1
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
-                        >
-                            <ChevronsLeft className="h-4 w-4" />
-                        </button>
-
-                        <button
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === 1
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-
-                        <div className="flex items-center gap-2">
-                            {getPageNumbers.map((pageNumber) => (
-                                <button
-                                    key={pageNumber}
-                                    onClick={() => handlePageChange(pageNumber)}
-                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${
-                                        currentPage === pageNumber
-                                            ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
-                                            : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
-                                    }`}
-                                >
-                                    {pageNumber}
-                                </button>
-                            ))}
-                        </div>
-
-                        <button
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === totalPages
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
-
-                        <button
-                            onClick={() => handlePageChange(totalPages)}
-                            disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${
-                                currentPage === totalPages
-                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                    : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                            }`}
-                        >
-                            <ChevronsRight className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
+                <Pagination
+                    currentPage={currentPage}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={handlePageChange}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                />
             )}
         </div>
     );

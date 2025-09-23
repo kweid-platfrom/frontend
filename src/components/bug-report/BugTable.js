@@ -11,14 +11,11 @@ import {
     Bug,
     Clock,
     MessageSquare,
-    ChevronLeft,
-    ChevronRight,
-    ChevronsLeft,
-    ChevronsRight,
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import InlineEditCell from './InlineEditCell';
 import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import Pagination from '../common/Pagination';
 
 const BugTable = ({
     bugs = [],
@@ -158,7 +155,6 @@ const BugTable = ({
 
     // Pagination calculations
     const totalItems = sortedBugs.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedBugs = sortedBugs.slice(startIndex, endIndex);
@@ -172,27 +168,6 @@ const BugTable = ({
         setItemsPerPage(newItemsPerPage);
         setCurrentPage(1); // Reset to first page
     }, []);
-
-    // Generate page numbers for pagination
-    const getPageNumbers = useMemo(() => {
-        const pages = [];
-        const maxVisiblePages = 5;
-
-        if (totalPages <= maxVisiblePages) {
-            for (let i = 1; i <= totalPages; i++) {
-                pages.push(i);
-            }
-        } else {
-            const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-            const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-            for (let i = startPage; i <= endPage; i++) {
-                pages.push(i);
-            }
-        }
-
-        return pages;
-    }, [currentPage, totalPages]);
 
     const handleLinkTestCase = useCallback((bugId, testCaseIds) => {
         if (onLinkTestCase) {
@@ -481,6 +456,9 @@ const BugTable = ({
                                     )}
                                 </div>
                             </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-96 sticky left-12 bg-gray-50 z-30 whitespace-nowrap">
+                                Title
+                            </th>
                             <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
                                 onClick={() => handleSort('id')}
@@ -757,128 +735,15 @@ const BugTable = ({
                 </table>
             </div>
 
-            {/* Pagination Component */}
+            {/* Global Pagination Component */}
             {!loading && totalItems > 0 && (
-                <div className="bg-white px-6 py-4 border-t border-gray-200 flex items-center justify-between rounded-b-lg">
-                    {/* Left side - Results info and items per page */}
-                    <div className="flex items-center gap-6">
-                        <div className="text-sm text-gray-600">
-                            <span className="font-medium">{startIndex + 1}</span> to{' '}
-                            <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
-                            <span className="font-medium">{totalItems}</span> results
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
-                                Rows per page:
-                            </label>
-                            <select
-                                id="itemsPerPage"
-                                value={itemsPerPage}
-                                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                                className="border border-gray-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
-                                style={{
-                                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-                                    backgroundPosition: 'right 0.5rem center',
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundSize: '1.25em 1.25em'
-                                }}
-                            >
-                                <option value={5}>5</option>
-                                <option value={10}>10</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                                <option value={100}>100</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Right side - Pagination controls */}
-                    <div className="flex items-center gap-3">
-                        {/* First page button */}
-                        <button
-                            onClick={() => handlePageChange(1)}
-                            disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
-                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                                }`}
-                            title="First page"
-                        >
-                            <ChevronsLeft className="h-4 w-4" />
-                        </button>
-
-                        {/* Previous page button */}
-                        <button
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
-                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                                }`}
-                            title="Previous page"
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-
-                        {/* Page numbers */}
-                        <div className="flex items-center gap-2">
-                            {getPageNumbers.map((pageNumber) => (
-                                <button
-                                    key={pageNumber}
-                                    onClick={() => handlePageChange(pageNumber)}
-                                    className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${currentPage === pageNumber
-                                        ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
-                                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
-                                        }`}
-                                >
-                                    {pageNumber}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Show ellipsis and last page if needed */}
-                        {totalPages > 5 && currentPage < totalPages - 2 && (
-                            <>
-                                {currentPage < totalPages - 3 && (
-                                    <span className="px-2 text-gray-500 text-sm">...</span>
-                                )}
-                                <button
-                                    onClick={() => handlePageChange(totalPages)}
-                                    className="w-9 h-9 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
-                                >
-                                    {totalPages}
-                                </button>
-                            </>
-                        )}
-
-                        {/* Next page button */}
-                        <button
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
-                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                                }`}
-                            title="Next page"
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
-
-                        {/* Last page button */}
-                        <button
-                            onClick={() => handlePageChange(totalPages)}
-                            disabled={currentPage === totalPages}
-                            className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
-                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
-                                }`}
-                            title="Last page"
-                        >
-                            <ChevronsRight className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
+                <Pagination
+                    currentPage={currentPage}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={handlePageChange}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                />
             )}
         </div>
     );

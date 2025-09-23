@@ -602,6 +602,7 @@ const TestCases = () => {
             onView={handleEditTestCase}
             onRun={handleRunNotification}
             onLinkBug={handleLinkBug}
+            onUpdateExecutionStatus={handleUpdateExecutionStatus}
         />
     ), [
         filteredTestCases,
@@ -611,7 +612,8 @@ const TestCases = () => {
         handleDeleteTestCase,
         handleBulkAction,
         handleRunNotification,
-        handleLinkBug
+        handleLinkBug,
+        handleUpdateExecutionStatus
     ]);
 
     // Loading state
