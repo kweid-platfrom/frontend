@@ -1,4 +1,4 @@
-// Complete FirestoreService.js - Fixed Implementation with Proper Recording Integration
+// Fixed FirestoreService.js - Ensures deleted/archived items are properly filtered from main views
 import { BaseFirestoreService } from './firestoreService';
 import { UserService } from './userService';
 import { OrganizationService } from './OrganizationService';
@@ -43,7 +43,7 @@ class FirestoreService extends BaseFirestoreService {
                 return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
             },
             
-            // Read operations
+            // Read operations - FIXED: Always exclude deleted/archived by default
             get: async (recordingId, suiteId, sprintId = null) => {
                 return await this.assets.getRecording(recordingId, suiteId, sprintId);
             },
@@ -53,11 +53,21 @@ class FirestoreService extends BaseFirestoreService {
             },
             
             getAll: async (suiteId, sprintId = null, options = {}) => {
-                return await this.assets.getRecordings(suiteId, sprintId, options);
+                // FIXED: Default to exclude deleted and archived
+                const defaultOptions = { 
+                    excludeStatus: ['deleted', 'archived'], 
+                    ...options 
+                };
+                return await this.assets.getRecordings(suiteId, sprintId, defaultOptions);
             },
             
             getRecordings: async (suiteId, sprintId = null, options = {}) => {
-                return await this.assets.getRecordings(suiteId, sprintId, options);
+                // FIXED: Default to exclude deleted and archived
+                const defaultOptions = { 
+                    excludeStatus: ['deleted', 'archived'], 
+                    ...options 
+                };
+                return await this.assets.getRecordings(suiteId, sprintId, defaultOptions);
             },
             
             // Update operations
@@ -78,13 +88,25 @@ class FirestoreService extends BaseFirestoreService {
                 return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
             },
             
-            // Subscribe to real-time updates
+            // Subscribe to real-time updates - FIXED: Filter out deleted/archived
             subscribe: (suiteId, callback, errorCallback = null, sprintId = null) => {
-                return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
+                return this.assets.subscribeToRecordings(suiteId, (recordings) => {
+                    // Filter out deleted and archived items from real-time updates
+                    const activeRecordings = recordings.filter(recording => 
+                        recording.status !== 'deleted' && recording.status !== 'archived'
+                    );
+                    callback(activeRecordings);
+                }, errorCallback, sprintId);
             },
             
             subscribeToRecordings: (suiteId, callback, errorCallback = null, sprintId = null) => {
-                return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
+                return this.assets.subscribeToRecordings(suiteId, (recordings) => {
+                    // Filter out deleted and archived items from real-time updates
+                    const activeRecordings = recordings.filter(recording => 
+                        recording.status !== 'deleted' && recording.status !== 'archived'
+                    );
+                    callback(activeRecordings);
+                }, errorCallback, sprintId);
             },
             
             // Service status and utility methods
@@ -451,7 +473,7 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     // ========================
-    // RECORDING METHODS (properly delegated to AssetService)
+    // RECORDING METHODS - FIXED: Proper filtering
     // ========================
 
     async createRecording(suiteId, recordingData, sprintId = null) {
@@ -470,18 +492,25 @@ class FirestoreService extends BaseFirestoreService {
         return await this.assets.getRecording(recordingId, suiteId, sprintId);
     }
 
+    // FIXED: Default behavior excludes deleted and archived
     async getRecordings(suiteId, sprintId = null, options = {}) {
-        // Set default options to exclude deleted by default
-        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
         return await this.assets.getRecordings(suiteId, sprintId, defaultOptions);
     }
 
-    async getAllRecordings(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+    async getAllRecordings(suiteId, sprintId = null, includeStatus = ['active']) {
         return await this.assets.getRecordings(suiteId, sprintId, { includeStatus });
     }
 
+    // FIXED: Filter real-time updates
     subscribeToRecordings(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.assets.subscribeToRecordings(suiteId, callback, errorCallback, sprintId);
+        return this.assets.subscribeToRecordings(suiteId, (recordings) => {
+            // Filter out deleted and archived items from real-time updates
+            const activeRecordings = recordings.filter(recording => 
+                recording.status !== 'deleted' && recording.status !== 'archived'
+            );
+            callback(activeRecordings);
+        }, errorCallback, sprintId);
     }
 
     async getRecordingServiceStatus() {
@@ -501,7 +530,7 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     // ========================
-    // BUG METHODS (delegated to BugService)
+    // BUG METHODS - FIXED: Proper filtering
     // ========================
 
     async createBug(suiteId, bugData, sprintId = null) {
@@ -516,21 +545,29 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.getBug(bugId, suiteId, sprintId);
     }
 
+    // FIXED: Default behavior excludes deleted and archived
     async getBugs(suiteId, sprintId = null, options = {}) {
-        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
         return await this.bugs.getBugs(suiteId, sprintId, defaultOptions);
     }
 
-    async getAllBugs(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+    async getAllBugs(suiteId, sprintId = null, includeStatus = ['active']) {
         return await this.bugs.getBugs(suiteId, sprintId, { includeStatus });
     }
 
+    // FIXED: Filter real-time updates
     subscribeToBugs(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.bugs.subscribeToBugs(suiteId, callback, errorCallback, sprintId);
+        return this.bugs.subscribeToBugs(suiteId, (bugs) => {
+            // Filter out deleted and archived items from real-time updates
+            const activeBugs = bugs.filter(bug => 
+                bug.status !== 'deleted' && bug.status !== 'archived'
+            );
+            callback(activeBugs);
+        }, errorCallback, sprintId);
     }
 
     // ========================
-    // TEST CASE METHODS (delegated to AssetService)
+    // TEST CASE METHODS - FIXED: Proper filtering
     // ========================
 
     async createTestCase(suiteId, testCaseData, sprintId = null) {
@@ -545,21 +582,29 @@ class FirestoreService extends BaseFirestoreService {
         return await this.assets.getTestCase(testCaseId, suiteId, sprintId);
     }
 
+    // FIXED: Default behavior excludes deleted and archived
     async getTestCases(suiteId, sprintId = null, options = {}) {
-        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
         return await this.assets.getTestCases(suiteId, sprintId, defaultOptions);
     }
 
-    async getAllTestCases(suiteId, sprintId = null, includeStatus = ['active', 'archived', 'deleted']) {
+    async getAllTestCases(suiteId, sprintId = null, includeStatus = ['active']) {
         return await this.assets.getTestCases(suiteId, sprintId, { includeStatus });
     }
 
+    // FIXED: Filter real-time updates
     subscribeToTestCases(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.assets.subscribeToTestCases(suiteId, callback, errorCallback, sprintId);
+        return this.assets.subscribeToTestCases(suiteId, (testCases) => {
+            // Filter out deleted and archived items from real-time updates
+            const activeTestCases = testCases.filter(testCase => 
+                testCase.status !== 'deleted' && testCase.status !== 'archived'
+            );
+            callback(activeTestCases);
+        }, errorCallback, sprintId);
     }
 
     // ========================
-    // RECOMMENDATION METHODS (delegated to BugService)
+    // RECOMMENDATION METHODS - FIXED: Proper filtering
     // ========================
 
     async createRecommendation(suiteId, recommendationData, sprintId = null) {
@@ -578,13 +623,21 @@ class FirestoreService extends BaseFirestoreService {
         return await this.bugs.getRecommendation(recommendationId, suiteId, sprintId);
     }
 
+    // FIXED: Default behavior excludes deleted and archived
     async getRecommendations(suiteId, sprintId = null, options = {}) {
-        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
         return await this.bugs.getRecommendations(suiteId, sprintId, defaultOptions);
     }
 
+    // FIXED: Filter real-time updates
     subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.bugs.subscribeToRecommendations(suiteId, callback, errorCallback, sprintId);
+        return this.bugs.subscribeToRecommendations(suiteId, (recommendations) => {
+            // Filter out deleted and archived items from real-time updates
+            const activeRecommendations = recommendations.filter(rec => 
+                rec.status !== 'deleted' && rec.status !== 'archived'
+            );
+            callback(activeRecommendations);
+        }, errorCallback, sprintId);
     }
 
     // ========================
@@ -716,7 +769,7 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     // ========================
-    // SPRINT METHODS (delegated to AssetService)
+    // SPRINT METHODS - FIXED: Proper filtering
     // ========================
 
     async createSprint(suiteId, sprintData) {
@@ -731,17 +784,25 @@ class FirestoreService extends BaseFirestoreService {
         return await this.assets.getSprint(sprintId, suiteId);
     }
 
+    // FIXED: Default behavior excludes deleted and archived
     async getSprints(suiteId, options = {}) {
-        const defaultOptions = { excludeStatus: ['deleted'], ...options };
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
         return await this.assets.getSprints(suiteId, defaultOptions);
     }
 
-    async getAllSprints(suiteId, includeStatus = ['active', 'archived', 'deleted']) {
+    async getAllSprints(suiteId, includeStatus = ['active']) {
         return await this.assets.getSprints(suiteId, { includeStatus });
     }
 
+    // FIXED: Filter real-time updates
     subscribeToSprints(suiteId, callback, errorCallback = null) {
-        return this.assets.subscribeToSprints(suiteId, callback, errorCallback);
+        return this.assets.subscribeToSprints(suiteId, (sprints) => {
+            // Filter out deleted and archived items from real-time updates
+            const activeSprints = sprints.filter(sprint => 
+                sprint.status !== 'deleted' && sprint.status !== 'archived'
+            );
+            callback(activeSprints);
+        }, errorCallback);
     }
 
     // ========================
@@ -773,590 +834,151 @@ class FirestoreService extends BaseFirestoreService {
     }
 
     // ========================
-    // DELETE OPERATIONS (soft delete by default)
+    // ENHANCED DELETE OPERATIONS - Use ArchiveTrashService
     // ========================
 
     async deleteTestCase(testCaseId, suiteId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateTestCase(testCaseId, {
-            status: 'deleted',
-            deleted_at: new Date(),
-            deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            delete_reason: 'User deletion'
-        }, suiteId, sprintId);
+        return await this.archiveTrash.deleteTestCase(suiteId, testCaseId, sprintId, 'User deletion');
     }
 
     async deleteBug(bugId, suiteId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateBug(bugId, {
-            status: 'deleted',
-            deleted_at: new Date(),
-            deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            delete_reason: 'User deletion'
-        }, suiteId, sprintId);
+        return await this.archiveTrash.deleteBug(suiteId, bugId, sprintId, 'User deletion');
     }
 
     async deleteRecording(recordingId, suiteId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecording(recordingId, {
-            status: 'deleted',
-            deleted_at: new Date(),
-            deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            delete_reason: 'User deletion'
-        }, suiteId, sprintId);
+        return await this.archiveTrash.deleteRecording(suiteId, recordingId, sprintId, 'User deletion');
     }
 
     async deleteSprint(sprintId, suiteId) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateSprint(sprintId, {
-            status: 'deleted',
-            deleted_at: new Date(),
-            deleted_by: userId,
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            delete_reason: 'User deletion'
-        }, suiteId);
+        return await this.archiveTrash.deleteSprint(suiteId, sprintId, 'User deletion');
     }
 
     // ========================
-    // ARCHIVE OPERATIONS
+    // ENHANCED ARCHIVE OPERATIONS - Use ArchiveTrashService
     // ========================
 
-    async archiveTestCase(suiteId, testCaseId, sprintId = null, reason = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateTestCase(testCaseId, {
-            status: 'archived',
-            archived_at: new Date(),
-            archived_by: userId,
-            ...(reason && { archive_reason: reason })
-        }, suiteId, sprintId);
+    async archiveTestCase(suiteId, testCaseId, sprintId = null, reason = 'User archive') {
+        return await this.archiveTrash.archiveTestCase(suiteId, testCaseId, sprintId, reason);
     }
 
-    async archiveBug(suiteId, bugId, sprintId = null, reason = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateBug(bugId, {
-            status: 'archived',
-            archived_at: new Date(),
-            archived_by: userId,
-            ...(reason && { archive_reason: reason })
-        }, suiteId, sprintId);
+    async archiveBug(suiteId, bugId, sprintId = null, reason = 'User archive') {
+        return await this.archiveTrash.archiveBug(suiteId, bugId, sprintId, reason);
     }
 
-    async archiveRecording(suiteId, recordingId, sprintId = null, reason = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecording(recordingId, {
-            status: 'archived',
-            archived_at: new Date(),
-            archived_by: userId,
-            ...(reason && { archive_reason: reason })
-        }, suiteId, sprintId);
+    async archiveRecording(suiteId, recordingId, sprintId = null, reason = 'User archive') {
+        return await this.archiveTrash.archiveRecording(suiteId, recordingId, sprintId, reason);
     }
 
-    async archiveSprint(suiteId, sprintId, reason = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateSprint(sprintId, {
-            status: 'archived',
-            archived_at: new Date(),
-            archived_by: userId,
-            ...(reason && { archive_reason: reason })
-        }, suiteId);
+    async archiveSprint(suiteId, sprintId, reason = 'User archive') {
+        return await this.archiveTrash.archiveSprint(suiteId, sprintId, reason);
     }
 
-    async archiveRecommendation(suiteId, recommendationId, sprintId = null, reason = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecommendation(recommendationId, {
-            status: 'archived',
-            archived_at: new Date(),
-            archived_by: userId,
-            ...(reason && { archive_reason: reason })
-        }, suiteId, sprintId);
+    async archiveRecommendation(suiteId, recommendationId, sprintId = null, reason = 'User archive') {
+        return await this.archiveTrash.archiveRecommendation(suiteId, recommendationId, sprintId, reason);
     }
 
     // ========================
-    // UNARCHIVE OPERATIONS
+    // ENHANCED UNARCHIVE OPERATIONS - Use ArchiveTrashService
     // ========================
 
     async unarchiveTestCase(suiteId, testCaseId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateTestCase(testCaseId, {
-            status: 'active',
-            unarchived_at: new Date(),
-            unarchived_by: userId,
-            archived_at: null,
-            archived_by: null,
-            archive_reason: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.unarchiveTestCase(suiteId, testCaseId, sprintId);
     }
 
     async unarchiveBug(suiteId, bugId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateBug(bugId, {
-            status: 'active',
-            unarchived_at: new Date(),
-            unarchived_by: userId,
-            archived_at: null,
-            archived_by: null,
-            archive_reason: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.unarchiveBug(suiteId, bugId, sprintId);
     }
 
     async unarchiveRecording(suiteId, recordingId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecording(recordingId, {
-            status: 'active',
-            unarchived_at: new Date(),
-            unarchived_by: userId,
-            archived_at: null,
-            archived_by: null,
-            archive_reason: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.unarchiveRecording(suiteId, recordingId, sprintId);
     }
 
     async unarchiveSprint(suiteId, sprintId) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateSprint(sprintId, {
-            status: 'active',
-            unarchived_at: new Date(),
-            unarchived_by: userId,
-            archived_at: null,
-            archived_by: null,
-            archive_reason: null
-        }, suiteId);
+        return await this.archiveTrash.unarchiveSprint(suiteId, sprintId);
     }
 
     async unarchiveRecommendation(suiteId, recommendationId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecommendation(recommendationId, {
-            status: 'active',
-            unarchived_at: new Date(),
-            unarchived_by: userId,
-            archived_at: null,
-            archived_by: null,
-            archive_reason: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.unarchiveRecommendation(suiteId, recommendationId, sprintId);
     }
 
     // ========================
-    // RESTORE FROM TRASH OPERATIONS
+    // ENHANCED RESTORE FROM TRASH OPERATIONS - Use ArchiveTrashService
     // ========================
 
     async restoreTestCaseFromTrash(suiteId, testCaseId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateTestCase(testCaseId, {
-            status: 'active',
-            restored_at: new Date(),
-            restored_by: userId,
-            deleted_at: null,
-            deleted_by: null,
-            delete_reason: null,
-            expires_at: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.restoreTestCase(suiteId, testCaseId, sprintId);
     }
 
     async restoreBugFromTrash(suiteId, bugId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateBug(bugId, {
-            status: 'active',
-            restored_at: new Date(),
-            restored_by: userId,
-            deleted_at: null,
-            deleted_by: null,
-            delete_reason: null,
-            expires_at: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.restoreBug(suiteId, bugId, sprintId);
     }
 
     async restoreRecordingFromTrash(suiteId, recordingId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecording(recordingId, {
-            status: 'active',
-            restored_at: new Date(),
-            restored_by: userId,
-            deleted_at: null,
-            deleted_by: null,
-            delete_reason: null,
-            expires_at: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.restoreRecording(suiteId, recordingId, sprintId);
     }
 
     async restoreSprintFromTrash(suiteId, sprintId) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateSprint(sprintId, {
-            status: 'active',
-            restored_at: new Date(),
-            restored_by: userId,
-            deleted_at: null,
-            deleted_by: null,
-            delete_reason: null,
-            expires_at: null
-        }, suiteId);
+        return await this.archiveTrash.restoreSprint(suiteId, sprintId);
     }
 
     async restoreRecommendationFromTrash(suiteId, recommendationId, sprintId = null) {
-        const userId = this.getCurrentUserId();
-        if (!userId) {
-            return { success: false, error: { message: 'User not authenticated' } };
-        }
-
-        return await this.assets.updateRecommendation(recommendationId, {
-            status: 'active',
-            restored_at: new Date(),
-            restored_by: userId,
-            deleted_at: null,
-            deleted_by: null,
-            delete_reason: null,
-            expires_at: null
-        }, suiteId, sprintId);
+        return await this.archiveTrash.restoreRecommendation(suiteId, recommendationId, sprintId);
     }
 
     // ========================
-    // PERMANENT DELETE OPERATIONS (Admin only)
+    // ENHANCED PERMANENT DELETE OPERATIONS - Use ArchiveTrashService
     // ========================
 
     async permanentlyDeleteTestCase(suiteId, testCaseId, sprintId = null) {
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
-        }
-        return await this.assets.deleteTestCase(testCaseId, suiteId, sprintId);
+        return await this.archiveTrash.permanentlyDeleteTestCase(suiteId, testCaseId, sprintId);
     }
 
     async permanentlyDeleteBug(suiteId, bugId, sprintId = null) {
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
-        }
-        return await this.assets.deleteBug(bugId, suiteId, sprintId);
+        return await this.archiveTrash.permanentlyDeleteBug(suiteId, bugId, sprintId);
     }
 
     async permanentlyDeleteRecording(suiteId, recordingId, sprintId = null) {
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
-        }
-        return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
+        return await this.archiveTrash.permanentlyDeleteRecording(suiteId, recordingId, sprintId);
     }
 
     async permanentlyDeleteSprint(suiteId, sprintId) {
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
-        }
-        return await this.assets.deleteSprint(sprintId, suiteId);
+        return await this.archiveTrash.permanentlyDeleteSprint(suiteId, sprintId);
     }
 
     async permanentlyDeleteRecommendation(suiteId, recommendationId, sprintId = null) {
-        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'admin');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Admin permissions required for permanent deletion' } };
-        }
-        return await this.assets.deleteRecommendation(recommendationId, suiteId, sprintId);
+        return await this.archiveTrash.permanentlyDeleteRecommendation(suiteId, recommendationId, sprintId);
     }
 
     // ========================
-    // QUERY METHODS FOR ARCHIVED/DELETED ITEMS
+    // ENHANCED QUERY METHODS FOR ARCHIVED/DELETED ITEMS - Use ArchiveTrashService
     // ========================
 
     async getArchivedItems(suiteId, assetType, sprintId = null) {
-        const options = { includeStatus: ['archived'] };
-        
-        switch (assetType) {
-            case 'testCases':
-                return await this.assets.getTestCases(suiteId, sprintId, options);
-            case 'bugs':
-                return await this.assets.getBugs(suiteId, sprintId, options);
-            case 'recordings':
-                return await this.assets.getRecordings(suiteId, sprintId, options);
-            case 'sprints':
-                return await this.assets.getSprints(suiteId, options);
-            case 'recommendations':
-                return await this.assets.getRecommendations(suiteId, sprintId, options);
-            default:
-                return { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-        }
+        return await this.archiveTrash.getArchivedAssets(suiteId, assetType, sprintId);
     }
 
     async getTrashedItems(suiteId, assetType, sprintId = null) {
-        const options = { includeStatus: ['deleted'] };
-        
-        switch (assetType) {
-            case 'testCases':
-                return await this.assets.getTestCases(suiteId, sprintId, options);
-            case 'bugs':
-                return await this.assets.getBugs(suiteId, sprintId, options);
-            case 'recordings':
-                return await this.assets.getRecordings(suiteId, sprintId, options);
-            case 'sprints':
-                return await this.assets.getSprints(suiteId, options);
-            case 'recommendations':
-                return await this.assets.getRecommendations(suiteId, sprintId, options);
-            default:
-                return { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-        }
+        return await this.archiveTrash.getTrashedAssets(suiteId, assetType, sprintId);
     }
 
     // ========================
-    // BULK OPERATIONS
+    // ENHANCED BULK OPERATIONS - Use ArchiveTrashService
     // ========================
 
-    async bulkDelete(suiteId, assetType, assetIds, sprintId = null) {
-        const results = [];
-        
-        for (const assetId of assetIds) {
-            let result;
-            switch (assetType) {
-                case 'testCases':
-                    result = await this.deleteTestCase(assetId, suiteId, sprintId);
-                    break;
-                case 'bugs':
-                    result = await this.deleteBug(assetId, suiteId, sprintId);
-                    break;
-                case 'recordings':
-                    result = await this.deleteRecording(assetId, suiteId, sprintId);
-                    break;
-                case 'sprints':
-                    result = await this.deleteSprint(assetId, suiteId);
-                    break;
-                case 'recommendations':
-                    result = await this.deleteRecommendation(assetId, suiteId, sprintId);
-                    break;
-                default:
-                    result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-            }
-            results.push({ assetId, ...result });
-        }
-
-        const successful = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
-
-        return {
-            success: failed === 0,
-            data: {
-                total: assetIds.length,
-                successful,
-                failed,
-                results
-            }
-        };
+    async bulkDelete(suiteId, assetType, assetIds, sprintId = null, reason = 'Bulk deletion') {
+        return await this.archiveTrash.bulkDelete(suiteId, assetType, assetIds, sprintId, reason);
     }
 
     async bulkArchive(suiteId, assetType, assetIds, sprintId = null, reason = 'Bulk archive') {
-        const results = [];
-        
-        for (const assetId of assetIds) {
-            let result;
-            switch (assetType) {
-                case 'testCases':
-                    result = await this.archiveTestCase(suiteId, assetId, sprintId, reason);
-                    break;
-                case 'bugs':
-                    result = await this.archiveBug(suiteId, assetId, sprintId, reason);
-                    break;
-                case 'recordings':
-                    result = await this.archiveRecording(suiteId, assetId, sprintId, reason);
-                    break;
-                case 'sprints':
-                    result = await this.archiveSprint(suiteId, assetId, reason);
-                    break;
-                case 'recommendations':
-                    result = await this.archiveRecommendation(suiteId, assetId, sprintId, reason);
-                    break;
-                default:
-                    result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-            }
-            results.push({ assetId, ...result });
-        }
-
-        const successful = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
-
-        return {
-            success: failed === 0,
-            data: {
-                total: assetIds.length,
-                successful,
-                failed,
-                results
-            }
-        };
+        return await this.archiveTrash.bulkArchive(suiteId, assetType, assetIds, sprintId, reason);
     }
 
     async bulkRestore(suiteId, assetType, assetIds, sprintId = null, fromTrash = false) {
-        const results = [];
-        
-        for (const assetId of assetIds) {
-            let result;
-            if (fromTrash) {
-                switch (assetType) {
-                    case 'testCases':
-                        result = await this.restoreTestCaseFromTrash(suiteId, assetId, sprintId);
-                        break;
-                    case 'bugs':
-                        result = await this.restoreBugFromTrash(suiteId, assetId, sprintId);
-                        break;
-                    case 'recordings':
-                        result = await this.restoreRecordingFromTrash(suiteId, assetId, sprintId);
-                        break;
-                    case 'sprints':
-                        result = await this.restoreSprintFromTrash(suiteId, assetId);
-                        break;
-                    case 'recommendations':
-                        result = await this.restoreRecommendationFromTrash(suiteId, assetId, sprintId);
-                        break;
-                    default:
-                        result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-                }
-            } else {
-                switch (assetType) {
-                    case 'testCases':
-                        result = await this.unarchiveTestCase(suiteId, assetId, sprintId);
-                        break;
-                    case 'bugs':
-                        result = await this.unarchiveBug(suiteId, assetId, sprintId);
-                        break;
-                    case 'recordings':
-                        result = await this.unarchiveRecording(suiteId, assetId, sprintId);
-                        break;
-                    case 'sprints':
-                        result = await this.unarchiveSprint(suiteId, assetId);
-                        break;
-                    case 'recommendations':
-                        result = await this.unarchiveRecommendation(suiteId, assetId, sprintId);
-                        break;
-                    default:
-                        result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-                }
-            }
-            results.push({ assetId, ...result });
-        }
-
-        const successful = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
-
-        return {
-            success: failed === 0,
-            data: {
-                total: assetIds.length,
-                successful,
-                failed,
-                results
-            }
-        };
+        return await this.archiveTrash.bulkRestore(suiteId, assetType, assetIds, sprintId, fromTrash);
     }
 
     async bulkPermanentDelete(suiteId, assetType, assetIds, sprintId = null) {
-        const results = [];
-        
-        for (const assetId of assetIds) {
-            let result;
-            switch (assetType) {
-                case 'testCases':
-                    result = await this.permanentlyDeleteTestCase(suiteId, assetId, sprintId);
-                    break;
-                case 'bugs':
-                    result = await this.permanentlyDeleteBug(suiteId, assetId, sprintId);
-                    break;
-                case 'recordings':
-                    result = await this.permanentlyDeleteRecording(suiteId, assetId, sprintId);
-                    break;
-                case 'sprints':
-                    result = await this.permanentlyDeleteSprint(suiteId, assetId);
-                    break;
-                case 'recommendations':
-                    result = await this.permanentlyDeleteRecommendation(suiteId, assetId, sprintId);
-                    break;
-                default:
-                    result = { success: false, error: { message: `Unknown asset type: ${assetType}` } };
-            }
-            results.push({ assetId, ...result });
-        }
-
-        const successful = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
-
-        return {
-            success: failed === 0,
-            data: {
-                total: assetIds.length,
-                successful,
-                failed,
-                results
-            }
-        };
+        return await this.archiveTrash.bulkPermanentDelete(suiteId, assetType, assetIds, sprintId);
     }
 
     // ========================
