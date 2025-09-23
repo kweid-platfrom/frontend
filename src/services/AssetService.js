@@ -1,4 +1,4 @@
-// Enhanced AssetService.js - Fixed for corrected YouTube service
+// Fixed AssetService.js - Properly filters deleted/archived items from main views
 import { BaseFirestoreService } from './firestoreService';
 import { orderBy } from 'firebase/firestore';
 import recordingService from '../services/recordingService';
@@ -11,7 +11,7 @@ export class AssetService extends BaseFirestoreService {
     }
 
     // ========================
-    // CORE ASSET METHODS (unchanged)
+    // CORE ASSET METHODS (enhanced with proper filtering)
     // ========================
     
     async updateSuiteAsset(suiteId, assetType, assetId, updates, sprintId = null) {
@@ -125,6 +125,7 @@ export class AssetService extends BaseFirestoreService {
         return await this.createDocument(collectionPath, data);
     }
 
+    // FIXED: Enhanced getSuiteAssets with proper default filtering
     async getSuiteAssets(suiteId, assetType, sprintId = null, options = {}) {
         const userId = this.getCurrentUserId();
         if (!userId) {
@@ -142,8 +143,19 @@ export class AssetService extends BaseFirestoreService {
 
         const constraints = [];
 
+        // FIXED: Default filtering behavior
         if (options.includeStatus && options.includeStatus.length > 0) {
+            // If includeStatus is specified, use it
             constraints.push(['status', 'in', options.includeStatus]);
+        } else if (!options.includeAll) {
+            // Default behavior: exclude deleted and archived unless explicitly requested
+            const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+            if (excludeStatuses.length > 0) {
+                // Use 'not-in' to exclude specific statuses, or filter results post-query
+                // Since Firestore 'not-in' has limitations, we'll filter post-query
+                // constraints.push(['status', 'not-in', excludeStatuses]); // Limited support
+                // We'll handle this in post-processing instead
+            }
         }
 
         // Handle date filtering
@@ -159,6 +171,16 @@ export class AssetService extends BaseFirestoreService {
             constraints.push(['provider', '==', options.provider]);
         }
 
+        // Handle priority filtering for bugs
+        if (assetType === 'bugs' && options.priority) {
+            constraints.push(['priority', '==', options.priority]);
+        }
+
+        // Handle severity filtering for bugs
+        if (assetType === 'bugs' && options.severity) {
+            constraints.push(['severity', '==', options.severity]);
+        }
+
         const result = await this.queryDocuments(
             collectionPath, 
             constraints, 
@@ -166,23 +188,58 @@ export class AssetService extends BaseFirestoreService {
             options.orderDirection || 'desc'
         );
 
-        if (result.success && options.excludeStatus && options.excludeStatus.length > 0) {
-            result.data = result.data.filter(item =>
-                !options.excludeStatus.includes(item.status)
-            );
+        // FIXED: Post-process filtering for excluded statuses
+        if (result.success && result.data) {
+            let filteredData = result.data;
+
+            // Apply excludeStatus filtering if no includeStatus was specified
+            if (!options.includeStatus && !options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                if (excludeStatuses.length > 0) {
+                    filteredData = result.data.filter(item =>
+                        !excludeStatuses.includes(item.status)
+                    );
+                }
+            }
+
+            // Apply additional filters if specified
+            if (options.excludeStatus && options.includeStatus) {
+                // If both are specified, includeStatus takes precedence, but still exclude
+                filteredData = filteredData.filter(item =>
+                    !options.excludeStatus.includes(item.status)
+                );
+            }
+
+            result.data = filteredData;
         }
 
         return result;
     }
 
-    subscribeToSuiteAssets(suiteId, assetType, callback, errorCallback = null, sprintId = null) {
+    // FIXED: Enhanced subscription with filtering
+    subscribeToSuiteAssets(suiteId, assetType, callback, errorCallback = null, sprintId = null, options = {}) {
         const collectionPath = sprintId
             ? `testSuites/${suiteId}/sprints/${sprintId}/${assetType}`
             : `testSuites/${suiteId}/${assetType}`;
+
         return this.subscribeToCollection(
             collectionPath,
             [orderBy('created_at', 'desc')],
-            callback,
+            (data) => {
+                // FIXED: Filter real-time updates to exclude deleted and archived by default
+                let filteredData = data;
+
+                if (!options.includeAll) {
+                    const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                    if (excludeStatuses.length > 0) {
+                        filteredData = data.filter(item =>
+                            !excludeStatuses.includes(item.status)
+                        );
+                    }
+                }
+
+                callback(filteredData);
+            },
             errorCallback
         );
     }
@@ -416,12 +473,13 @@ export class AssetService extends BaseFirestoreService {
         return await this.createSuiteAsset(suiteId, 'recordings', data, sprintId);
     }
 
-    // FIXED: Get recordings with enhanced post-processing
+    // FIXED: Get recordings with enhanced post-processing and default filtering
     async getRecordings(suiteId, sprintId = null, options = {}) {
-        // Set default options for recordings
+        // FIXED: Set default options for recordings to exclude deleted and archived
         const recordingOptions = {
-            excludeStatus: options.excludeStatus || ['deleted'],
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
             includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
             dateFrom: options.dateFrom,
             dateTo: options.dateTo,
             provider: options.provider,
@@ -599,11 +657,21 @@ export class AssetService extends BaseFirestoreService {
         return await this.updateSuiteAsset(suiteId, 'recordings', recordingId, updates, sprintId);
     }
 
-    // FIXED: Subscribe to recordings with enhanced post-processing
-    subscribeToRecordings(suiteId, callback, errorCallback = null, sprintId = null) {
+    // FIXED: Subscribe to recordings with enhanced post-processing and filtering
+    subscribeToRecordings(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
         return this.subscribeToSuiteAssets(suiteId, 'recordings', (recordings) => {
+            // FIXED: Filter out deleted and archived items from real-time updates by default
+            let filteredRecordings = recordings;
+            
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredRecordings = recordings.filter(recording =>
+                    !excludeStatuses.includes(recording.status)
+                );
+            }
+
             // Enhanced post-processing for real-time updates
-            const processedRecordings = recordings.map(recording => {
+            const processedRecordings = filteredRecordings.map(recording => {
                 const videoUrl = recording.videoUrl || recording.url;
                 return {
                     ...recording,
@@ -632,7 +700,7 @@ export class AssetService extends BaseFirestoreService {
                 };
             });
             callback(processedRecordings);
-        }, errorCallback, sprintId);
+        }, errorCallback, sprintId, options);
     }
 
     // FIXED: Delete recording with enhanced cleanup
@@ -712,22 +780,19 @@ export class AssetService extends BaseFirestoreService {
         return result;
     }
 
-    // NEW: Check recording service status
+    // Recording service status methods
     async getRecordingServiceStatus() {
         return await this.recordingService.getServiceStatus();
     }
 
-    // NEW: Test YouTube connection
     async testYouTubeConnection() {
         return await this.recordingService.testYouTubeConnection();
     }
 
-    // NEW: Check YouTube availability (legacy method)
     async isYouTubeAvailable() {
         return await this.recordingService.isYouTubeAvailable();
     }
 
-    // NEW: Get recording statistics
     async getRecordingStatistics(suiteId, sprintId = null) {
         const recordings = await this.getRecordings(suiteId, sprintId, {
             includeStatus: ['active', 'archived']
@@ -778,20 +843,39 @@ export class AssetService extends BaseFirestoreService {
     }
 
     // ========================
-    // OTHER ASSET METHODS (unchanged)
+    // TEST CASES METHODS - FIXED: Default filtering
     // ========================
 
-    // Test Cases
     async createTestCase(suiteId, testCaseData, sprintId = null) {
         return await this.createSuiteAsset(suiteId, 'testCases', testCaseData, sprintId);
     }
 
+    // FIXED: Default filtering for test cases
     async getTestCases(suiteId, sprintId = null, options = {}) {
-        return await this.getSuiteAssets(suiteId, 'testCases', sprintId, options);
+        const defaultOptions = {
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
+            includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
+            ...options
+        };
+        return await this.getSuiteAssets(suiteId, 'testCases', sprintId, defaultOptions);
     }
 
-    subscribeToTestCases(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.subscribeToSuiteAssets(suiteId, 'testCases', callback, errorCallback, sprintId);
+    // FIXED: Filter real-time updates for test cases
+    subscribeToTestCases(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
+        return this.subscribeToSuiteAssets(suiteId, 'testCases', (testCases) => {
+            // Filter out deleted and archived items from real-time updates by default
+            let filteredTestCases = testCases;
+            
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredTestCases = testCases.filter(testCase =>
+                    !excludeStatuses.includes(testCase.status)
+                );
+            }
+            
+            callback(filteredTestCases);
+        }, errorCallback, sprintId, options);
     }
 
     async updateTestCase(testCaseId, updates, suiteId, sprintId = null) {
@@ -806,17 +890,40 @@ export class AssetService extends BaseFirestoreService {
         return await this.getSuiteAsset(suiteId, 'testCases', testCaseId, sprintId);
     }
 
-    // Bugs
+    // ========================
+    // BUGS METHODS - FIXED: Default filtering
+    // ========================
+
     async createBug(suiteId, bugData, sprintId = null) {
         return await this.createSuiteAsset(suiteId, 'bugs', bugData, sprintId);
     }
 
+    // FIXED: Default filtering for bugs
     async getBugs(suiteId, sprintId = null, options = {}) {
-        return await this.getSuiteAssets(suiteId, 'bugs', sprintId, options);
+        const defaultOptions = {
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
+            includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
+            ...options
+        };
+        return await this.getSuiteAssets(suiteId, 'bugs', sprintId, defaultOptions);
     }
 
-    subscribeToBugs(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.subscribeToSuiteAssets(suiteId, 'bugs', callback, errorCallback, sprintId);
+    // FIXED: Filter real-time updates for bugs
+    subscribeToBugs(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
+        return this.subscribeToSuiteAssets(suiteId, 'bugs', (bugs) => {
+            // Filter out deleted and archived items from real-time updates by default
+            let filteredBugs = bugs;
+            
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredBugs = bugs.filter(bug =>
+                    !excludeStatuses.includes(bug.status)
+                );
+            }
+            
+            callback(filteredBugs);
+        }, errorCallback, sprintId, options);
     }
 
     async updateBug(bugId, updates, suiteId, sprintId = null) {
@@ -831,17 +938,40 @@ export class AssetService extends BaseFirestoreService {
         return await this.getSuiteAsset(suiteId, 'bugs', bugId, sprintId);
     }
 
-    // Recommendations
+    // ========================
+    // RECOMMENDATIONS METHODS - FIXED: Default filtering
+    // ========================
+
     async createRecommendation(suiteId, recommendationData, sprintId = null) {
         return await this.createSuiteAsset(suiteId, 'recommendations', recommendationData, sprintId);
     }
 
+    // FIXED: Default filtering for recommendations
     async getRecommendations(suiteId, sprintId = null, options = {}) {
-        return await this.getSuiteAssets(suiteId, 'recommendations', sprintId, options);
+        const defaultOptions = {
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
+            includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
+            ...options
+        };
+        return await this.getSuiteAssets(suiteId, 'recommendations', sprintId, defaultOptions);
     }
 
-    subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
-        return this.subscribeToSuiteAssets(suiteId, 'recommendations', callback, errorCallback, sprintId);
+    // FIXED: Filter real-time updates for recommendations
+    subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
+        return this.subscribeToSuiteAssets(suiteId, 'recommendations', (recommendations) => {
+            // Filter out deleted and archived items from real-time updates by default
+            let filteredRecommendations = recommendations;
+            
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredRecommendations = recommendations.filter(rec =>
+                    !excludeStatuses.includes(rec.status)
+                );
+            }
+            
+            callback(filteredRecommendations);
+        }, errorCallback, sprintId, options);
     }
 
     async updateRecommendation(recommendationId, updates, suiteId, sprintId = null) {
@@ -856,17 +986,40 @@ export class AssetService extends BaseFirestoreService {
         return await this.getSuiteAsset(suiteId, 'recommendations', recommendationId, sprintId);
     }
 
-    // Sprints
+    // ========================
+    // SPRINTS METHODS - FIXED: Default filtering
+    // ========================
+
     async createSprint(suiteId, sprintData) {
         return await this.createSuiteAsset(suiteId, 'sprints', sprintData);
     }
 
+    // FIXED: Default filtering for sprints
     async getSprints(suiteId, options = {}) {
-        return await this.getSuiteAssets(suiteId, 'sprints', null, options);
+        const defaultOptions = {
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
+            includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
+            ...options
+        };
+        return await this.getSuiteAssets(suiteId, 'sprints', null, defaultOptions);
     }
 
-    subscribeToSprints(suiteId, callback, errorCallback = null) {
-        return this.subscribeToSuiteAssets(suiteId, 'sprints', callback, errorCallback);
+    // FIXED: Filter real-time updates for sprints
+    subscribeToSprints(suiteId, callback, errorCallback = null, options = {}) {
+        return this.subscribeToSuiteAssets(suiteId, 'sprints', (sprints) => {
+            // Filter out deleted and archived items from real-time updates by default
+            let filteredSprints = sprints;
+            
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredSprints = sprints.filter(sprint =>
+                    !excludeStatuses.includes(sprint.status)
+                );
+            }
+            
+            callback(filteredSprints);
+        }, errorCallback, null, options);
     }
 
     async updateSprint(sprintId, updates, suiteId) {

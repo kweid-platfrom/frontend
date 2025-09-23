@@ -69,7 +69,7 @@ const getEffortIndicator = (effort) => {
     );
 };
 
-// Individual Recommendation Card with Enhanced Actions
+// Individual Recommendation Card with Enhanced Actions and Selection
 const RecommendationCard = ({ 
     recommendation, 
     onEdit, 
@@ -78,12 +78,15 @@ const RecommendationCard = ({
     onDelete,
     onArchive,
     currentUser,
-    safeFormatDate
+    safeFormatDate,
+    selectedRecommendations,
+    onSelectRecommendation
 }) => {
     const [showStatusDropdown, setShowStatusDropdown] = useState(false);
     const [showActionsDropdown, setShowActionsDropdown] = useState(false);
     const [actionLoading, setActionLoading] = useState(null);
     
+    const isSelected = selectedRecommendations.includes(recommendation.id);
     const netVotes = (recommendation.upvotes || 0) - (recommendation.downvotes || 0);
     const hasUserVoted = recommendation.userVotes && currentUser && 
         recommendation.userVotes[currentUser.uid];
@@ -119,46 +122,66 @@ const RecommendationCard = ({
         }
     };
 
+    const handleSelectChange = (e) => {
+        onSelectRecommendation(recommendation.id, e.target.checked);
+    };
+
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+        <div className={`bg-white rounded-lg shadow-sm border transition-all ${
+            isSelected 
+                ? 'border-teal-500 ring-2 ring-teal-200' 
+                : 'border-gray-200 hover:shadow-md'
+        }`}>
             <div className="p-6">
-                {/* Header */}
+                {/* Header with Selection Checkbox */}
                 <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                            {recommendation.title}
-                        </h3>
-                        <div className="flex items-center gap-2 mb-3">
-                            {/* Status Badge with Dropdown */}
-                            <div className="relative">
-                                <button
-                                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                                    className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border cursor-pointer hover:opacity-80 ${getStatusBadge(recommendation.status)}`}
-                                >
-                                    {recommendation.status?.replace('-', ' ')?.toUpperCase() || 'UNDER REVIEW'}
-                                    <ChevronDown className="w-3 h-3 ml-1" />
-                                </button>
-                                
-                                {showStatusDropdown && (
-                                    <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-10">
-                                        {statusOptions.map((option) => (
-                                            <button
-                                                key={option.value}
-                                                onClick={() => {
-                                                    onStatusUpdate(recommendation.id, option.value);
-                                                    setShowStatusDropdown(false);
-                                                }}
-                                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-md last:rounded-b-md"
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                    <div className="flex items-start gap-3 flex-1">
+                        {/* Selection Checkbox */}
+                        <div className="flex items-center pt-1">
+                            <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={handleSelectChange}
+                                className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                            />
+                        </div>
+                        
+                        <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                                {recommendation.title}
+                            </h3>
+                            <div className="flex items-center gap-2 mb-3">
+                                {/* Status Badge with Dropdown */}
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border cursor-pointer hover:opacity-80 ${getStatusBadge(recommendation.status)}`}
+                                    >
+                                        {recommendation.status?.replace('-', ' ')?.toUpperCase() || 'UNDER REVIEW'}
+                                        <ChevronDown className="w-3 h-3 ml-1" />
+                                    </button>
+                                    
+                                    {showStatusDropdown && (
+                                        <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                                            {statusOptions.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => {
+                                                        onStatusUpdate(recommendation.id, option.value);
+                                                        setShowStatusDropdown(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-md last:rounded-b-md"
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getPriorityBadge(recommendation.priority)}`}>
+                                    {recommendation.priority?.toUpperCase() || 'MEDIUM'}
+                                </span>
                             </div>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getPriorityBadge(recommendation.priority)}`}>
-                                {recommendation.priority?.toUpperCase() || 'MEDIUM'}
-                            </span>
                         </div>
                     </div>
                     
@@ -295,9 +318,51 @@ const RecommendationCard = ({
     );
 };
 
+// Bulk Selection Header Component
+const BulkSelectionHeader = ({ 
+    recommendations, 
+    selectedRecommendations, 
+    onSelectAll 
+}) => {
+    if (recommendations.length === 0) return null;
+    
+    const allSelected = recommendations.length > 0 && 
+        recommendations.every(rec => selectedRecommendations.includes(rec.id));
+    const someSelected = selectedRecommendations.length > 0 && !allSelected;
+
+    const handleSelectAllChange = (e) => {
+        onSelectAll(e.target.checked);
+    };
+
+    return (
+        <div className="flex items-center gap-3 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center">
+                <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={input => {
+                        if (input) input.indeterminate = someSelected;
+                    }}
+                    onChange={handleSelectAllChange}
+                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                />
+            </div>
+            <span className="text-sm text-gray-600">
+                {selectedRecommendations.length === 0 
+                    ? `Select recommendations (${recommendations.length} total)`
+                    : `${selectedRecommendations.length} of ${recommendations.length} selected`
+                }
+            </span>
+        </div>
+    );
+};
+
 // Recommendation Cards Component
 const RecommendationCards = ({ 
     recommendations, 
+    selectedRecommendations,
+    onSelectRecommendation,
+    onSelectAll,
     onEdit, 
     onVote, 
     onStatusUpdate,
@@ -324,20 +389,32 @@ const RecommendationCards = ({
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recommendations.map((rec) => (
-                <RecommendationCard
-                    key={rec.id}
-                    recommendation={rec}
-                    onEdit={onEdit}
-                    onVote={onVote}
-                    onStatusUpdate={onStatusUpdate}
-                    onDelete={onDelete}
-                    onArchive={onArchive}
-                    currentUser={currentUser}
-                    safeFormatDate={safeFormatDate}
-                />
-            ))}
+        <div>
+            {/* Bulk Selection Header */}
+            <BulkSelectionHeader
+                recommendations={recommendations}
+                selectedRecommendations={selectedRecommendations}
+                onSelectAll={onSelectAll}
+            />
+            
+            {/* Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recommendations.map((rec) => (
+                    <RecommendationCard
+                        key={rec.id}
+                        recommendation={rec}
+                        onEdit={onEdit}
+                        onVote={onVote}
+                        onStatusUpdate={onStatusUpdate}
+                        onDelete={onDelete}
+                        onArchive={onArchive}
+                        currentUser={currentUser}
+                        safeFormatDate={safeFormatDate}
+                        selectedRecommendations={selectedRecommendations}
+                        onSelectRecommendation={onSelectRecommendation}
+                    />
+                ))}
+            </div>
         </div>
     );
 };

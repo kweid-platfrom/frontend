@@ -9,13 +9,11 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
     const buttonRef = useRef(null);
     const searchInputRef = useRef(null);
 
-    // Validate and filter options
     const validOptions = useMemo(() =>
         Array.isArray(options) ? options.filter((opt) => opt?.value && opt?.label) : [],
         [options]
     );
 
-    // Filter options based on search query
     const filteredOptions = useMemo(() => {
         if (!searchQuery) return validOptions;
         const query = searchQuery.toLowerCase();
@@ -24,7 +22,6 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
         );
     }, [searchQuery, validOptions]);
 
-    // Dynamic positioning
     useEffect(() => {
         if (isOpen && buttonRef.current && dropdownRef.current) {
             const buttonRect = buttonRef.current.getBoundingClientRect();
@@ -32,20 +29,19 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
             const viewportHeight = window.innerHeight;
             const viewportWidth = window.innerWidth;
 
-            // Vertical positioning: prefer above if near bottom
             const spaceBelow = viewportHeight - buttonRect.bottom;
             const spaceAbove = buttonRect.top;
-            const threshold = 100; // Pixels from bottom to prefer above
+            const threshold = 100;
 
-            const verticalPosition = (spaceBelow < threshold || spaceBelow < dropdownHeight) && spaceAbove > dropdownHeight
-                ? { top: 'auto', bottom: '100%' }
-                : { top: '100%', bottom: 'auto' };
+            const verticalPosition =
+                (spaceBelow < threshold || spaceBelow < dropdownHeight) && spaceAbove > dropdownHeight
+                    ? { top: 'auto', bottom: '100%' }
+                    : { top: '100%', bottom: 'auto' };
 
-            // Horizontal positioning
             let horizontalPosition = { left: '0', right: 'auto' };
             const dropdownWidth = Math.max(300, buttonRect.width);
             const dropdownRight = buttonRect.left + dropdownWidth;
-            if (dropdownRight > viewportWidth - 10) { // 10px buffer
+            if (dropdownRight > viewportWidth - 10) {
                 horizontalPosition = { left: 'auto', right: '0' };
             }
 
@@ -53,7 +49,6 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
         }
     }, [isOpen]);
 
-    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -68,7 +63,6 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
         }
     }, [isOpen]);
 
-    // Focus search input when dropdown opens
     useEffect(() => {
         if (isOpen && searchInputRef.current) {
             searchInputRef.current.focus();
@@ -80,7 +74,11 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
             const newValue = value.includes(optionValue)
                 ? value.filter((v) => v !== optionValue)
                 : [...value, optionValue];
-            onChange(newValue);
+            if (typeof onChange === 'function') {
+                onChange(newValue);
+            } else {
+                console.warn('onChange is not a function');
+            }
         } catch (error) {
             console.error(`Error updating ${type} selection:`, error);
         }
@@ -133,24 +131,24 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
     }, [value, validOptions, placeholder]);
 
     return (
-        <div className="relative w-full" ref={dropdownRef}>
+        <div className="relative w-full font-poppins" ref={dropdownRef}>
             <button
                 ref={buttonRef}
                 type="button"
-                className="text-xs px-2 py-1 rounded border border-gray-300 focus:ring-2 focus:ring-teal-500 cursor-pointer w-full bg-white flex items-center justify-between hover:border-gray-400 transition-colors"
+                className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-ring dark:focus:ring-ring cursor-pointer w-full bg-card dark:bg-card flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
                 onClick={handleDropdownToggle}
                 onMouseDown={(e) => e.stopPropagation()}
                 onFocus={(e) => e.stopPropagation()}
             >
-                <span className="truncate flex-1 text-left">
+                <span className="truncate flex-1 text-left text-foreground dark:text-foreground">
                     {displayText}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (
                 <div
-                    className="absolute z-100 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                    className="absolute z-50 bg-card dark:bg-card border border-border dark:border-border rounded shadow-theme-lg max-h-60 overflow-y-auto"
                     style={{
                         top: dropdownPosition.top,
                         bottom: dropdownPosition.bottom,
@@ -161,16 +159,16 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
                         width: 'max-content',
                     }}
                 >
-                    <div className="px-3 py-2 border-b border-gray-200">
+                    <div className="px-3 py-2 border-b border-border dark:border-border">
                         <div className="relative">
-                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                             <input
                                 ref={searchInputRef}
                                 type="text"
                                 value={searchQuery}
                                 onChange={handleSearchChange}
                                 placeholder={`Search ${type}...`}
-                                className="w-full pl-8 pr-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                className="w-full pl-8 pr-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-ring dark:focus:ring-ring focus:outline-none bg-card dark:bg-card text-foreground dark:text-foreground"
                                 onClick={(e) => e.stopPropagation()}
                             />
                         </div>
@@ -179,7 +177,7 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
                         filteredOptions.map((option) => (
                             <div
                                 key={option.value}
-                                className="flex items-center px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
+                                className="flex items-center px-3 py-2 text-xs hover:bg-accent dark:hover:bg-accent cursor-pointer text-foreground dark:text-foreground"
                                 onClick={(e) => handleOptionClick(e, option.value)}
                                 onMouseDown={(e) => e.stopPropagation()}
                             >
@@ -188,13 +186,13 @@ const MultiSelectDropdown = ({ options = [], value = [], onChange, placeholder, 
                                     checked={value.includes(option.value)}
                                     onChange={(e) => handleCheckboxChange(e, option.value)}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="mr-2 h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                                    className="mr-2 h-4 w-4 text-teal-500 dark:text-teal-300 focus:ring-ring dark:focus:ring-ring border-gray-300 dark:border-gray-600 rounded"
                                 />
                                 <span className="truncate max-w-[270px]">{option.label}</span>
                             </div>
                         ))
                     ) : (
-                        <div className="px-3 py-2 text-xs text-gray-500">No {type} found</div>
+                        <div className="px-3 py-2 text-xs text-muted-foreground dark:text-muted-foreground">No {type} found</div>
                     )}
                 </div>
             )}

@@ -40,7 +40,7 @@ const Register = ({ onSwitchToLogin }) => {
         }
 
         setSuccessMessage(message);
-        
+
         // Use Sonner toast instead of custom toast
         if (result.needsVerification || message.includes('verify')) {
             toast.success("Registration successful! Check your email for verification.");
@@ -101,27 +101,27 @@ const Register = ({ onSwitchToLogin }) => {
             <BackgroundDecorations />
             <div className="flex items-center justify-center min-h-screen px-3 sm:px-4 lg:px-6 relative z-10 py-6 sm:py-8">
                 <div className="w-full max-w-[320px] xs:max-w-[360px] sm:max-w-md">
-                    <div className="text-center mb-3 sm:mb-4">
-                        <div className="inline-block">
-                             <div className="flex items-center justify-center mb-2">
-                                <div className="w-16 h-16 xs:w-20 xs:h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex items-center justify-center">
-                                    <Image 
-                                        src="/logo.svg" 
-                                        alt="Assura Logo" 
-                                        width={128} 
-                                        height={128} 
-                                        className="w-full h-full object-contain" 
-                                        priority
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                     <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-4 xs:p-5 sm:p-6 md:p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
                         <div className="text-center mb-6 sm:mb-8">
-                            <h1 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 mb-2">Join Assura</h1>
-                            <p className="text-sm sm:text-base md:text-lg text-slate-600">Your QA Workflow Just got reimagined</p>
+                            <div className="text-center">
+                                <div className="inline-block">
+                                    <div className="flex items-center justify-center">
+                                        <div className="w-16 h-16 xs:w-20 xs:h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex items-center justify-center">
+                                            <Image
+                                                src="/logo.svg"
+                                                alt="Assura Logo"
+                                                width={50}
+                                                height={50}
+                                                className="w-full h-full object-contain"
+                                                priority
+                                            />
+                                        </div>
+                                    </div>
+                                    <h1 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-card-foreground mb-2">Join Assura</h1>
+                                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6">Your QA Workflow Just got reimagined</p>
+                                </div>
+                            </div>
                         </div>
                         {renderCurrentScreen()}
                     </div>

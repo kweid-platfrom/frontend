@@ -38,9 +38,6 @@ const BugList = ({
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
     const [loadingActions, setLoadingActions] = useState([]);
 
-    // Pagination state
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     const handleSelectAll = useCallback((checked) => {
         if (checked) {
