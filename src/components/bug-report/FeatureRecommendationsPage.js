@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useApp } from '../../context/AppProvider';
 import {
@@ -12,6 +12,8 @@ import {
 import RecommendationCards from '../recommend/RecommendationCards';
 import RecommendationTable from '../recommend/RecommendationTable';
 import RecommendationModal from '../recommend/RecommendationModal';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import Pagination from '../common/Pagination';
 
 // Safe date formatting helper
 const safeFormatDate = (dateValue, formatType = 'relative') => {
@@ -54,6 +56,12 @@ const safeFormatDate = (dateValue, formatType = 'relative') => {
 const FeatureRecommendationsPage = () => {
     // Get app state and actions
     const { state, actions, currentUser, isLoading } = useApp();
+
+    // Local state for selection and pagination
+    const [selectedRecommendations, setSelectedRecommendations] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [bulkLoadingActions, setBulkLoadingActions] = useState([]);
 
     // Safely destructure recommendations state with fallbacks
     const recommendationsState = state.recommendations || {};
@@ -188,6 +196,171 @@ const FeatureRecommendationsPage = () => {
         return filtered;
     }, [recommendations, filters, sortConfig, recommendationsAvailable]);
 
+    // Paginated recommendations
+    const paginatedRecommendations = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredRecommendations.slice(startIndex, endIndex);
+    }, [filteredRecommendations, currentPage, itemsPerPage]);
+
+    // Selection handlers
+    const handleSelectRecommendation = useCallback((recId, selected) => {
+        setSelectedRecommendations(prev => {
+            if (selected) {
+                return [...prev, recId];
+            } else {
+                return prev.filter(id => id !== recId);
+            }
+        });
+    }, []);
+
+    const handleSelectAll = useCallback((selected) => {
+        if (selected) {
+            const currentPageIds = paginatedRecommendations.map(rec => rec.id);
+            setSelectedRecommendations(prev => {
+                const newSelection = new Set([...prev, ...currentPageIds]);
+                return Array.from(newSelection);
+            });
+        } else {
+            const currentPageIds = new Set(paginatedRecommendations.map(rec => rec.id));
+            setSelectedRecommendations(prev => prev.filter(id => !currentPageIds.has(id)));
+        }
+    }, [paginatedRecommendations]);
+
+    const handleClearSelection = useCallback(() => {
+        setSelectedRecommendations([]);
+    }, []);
+
+    // Bulk action handler
+    const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig, selectedOption) => {
+        if (!currentUser?.uid) {
+            actions.ui.showNotification({
+                id: 'bulk-no-auth',
+                type: 'error',
+                message: 'You must be logged in to perform bulk actions',
+                duration: 3000
+            });
+            return;
+        }
+
+        setBulkLoadingActions(prev => [...prev, actionId]);
+
+        try {
+            let successCount = 0;
+            let failureCount = 0;
+
+            for (const recId of selectedItems) {
+                try {
+                    let result;
+
+                    switch (actionId) {
+                        case 'approve':
+                            result = await handleStatusUpdate(recId, 'approved');
+                            break;
+                        case 'reject':
+                            result = await handleStatusUpdate(recId, 'rejected');
+                            break;
+                        case 'review':
+                            result = await handleStatusUpdate(recId, 'under-review');
+                            break;
+                        case 'assign':
+                            if (selectedOption) {
+                                // Update recommendation with assigned user
+                                const recommendation = recommendations.find(r => r.id === recId);
+                                if (recommendation) {
+                                    result = await updateRecommendation({
+                                        ...recommendation,
+                                        assigned_to: selectedOption.id,
+                                        updated_at: new Date().toISOString()
+                                    });
+                                }
+                            }
+                            break;
+                        case 'add-to-sprint':
+                            if (selectedOption) {
+                                const recommendation = recommendations.find(r => r.id === recId);
+                                if (recommendation) {
+                                    result = await updateRecommendation({
+                                        ...recommendation,
+                                        sprint_id: selectedOption.id,
+                                        updated_at: new Date().toISOString()
+                                    });
+                                }
+                            }
+                            break;
+                        case 'archive':
+                            result = await archiveRecommendation(recId);
+                            break;
+                        case 'delete':
+                            result = await deleteRecommendation(recId);
+                            break;
+                        default:
+                            console.warn(`Unknown bulk action: ${actionId}`);
+                            failureCount++;
+                            continue;
+                    }
+
+                    if (result && result.success !== false) {
+                        successCount++;
+                    } else {
+                        failureCount++;
+                    }
+                } catch (error) {
+                    console.error(`Error performing ${actionId} on recommendation ${recId}:`, error);
+                    failureCount++;
+                }
+            }
+
+            // Show summary notification
+            if (successCount > 0 && failureCount === 0) {
+                actions.ui.showNotification({
+                    id: 'bulk-success',
+                    type: 'success',
+                    message: `Successfully ${actionConfig.label.toLowerCase()} ${successCount} recommendation${successCount > 1 ? 's' : ''}`,
+                    duration: 3000
+                });
+            } else if (successCount > 0 && failureCount > 0) {
+                actions.ui.showNotification({
+                    id: 'bulk-partial',
+                    type: 'warning',
+                    message: `${successCount} successful, ${failureCount} failed`,
+                    duration: 4000
+                });
+            } else {
+                actions.ui.showNotification({
+                    id: 'bulk-failure',
+                    type: 'error',
+                    message: `Failed to ${actionConfig.label.toLowerCase()} recommendations`,
+                    duration: 3000
+                });
+            }
+
+        } catch (error) {
+            console.error('Bulk action error:', error);
+            actions.ui.showNotification({
+                id: 'bulk-error',
+                type: 'error',
+                message: 'An error occurred while performing bulk actions',
+                duration: 3000
+            });
+        } finally {
+            setBulkLoadingActions(prev => prev.filter(id => id !== actionId));
+        }
+    }, [currentUser, actions.ui, recommendations, updateRecommendation, archiveRecommendation, deleteRecommendation]);
+
+    // Pagination handlers
+    const handlePageChange = useCallback((page) => {
+        setCurrentPage(page);
+        setSelectedRecommendations([]); // Clear selection when changing pages
+    }, []);
+
+    const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
+        setItemsPerPage(newItemsPerPage);
+        setCurrentPage(1); // Reset to first page
+        setSelectedRecommendations([]); // Clear selection
+    }, []);
+
+    // Standard handlers (same as before)
     const handleCreateRecommendation = useCallback(() => {
         if (!recommendationsAvailable) {
             actions.ui.showNotification({
@@ -214,7 +387,6 @@ const FeatureRecommendationsPage = () => {
         openModal(rec);
     }, [openModal, recommendationsAvailable, actions.ui]);
 
-    // Fixed voting function - only pass the vote type (string)
     const handleVote = useCallback(async (recId, voteType) => {
         if (!currentUser?.uid) {
             actions.ui.showNotification({
@@ -237,10 +409,7 @@ const FeatureRecommendationsPage = () => {
         }
 
         try {
-            console.log('Voting on recommendation:', recId, voteType);
-            // Pass only primitive values - the vote type should be just 'up' or 'down'
             const result = await voteOnRecommendation(recId, voteType);
-
             if (result && result.success === false) {
                 actions.ui.showNotification({
                     id: 'vote-error',
@@ -260,7 +429,6 @@ const FeatureRecommendationsPage = () => {
         }
     }, [voteOnRecommendation, currentUser, actions.ui, recommendationsAvailable]);
 
-    // Fixed status update function - pass only the new status string
     const handleStatusUpdate = useCallback(async (recId, newStatus) => {
         if (!currentUser?.uid) {
             actions.ui.showNotification({
@@ -288,12 +456,10 @@ const FeatureRecommendationsPage = () => {
                 throw new Error('Recommendation not found');
             }
 
-            // Create update object with only the fields that need to be updated
             const updateData = {
                 id: recId,
                 status: newStatus,
                 updated_at: new Date().toISOString(),
-                // Include other required fields to avoid partial updates
                 title: recommendation.title,
                 description: recommendation.description,
                 priority: recommendation.priority,
@@ -311,13 +477,9 @@ const FeatureRecommendationsPage = () => {
                     message: result.error?.message || 'Failed to update recommendation status',
                     duration: 3000
                 });
+                return result;
             } else {
-                actions.ui.showNotification({
-                    id: 'status-update-success',
-                    type: 'success',
-                    message: 'Recommendation status updated successfully',
-                    duration: 2000
-                });
+                return { success: true };
             }
         } catch (error) {
             console.error('Error updating status:', error);
@@ -327,10 +489,10 @@ const FeatureRecommendationsPage = () => {
                 message: 'Failed to update recommendation status',
                 duration: 3000
             });
+            return { success: false, error };
         }
-    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable]);
+    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable, handleStatusUpdate]);
 
-    // Delete recommendation function
     const handleDeleteRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
             actions.ui.showNotification({
@@ -381,7 +543,6 @@ const FeatureRecommendationsPage = () => {
         }
     }, [deleteRecommendation, currentUser, actions.ui, recommendationsAvailable]);
 
-    // Archive recommendation function
     const handleArchiveRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
             actions.ui.showNotification({
@@ -600,35 +761,65 @@ const FeatureRecommendationsPage = () => {
                 </div>
 
                 {/* Content */}
-                {viewMode === 'cards' ? (
-                    <RecommendationCards
-                        recommendations={filteredRecommendations}
-                        onEdit={handleEditRecommendation}
-                        onVote={handleVote}
-                        onStatusUpdate={handleStatusUpdate}
-                        onDelete={handleDeleteRecommendation}
-                        onArchive={handleArchiveRecommendation}
-                        currentUser={currentUser}
-                        safeFormatDate={safeFormatDate}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                    {viewMode === 'cards' ? (
+                        <div className="p-6">
+                            <RecommendationCards
+                                recommendations={paginatedRecommendations}
+                                selectedRecommendations={selectedRecommendations}
+                                onSelectRecommendation={handleSelectRecommendation}
+                                onSelectAll={handleSelectAll}
+                                onEdit={handleEditRecommendation}
+                                onVote={handleVote}
+                                onStatusUpdate={handleStatusUpdate}
+                                onDelete={handleDeleteRecommendation}
+                                onArchive={handleArchiveRecommendation}
+                                currentUser={currentUser}
+                                safeFormatDate={safeFormatDate}
+                            />
+                        </div>
+                    ) : (
+                        <RecommendationTable
+                            recommendations={paginatedRecommendations}
+                            selectedRecommendations={selectedRecommendations}
+                            onSelectRecommendation={handleSelectRecommendation}
+                            onSelectAll={handleSelectAll}
+                            onEdit={handleEditRecommendation}
+                            onVote={handleVote}
+                            onStatusUpdate={handleStatusUpdate}
+                            onDelete={handleDeleteRecommendation}
+                            onArchive={handleArchiveRecommendation}
+                            currentUser={currentUser}
+                            onSort={(key) => setSortConfig({
+                                key,
+                                direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc',
+                            })}
+                            sortConfig={sortConfig}
+                            safeFormatDate={safeFormatDate}
+                        />
+                    )}
+                    
+                    {/* Pagination */}
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredRecommendations.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={handlePageChange}
+                        onItemsPerPageChange={handleItemsPerPageChange}
                     />
-                ) : (
-                    <RecommendationTable
-                        recommendations={filteredRecommendations}
-                        onEdit={handleEditRecommendation}
-                        onVote={handleVote}
-                        onStatusUpdate={handleStatusUpdate}
-                        onDelete={handleDeleteRecommendation}
-                        onArchive={handleArchiveRecommendation}
-                        currentUser={currentUser}
-                        onSort={(key) => setSortConfig({
-                            key,
-                            direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc',
-                        })}
-                        sortConfig={sortConfig}
-                        safeFormatDate={safeFormatDate}
-                    />
-                )}
+                </div>
             </div>
+
+            {/* Bulk Actions Bar */}
+            <EnhancedBulkActionsBar
+                selectedItems={selectedRecommendations}
+                onClearSelection={handleClearSelection}
+                pageTitle="recommendation"
+                pageIcon="Lightbulb"
+                assetType="recommendations"
+                onAction={handleBulkAction}
+                loadingActions={bulkLoadingActions}
+            />
 
             {/* Modal for creating/editing recommendations */}
             {isModalOpen && (
