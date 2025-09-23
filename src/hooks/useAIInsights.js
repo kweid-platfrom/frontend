@@ -1,461 +1,199 @@
-// hooks/useAIInsights.js - Hook for managing AI insights in recordings
-import { useState, useCallback, useEffect } from 'react';
-import aiInsightService from '../services/AIInsightService';
+// hooks/useAIInsights.js - Fixed to prevent infinite loops
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useApp } from '../context/AppProvider';
 
-export const useAIInsights = (recording, options = {}) => {
-    const {
-        autoAnalyze = true,
-        enableFallback = true,
-        storageKey = null // If provided, will cache insights locally
-    } = options;
+export const useAIInsights = (config = {}) => {
+  const {
+    refreshInterval = 5, // minutes
+    autoRefresh = false, // Default to false to prevent issues
+    maxInsights = 10,
+    includeMetrics = true
+  } = config;
 
-    const [insights, setInsights] = useState([]);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [analysisComplete, setAnalysisComplete] = useState(false);
-    const [error, setError] = useState(null);
-    const [analysisMetrics, setAnalysisMetrics] = useState(null);
-    const [serviceReady, setServiceReady] = useState(false);
+  const { bugs, testCases, aiMetrics } = useApp();
+  const [insights, setInsights] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  
+  // Use refs to prevent infinite loops
+  const bugsRef = useRef(bugs);
+  const testCasesRef = useRef(testCases);
+  const aiMetricsRef = useRef(aiMetrics);
+  const refreshTimeoutRef = useRef(null);
 
-    // Check service health on mount
-    useEffect(() => {
-        const checkService = async () => {
-            try {
-                const health = await aiInsightService.testHealth();
-                setServiceReady(health.success && health.healthy);
-            } catch (err) {
-                console.warn('AI insight service health check failed:', err);
-                setServiceReady(false);
-            }
-        };
+  // Update refs when data changes
+  useEffect(() => {
+    bugsRef.current = bugs;
+  }, [bugs]);
 
-        checkService();
-    }, []);
+  useEffect(() => {
+    testCasesRef.current = testCases;
+  }, [testCases]);
 
-    // Load cached insights if available
-    useEffect(() => {
-        if (storageKey && recording?.id) {
-            try {
-                const cached = localStorage.getItem(`ai_insights_${storageKey}_${recording.id}`);
-                if (cached) {
-                    const parsedCache = JSON.parse(cached);
-                    const cacheAge = Date.now() - new Date(parsedCache.timestamp).getTime();
-                    
-                    // Use cached insights if less than 1 hour old
-                    if (cacheAge < 60 * 60 * 1000) {
-                        setInsights(parsedCache.insights);
-                        setAnalysisMetrics(parsedCache.metadata);
-                        setAnalysisComplete(true);
-                        console.log('📋 Loaded cached AI insights');
-                        return;
-                    }
-                }
-            } catch (err) {
-                console.warn('Failed to load cached insights:', err);
-            }
-        }
-    }, [recording?.id, storageKey]);
+  useEffect(() => {
+    aiMetricsRef.current = aiMetrics;
+  }, [aiMetrics]);
 
-    // Analyze recording data
-    const analyzeRecording = useCallback(async (recordingData) => {
-        if (!recordingData || isAnalyzing) {
-            return { success: false, error: 'Invalid recording data or analysis in progress' };
-        }
+  // Generate insights from current data - STABLE function
+  const generateInsights = useCallback(() => {
+    const currentInsights = [];
+    const now = new Date();
+    const currentBugs = bugsRef.current || [];
+    const currentTestCases = testCasesRef.current || [];
+    const currentMetrics = aiMetricsRef.current;
 
-        setIsAnalyzing(true);
-        setError(null);
-        setAnalysisComplete(false);
+    // Bug-related insights
+    if (currentBugs.length > 0) {
+      const criticalBugs = currentBugs.filter(b => 
+        b.severity === 'critical' || b.priority === 'P1'
+      );
+      
+      const recentBugs = currentBugs.filter(b => {
+        const created = new Date(b.created_at || b.createdAt);
+        const daysDiff = (now - created) / (1000 * 60 * 60 * 24);
+        return daysDiff <= 7;
+      });
 
-        try {
-            console.log('🤖 Analyzing recording with AI insights service...');
-            
-            const result = await aiInsightService.analyzeRecording(recordingData);
+      if (criticalBugs.length > 0) {
+        currentInsights.push({
+          id: `critical-bugs-${criticalBugs.length}`,
+          type: 'alert',
+          severity: 'high',
+          title: 'Critical Issues Detected',
+          message: `${criticalBugs.length} critical bugs require immediate attention`,
+          actionable: true,
+          data: { count: criticalBugs.length }
+        });
+      }
 
-            if (result.success && result.data?.insights) {
-                const processedInsights = result.data.insights.map(insight => ({
-                    ...insight,
-                    recordingId: recordingData.id,
-                    generatedAt: new Date().toISOString()
-                }));
+      if (recentBugs.length > 3) {
+        currentInsights.push({
+          id: `recent-bugs-${recentBugs.length}`,
+          type: 'trend',
+          severity: 'medium',
+          title: 'Increasing Bug Reports',
+          message: `${recentBugs.length} new bugs reported in the last 7 days`,
+          actionable: true,
+          data: { count: recentBugs.length, trend: 'increasing' }
+        });
+      }
+    }
 
-                setInsights(processedInsights);
-                setAnalysisMetrics(result.metadata);
-                setAnalysisComplete(true);
-                setError(null);
+    // Test case insights
+    if (currentTestCases.length > 0) {
+      const failedTests = currentTestCases.filter(tc => tc.status === 'failed');
+      const blockedTests = currentTestCases.filter(tc => tc.status === 'blocked');
+      const passRate = currentTestCases.length > 0 ? 
+        ((currentTestCases.length - failedTests.length) / currentTestCases.length) * 100 : 0;
 
-                // Cache insights if storage key provided
-                if (storageKey) {
-                    try {
-                        const cacheData = {
-                            insights: processedInsights,
-                            metadata: result.metadata,
-                            timestamp: new Date().toISOString(),
-                            recordingId: recordingData.id
-                        };
-                        localStorage.setItem(
-                            `ai_insights_${storageKey}_${recordingData.id}`, 
-                            JSON.stringify(cacheData)
-                        );
-                    } catch (err) {
-                        console.warn('Failed to cache insights:', err);
-                    }
-                }
+      if (passRate < 70) {
+        currentInsights.push({
+          id: `low-pass-rate-${Math.round(passRate)}`,
+          type: 'warning',
+          severity: 'medium',
+          title: 'Low Test Pass Rate',
+          message: `Current pass rate is ${Math.round(passRate)}% - consider reviewing test strategy`,
+          actionable: true,
+          data: { passRate, failed: failedTests.length, total: currentTestCases.length }
+        });
+      }
 
-                console.log(`✅ Generated ${processedInsights.length} AI insights`);
-                
-                return {
-                    success: true,
-                    insights: processedInsights,
-                    metadata: result.metadata
-                };
+      if (blockedTests.length > 0) {
+        currentInsights.push({
+          id: `blocked-tests-${blockedTests.length}`,
+          type: 'info',
+          severity: 'low',
+          title: 'Blocked Test Cases',
+          message: `${blockedTests.length} test cases are currently blocked`,
+          actionable: true,
+          data: { count: blockedTests.length }
+        });
+      }
+    }
 
-            } else if (result.fallbackData?.insights) {
-                // Handle fallback mode
-                const fallbackInsights = result.fallbackData.insights.map(insight => ({
-                    ...insight,
-                    recordingId: recordingData.id,
-                    generatedAt: new Date().toISOString(),
-                    fallbackMode: true
-                }));
+    // AI metrics insights
+    if (includeMetrics && currentMetrics?.efficiency < 60) {
+      currentInsights.push({
+        id: `low-ai-efficiency-${Math.round(currentMetrics.efficiency)}`,
+        type: 'suggestion',
+        severity: 'low',
+        title: 'AI Usage Optimization',
+        message: `AI efficiency at ${Math.round(currentMetrics.efficiency)}% - optimize usage`,
+        actionable: true,
+        data: { efficiency: currentMetrics.efficiency }
+      });
+    }
 
-                setInsights(fallbackInsights);
-                setAnalysisMetrics({
-                    totalInsights: fallbackInsights.length,
-                    provider: 'fallback',
-                    model: 'rule-based',
-                    fallbackMode: true
-                });
-                setAnalysisComplete(true);
-                setError(result.userMessage || 'AI service unavailable, using fallback analysis');
+    return currentInsights.slice(0, maxInsights);
+  }, [maxInsights, includeMetrics]);
 
-                console.log(`⚠️ Using fallback insights: ${fallbackInsights.length} insights`);
-                
-                return {
-                    success: true,
-                    insights: fallbackInsights,
-                    fallbackMode: true,
-                    error: result.userMessage
-                };
+  // Refresh insights - STABLE function
+  const refreshInsights = useCallback(() => {
+    setLoading(true);
+    
+    try {
+      const newInsights = generateInsights();
+      setInsights(newInsights);
+      setLastRefresh(new Date());
+    } catch (error) {
+      console.error('Failed to refresh insights:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [generateInsights]);
 
-            } else {
-                throw new Error(result.userMessage || result.error || 'Failed to generate insights');
-            }
+  // Initial load - only run once when component mounts
+  useEffect(() => {
+    refreshInsights();
+  }, []); // Empty dependency array
 
-        } catch (err) {
-            console.error('❌ Recording analysis failed:', err);
-            
-            const errorMessage = err.message || 'Failed to analyze recording';
-            setError(errorMessage);
-            
-            // Generate basic fallback if enabled
-            if (enableFallback) {
-                const basicInsights = generateBasicFallbackInsights(recordingData);
-                setInsights(basicInsights);
-                setAnalysisMetrics({
-                    totalInsights: basicInsights.length,
-                    provider: 'basic-fallback',
-                    model: 'rule-based',
-                    fallbackMode: true,
-                    error: errorMessage
-                });
-                setAnalysisComplete(true);
+  // Data change handler - debounced to prevent excessive updates
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      refreshInsights();
+    }, 1000); // Debounce for 1 second
 
-                return {
-                    success: false,
-                    insights: basicInsights,
-                    fallbackMode: true,
-                    error: errorMessage
-                };
-            }
+    return () => clearTimeout(timeoutId);
+  }, [bugs?.length, testCases?.length, aiMetrics?.efficiency]);
 
-            setAnalysisComplete(false);
-            return {
-                success: false,
-                error: errorMessage
-            };
-
-        } finally {
-            setIsAnalyzing(false);
-        }
-    }, [isAnalyzing, enableFallback, storageKey]);
-
-    // Generate basic fallback insights
-    const generateBasicFallbackInsights = (recordingData) => {
-        const insights = [];
-        const { consoleLogs = [], networkLogs = [], duration = 300 } = recordingData;
-
-        // Basic error detection
-        const errors = consoleLogs.filter(log => log.level === 'error');
-        if (errors.length > 0) {
-            insights.push({
-                id: `basic_error_${Date.now()}`,
-                type: 'error',
-                category: 'javascript',
-                title: `${errors.length} JavaScript Error${errors.length > 1 ? 's' : ''} Found`,
-                description: 'JavaScript errors detected that may affect application functionality',
-                severity: errors.length > 3 ? 'high' : 'medium',
-                confidence: 1.0,
-                impact: 'May prevent users from completing tasks',
-                recommendation: 'Review and fix JavaScript errors',
-                evidence: errors.slice(0, 3).map(e => e.message),
-                tags: ['javascript', 'errors', 'basic-analysis'],
-                automationPotential: 'high',
-                businessImpact: 'functionality',
-                icon: 'AlertTriangle',
-                color: 'red',
-                time: Math.random() * duration,
-                source: 'basic-fallback'
-            });
-        }
-
-        // Basic network analysis
-        const failedRequests = networkLogs.filter(req => req.status >= 400);
-        if (failedRequests.length > 0) {
-            insights.push({
-                id: `basic_network_${Date.now()}`,
-                type: 'network',
-                category: 'api',
-                title: `${failedRequests.length} Failed Request${failedRequests.length > 1 ? 's' : ''}`,
-                description: 'Network requests failed with error status codes',
-                severity: failedRequests.some(r => r.status >= 500) ? 'high' : 'medium',
-                confidence: 1.0,
-                impact: 'Users may experience data loading issues',
-                recommendation: 'Check API endpoints and error handling',
-                evidence: failedRequests.slice(0, 3).map(r => `${r.method} ${r.url} - ${r.status}`),
-                tags: ['network', 'api', 'basic-analysis'],
-                automationPotential: 'high',
-                businessImpact: 'user_experience',
-                icon: 'Network',
-                color: 'yellow',
-                time: Math.random() * duration,
-                source: 'basic-fallback'
-            });
-        }
-
-        // If no issues found, add positive insight
-        if (insights.length === 0) {
-            insights.push({
-                id: `basic_positive_${Date.now()}`,
-                type: 'positive',
-                category: 'system',
-                title: 'Clean Session',
-                description: 'No major issues detected in this recording',
-                severity: 'info',
-                confidence: 1.0,
-                impact: 'Application appears stable',
-                recommendation: 'Continue monitoring for potential issues',
-                evidence: ['No critical errors found'],
-                tags: ['positive', 'stable', 'basic-analysis'],
-                automationPotential: 'low',
-                businessImpact: 'user_experience',
-                icon: 'CheckCircle',
-                color: 'green',
-                time: duration * 0.5,
-                source: 'basic-fallback'
-            });
-        }
-
-        return insights;
-    };
-
-    // Auto-analyze when recording data is available
-    useEffect(() => {
-        if (autoAnalyze && recording && serviceReady && !analysisComplete && !isAnalyzing) {
-            const hasData = (recording.consoleLogs?.length > 0 || 
-                           recording.networkLogs?.length > 0 || 
-                           recording.detectedIssues?.length > 0);
-            
-            if (hasData) {
-                const recordingData = {
-                    id: recording.id || `recording_${Date.now()}`,
-                    duration: recording.duration || 300,
-                    consoleLogs: recording.consoleLogs || [],
-                    networkLogs: recording.networkLogs || [],
-                    detectedIssues: recording.detectedIssues || [],
-                    metadata: {
-                        totalLogs: recording.consoleLogs?.length || 0,
-                        totalRequests: recording.networkLogs?.length || 0,
-                        totalIssues: recording.detectedIssues?.length || 0,
-                        recordingDuration: recording.duration || 300
-                    }
-                };
-
-                analyzeRecording(recordingData);
-            }
-        }
-    }, [autoAnalyze, recording, serviceReady, analysisComplete, isAnalyzing, analyzeRecording]);
-
-    // Clear cached insights
-    const clearCache = useCallback(() => {
-        if (storageKey && recording?.id) {
-            try {
-                localStorage.removeItem(`ai_insights_${storageKey}_${recording.id}`);
-                console.log('🗑️ Cleared cached insights');
-            } catch (err) {
-                console.warn('Failed to clear insight cache:', err);
-            }
-        }
-    }, [storageKey, recording?.id]);
-
-    // Refresh insights (clear cache and re-analyze)
-    const refreshInsights = useCallback(async () => {
-        clearCache();
-        setInsights([]);
-        setAnalysisComplete(false);
-        setError(null);
+  // Auto-refresh setup - FIXED to prevent infinite loops
+  useEffect(() => {
+    if (autoRefresh && refreshInterval > 0) {
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshInsights();
         
-        if (recording) {
-            const recordingData = {
-                id: recording.id || `recording_${Date.now()}`,
-                duration: recording.duration || 300,
-                consoleLogs: recording.consoleLogs || [],
-                networkLogs: recording.networkLogs || [],
-                detectedIssues: recording.detectedIssues || [],
-                metadata: {
-                    totalLogs: recording.consoleLogs?.length || 0,
-                    totalRequests: recording.networkLogs?.length || 0,
-                    totalIssues: recording.detectedIssues?.length || 0,
-                    recordingDuration: recording.duration || 300
-                }
-            };
-
-            return await analyzeRecording(recordingData);
-        }
-    }, [recording, clearCache, analyzeRecording]);
-
-    // Export insights data
-    const exportInsights = useCallback((format = 'json') => {
-        if (insights.length === 0) {
-            return { success: false, error: 'No insights to export' };
-        }
-
-        const exportData = {
-            recordingId: recording?.id,
-            recordingTitle: recording?.title || 'Untitled Recording',
-            generatedAt: new Date().toISOString(),
-            totalInsights: insights.length,
-            insights: insights.map(insight => ({
-                ...insight,
-                // Remove internal properties for export
-                recordingId: undefined,
-                generatedAt: undefined
-            })),
-            metadata: analysisMetrics,
-            summary: {
-                criticalIssues: insights.filter(i => i.severity === 'critical').length,
-                highPriorityIssues: insights.filter(i => i.severity === 'high').length,
-                automationCandidates: insights.filter(i => i.automationPotential === 'high').length,
-                categories: [...new Set(insights.map(i => i.category))]
-            }
-        };
-
-        if (format === 'json') {
-            return {
-                success: true,
-                data: JSON.stringify(exportData, null, 2),
-                filename: `recording_insights_${recording?.id || Date.now()}.json`,
-                contentType: 'application/json'
-            };
-        }
-
-        // CSV format
-        if (format === 'csv') {
-            const csvHeaders = ['Title', 'Severity', 'Category', 'Type', 'Confidence', 'Impact', 'Recommendation', 'Automation Potential'];
-            const csvRows = insights.map(insight => [
-                insight.title,
-                insight.severity,
-                insight.category,
-                insight.type,
-                insight.confidence,
-                insight.impact,
-                insight.recommendation,
-                insight.automationPotential
-            ]);
-
-            const csvContent = [csvHeaders, ...csvRows]
-                .map(row => row.map(cell => `"${cell}"`).join(','))
-                .join('\n');
-
-            return {
-                success: true,
-                data: csvContent,
-                filename: `recording_insights_${recording?.id || Date.now()}.csv`,
-                contentType: 'text/csv'
-            };
-        }
-
-        return { success: false, error: `Unsupported format: ${format}` };
-    }, [insights, recording, analysisMetrics]);
-
-    // Get insights by criteria
-    const getInsightsByType = useCallback((type) => {
-        return insights.filter(insight => insight.type === type);
-    }, [insights]);
-
-    const getInsightsBySeverity = useCallback((severity) => {
-        return insights.filter(insight => insight.severity === severity);
-    }, [insights]);
-
-    const getInsightsByCategory = useCallback((category) => {
-        return insights.filter(insight => insight.category === category);
-    }, [insights]);
-
-    const getCriticalInsights = useCallback(() => {
-        return insights.filter(insight => 
-            insight.severity === 'critical' || insight.severity === 'high'
-        );
-    }, [insights]);
-
-    const getAutomationCandidates = useCallback(() => {
-        return insights.filter(insight => insight.automationPotential === 'high');
-    }, [insights]);
-
-    // Summary statistics
-    const getInsightStats = useCallback(() => {
-        return {
-            total: insights.length,
-            critical: insights.filter(i => i.severity === 'critical').length,
-            high: insights.filter(i => i.severity === 'high').length,
-            medium: insights.filter(i => i.severity === 'medium').length,
-            low: insights.filter(i => i.severity === 'low').length,
-            info: insights.filter(i => i.severity === 'info').length,
-            automationReady: insights.filter(i => i.automationPotential === 'high').length,
-            categories: [...new Set(insights.map(i => i.category))],
-            types: [...new Set(insights.map(i => i.type))],
-            averageConfidence: insights.length > 0 ? 
-                insights.reduce((sum, i) => sum + i.confidence, 0) / insights.length : 0
-        };
-    }, [insights]);
-
-    return {
-        // State
-        insights,
-        isAnalyzing,
-        analysisComplete,
-        error,
-        analysisMetrics,
-        serviceReady,
-
-        // Actions
-        analyzeRecording,
-        refreshInsights,
-        clearCache,
-        exportInsights,
-
-        // Getters
-        getInsightsByType,
-        getInsightsBySeverity,
-        getInsightsByCategory,
-        getCriticalInsights,
-        getAutomationCandidates,
-        getInsightStats,
-
-        // Computed values
-        hasInsights: insights.length > 0,
-        hasCriticalIssues: insights.some(i => i.severity === 'critical' || i.severity === 'high'),
-        hasAutomationCandidates: insights.some(i => i.automationPotential === 'high'),
-        isUsingFallback: analysisMetrics?.fallbackMode === true,
+        // Set up recurring refresh
+        const interval = setInterval(refreshInsights, refreshInterval * 60 * 1000);
         
-        // Service status
-        canAnalyze: serviceReady && !isAnalyzing
+        return () => {
+          clearInterval(interval);
+          if (refreshTimeoutRef.current) {
+            clearTimeout(refreshTimeoutRef.current);
+          }
+        };
+      }, refreshInterval * 60 * 1000);
+
+      return () => {
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+        }
+      };
+    }
+  }, [autoRefresh, refreshInterval]); // Only depend on config, not refreshInsights
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
     };
+  }, []);
+
+  return {
+    insights,
+    loading,
+    lastRefresh,
+    refreshInsights
+  };
 };

@@ -3,19 +3,14 @@
 
 import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
 import { useSlices, getAppState } from './hooks/useSlices';
-import { useAI } from './hooks/useAI';
 import { useTestCases } from './hooks/useTestCases';
 import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
 import { useRecording } from './hooks/useRecording';
 import { useRecommendations } from '../hooks/useRecommendations';
+import { useAIContextValues, AIContext } from './AIContext';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
-
-// Import bulk actions components and utilities
-import {  
-  createBulkActionHandlers 
-} from './BulkActionsProvider';
 
 const AppContext = createContext();
 
@@ -23,14 +18,15 @@ export const AppProvider = ({ children }) => {
     const slices = useSlices();
     const [suitesLoaded, setSuitesLoaded] = useState(false);
     const [suiteSubscriptionActive, setSuiteSubscriptionActive] = useState(false);
-    const [aiInitialized, setAiInitialized] = useState(false);
 
-    // Bulk Actions State
+    // Initialize AI Context
+    const aiContextValues = useAIContextValues();
+
+    // Bulk Actions State (simplified - no external provider)
     const [bulkActions, setBulkActions] = useState({
         selectedItems: [],
         currentPageType: '',
-        portalContainer: null,
-        onBulkAction: null
+        portalContainer: null
     });
 
     const unsubscribeSuitesRef = useRef(null);
@@ -39,14 +35,6 @@ export const AppProvider = ({ children }) => {
 
     // Check if recommendations slice is available
     const hasRecommendationsSlice = slices.recommendations !== undefined;
-
-    const { initializeAI, generateTestCasesWithAI, getAIAnalytics, updateAISettings } = useAI(
-        slices.auth,
-        slices.ai,
-        slices.ui,
-        aiInitialized,
-        setAiInitialized
-    );
 
     const { wrappedCreateTestCase, wrappedUpdateTestCase } = useTestCases(slices);
     const { setTheme, toggleTheme } = useTheme(slices.theme, slices.ui);
@@ -284,20 +272,22 @@ export const AppProvider = ({ children }) => {
     }, []);
 
     const logout = async () => {
-        slices.ai.actions.clearAIState();
-        setAiInitialized(false);
+        // Clear AI state
+        aiContextValues.clearSuggestions();
+        
         try {
             cleanupRecommendations();
         } catch (error) {
             console.warn('Error cleaning up recommendations on logout:', error.message);
         }
+        
         // Clear bulk actions on logout
         setBulkActions({
             selectedItems: [],
             currentPageType: '',
-            portalContainer: bulkActions.portalContainer,
-            onBulkAction: null
+            portalContainer: bulkActions.portalContainer
         });
+        
         return slices.auth.actions.signOut();
     };
 
@@ -449,6 +439,9 @@ export const AppProvider = ({ children }) => {
                 } catch (e) { console.warn('Recommendations clear error:', e.message); }
             }
 
+            // Clear AI context
+            aiContextValues.clearSuggestions();
+
             // Clear archive/trash state
             setArchivedItems({});
             setTrashedItems({});
@@ -457,8 +450,7 @@ export const AppProvider = ({ children }) => {
             setBulkActions(prev => ({
                 selectedItems: [],
                 currentPageType: '',
-                portalContainer: prev.portalContainer,
-                onBulkAction: null
+                portalContainer: prev.portalContainer
             }));
 
             // Clean up recommendations hook
@@ -470,7 +462,6 @@ export const AppProvider = ({ children }) => {
 
             setSuitesLoaded(false);
             setSuiteSubscriptionActive(false);
-            setAiInitialized(false);
         } catch (error) {
             console.error('Error clearing state:', error);
             slices.ui.actions.showNotification?.({
@@ -488,7 +479,7 @@ export const AppProvider = ({ children }) => {
         initializeAuth();
     }, []);
 
-    // Auth state management effect (unchanged from your original)
+    // Auth state management effect (same as your original, but cleaner)
     useEffect(() => {
         console.log('Auth state changed:', {
             isAuthenticated: slices.auth.state.isAuthenticated,
@@ -500,7 +491,6 @@ export const AppProvider = ({ children }) => {
             profileLoaded: slices.auth.state.profileLoaded,
             subscriptionLoading: slices.subscription.state.loading,
             suiteSubscriptionActive,
-            aiInitialized,
         });
 
         if (!slices.auth.state.isInitialized || slices.auth.state.loading || slices.subscription.state.loading) {
@@ -517,7 +507,6 @@ export const AppProvider = ({ children }) => {
                 console.log('✅ Profile refreshed, proceeding with app initialization');
                 slices.suites.actions.loadSuitesStart();
                 setSuitesLoaded(false);
-                initializeAI();
 
                 if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
                     unsubscribeSuitesRef.current();
@@ -667,7 +656,7 @@ export const AppProvider = ({ children }) => {
         slices.subscription.state.isSubscriptionActive,
     ]);
 
-    // Asset subscriptions effect
+    // Asset subscriptions effect (unchanged from your original)
     useEffect(() => {
         if (
             !slices.auth.state.isAuthenticated ||
@@ -1041,158 +1030,74 @@ export const AppProvider = ({ children }) => {
         }
     };
 
+    // Simplified bulk actions methods (no external provider)
+    const bulkActionMethods = useMemo(() => ({
+        registerPageBulkActions: (pageType) => {
+            setBulkActions(prev => ({
+                ...prev,
+                currentPageType: pageType
+            }));
+        },
 
-        // Bulk actions methods
-        const bulkActionMethods = useMemo(() => {
-            // Create a reference object for the current app actions
-            const appActionsRef = {
-                get current() {
-                    return {
-                        testCases: {
-                            ...slices.testCases.actions,
-                            createTestCase: wrappedCreateTestCase,
-                            updateTestCase: wrappedUpdateTestCase,
-                            deleteTestCase: enhancedDeleteTestCase
-                        },
-                        bugs: {
-                            ...slices.bugs.actions,
-                            deleteBug: enhancedDeleteBug
-                        },
-                        recordings: { 
-                            ...slices.recordings.actions, 
-                            saveRecording, 
-                            linkRecordingToBug,
-                            deleteRecording: enhancedDeleteRecording
-                        },
-                        sprints: {
-                            ...slices.sprints.actions,
-                            deleteSprint: enhancedDeleteSprint
-                        },
-                        recommendations: {
-                            createRecommendation,
-                            updateRecommendation,
-                            deleteRecommendation: enhancedDeleteRecommendation,
-                            voteOnRecommendation,
-                            addComment,
-                            removeComment,
-                        },
-                        archive: {
-                            archiveItem,
-                            unarchiveItem,
-                            moveToTrash,
-                            restoreFromTrash,
-                            permanentlyDelete,
-                            bulkArchive,
-                            bulkRestore,
-                            bulkPermanentDelete,
-                            archiveTestCase: (suiteId, testCaseId, sprintId, reason) => 
-                                archiveItem(suiteId, 'testCases', testCaseId, sprintId, reason),
-                            archiveBug: (suiteId, bugId, sprintId, reason) => 
-                                archiveItem(suiteId, 'bugs', bugId, sprintId, reason),
-                            archiveRecording: (suiteId, recordingId, sprintId, reason) => 
-                                archiveItem(suiteId, 'recordings', recordingId, sprintId, reason),
-                            archiveSprint: (suiteId, sprintId, reason) => 
-                                archiveItem(suiteId, 'sprints', sprintId, null, reason),
-                            archiveRecommendation: (suiteId, recommendationId, sprintId, reason) => 
-                                archiveItem(suiteId, 'recommendations', recommendationId, sprintId, reason),
-                        },
-                        reports: {
-                            getReports,
-                            saveReport,
-                            deleteReport,
-                            generatePDF,
-                        },
-                        ui: slices.ui.actions
-                    };
-                }
-            };
-    
-            return {
-                registerPageBulkActions: (pageType, onBulkAction) => {
-                    setBulkActions(prev => ({
-                        ...prev,
-                        currentPageType: pageType,
-                        onBulkAction
-                    }));
-                },
-    
-                updateBulkSelection: (items) => {
-                    setBulkActions(prev => ({
-                        ...prev,
-                        selectedItems: Array.isArray(items) ? items : []
-                    }));
-                },
-    
-                clearBulkSelection: () => {
-                    setBulkActions(prev => ({
-                        ...prev,
-                        selectedItems: []
-                    }));
-                },
-    
-                executeBulkAction: async (actionId, items) => {
-                    const { currentPageType, onBulkAction } = bulkActions;
-                    
-                    // Use custom bulk action handler if provided
-                    if (onBulkAction) {
-                        await onBulkAction(actionId, items);
-                        return;
-                    }
-    
-                    // Use default bulk action handlers
-                    const activeSuite = slices.suites.state.activeSuite;
-                    if (!activeSuite) {
-                        slices.ui.actions.showNotification?.({
-                            id: 'bulk-no-suite',
-                            type: 'error',
-                            message: 'No active suite selected',
-                            duration: 3000,
-                        });
-                        return;
-                    }
-    
-                    const bulkHandlers = createBulkActionHandlers(appActionsRef.current, activeSuite);
-                    const handler = bulkHandlers[currentPageType];
-                    
-                    if (handler) {
-                        await handler(actionId, items);
-                    } else {
-                        console.warn(`No bulk action handler for page type: ${currentPageType}`);
+        updateBulkSelection: (items) => {
+            setBulkActions(prev => ({
+                ...prev,
+                selectedItems: Array.isArray(items) ? items : []
+            }));
+        },
+
+        clearBulkSelection: () => {
+            setBulkActions(prev => ({
+                ...prev,
+                selectedItems: []
+            }));
+        },
+
+        executeBulkAction: async (actionId, items) => {
+            const { currentPageType } = bulkActions;
+            const activeSuite = slices.suites.state.activeSuite;
+            
+            if (!activeSuite) {
+                slices.ui.actions.showNotification?.({
+                    id: 'bulk-no-suite',
+                    type: 'error',
+                    message: 'No active suite selected',
+                    duration: 3000,
+                });
+                return;
+            }
+
+            try {
+                switch (actionId) {
+                    case 'archive':
+                        await bulkArchive(activeSuite.id, currentPageType, items.map(item => item.id));
+                        break;
+                    case 'delete':
+                        await bulkPermanentDelete(activeSuite.id, currentPageType, items.map(item => item.id));
+                        break;
+                    case 'restore':
+                        await bulkRestore(activeSuite.id, currentPageType, items.map(item => item.id));
+                        break;
+                    default:
+                        console.warn(`Unsupported bulk action: ${actionId}`);
                         slices.ui.actions.showNotification?.({
                             id: 'bulk-unsupported',
                             type: 'warning',
-                            message: `Bulk actions not supported for ${currentPageType}`,
+                            message: `Bulk action '${actionId}' not supported`,
                             duration: 3000,
                         });
-                    }
                 }
-            };
-        }, [
-            bulkActions,
-            slices,
-            wrappedCreateTestCase,
-            wrappedUpdateTestCase,
-            saveRecording,
-            linkRecordingToBug,
-            createRecommendation,
-            updateRecommendation,
-            voteOnRecommendation,
-            addComment,
-            removeComment,
-            archiveItem,
-            unarchiveItem,
-            moveToTrash,
-            restoreFromTrash,
-            permanentlyDelete,
-            bulkArchive,
-            bulkRestore,
-            bulkPermanentDelete,
-            getReports,
-            saveReport,
-            deleteReport,
-            generatePDF
-        ]);
-    
+            } catch (error) {
+                console.error('Bulk action failed:', error);
+                slices.ui.actions.showNotification?.({
+                    id: 'bulk-action-error',
+                    type: 'error',
+                    message: `Bulk action failed: ${getFirebaseErrorMessage(error)}`,
+                    duration: 5000,
+                });
+            }
+        }
+    }), [bulkActions, bulkArchive, bulkRestore, bulkPermanentDelete, slices]);
 
     // Asset counts functionality
     const getAssetCounts = async (suiteId) => {
@@ -1249,7 +1154,27 @@ export const AppProvider = ({ children }) => {
                 team: slices.team.actions,
                 automation: slices.automation.actions,
                 ui: slices.ui.actions,
-                ai: { ...slices.ai.actions, generateTestCasesWithAI, getAIAnalytics, updateAISettings },
+                ai: {
+                    ...slices.ai.actions,
+                    // Enhanced AI actions from context
+                    ...aiContextValues.aiService,
+                    // AI operations with loading states
+                    analyzeRequirements: aiContextValues.aiService.analyzeRequirements,
+                    generateTestCases: aiContextValues.aiService.generateTestCases,
+                    prioritizeTests: aiContextValues.aiService.prioritizeTests,
+                    improveDocumentation: aiContextValues.aiService.improveDocumentation,
+                    assessBugSeverity: aiContextValues.aiService.assessBugSeverity,
+                    generateTestData: aiContextValues.aiService.generateTestData,
+                    analyzeDefectTrends: aiContextValues.aiService.analyzeDefectTrends,
+                    // AI metrics and reporting
+                    getEnhancedAIMetrics: aiContextValues.aiService.getEnhancedAIMetrics,
+                    exportEnhancedAIReport: aiContextValues.aiService.exportEnhancedAIReport,
+                    // AI suggestions
+                    addSuggestion: aiContextValues.addSuggestion,
+                    dismissSuggestion: aiContextValues.dismissSuggestion,
+                    clearSuggestions: aiContextValues.clearSuggestions,
+                    loadAIMetrics: aiContextValues.loadAIMetrics
+                },
                 theme: { ...slices.theme.actions, setTheme, toggleTheme },
                 
                 // Organization actions
@@ -1337,7 +1262,7 @@ export const AppProvider = ({ children }) => {
                     bulkLinkBugsToTestCases: FirestoreService.bulkLinkBugsToTestCases.bind(FirestoreService),
                 },
 
-                // Bulk actions
+                // Bulk actions (simplified)
                 bulkActions: bulkActionMethods,
 
                 clearState,
@@ -1351,8 +1276,16 @@ export const AppProvider = ({ children }) => {
             suiteCreationBlocked: slices.suites.state.suiteCreationBlocked,
             isTrialActive: slices.subscription.state.isTrialActive,
             planLimits: slices.subscription.state.planLimits,
-            aiAvailable: slices.ai.state.isInitialized && !slices.ai.state.error,
-            aiGenerating: slices.ai.state.isGenerating,
+            
+            // AI state from context
+            aiAvailable: aiContextValues.aiState.isHealthy && !aiContextValues.aiState.error,
+            aiGenerating: Object.values(aiContextValues.aiOperations).some(op => op),
+            aiHealthy: aiContextValues.aiState.isHealthy,
+            aiError: aiContextValues.aiState.error,
+            aiSuggestions: aiContextValues.aiState.suggestions,
+            aiMetrics: aiContextValues.aiState.metrics,
+            aiOperations: aiContextValues.aiOperations,
+
             isDarkMode: slices.theme.state.isDark,
             isLightMode: slices.theme.state.isLight,
             isSystemTheme: slices.theme.state.isSystem,
@@ -1366,7 +1299,7 @@ export const AppProvider = ({ children }) => {
             archivedItems,
             trashedItems,
 
-            // Bulk actions state
+            // Bulk actions state (simplified)
             bulkSelection: bulkActions.selectedItems,
             hasBulkSelection: bulkActions.selectedItems.length > 0,
             currentBulkPageType: bulkActions.currentPageType,
@@ -1401,9 +1334,6 @@ export const AppProvider = ({ children }) => {
             wrappedUpdateTestCase,
             saveRecording,
             linkRecordingToBug,
-            generateTestCasesWithAI,
-            getAIAnalytics,
-            updateAISettings,
             setTheme,
             toggleTheme,
             linkTestCasesToBug,
@@ -1417,7 +1347,6 @@ export const AppProvider = ({ children }) => {
             initializeAuth,
             refreshUserProfile,
             suitesLoaded,
-            aiInitialized,
             archiveLoading,
             archivedItems,
             trashedItems,
@@ -1459,14 +1388,17 @@ export const AppProvider = ({ children }) => {
             getAssetCounts,
             bulkActionMethods,
             bulkActions,
+            aiContextValues,
         ]
     );
 
     return (
-        <AppContext.Provider value={value}>
-          {children}
-        </AppContext.Provider>
-      )
+        <AIContext.Provider value={aiContextValues}>
+            <AppContext.Provider value={value}>
+                {children}
+            </AppContext.Provider>
+        </AIContext.Provider>
+    );
 };
 
 export const useApp = () => {

@@ -9,18 +9,36 @@ import FeatureRecommendationsPage from '@/components/bug-report/FeatureRecommend
 import BugReportButton from '@/components/modals/BugReportButton';
 import BugFilterBar from '@/components/bug-report/BugFilterBar';
 import BugDetailsModal from '@/components/modals/BugDetailsModal';
+
+// AI Components
+import {
+    AISuggestionPanel,
+    AIBugAnalysisModal,
+    AIDefectTrendsModal,
+    AISeverityAssessmentTooltip,
+    AIInsightsCard,
+    AIProvider,
+    AIErrorBoundary,
+    AIActionButton,
+    AISeverityBadge,
+    useAIModal
+} from '../ai';
+
 import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
-import { 
-    Bug, 
-    Lightbulb, 
-    Minimize, 
+import {
+    Bug,
+    Lightbulb,
+    Minimize,
     Maximize,
     Menu,
-    X
+    X,
+    Brain,
+    TrendingUp,
+    Zap
 } from 'lucide-react';
 
-// Helper functions for localStorage
+// Helper functions for localStorage (unchanged)
 const getStoredViewMode = () => {
     try {
         return localStorage.getItem('bugTracker_viewMode') || 'table';
@@ -73,16 +91,21 @@ const BugTrackerPage = () => {
     const bugsHook = useBugs();
     const uiHook = useUI();
 
+    // AI Modal management
+    const { openModal, closeModal, getModalState } = useAIModal();
+
     // Mobile menu state
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [showAISidebar, setShowAISidebar] = useState(false);
 
-    // FIXED: Use stable refs like the test cases page
+    // Existing refs and state (unchanged)
     const bugsRef = useRef(bugsHook.bugs || []);
     const testCasesRef = useRef(bugsHook.testCases || []);
     const relationshipsRef = useRef(bugsHook.relationships || { bugToTestCases: {} });
     const hasInitializedRef = useRef(false);
 
-    // FIXED: Update refs when data changes (exactly like test cases page)
+
+    // Update refs when data changes
     useEffect(() => {
         bugsRef.current = bugsHook.bugs || [];
     }, [bugsHook.bugs]);
@@ -94,22 +117,22 @@ const BugTrackerPage = () => {
     useEffect(() => {
         relationshipsRef.current = bugsHook.relationships || { bugToTestCases: {} };
     }, [bugsHook.relationships]);
-    
-    // FIXED: Use separate state for filtered bugs (like test cases page does)
+
+    // Existing state
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [selectedBug, setSelectedBug] = useState(null);
     const [, setIsModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-    
-    // FIXED: Initialize states from localStorage with fallbacks
+
+    // Initialize states from localStorage
     const [viewMode, setViewMode] = useState(() => getStoredViewMode());
     const [pageMode, setPageMode] = useState(() => getStoredPageMode());
     const [bugViewType, setBugViewType] = useState(() => getStoredBugViewType());
-    
-    const [ setIsTraceabilityOpen] = useState(false);
-    const [ setIsImportModalOpen] = useState(false);
-    
-    // FIXED: Stable filter state
+
+    const [setIsTraceabilityOpen] = useState(false);
+    const [setIsImportModalOpen] = useState(false);
+
+    // Filter state
     const [filters, setFilters] = useState({
         search: '',
         status: 'all',
@@ -121,45 +144,8 @@ const BugTrackerPage = () => {
         lastUpdated: 'all',
     });
 
-    // Mock recommendations data
-    const [recommendations, setRecommendations] = useState([
-        {
-            id: 'rec1',
-            title: 'Improve Dashboard Performance',
-            description: 'The main dashboard takes too long to load when there are many test cases. We should implement pagination and lazy loading.',
-            rationale: 'Better user experience and reduced server load',
-            status: 'under-review',
-            priority: 'high',
-            category: 'performance',
-            impact: 'high',
-            effort: 'medium',
-            created_by: 'user1',
-            created_at: new Date('2024-01-15'),
-            updated_at: new Date('2024-01-20'),
-            upvotes: 8,
-            downvotes: 1,
-            tags: ['dashboard', 'performance', 'ux'],
-        },
-        {
-            id: 'rec2',
-            title: 'Dark Mode Support',
-            description: 'Add dark mode theme option for better user experience during night work sessions.',
-            rationale: 'Many users work late hours and dark mode reduces eye strain',
-            status: 'approved',
-            priority: 'medium',
-            category: 'ui-ux',
-            impact: 'medium',
-            effort: 'small',
-            created_by: 'user2',
-            created_at: new Date('2024-01-10'),
-            updated_at: new Date('2024-01-25'),
-            upvotes: 15,
-            downvotes: 2,
-            tags: ['ui', 'accessibility', 'theme'],
-        },
-    ]);
 
-    // FIXED: Persist view mode changes to localStorage
+    // All existing handlers (unchanged)
     const handleViewModeChange = useCallback((newViewMode) => {
         setViewMode(newViewMode);
         setStoredViewMode(newViewMode);
@@ -168,7 +154,7 @@ const BugTrackerPage = () => {
     const handlePageModeChange = useCallback((newPageMode) => {
         setPageMode(newPageMode);
         setStoredPageMode(newPageMode);
-        setIsMobileMenuOpen(false); // Close mobile menu on page change
+        setIsMobileMenuOpen(false);
     }, []);
 
     const handleBugViewTypeChange = useCallback((newBugViewType) => {
@@ -176,7 +162,7 @@ const BugTrackerPage = () => {
         setStoredBugViewType(newBugViewType);
     }, []);
 
-    // FIXED: Stable filter function (exactly like test cases page)
+    // Stable filter function
     const applyFiltersStable = useCallback((currentBugs, currentFilters) => {
         if (!Array.isArray(currentBugs)) return [];
 
@@ -249,18 +235,18 @@ const BugTrackerPage = () => {
         }
 
         return filtered;
-    }, []); // Empty deps - pure function
+    }, []);
 
-    // FIXED: Apply filters effect using refs (exactly like test cases page)
+    // Apply filters effect
     useEffect(() => {
         const newFilteredBugs = applyFiltersStable(bugsRef.current, filters);
         setFilteredBugs(newFilteredBugs);
     }, [bugsHook.bugs, filters, applyFiltersStable]);
 
-    // FIXED: Stable error handler
+    // Error handler
     const handleError = useCallback((error, context) => {
         console.error(`Error in ${context}:`, error);
-        
+
         if (uiHook.addNotification) {
             uiHook.addNotification({
                 type: 'error',
@@ -271,7 +257,7 @@ const BugTrackerPage = () => {
         }
     }, [uiHook.addNotification]);
 
-    // FIXED: Simplified save handler (matching test cases pattern exactly)
+    // All existing handlers (unchanged)
     const handleSaveBug = useCallback(async (bugData) => {
         try {
             console.log('Saving bug:', { title: bugData.title, isEdit: !!selectedBug });
@@ -314,7 +300,6 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.bugsLocked, bugsHook.updateBug, bugsHook.createBug, selectedBug, uiHook.addNotification, handleError]);
 
-    // FIXED: All handlers with stable dependencies (matching test cases pattern)
     const handleFiltersChange = useCallback((newFilters) => {
         setFilters(newFilters);
     }, []);
@@ -417,7 +402,6 @@ const BugTrackerPage = () => {
         handleError
     ]);
 
-    // FIXED: Simplified bulk action handler (matching test cases pattern)
     const handleBulkAction = useCallback(async (action, selectedIds) => {
         try {
             if (bugsHook.bugsLocked) {
@@ -431,7 +415,6 @@ const BugTrackerPage = () => {
                     await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id)));
                     break;
                 default:
-                    // Process sequentially like test cases page
                     for (const id of selectedIds) {
                         await bugsHook.updateBug(id, {
                             status: action,
@@ -464,7 +447,6 @@ const BugTrackerPage = () => {
         setSelectedBug(null);
     }, []);
 
-    // FIXED: Simple update handler without complex return logic
     const handleUpdateBug = useCallback(async (bugId, updates) => {
         try {
             if (bugsHook.bugsLocked) {
@@ -477,12 +459,10 @@ const BugTrackerPage = () => {
                 updated_at: timestamp,
             });
 
-            // Update selectedBug if it's the one being updated
             if (selectedBug && selectedBug.id === bugId) {
                 setSelectedBug(prev => ({ ...prev, ...updates, updated_at: timestamp }));
             }
-            
-            // Only show notification for significant updates
+
             if (Object.keys(updates).length > 1 || (!updates.status && !updates.priority && !updates.severity)) {
                 uiHook.addNotification?.({
                     type: 'success',
@@ -496,7 +476,7 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.bugsLocked, bugsHook.updateBug, selectedBug, uiHook.addNotification, handleError]);
 
-    // Recommendation handlers
+    // Recommendation handlers (unchanged)
     const handleCreateRecommendation = useCallback(async (recData) => {
         try {
             const newRec = {
@@ -520,7 +500,7 @@ const BugTrackerPage = () => {
 
     const handleUpdateRecommendation = useCallback(async (recData) => {
         try {
-            setRecommendations(prev => 
+            setRecommendations(prev =>
                 prev.map(rec => rec.id === recData.id ? { ...rec, ...recData, updated_at: new Date() } : rec)
             );
             uiHook.addNotification?.({
@@ -535,22 +515,22 @@ const BugTrackerPage = () => {
 
     const handleVote = useCallback(async (recId, voteType, userId) => {
         try {
-            setRecommendations(prev => 
+            setRecommendations(prev =>
                 prev.map(rec => {
                     if (rec.id === recId) {
                         const currentVote = rec.userVotes?.[userId];
                         const updatedRec = { ...rec };
-                        
+
                         if (!updatedRec.userVotes) {
                             updatedRec.userVotes = {};
                         }
-                        
+
                         if (currentVote === 'up') {
                             updatedRec.upvotes = (updatedRec.upvotes || 1) - 1;
                         } else if (currentVote === 'down') {
                             updatedRec.downvotes = (updatedRec.downvotes || 1) - 1;
                         }
-                        
+
                         if (currentVote === voteType) {
                             delete updatedRec.userVotes[userId];
                         } else {
@@ -561,7 +541,7 @@ const BugTrackerPage = () => {
                                 updatedRec.downvotes = (updatedRec.downvotes || 0) + 1;
                             }
                         }
-                        
+
                         return updatedRec;
                     }
                     return rec;
@@ -572,7 +552,40 @@ const BugTrackerPage = () => {
         }
     }, [handleError]);
 
-    // FIXED: Only run debug logging once (like test cases page)
+    // NEW: AI-specific handlers
+    const handleAIBugAnalysis = useCallback((bug) => {
+        openModal('bugAnalysis', { bugData: bug });
+    }, [openModal]);
+
+    const handleAITrendsAnalysis = useCallback(() => {
+        openModal('trendsAnalysis', { defectData: filteredBugs });
+    }, [openModal, filteredBugs]);
+
+    const handleAISeverityAssessment = useCallback(async (bug, assessment) => {
+        try {
+            if (assessment && assessment.assessment) {
+                await handleUpdateBug(bug.id, {
+                    severity: assessment.assessment.severity,
+                    priority: assessment.assessment.priority,
+                    ai_assessment: {
+                        confidence: assessment.confidence,
+                        reasoning: assessment.reasoning,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+
+                uiHook.addNotification?.({
+                    type: 'success',
+                    title: 'AI Assessment Applied',
+                    message: `Bug severity updated to ${assessment.assessment.severity}`,
+                });
+            }
+        } catch (error) {
+            handleError(error, 'apply AI assessment');
+        }
+    }, [handleUpdateBug, uiHook.addNotification, handleError]);
+
+    // Debug logging
     useEffect(() => {
         if (!hasInitializedRef.current) {
             console.log('Bugs Hook Debug:', {
@@ -591,20 +604,12 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.updateBug, bugsHook.createBug, bugsHook.deleteBug, bugsHook.bugs?.length, bugsHook.loading, bugsHook.bugsLocked, bugsHook.activeSuite, viewMode, bugViewType, pageMode]);
 
-    // FIXED: Memoize components with stable dependencies (like test cases page)
-    const tableComponent = useMemo(() => (
-        bugViewType === 'minimal' ? (
-            <MinimalBugTable
-                bugs={filteredBugs}
-                loading={bugsHook.loading}
-                onBulkAction={handleBulkAction}
-                onView={handleViewBug}
-                selectedBugs={bugsHook.selectedBugs}
-                onSelectBugs={bugsHook.selectBugs}
-                onUpdateBug={handleUpdateBug}
-            />
-        ) : (
-            <BugTable
+    // Enhanced Bug Table with AI tooltips
+    const EnhancedBugTable = useMemo(() => {
+        const TableComponent = bugViewType === 'minimal' ? MinimalBugTable : BugTable;
+
+        return (
+            <TableComponent
                 bugs={filteredBugs}
                 testCases={testCasesRef.current}
                 relationships={relationshipsRef.current}
@@ -616,23 +621,55 @@ const BugTrackerPage = () => {
                 onView={handleViewBug}
                 onLinkTestCase={handleLinkTestCase}
                 onUpdateBug={handleUpdateBug}
+                // AI enhancement props
+                renderSeverityCell={(bug) => (
+                    <AISeverityAssessmentTooltip
+                        bugData={bug}
+                        triggerOnHover={true}
+                        position="top"
+                        onAssessmentComplete={(assessment) => handleAISeverityAssessment(bug, assessment)}
+                    >
+                        <div className="cursor-help">
+                            <AISeverityBadge
+                                severity={bug.severity}
+                                confidence={bug.ai_assessment?.confidence}
+                                showConfidence={!!bug.ai_assessment}
+                                size="sm"
+                            />
+                        </div>
+                    </AISeverityAssessmentTooltip>
+                )}
+                renderActionButtons={(bug) => (
+                    <div className="flex items-center space-x-1">
+                        <button
+                            onClick={() => handleAIBugAnalysis(bug)}
+                            className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded"
+                            title="AI Analysis"
+                        >
+                            <Brain className="w-4 h-4" />
+                        </button>
+                        {/* Other action buttons would go here */}
+                    </div>
+                )}
             />
-        )
-    ), [
+        );
+    }, [
         bugViewType,
         filteredBugs,
-        bugsHook.loading,
         bugsHook.selectedBugs,
         bugsHook.selectBugs,
-        handleBulkAction,
-        handleViewBug,
         handleEditBug,
         handleDuplicateBug,
+        handleBulkAction,
+        handleViewBug,
         handleLinkTestCase,
-        handleUpdateBug
+        handleUpdateBug,
+        handleAIBugAnalysis,
+        handleAISeverityAssessment
     ]);
 
-    const listComponent = useMemo(() => (
+    // Enhanced Bug List with AI tooltips
+    const EnhancedBugList = useMemo(() => (
         <BugList
             bugs={filteredBugs}
             testCases={testCasesRef.current}
@@ -646,6 +683,23 @@ const BugTrackerPage = () => {
             onView={handleViewBug}
             onLinkTestCase={handleLinkTestCase}
             onUpdateBug={handleUpdateBug}
+            // AI enhancements
+            renderSeverityBadge={(bug) => (
+                <AISeverityAssessmentTooltip
+                    bugData={bug}
+                    triggerOnHover={true}
+                    position="top"
+                    onAssessmentComplete={(assessment) => handleAISeverityAssessment(bug, assessment)}
+                >
+                    <div className="cursor-help">
+                        <AISeverityBadge
+                            severity={bug.severity}
+                            confidence={bug.ai_assessment?.confidence}
+                            showConfidence={!!bug.ai_assessment}
+                        />
+                    </div>
+                </AISeverityAssessmentTooltip>
+            )}
         />
     ), [
         filteredBugs,
@@ -657,28 +711,26 @@ const BugTrackerPage = () => {
         handleBulkAction,
         handleViewBug,
         handleLinkTestCase,
-        handleUpdateBug
+        handleUpdateBug,
+        handleAISeverityAssessment
     ]);
 
-    // Mobile Action Menu Component
+    // Enhanced Mobile Action Menu
     const MobileActionMenu = () => (
         <div className={`
             fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out
             ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}>
-            {/* Backdrop */}
-            <div 
+            <div
                 className="absolute inset-0 bg-black bg-opacity-50"
                 onClick={() => setIsMobileMenuOpen(false)}
             />
-            
-            {/* Menu Panel */}
+
             <div className={`
                 absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-xl p-4 space-y-3
                 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'}
             `}>
-                {/* Header */}
                 <div className="flex items-center justify-between pb-3 border-b">
                     <h3 className="text-lg font-semibold text-gray-900">Actions</h3>
                     <button
@@ -689,8 +741,24 @@ const BugTrackerPage = () => {
                     </button>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="space-y-3">
+                    {/* AI Actions */}
+                    <div className="border-b pb-3">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">AI Analysis</h4>
+                        <div className="space-y-2">
+                            <AIActionButton
+                                onClick={handleAITrendsAnalysis}
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                icon={TrendingUp}
+                            >
+                                Analyze Bug Trends
+                            </AIActionButton>
+                        </div>
+                    </div>
+
+                    {/* Regular Actions */}
                     {bugViewType === 'full' && (
                         <>
                             <button
@@ -715,7 +783,7 @@ const BugTrackerPage = () => {
                             </button>
                         </>
                     )}
-                    
+
                     <div className="pt-2">
                         <BugReportButton
                             bug={null}
@@ -728,6 +796,95 @@ const BugTrackerPage = () => {
                             currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
                             className="w-full"
                         />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    // AI Sidebar Component
+    const AISidebar = () => (
+        <div className={`
+            fixed right-0 top-0 h-full w-80 bg-white shadow-xl z-40 transform transition-transform duration-300 ease-in-out
+            ${showAISidebar ? 'translate-x-0' : 'translate-x-full'}
+            lg:relative lg:translate-x-0 lg:w-auto lg:shadow-none lg:bg-transparent
+        `}>
+            {/* Mobile sidebar header */}
+            <div className="lg:hidden flex items-center justify-between p-4 border-b bg-white">
+                <h2 className="text-lg font-semibold text-gray-900">AI Assistant</h2>
+                <button
+                    onClick={() => setShowAISidebar(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+
+            {/* AI Components */}
+            <div className="p-4 space-y-4 lg:p-0 lg:space-y-6 overflow-y-auto h-full lg:h-auto">
+                <AIInsightsCard
+                    title="Bug Insights"
+                    showMetrics={true}
+                    showSuggestions={true}
+                    showTrends={false}
+                    maxInsights={5}
+                    autoRefresh={true}
+                    className="lg:max-w-sm"
+                />
+
+                <AISuggestionPanel
+                    maxSuggestions={3}
+                    showTimestamp={false}
+                    filterTypes={['bug-severity', 'test-priority']}
+                    className="lg:max-w-sm"
+                />
+
+                {/* AI Quick Actions */}
+                <div className="bg-white p-4 rounded-lg border lg:max-w-sm">
+                    <h3 className="font-medium text-gray-900 mb-3 flex items-center">
+                        <Brain className="w-4 h-4 mr-2 text-purple-600" />
+                        AI Analysis
+                    </h3>
+                    <div className="space-y-2">
+                        <AIActionButton
+                            onClick={handleAITrendsAnalysis}
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start"
+                            icon={TrendingUp}
+                        >
+                            Analyze Bug Trends
+                        </AIActionButton>
+
+                        <AIActionButton
+                            onClick={() => {
+                                if (filteredBugs.length === 0) {
+                                    uiHook.addNotification?.({
+                                        type: 'warning',
+                                        title: 'No Bugs',
+                                        message: 'No bugs available for bulk analysis',
+                                    });
+                                    return;
+                                }
+                                // Analyze bugs without severity
+                                const unassessedBugs = filteredBugs.filter(bug => !bug.severity);
+                                if (unassessedBugs.length === 0) {
+                                    uiHook.addNotification?.({
+                                        type: 'info',
+                                        title: 'All Assessed',
+                                        message: 'All bugs already have severity assessments',
+                                    });
+                                    return;
+                                }
+                                openModal('bulkAnalysis', { bugs: unassessedBugs });
+                            }}
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start"
+                            icon={Zap}
+                        >
+                            Bulk Severity Analysis
+                        </AIActionButton>
                     </div>
                 </div>
             </div>
@@ -753,287 +910,380 @@ const BugTrackerPage = () => {
     // Show Recommendations page
     if (pageMode === 'recommendations') {
         return (
-            <div className="min-h-screen bg-gray-50">
-                {/* Responsive Page Mode Toggle */}
-                <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                    <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
-                        <div className="flex items-center justify-between">
-                            {/* Desktop Navigation */}
-                            <div className="hidden sm:flex items-center space-x-1">
-                                <button
-                                    onClick={() => handlePageModeChange('bugs')}
-                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        pageMode === 'bugs'
-                                            ? 'bg-teal-100 text-teal-700'
-                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    <Bug className="w-4 h-4 mr-2" />
-                                    Bug Reports
-                                </button>
-                                <button
-                                    onClick={() => handlePageModeChange('recommendations')}
-                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        pageMode === 'recommendations'
-                                            ? 'bg-teal-100 text-teal-700'
-                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    <Lightbulb className="w-4 h-4 mr-2" />
-                                    Feature Recommendations
-                                </button>
-                            </div>
-                            
-                            {/* Mobile Navigation */}
-                            <div className="flex sm:hidden items-center space-x-2">
-                                <select
-                                    value={pageMode}
-                                    onChange={(e) => handlePageModeChange(e.target.value)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                >
-                                    <option value="bugs">Bug Reports</option>
-                                    <option value="recommendations">Feature Recommendations</option>
-                                </select>
+            <AIProvider config={{
+                insights: { refreshInterval: 10, autoRefresh: true }
+            }}>
+                <AIErrorBoundary>
+                    <div className="min-h-screen bg-gray-50">
+                        {/* Page Mode Toggle */}
+                        <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+                            <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
+                                <div className="flex items-center justify-between">
+                                    {/* Desktop Navigation */}
+                                    <div className="hidden sm:flex items-center space-x-1">
+                                        <button
+                                            onClick={() => handlePageModeChange('bugs')}
+                                            className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'bugs'
+                                                    ? 'bg-teal-100 text-teal-700'
+                                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            <Bug className="w-4 h-4 mr-2" />
+                                            Bug Reports
+                                        </button>
+                                        <button
+                                            onClick={() => handlePageModeChange('recommendations')}
+                                            className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'recommendations'
+                                                    ? 'bg-teal-100 text-teal-700'
+                                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            <Lightbulb className="w-4 h-4 mr-2" />
+                                            Feature Recommendations
+                                        </button>
+                                    </div>
+
+                                    {/* Mobile Navigation */}
+                                    <div className="flex sm:hidden items-center space-x-2">
+                                        <select
+                                            value={pageMode}
+                                            onChange={(e) => handlePageModeChange(e.target.value)}
+                                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                        >
+                                            <option value="bugs">Bug Reports</option>
+                                            <option value="recommendations">Feature Recommendations</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <FeatureRecommendationsPage
-                    recommendations={recommendations}
-                    loading={false}
-                    onCreateRecommendation={handleCreateRecommendation}
-                    onUpdateRecommendation={handleUpdateRecommendation}
-                    onVote={handleVote}
-                    currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
-                    teamMembers={bugsHook.teamMembers || []}
-                />
-            </div>
+                        <FeatureRecommendationsPage
+                            recommendations={recommendations}
+                            loading={false}
+                            onCreateRecommendation={handleCreateRecommendation}
+                            onUpdateRecommendation={handleUpdateRecommendation}
+                            onVote={handleVote}
+                            currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                            teamMembers={bugsHook.teamMembers || []}
+                        />
+                    </div>
+                </AIErrorBoundary>
+            </AIProvider>
         );
     }
 
-    // Main Bugs page
+    // Main Bugs page with AI integration
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Responsive Page Mode Toggle */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
-                    <div className="flex items-center justify-between">
-                        {/* Desktop Navigation */}
-                        <div className="hidden sm:flex items-center space-x-1">
-                            <button
-                                onClick={() => handlePageModeChange('bugs')}
-                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                    pageMode === 'bugs'
-                                        ? 'bg-teal-100 text-teal-700'
-                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                }`}
-                            >
-                                <Bug className="w-4 h-4 mr-2" />
-                                <span className="hidden md:inline">Bug Reports</span>
-                                <span className="md:hidden">Bugs</span>
-                            </button>
-                            <button
-                                onClick={() => handlePageModeChange('recommendations')}
-                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                    pageMode === 'recommendations'
-                                        ? 'bg-teal-100 text-teal-700'
-                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                }`}
-                            >
-                                <Lightbulb className="w-4 h-4 mr-2" />
-                                <span className="hidden md:inline">Feature Recommendations</span>
-                                <span className="md:hidden">Features</span>
-                            </button>
-                        </div>
-                        
-                        {/* Mobile Navigation */}
-                        <div className="flex sm:hidden items-center space-x-2">
-                            <select
-                                value={pageMode}
-                                onChange={(e) => handlePageModeChange(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                <option value="bugs">Bug Reports</option>
-                                <option value="recommendations">Features</option>
-                            </select>
-                        </div>
-                        
-                        {/* Desktop Bug View Type Toggle */}
-                        <div className="hidden lg:flex items-center space-x-3">
-                            <div className="flex items-center space-x-2">
-                                <span className="text-sm text-gray-600">View:</span>
-                                <button
-                                    onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
-                                    className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
-                                        bugViewType === 'minimal'
-                                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    {bugViewType === 'minimal' ? (
-                                        <>
-                                            <Minimize className="w-3 h-3 mr-1" />
-                                            Minimal
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Maximize className="w-3 h-3 mr-1" />
-                                            Full Details
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
+        <AIProvider config={{
+            insights: {
+                refreshInterval: 5,
+                autoRefresh: true,
+                maxInsights: 8,
+                includeMetrics: true
+            }
+        }}>
+            <AIErrorBoundary>
+                <div className="min-h-screen bg-gray-50">
+                    {/* Page Mode Toggle */}
+                    <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+                        <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
+                            <div className="flex items-center justify-between">
+                                {/* Desktop Navigation */}
+                                <div className="hidden sm:flex items-center space-x-1">
+                                    <button
+                                        onClick={() => handlePageModeChange('bugs')}
+                                        className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'bugs'
+                                                ? 'bg-teal-100 text-teal-700'
+                                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        <Bug className="w-4 h-4 mr-2" />
+                                        <span className="hidden md:inline">Bug Reports</span>
+                                        <span className="md:hidden">Bugs</span>
+                                    </button>
+                                    <button
+                                        onClick={() => handlePageModeChange('recommendations')}
+                                        className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'recommendations'
+                                                ? 'bg-teal-100 text-teal-700'
+                                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        <Lightbulb className="w-4 h-4 mr-2" />
+                                        <span className="hidden md:inline">Feature Recommendations</span>
+                                        <span className="md:hidden">Features</span>
+                                    </button>
+                                </div>
 
-                        {/* Mobile View Type Toggle */}
-                        <div className="flex lg:hidden items-center">
-                            <button
-                                onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
-                                className={`p-2 rounded-lg transition-all ${
-                                    bugViewType === 'minimal'
-                                        ? 'bg-blue-50 text-blue-700'
-                                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                                }`}
-                                title={`Switch to ${bugViewType === 'full' ? 'minimal' : 'full'} view`}
-                            >
-                                {bugViewType === 'minimal' ? (
-                                    <Minimize className="w-4 h-4" />
-                                ) : (
-                                    <Maximize className="w-4 h-4" />
-                                )}
-                            </button>
+                                {/* Mobile Navigation */}
+                                <div className="flex sm:hidden items-center space-x-2">
+                                    <select
+                                        value={pageMode}
+                                        onChange={(e) => handlePageModeChange(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                    >
+                                        <option value="bugs">Bug Reports</option>
+                                        <option value="recommendations">Features</option>
+                                    </select>
+                                </div>
+
+                                {/* Desktop Bug View Type Toggle */}
+                                <div className="hidden lg:flex items-center space-x-3">
+                                    {/* AI Sidebar Toggle */}
+                                    <button
+                                        onClick={() => setShowAISidebar(!showAISidebar)}
+                                        className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${showAISidebar
+                                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        <Brain className="w-3 h-3 mr-1" />
+                                        AI Assistant
+                                    </button>
+
+                                    <div className="flex items-center space-x-2">
+                                        <span className="text-sm text-gray-600">View:</span>
+                                        <button
+                                            onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
+                                            className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${bugViewType === 'minimal'
+                                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            {bugViewType === 'minimal' ? (
+                                                <>
+                                                    <Minimize className="w-3 h-3 mr-1" />
+                                                    Minimal
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Maximize className="w-3 h-3 mr-1" />
+                                                    Full Details
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Mobile View Type Toggle */}
+                                <div className="flex lg:hidden items-center space-x-2">
+                                    <button
+                                        onClick={() => setShowAISidebar(true)}
+                                        className="p-2 rounded-lg bg-purple-50 text-purple-700"
+                                    >
+                                        <Brain className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
+                                        className={`p-2 rounded-lg transition-all ${bugViewType === 'minimal'
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        {bugViewType === 'minimal' ? (
+                                            <Minimize className="w-4 h-4" />
+                                        ) : (
+                                            <Maximize className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <div className="max-w-full mx-auto py-4 px-3 sm:py-6 sm:px-6 lg:px-4">
-                {/* Responsive Header */}
-                <div className="flex flex-col space-y-4 mb-6">
-                    {/* Title Row */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center flex-wrap">
-                            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
-                                <span className="hidden sm:inline">Bug Tracker</span>
-                                <span className="sm:hidden">Bugs</span>
-                                {bugViewType === 'minimal' && (
-                                    <span className="hidden sm:inline"> - Minimal View</span>
+                    {/* Main Content Layout */}
+                    <div className="flex">
+                        {/* Main Content */}
+                        <div className={`flex-1 transition-all duration-300 ${showAISidebar && !window.matchMedia('(max-width: 1024px)').matches ? 'lg:pr-80' : ''}`}>
+                            <div className="max-w-full mx-auto py-4 px-3 sm:py-6 sm:px-6 lg:px-4">
+                                {/* Header */}
+                                <div className="flex flex-col space-y-4 mb-6">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center flex-wrap">
+                                            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
+                                                <span className="hidden sm:inline">Bug Tracker</span>
+                                                <span className="sm:hidden">Bugs</span>
+                                                {bugViewType === 'minimal' && (
+                                                    <span className="hidden sm:inline"> - Minimal View</span>
+                                                )}
+                                            </h1>
+                                            <div className="flex items-center space-x-2 ml-2">
+                                                <span className="px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                                                    {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
+                                                </span>
+                                                {bugViewType === 'minimal' && (
+                                                    <span className="hidden sm:inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                                        Developer Focus Mode
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Desktop Action Buttons */}
+                                        <div className="hidden lg:flex items-center space-x-2">
+                                            {bugViewType === 'full' && (
+                                                <>
+                                                    <button
+                                                        onClick={() => setIsTraceabilityOpen(true)}
+                                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                                                    >
+                                                        Traceability
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setIsImportModalOpen(true)}
+                                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                                                    >
+                                                        Import
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {/* AI Action Button */}
+                                            <AIActionButton
+                                                onClick={handleAITrendsAnalysis}
+                                                variant="secondary"
+                                                size="md"
+                                                icon={TrendingUp}
+                                            >
+                                                AI Analysis
+                                            </AIActionButton>
+
+                                            <BugReportButton
+                                                bug={null}
+                                                onSave={handleSaveBug}
+                                                onClose={handleCloseModal}
+                                                activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
+                                                currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                                            />
+                                        </div>
+
+                                        {/* Mobile/Tablet Actions */}
+                                        <div className="flex lg:hidden items-center space-x-2">
+                                            <div className="sm:block">
+                                                <BugReportButton
+                                                    bug={null}
+                                                    onSave={handleSaveBug}
+                                                    onClose={handleCloseModal}
+                                                    activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
+                                                    currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                                                    compact={true}
+                                                />
+                                            </div>
+
+                                            {bugViewType === 'full' && (
+                                                <button
+                                                    onClick={() => setIsMobileMenuOpen(true)}
+                                                    className="p-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                    title="More actions"
+                                                >
+                                                    <Menu className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Filter Bar */}
+                                {bugViewType === 'full' && (
+                                    <div className="mb-4">
+                                        <BugFilterBar
+                                            filters={filters}
+                                            onFiltersChange={handleFiltersChange}
+                                            bugs={bugsRef.current}
+                                            viewMode={viewMode}
+                                            setViewMode={handleViewModeChange}
+                                        />
+                                    </div>
                                 )}
-                            </h1>
-                            <div className="flex items-center space-x-2 ml-2">
-                                <span className="px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
-                                    {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
-                                </span>
-                                {bugViewType === 'minimal' && (
-                                    <span className="hidden sm:inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                        Developer Focus Mode
-                                    </span>
-                                )}
+
+                                {/* Content */}
+                                <div className="transition-all duration-300 ease-in-out">
+                                    <div className="overflow-hidden">
+                                        {viewMode === 'table' ? (
+                                            <div className="overflow-x-auto">
+                                                {EnhancedBugTable}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {EnhancedBugList}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        
-                        {/* Desktop Action Buttons */}
-                        <div className="hidden lg:flex items-center space-x-2">
-                            {bugViewType === 'full' && (
-                                <>
-                                    <button
-                                        onClick={() => setIsTraceabilityOpen(true)}
-                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
-                                    >
-                                        Traceability
-                                    </button>
-                                    <button
-                                        onClick={() => setIsImportModalOpen(true)}
-                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
-                                    >
-                                        Import
-                                    </button>
-                                </>
-                            )}
-                            <BugReportButton
-                                bug={null}
-                                onSave={handleSaveBug}
-                                onClose={handleCloseModal}
-                                activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
-                                currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
-                            />
-                        </div>
 
-                        {/* Mobile/Tablet Actions */}
-                        <div className="flex lg:hidden items-center space-x-2">
-                            {/* Quick Bug Report Button for mobile */}
-                            <div className="sm:block">
-                                <BugReportButton
-                                    bug={null}
-                                    onSave={handleSaveBug}
+                        {/* AI Sidebar */}
+                        <AISidebar />
+                    </div>
+
+                    {/* Mobile Action Menu */}
+                    <MobileActionMenu />
+
+                    {/* AI Modals */}
+                    <AIBugAnalysisModal
+                        isOpen={getModalState('bugAnalysis').isOpen}
+                        onClose={() => closeModal('bugAnalysis')}
+                        bugData={getModalState('bugAnalysis').bugData}
+                        analysisType="full"
+                    />
+
+                    <AIDefectTrendsModal
+                        isOpen={getModalState('trendsAnalysis').isOpen}
+                        onClose={() => closeModal('trendsAnalysis')}
+                        defectData={getModalState('trendsAnalysis').defectData || filteredBugs}
+                        timeframe={30}
+                        suiteId={bugsHook.activeSuite?.id}
+                    />
+
+                    {/* Enhanced Bug Details Modal */}
+                    {isDetailsModalOpen && selectedBug && (
+                        <div className="fixed inset-0 z-50 overflow-y-auto">
+                            <div className="flex min-h-screen items-center justify-center p-4">
+                                <BugDetailsModal
+                                    bug={selectedBug}
+                                    teamMembers={bugsHook.teamMembers || []}
+                                    onUpdateBug={handleUpdateBug}
                                     onClose={handleCloseModal}
-                                    activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
-                                    currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
-                                    compact={true}
+                                    // AI Enhancement: Add severity assessment tooltip
+                                    renderSeverityField={() => (
+                                        <AISeverityAssessmentTooltip
+                                            bugData={selectedBug}
+                                            triggerOnHover={false}
+                                            position="right"
+                                            onAssessmentComplete={(assessment) => handleAISeverityAssessment(selectedBug, assessment)}
+                                        >
+                                            <div className="flex items-center space-x-2">
+                                                <AISeverityBadge
+                                                    severity={selectedBug.severity}
+                                                    confidence={selectedBug.ai_assessment?.confidence}
+                                                    showConfidence={!!selectedBug.ai_assessment}
+                                                />
+                                                {!selectedBug.severity && (
+                                                    <span className="text-xs text-purple-600 cursor-pointer hover:underline">
+                                                        Get AI Assessment
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </AISeverityAssessmentTooltip>
+                                    )}
+                                    // AI Enhancement: Add analysis button
+                                    renderActionButtons={() => (
+                                        <AIActionButton
+                                            onClick={() => handleAIBugAnalysis(selectedBug)}
+                                            variant="secondary"
+                                            size="sm"
+                                        >
+                                            AI Analysis
+                                        </AIActionButton>
+                                    )}
                                 />
                             </div>
-                            
-                            {/* Mobile Menu Button */}
-                            {bugViewType === 'full' && (
-                                <button
-                                    onClick={() => setIsMobileMenuOpen(true)}
-                                    className="p-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                    title="More actions"
-                                >
-                                    <Menu className="w-4 h-4" />
-                                </button>
-                            )}
                         </div>
-                    </div>
+                    )}
                 </div>
-
-                {/* Responsive Filter Bar */}
-                {bugViewType === 'full' && (
-                    <div className="mb-4">
-                        <BugFilterBar
-                            filters={filters}
-                            onFiltersChange={handleFiltersChange}
-                            bugs={bugsRef.current}
-                            viewMode={viewMode}
-                            setViewMode={handleViewModeChange}
-                        />
-                    </div>
-                )}
-
-                {/* Content with smooth transitions */}
-                <div className="transition-all duration-300 ease-in-out">
-                    <div className="overflow-hidden">
-                        {viewMode === 'table' ? (
-                            <div className="overflow-x-auto">
-                                {tableComponent}
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {listComponent}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Mobile Action Menu */}
-                <MobileActionMenu />
-
-                {/* Modals */}
-                {isDetailsModalOpen && selectedBug && (
-                    <div className="fixed inset-0 z-50 overflow-y-auto">
-                        <div className="flex min-h-screen items-center justify-center p-4">
-                            <BugDetailsModal
-                                bug={selectedBug}
-                                teamMembers={bugsHook.teamMembers || []}
-                                onUpdateBug={handleUpdateBug}
-                                onClose={handleCloseModal}
-                            />
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
+            </AIErrorBoundary>
+        </AIProvider>
     );
 };
 
