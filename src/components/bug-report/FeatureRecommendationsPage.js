@@ -231,6 +231,71 @@ const FeatureRecommendationsPage = () => {
         setSelectedRecommendations([]);
     }, []);
 
+    // Status update handler - moved before bulk action handler
+    const handleStatusUpdate = useCallback(async (recId, newStatus) => {
+        if (!currentUser?.uid) {
+            actions.ui.showNotification({
+                id: 'status-no-auth',
+                type: 'error',
+                message: 'You must be logged in to update status',
+                duration: 3000
+            });
+            return;
+        }
+
+        if (!recommendationsAvailable) {
+            actions.ui.showNotification({
+                id: 'recommendations-unavailable',
+                type: 'error',
+                message: 'Recommendations feature is not available',
+                duration: 3000
+            });
+            return;
+        }
+
+        try {
+            const recommendation = recommendations.find(r => r.id === recId);
+            if (!recommendation) {
+                throw new Error('Recommendation not found');
+            }
+
+            const updateData = {
+                id: recId,
+                status: newStatus,
+                updated_at: new Date().toISOString(),
+                title: recommendation.title,
+                description: recommendation.description,
+                priority: recommendation.priority,
+                category: recommendation.category,
+                impact: recommendation.impact,
+                effort: recommendation.effort
+            };
+
+            const result = await updateRecommendation(updateData);
+
+            if (result && result.success === false) {
+                actions.ui.showNotification({
+                    id: 'status-update-error',
+                    type: 'error',
+                    message: result.error?.message || 'Failed to update recommendation status',
+                    duration: 3000
+                });
+                return result;
+            } else {
+                return { success: true };
+            }
+        } catch (error) {
+            console.error('Error updating status:', error);
+            actions.ui.showNotification({
+                id: 'status-update-error',
+                type: 'error',
+                message: 'Failed to update recommendation status',
+                duration: 3000
+            });
+            return { success: false, error };
+        }
+    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable]);
+
     // Bulk action handler
     const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig, selectedOption) => {
         if (!currentUser?.uid) {
@@ -346,7 +411,7 @@ const FeatureRecommendationsPage = () => {
         } finally {
             setBulkLoadingActions(prev => prev.filter(id => id !== actionId));
         }
-    }, [currentUser, actions.ui, recommendations, updateRecommendation, archiveRecommendation, deleteRecommendation]);
+    }, [currentUser, actions.ui, recommendations, updateRecommendation, archiveRecommendation, deleteRecommendation, handleStatusUpdate]);
 
     // Pagination handlers
     const handlePageChange = useCallback((page) => {
@@ -428,70 +493,6 @@ const FeatureRecommendationsPage = () => {
             });
         }
     }, [voteOnRecommendation, currentUser, actions.ui, recommendationsAvailable]);
-
-    const handleStatusUpdate = useCallback(async (recId, newStatus) => {
-        if (!currentUser?.uid) {
-            actions.ui.showNotification({
-                id: 'status-no-auth',
-                type: 'error',
-                message: 'You must be logged in to update status',
-                duration: 3000
-            });
-            return;
-        }
-
-        if (!recommendationsAvailable) {
-            actions.ui.showNotification({
-                id: 'recommendations-unavailable',
-                type: 'error',
-                message: 'Recommendations feature is not available',
-                duration: 3000
-            });
-            return;
-        }
-
-        try {
-            const recommendation = recommendations.find(r => r.id === recId);
-            if (!recommendation) {
-                throw new Error('Recommendation not found');
-            }
-
-            const updateData = {
-                id: recId,
-                status: newStatus,
-                updated_at: new Date().toISOString(),
-                title: recommendation.title,
-                description: recommendation.description,
-                priority: recommendation.priority,
-                category: recommendation.category,
-                impact: recommendation.impact,
-                effort: recommendation.effort
-            };
-
-            const result = await updateRecommendation(updateData);
-
-            if (result && result.success === false) {
-                actions.ui.showNotification({
-                    id: 'status-update-error',
-                    type: 'error',
-                    message: result.error?.message || 'Failed to update recommendation status',
-                    duration: 3000
-                });
-                return result;
-            } else {
-                return { success: true };
-            }
-        } catch (error) {
-            console.error('Error updating status:', error);
-            actions.ui.showNotification({
-                id: 'status-update-error',
-                type: 'error',
-                message: 'Failed to update recommendation status',
-                duration: 3000
-            });
-            return { success: false, error };
-        }
-    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable, handleStatusUpdate]);
 
     const handleDeleteRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
@@ -740,8 +741,8 @@ const FeatureRecommendationsPage = () => {
                                 <button
                                     onClick={() => setViewMode('cards')}
                                     className={`px-3 py-2 text-sm font-medium rounded-l-md ${viewMode === 'cards'
-                                            ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                        ? 'bg-teal-50 text-teal-700 border-teal-200'
+                                        : 'text-gray-700 hover:bg-gray-50'
                                         }`}
                                 >
                                     Cards
@@ -749,8 +750,8 @@ const FeatureRecommendationsPage = () => {
                                 <button
                                     onClick={() => setViewMode('table')}
                                     className={`px-3 py-2 text-sm font-medium rounded-r-md border-l ${viewMode === 'table'
-                                            ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                        ? 'bg-teal-50 text-teal-700 border-teal-200'
+                                        : 'text-gray-700 hover:bg-gray-50'
                                         }`}
                                 >
                                     Table
@@ -798,7 +799,7 @@ const FeatureRecommendationsPage = () => {
                             safeFormatDate={safeFormatDate}
                         />
                     )}
-                    
+
                     {/* Pagination */}
                     <Pagination
                         currentPage={currentPage}

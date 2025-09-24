@@ -19,22 +19,22 @@ const RecorderControls = ({
 }) => {
   let buttonClass = `inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className}`;
   if (variant === "contained") {
-    buttonClass += " bg-primary text-white hover:bg-primary/90";
+    buttonClass += " bg-primary text-primary-foreground hover:bg-primary/90";
   } else {
-    buttonClass += " text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800";
+    buttonClass += " text-foreground border border-muted hover:bg-muted/10 dark:hover:bg-muted/20";
   }
 
   if (recordingState.isRecording) {
     return (
       <div className="flex items-center space-x-2">
-        <div className="flex items-center space-x-2 text-red-600">
+        <div className="flex items-center space-x-2 text-error">
           <div className="w-3 h-3 bg-primary rounded-full animate-pulse"></div>
           <span className="font-mono text-sm">{formatTime(recordingState.recordingTime)}</span>
-          {recordingState.isPaused && <span className="text-yellow-600 text-xs">(Paused)</span>}
+          {recordingState.isPaused && <span className="text-warning text-xs">(Paused)</span>}
         </div>
         <button
           onClick={recordingState.isPaused ? actions.resumeRecording : actions.pauseRecording}
-          className="p-1.5 bg-orange-300 hover:bg-orange-400 text-white rounded transition-colors"
+          className="p-1.5 bg-orange-300 hover:bg-orange-400 text-orange-50 rounded transition-colors"
           disabled={disabled}
           title={recordingState.isPaused ? "Resume Recording" : "Pause Recording"}
         >
@@ -42,10 +42,10 @@ const RecorderControls = ({
         </button>
         <button
           onClick={actions.toggleMute}
-          className={`p-1.5 transition-colors text-white rounded ${
+          className={`p-1.5 transition-colors text-foreground rounded ${
             recordingState.micMuted 
-              ? 'bg-gray-600 hover:bg-gray-700' 
-              : 'bg-orange-500 hover:bg-orange-600'
+              ? 'bg-muted hover:bg-muted/90' 
+              : 'bg-teal-500 hover:bg-teal-600'
           }`}
           disabled={disabled}
           title={recordingState.micMuted ? "Unmute Microphone" : "Mute Microphone"}
@@ -54,7 +54,7 @@ const RecorderControls = ({
         </button>
         <button
           onClick={actions.stopRecording}
-          className="p-1.5 bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
+          className="p-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded transition-colors"
           disabled={disabled}
           title="Stop Recording"
         >

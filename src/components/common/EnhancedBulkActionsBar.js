@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useApp } from '@/context/AppProvider';
 import { 
   Trash2, Archive, Download, Play, CheckCircle, XCircle, RotateCcw, 
   FileText, Bug, TestTube, Video, BarChart3, Lightbulb, Zap, 
@@ -30,6 +31,7 @@ const Tooltip = ({ children, text, disabled = false }) => {
     </div>
   );
 };
+
 const ICONS = {
   Trash2, Archive, Download, Play, CheckCircle, XCircle, 
   RotateCcw, FileText, Bug, TestTube, Video, BarChart3, 
@@ -61,57 +63,16 @@ export const ASSET_ACTION_CONFIGS = {
         ]
       },
       {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'add-to-sprint', 
-            label: 'Add to Sprint', 
-            icon: 'Zap', 
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          {
-            id: 'assign',
-            label: 'Assign',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'user-1', label: 'John Doe' },
-              { id: 'user-2', label: 'Jane Smith' },
-              { id: 'user-3', label: 'Mike Johnson' }
-            ]
-          }
-        ]
-      },
-      {
         name: 'status',
         actions: [
           { id: 'activate', label: 'Activate', icon: 'Eye', color: 'green' },
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true }
+          { id: 'draft', label: 'Draft', icon: 'FileText', color: 'gray' }
         ]
       },
       {
         name: 'actions',
         actions: [
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' },
+          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
           { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
         ]
       }
@@ -128,65 +89,6 @@ export const ASSET_ACTION_CONFIGS = {
           { id: 'open', label: 'Reopen', icon: 'RotateCcw', color: 'blue' },
           { id: 'resolve', label: 'Resolve', icon: 'CheckCircle', color: 'green' },
           { id: 'close', label: 'Close', icon: 'XCircle', color: 'red' }
-        ]
-      },
-      {
-        name: 'assignment',
-        actions: [
-          { 
-            id: 'assign', 
-            label: 'Assign', 
-            icon: 'Users', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'user-1', label: 'John Doe' },
-              { id: 'user-2', label: 'Jane Smith' },
-              { id: 'user-3', label: 'Mike Johnson' }
-            ]
-          },
-          {
-          id: 'severity', 
-          label: 'Set Severity', 
-          icon: 'Flag', 
-          color: 'orange',
-          type: 'select',
-          options: [
-            { id: 'critical', label: 'Critical' },
-            { id: 'high', label: 'High' },
-            { id: 'medium', label: 'Medium' },
-            { id: 'low', label: 'Low' }
-          ]
-        }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'add-to-sprint', 
-            label: 'Add to Sprint', 
-            icon: 'Zap', 
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-critical', label: 'Critical Bugs' },
-              { id: 'group-ui', label: 'UI Issues' },
-              { id: 'group-backend', label: 'Backend Issues' }
-            ]
-          }
         ]
       },
       {
@@ -211,321 +113,6 @@ export const ASSET_ACTION_CONFIGS = {
         ]
       },
       {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          { id: 'bookmark', label: 'Bookmark', icon: 'Bookmark', color: 'yellow' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
-
-  sprints: {
-    icon: 'Zap',
-    color: 'indigo',
-    groups: [
-      {
-        name: 'status',
-        actions: [
-          { id: 'start', label: 'Start', icon: 'Play', color: 'green' },
-          { id: 'complete', label: 'Complete', icon: 'CheckCircle', color: 'green' },
-          { id: 'pause', label: 'Pause', icon: 'Clock', color: 'yellow' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { id: 'merge', label: 'Merge', icon: 'GitBranch', color: 'purple' },
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
-
-  reports: {
-    icon: 'BarChart3',
-    color: 'green',
-    groups: [
-      {
-        name: 'export',
-        actions: [
-          { id: 'pdf', label: 'Export PDF', icon: 'FileText', color: 'red' },
-          { id: 'csv', label: 'Export CSV', icon: 'Download', color: 'green' },
-          { id: 'excel', label: 'Export Excel', icon: 'FileText', color: 'blue' }
-        ]
-      },
-      {
-        name: 'sharing',
-        actions: [
-          { id: 'share', label: 'Share', icon: 'Link2', color: 'blue' },
-          { id: 'email', label: 'Email', icon: 'Mail', color: 'purple' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
-
-  documents: {
-    icon: 'FileText',
-    color: 'blue',
-    groups: [
-      {
-        name: 'access',
-        actions: [
-          { id: 'download', label: 'Download', icon: 'Download', color: 'blue' },
-          { id: 'lock', label: 'Lock', icon: 'Lock', color: 'red' },
-          { id: 'unlock', label: 'Unlock', icon: 'Unlock', color: 'green' }
-        ]
-      },
-      {
-        name: 'sharing',
-        actions: [
-          { id: 'share', label: 'Share', icon: 'Link2', color: 'blue' },
-          { id: 'email', label: 'Email', icon: 'Mail', color: 'purple' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          { id: 'move', label: 'Move', icon: 'Move', color: 'purple' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' },
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
-
-  testData: {
-    icon: 'Database',
-    color: 'cyan',
-    groups: [
-      {
-        name: 'data',
-        actions: [
-          { id: 'export', label: 'Export', icon: 'Download', color: 'blue' },
-          { id: 'refresh', label: 'Refresh', icon: 'RefreshCw', color: 'green' },
-          { id: 'validate', label: 'Validate', icon: 'CheckCircle', color: 'green' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
-
-  team: {
-    icon: 'Users',
-    color: 'purple',
-    groups: [
-      {
-        name: 'roles',
-        actions: [
-          { id: 'promote', label: 'Promote', icon: 'Star', color: 'yellow' },
-          {
-            id: 'assign-role',
-            label: 'Assign Role',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'role-admin', label: 'Admin' },
-              { id: 'role-tester', label: 'Tester' },
-              { id: 'role-viewer', label: 'Viewer' }
-            ]
-          },
-          { id: 'permissions', label: 'Set Permissions', icon: 'Shield', color: 'green' }
-        ]
-      },
-      {
-        name: 'communication',
-        actions: [
-          { id: 'notify', label: 'Notify', icon: 'Bell', color: 'blue' },
-          { id: 'email', label: 'Email', icon: 'Mail', color: 'purple' },
-          { id: 'message', label: 'Message', icon: 'Mail', color: 'green' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { 
-            id: 'add-to-sprint', 
-            label: 'Add to Sprint', 
-            icon: 'Zap', 
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          { 
-            id: 'group', 
-            label: 'Group', 
-            icon: 'FolderOpen', 
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'deactivate', label: 'Deactivate', icon: 'Lock', color: 'red' },
-          { id: 'remove', label: 'Remove', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
-
-  recommendations: {
-    icon: 'Lightbulb',
-    color: 'yellow',
-    groups: [
-      {
-        name: 'status',
-        actions: [
-          { id: 'approve', label: 'Approve', icon: 'CheckCircle', color: 'green' },
-          { id: 'reject', label: 'Reject', icon: 'XCircle', color: 'red' },
-          { id: 'review', label: 'Mark for Review', icon: 'Eye', color: 'blue' }
-        ]
-      },
-      {
-        name: 'implementation',
-        actions: [
-          { 
-            id: 'add-to-sprint', 
-            label: 'Add to Sprint', 
-            icon: 'Zap', 
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          {
-            id: 'assign',
-            label: 'Assign',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'user-1', label: 'John Doe' },
-              { id: 'user-2', label: 'Jane Smith' },
-              { id: 'user-3', label: 'Mike Johnson' }
-            ]
-          },
-          {
-          id: 'severity', 
-          label: 'Set Severity', 
-          icon: 'Flag', 
-          color: 'orange',
-          type: 'select',
-          options: [
-            { id: 'critical', label: 'Critical' },
-            { id: 'high', label: 'High' },
-            { id: 'medium', label: 'Medium' },
-            { id: 'low', label: 'Low' }
-          ]
-        }
-        ]
-      },
-      {
         name: 'actions',
         actions: [
           { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
@@ -542,19 +129,7 @@ export const ASSET_ACTION_CONFIGS = {
       {
         name: 'restore',
         actions: [
-          { id: 'restore', label: 'Restore', icon: 'RotateCcw', color: 'blue' },
-          { 
-            id: 'restore-to-sprint', 
-            label: 'Restore to Sprint', 
-            icon: 'Zap', 
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          }
+          { id: 'restore', label: 'Restore', icon: 'RotateCcw', color: 'blue' }
         ]
       },
       {
@@ -640,9 +215,9 @@ const ActionDropdown = ({ action, onSelect, isOpen, onToggle, disabled }) => {
 };
 
 const EnhancedBulkActionsBar = ({
-  // Selection props
-  selectedItems = [],
-  onClearSelection,
+  // Selection props - can be overridden by app context
+  selectedItems: propSelectedItems,
+  onClearSelection: propOnClearSelection,
   
   // Display props
   pageTitle = 'items',
@@ -653,18 +228,39 @@ const EnhancedBulkActionsBar = ({
   assetType = null, // Use predefined config: 'testCases', 'bugs', 'recordings', etc.
   actionGroups = [], // Custom action groups (overrides assetType)
   
-  // Action handler
-  onAction,
+  // Action handler - can be overridden by app context
+  onAction: propOnAction,
   
   // Portal configuration
   portalId = 'bulk-actions-portal',
-  
-  // Loading states
-  loadingActions = [],
 }) => {
   const [confirmingActions, setConfirmingActions] = useState(new Set());
   const [openDropdowns, setOpenDropdowns] = useState({});
   const [portalContainer, setPortalContainer] = useState(null);
+
+  // Use app context for bulk actions integration
+  const { 
+    state, 
+    actions,
+    activeSuite 
+  } = useApp();
+
+  // Get bulk actions from app context
+  const {
+    selectedItems: contextSelectedItems = [],
+    hasSelection = false
+  } = state.bulkActions || {};
+
+  const {
+    updateBulkSelection,
+    clearBulkSelection,
+    executeBulkAction
+  } = actions.bulk || {};
+
+  // Determine which selection and handlers to use
+  const selectedItems = propSelectedItems || contextSelectedItems;
+  const onClearSelection = propOnClearSelection || clearBulkSelection || (() => {});
+  const onAction = propOnAction || executeBulkAction || (() => {});
 
   useEffect(() => {
     // Create or find portal container
@@ -750,12 +346,43 @@ const EnhancedBulkActionsBar = ({
     }
 
     try {
+      // Show loading notification
+      if (actions.ui?.showNotification) {
+        actions.ui.showNotification({
+          id: `bulk-action-${actionId}-${Date.now()}`,
+          type: 'info',
+          message: `Executing ${actionConfig.label.toLowerCase()} on ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}...`,
+          duration: 2000,
+        });
+      }
+
       await onAction(actionId, selectedItems, actionConfig, selectedOption);
       onClearSelection();
       setConfirmingActions(new Set());
       setOpenDropdowns({});
+
+      // Show success notification
+      if (actions.ui?.showNotification) {
+        actions.ui.showNotification({
+          id: `bulk-action-success-${actionId}-${Date.now()}`,
+          type: 'success',
+          message: `Successfully ${actionConfig.label.toLowerCase()}${actionConfig.label.endsWith('e') ? 'd' : 'ed'} ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}`,
+          duration: 3000,
+        });
+      }
     } catch (error) {
       console.error(`Error executing bulk action ${actionId}:`, error);
+      
+      // Show error notification
+      if (actions.ui?.showNotification) {
+        actions.ui.showNotification({
+          id: `bulk-action-error-${actionId}-${Date.now()}`,
+          type: 'error',
+          message: `Failed to ${actionConfig.label.toLowerCase()}: ${error.message}`,
+          duration: 5000,
+        });
+      }
+      
       setConfirmingActions(prev => {
         const newSet = new Set(prev);
         newSet.delete(actionId);
@@ -796,6 +423,11 @@ const EnhancedBulkActionsBar = ({
             <span className="text-xs sm:text-sm font-medium text-gray-800 whitespace-nowrap">
               {selectedItems.length} {pageTitle}{selectedItems.length > 1 ? 's' : ''} selected
             </span>
+            {activeSuite && (
+              <span className="text-xs text-gray-500 hidden sm:inline">
+                in {activeSuite.name}
+              </span>
+            )}
           </div>
           
           {/* Actions */}
@@ -805,7 +437,6 @@ const EnhancedBulkActionsBar = ({
                 {group.actions.map((action) => {
                   const ActionIcon = ICONS[action.icon] || TestTube;
                   const isConfirming = confirmingActions.has(action.id);
-                  const isLoading = loadingActions.includes(action.id);
                   const requiresConfirm = action.requiresConfirm || action.destructive;
 
                   // Handle select type actions
@@ -817,7 +448,7 @@ const EnhancedBulkActionsBar = ({
                         onSelect={handleDropdownSelect}
                         isOpen={openDropdowns[action.id] || false}
                         onToggle={(isOpen) => handleDropdownToggle(action.id, isOpen)}
-                        disabled={isLoading}
+                        disabled={false}
                       />
                     );
                   }
@@ -827,7 +458,7 @@ const EnhancedBulkActionsBar = ({
                     <Tooltip key={action.id} text={isConfirming ? 'Click again to confirm' : action.label}>
                       <button
                         onClick={() => handleAction(action.id, action)}
-                        disabled={isLoading}
+                        disabled={false}
                         className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                           requiresConfirm
                             ? isConfirming
@@ -836,7 +467,7 @@ const EnhancedBulkActionsBar = ({
                             : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
                         } focus:outline-none focus:ring-2 focus:ring-offset-1`}
                       >
-                        <ActionIcon className={`w-3 h-3 sm:w-4 sm:h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        <ActionIcon className="w-3 h-3 sm:w-4 sm:h-4" />
                       </button>
                     </Tooltip>
                   );

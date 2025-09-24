@@ -72,19 +72,19 @@ const RecorderPreviewModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-background/50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-card dark:bg-card rounded-lg shadow-xl w-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-muted dark:border-muted flex-shrink-0">
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Recording Preview</h2>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground dark:text-foreground truncate">Recording Preview</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground dark:text-muted-foreground mt-1 hidden sm:block">
               Use controls to navigate the recording
             </p>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0 ml-2"
+            className="p-2 text-muted-foreground hover:text-foreground dark:hover:text-foreground rounded-full hover:bg-muted/10 dark:hover:bg-muted/20 transition-colors flex-shrink-0 ml-2"
           >
             <X className="w-5 h-5" />
           </button>
@@ -110,7 +110,7 @@ const RecorderPreviewModal = ({
           {/* Right Panel - 60% width */}
           <div className="w-3/5 flex-shrink-0 flex flex-col min-w-0">
             {/* Video Container */}
-            <div className="flex-1 bg-black relative min-h-[200px] sm:min-h-[300px]">
+            <div className="flex-1 bg-background relative min-h-[200px] sm:min-h-[300px]">
               {previewUrl ? (
                 <>
                   <video
@@ -123,10 +123,10 @@ const RecorderPreviewModal = ({
                   {!playerOverlayHidden && (
                     <div
                       onClick={() => videoRef.current?.play()}
-                      className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black/20 backdrop-blur-sm"
+                      className="absolute inset-0 flex items-center justify-center cursor-pointer bg-background/20 backdrop-blur-sm"
                     >
-                      <div className="bg-white/90 dark:bg-gray-800/90 rounded-full p-4 sm:p-6 shadow-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                        <svg className="w-8 h-8 sm:w-12 sm:h-12 text-gray-800 dark:text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <div className="bg-card/90 dark:bg-card/90 rounded-full p-4 sm:p-6 shadow-lg hover:bg-card dark:hover:bg-card transition-colors">
+                        <svg className="w-8 h-8 sm:w-12 sm:h-12 text-foreground dark:text-foreground" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M8 5v14l11-7z"/>
                         </svg>
                       </div>
@@ -134,7 +134,7 @@ const RecorderPreviewModal = ({
                   )}
                 </>
               ) : (
-                <div className="h-full flex items-center justify-center text-gray-500">
+                <div className="h-full flex items-center justify-center text-muted-foreground">
                   <div className="text-center p-4">
                     <div className="text-4xl sm:text-6xl mb-4">🎥</div>
                     <div className="text-base sm:text-lg">No recording available</div>

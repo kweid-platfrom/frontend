@@ -18,17 +18,17 @@ const createOptimizedLogger = () => {
   let isCapturing = false;
   const MAX_LOGS = 100; // Limit to prevent memory bloat
   const MAX_MESSAGE_LENGTH = 500; // Truncate long messages
-  
+
   const originalError = console.error;
   const originalWarn = console.warn;
   const originalFetch = window.fetch;
-  
+
   const start = () => {
     if (isCapturing) return;
     isCapturing = true;
     logs.length = 0;
     networkRequests.length = 0;
-    
+
     // Only capture errors and warnings (not regular logs)
     console.error = (...args) => {
       if (isCapturing && logs.length < MAX_LOGS) {
@@ -41,7 +41,7 @@ const createOptimizedLogger = () => {
       }
       originalError.apply(console, args);
     };
-    
+
     console.warn = (...args) => {
       if (isCapturing && logs.length < MAX_LOGS) {
         logs.push({
@@ -118,7 +118,7 @@ class OptimizedRecordingStore {
       duration: "0:00",
       micMuted: false,
     };
-    
+
     this.listeners = new Set();
     this.recorder = null;
     this.stream = null;
@@ -131,9 +131,9 @@ class OptimizedRecordingStore {
   setState(updates) {
     const hasChanges = Object.keys(updates).some(key => this.state[key] !== updates[key]);
     if (!hasChanges) return;
-    
+
     this.state = { ...this.state, ...updates };
-    
+
     // Batch state updates to prevent excessive re-renders
     if (!this.updateScheduled) {
       this.updateScheduled = true;
@@ -163,7 +163,7 @@ class OptimizedRecordingStore {
 
       // Get screen capture with optimized settings
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { 
+        video: {
           cursor: "always",
           frameRate: 15 // Reduced framerate for better performance
         },
@@ -180,7 +180,7 @@ class OptimizedRecordingStore {
       });
 
       this.chunks = [];
-      
+
       this.recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
           this.chunks.push(e.data);
@@ -189,7 +189,7 @@ class OptimizedRecordingStore {
 
       this.recorder.onstop = () => {
         this.logger.stop();
-        
+
         const blob = new Blob(this.chunks, { type: "video/webm" });
         const url = URL.createObjectURL(blob);
         this.setState({ previewUrl: url });
@@ -204,7 +204,7 @@ class OptimizedRecordingStore {
       this.recorder.start(3000);
       this.setState({ isRecording: true });
       this.startTimer();
-      
+
     } catch (err) {
       console.error('Recording failed:', err);
       this.cleanup();
@@ -221,7 +221,7 @@ class OptimizedRecordingStore {
     // Get logged data and detect issues
     const logData = this.logger.getData();
     const issues = this.detectIssues(logData);
-    
+
     // Store complete data for preview including the blob
     this.previewData = {
       previewUrl: url,
@@ -232,7 +232,7 @@ class OptimizedRecordingStore {
       detectedIssues: issues,
       comments: []
     };
-    
+
     this.setState({ showPreview: true });
     this.cleanup();
   }
@@ -241,7 +241,7 @@ class OptimizedRecordingStore {
     return new Promise(resolve => {
       let count = 3;
       this.setState({ showCountdown: count });
-      
+
       const timer = setInterval(() => {
         count--;
         if (count > 0) {
@@ -257,7 +257,7 @@ class OptimizedRecordingStore {
 
   detectIssues(data) {
     const issues = [];
-    
+
     // Only process errors and warnings (already filtered by logger)
     data.consoleLogs.forEach(log => {
       issues.push({
@@ -311,7 +311,7 @@ class OptimizedRecordingStore {
   toggleMute() {
     const newMutedState = !this.state.micMuted;
     this.setState({ micMuted: newMutedState });
-    
+
     if (this.stream) {
       this.stream.getAudioTracks().forEach(track => {
         track.enabled = !newMutedState;
@@ -375,7 +375,7 @@ const store = new OptimizedRecordingStore();
 
 const useRecordingStore = () => {
   const [state, setState] = useState(store.state);
-  
+
   useEffect(() => {
     return store.subscribe(setState);
   }, []);
@@ -393,7 +393,7 @@ const useRecordingStore = () => {
 };
 
 const ScreenRecorderButton = ({ disabled = false, className = "", variant = "ghost", isPrimary = false }) => {
-  const { activeSuite, ui, actions } = useApp(); // Get actions from AppProvider
+  const { activeSuite, ui, actions } = useApp();
   const { state, actions: recordingActions } = useRecordingStore();
 
   const handleStart = useCallback(async () => {
@@ -413,28 +413,28 @@ const ScreenRecorderButton = ({ disabled = false, className = "", variant = "gho
 
   return (
     <>
-      <RecorderControls 
-        disabled={disabled} 
-        className={className} 
-        variant={variant} 
+      <RecorderControls
+        disabled={disabled}
+        className={className}
+        variant={variant}
         isPrimary={isPrimary}
         onStart={handleStart}
         recordingState={state}
         actions={recordingActions}
       />
-      
+
       {isPrimary && state.showCountdown > 0 && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="text-white text-9xl font-bold animate-bounce">
+          <div className="text-primary-foreground text-9xl font-poppins font-bold animate-bounce shadow-theme-lg">
             {state.showCountdown}
           </div>
         </div>
       )}
-      
+
       {isPrimary && state.showPreview && (
         <RecorderPreviewModal
           activeSuite={activeSuite}
-          firestoreService={actions} // Use real actions from AppProvider
+          firestoreService={actions}
           onClose={() => recordingActions.setShowPreview(false)}
           previewUrl={previewData.previewUrl}
           blob={previewData.blob}

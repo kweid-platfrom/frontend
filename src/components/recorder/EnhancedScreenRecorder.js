@@ -96,7 +96,7 @@ const EnhancedScreenRecorder = ({
       actions={recordingActions}
       onStart={async () => {
         if (!activeSuite?.id) {
-          toast.error('Please select a test suite first');
+          toast.error('Please select a test suite first', { style: { background: 'var(--color-error)', color: 'var(--color-error-foreground)' } });
           return;
         }
         await recordingActions.startRecording();

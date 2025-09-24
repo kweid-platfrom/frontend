@@ -298,14 +298,14 @@ const RecorderLeftPanel = ({
   ).length;
 
   return (
-    <div className="w-full h-full border-r border-gray-200 dark:border-gray-700 flex flex-col">
+    <div className="w-full h-full border-r border-muted dark:border-muted flex flex-col">
       {/* AI Insights Section - 50% */}
-      <div className="h-1/2 flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className="h-1/2 flex-shrink-0 border-b border-muted dark:border-muted flex flex-col">
         {/* AI Toggle Button with Stats */}
-        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-3 border-b border-muted dark:border-muted">
           <button
             onClick={toggleAIInsights}
-            className="w-full flex items-center justify-between p-2 rounded text-sm font-medium transition-colors bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+            className="w-full flex items-center justify-between p-2 rounded text-sm font-medium transition-colors bg-muted text-muted-foreground hover:bg-muted/90 dark:hover:bg-muted/80"
           >
             <div className="flex items-center space-x-2">
               <Bot className="w-4 h-4 text-purple-500" />
@@ -316,14 +316,14 @@ const RecorderLeftPanel = ({
                     {aiInsightCount}
                   </span>
                   {criticalInsightCount > 0 && (
-                    <span className="text-xs bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300 px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-error/20 text-error dark:bg-error/30 dark:text-error px-2 py-0.5 rounded-full">
                       {criticalInsightCount} critical
                     </span>
                   )}
                 </div>
               )}
             </div>
-            <div className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400">
+            <div className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground">
               {showAIInsights ? 'ON' : 'OFF'}
             </div>
           </button>
@@ -349,9 +349,9 @@ const RecorderLeftPanel = ({
             </div>
           ) : (
             <div className="p-6 text-center">
-              <Bot className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-              <div className="text-sm text-gray-500 mb-2">AI Insights</div>
-              <div className="text-xs text-gray-400 mb-4">
+              <Bot className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+              <div className="text-sm text-muted-foreground mb-2">AI Insights</div>
+              <div className="text-xs text-muted-foreground mb-4">
                 Toggle AI Insights ON to view intelligent analysis of your recording
               </div>
             </div>
@@ -362,13 +362,13 @@ const RecorderLeftPanel = ({
       {/* Comments/DevTools Section - 50% */}
       <div className="h-1/2 flex-shrink-0 flex flex-col">
         {/* Comment Input - Above tabs */}
-        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-3 border-b border-muted dark:border-muted">
           <div className="flex space-x-2">
             <input
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="Add a comment at current time..."
-              className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-2 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+              className="flex-1 text-xs border border-muted dark:border-muted rounded px-2 py-2 dark:bg-background dark:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               onKeyPress={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -379,7 +379,7 @@ const RecorderLeftPanel = ({
             <button
               onClick={() => addCommentAtCurrentTime(commentText)}
               disabled={!commentText.trim()}
-              className="px-3 py-1 text-xs bg-orange-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-colors whitespace-nowrap"
+              className="px-3 py-1 text-xs bg-orange-500 text-orange-50 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-colors whitespace-nowrap"
             >
               @ {formatTime(currentVideoTime)}
             </button>
@@ -387,7 +387,7 @@ const RecorderLeftPanel = ({
         </div>
 
         {/* Tabs - Horizontal/Vertical Scrollable */}
-        <div className="flex overflow-x-auto overflow-y-hidden border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <div className="flex overflow-x-auto overflow-y-hidden border-b border-muted dark:border-muted bg-muted dark:bg-muted">
           {tabs.map(({ id, label, icon: Icon }) => {
             const count = getTabCount(id);
             return (
@@ -396,8 +396,8 @@ const RecorderLeftPanel = ({
                 onClick={() => setActiveTab(id)}
                 className={`flex-shrink-0 px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap flex items-center space-x-1 transition-colors ${
                   activeTab === id
-                    ? 'border-primary text-primary dark:text-orange-400 bg-white dark:bg-gray-900'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                    ? 'border-primary text-primary dark:text-primary bg-card dark:bg-card'
+                    : 'border-transparent text-muted-foreground hover:text-foreground dark:hover:text-foreground'
                 }`}
               >
                 <Icon className="w-3 h-3" />
@@ -405,8 +405,8 @@ const RecorderLeftPanel = ({
                 {count > 0 && (
                   <span className={`px-1 py-0.5 text-[10px] rounded-full ${
                     activeTab === id 
-                      ? 'bg-teal-100 text-primary dark:bg-primary dark:text-white' 
-                      : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400'
+                      ? 'bg-teal-100 text-primary dark:bg-primary dark:text-foreground' 
+                      : 'bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                   }`}>
                     {count}
                   </span>
@@ -422,7 +422,7 @@ const RecorderLeftPanel = ({
           {activeTab === 'comments' && (
             <div className="space-y-2">
               {comments.length === 0 ? (
-                <div className="text-gray-500 text-sm text-center py-8">
+                <div className="text-muted-foreground text-sm text-center py-8">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <div>No comments added yet</div>
                   <div className="text-xs mt-1">Add a comment above to get started</div>
@@ -433,19 +433,19 @@ const RecorderLeftPanel = ({
                     .slice()
                     .sort((a, b) => a.time - b.time)
                     .map(comment => (
-                      <div key={comment.id} className="p-3 bg-gray-50 dark:bg-gray-800 rounded border">
+                      <div key={comment.id} className="p-3 bg-muted dark:bg-muted rounded border">
                         <div className="flex items-center justify-between mb-2">
                           <button
                             onClick={() => seekTo(comment.time)}
-                            className="text-primary hover:text-primary/80 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-sm hover:underline"
+                            className="text-primary hover:text-primary/80 dark:text-primary dark:hover:text-primary/80 font-medium text-sm hover:underline"
                           >
                             [{comment.timeStr || formatTime(comment.time)}]
                           </button>
-                          <span className="text-gray-400 text-[10px]">
+                          <span className="text-muted-foreground text-[10px]">
                             {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
                           </span>
                         </div>
-                        <div className="text-sm text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
+                        <div className="text-sm text-foreground dark:text-foreground break-words">{comment.text}</div>
                       </div>
                     ))}
                   <div ref={commentsEndRef} />
@@ -458,7 +458,7 @@ const RecorderLeftPanel = ({
           {!isPreviewMode && activeTab === 'console' && (
             <div className="space-y-1">
               {consoleLogs.length === 0 ? (
-                <div className="text-gray-500 text-sm text-center py-8">
+                <div className="text-muted-foreground text-sm text-center py-8">
                   <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <div>No console logs captured</div>
                 </div>
@@ -467,27 +467,27 @@ const RecorderLeftPanel = ({
                   .slice()
                   .reverse()
                   .map((log, i) => (
-                    <div key={`${log.timestamp}-${i}`} className="text-xs border border-gray-100 dark:border-gray-700 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <div key={`${log.timestamp}-${i}`} className="text-xs border border-muted dark:border-muted rounded p-2 hover:bg-muted/10 dark:hover:bg-muted/20">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-gray-400 text-[10px]">
+                        <span className="text-muted-foreground text-[10px]">
                           {new Date(log.time || log.timestamp).toLocaleTimeString()}
                         </span>
                         <div className="flex items-center space-x-1">
                           <span className={`font-medium text-[10px] px-2 py-0.5 rounded ${
-                            log.level === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                            log.level === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-teal-100 text-primary dark:bg-primary dark:text-white'
+                            log.level === 'error' ? 'bg-error/20 text-error dark:bg-error/30 dark:text-error' :
+                            log.level === 'warn' ? 'bg-warning/20 text-warning dark:bg-warning/30 dark:text-warning' :
+                            'bg-teal-100 text-primary dark:bg-primary dark:text-foreground'
                           }`}>
                             {log.level?.toUpperCase() || 'LOG'}
                           </span>
                           {(log.count && log.count > 1) && (
-                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                            <span className="text-[10px] bg-muted text-muted-foreground px-1 rounded">
                               {log.count}x
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="text-gray-700 dark:text-gray-300 break-words">{log.message}</div>
+                      <div className="text-foreground dark:text-foreground break-words">{log.message}</div>
                     </div>
                   ))
               )}
@@ -497,7 +497,7 @@ const RecorderLeftPanel = ({
           {!isPreviewMode && activeTab === 'network' && (
             <div className="space-y-2">
               {networkLogs.length === 0 ? (
-                <div className="text-gray-500 text-sm text-center py-8">
+                <div className="text-muted-foreground text-sm text-center py-8">
                   <Network className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <div>No network requests captured</div>
                 </div>
@@ -508,33 +508,33 @@ const RecorderLeftPanel = ({
                   .map((req, i) => (
                     <div
                       key={req.id || `${req.timestamp}-${i}`}
-                      className="p-2 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      className="p-2 rounded border border-muted dark:border-muted hover:bg-muted/10 dark:hover:bg-muted/20"
                     >
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center space-x-2">
                           <span className={`text-[10px] font-medium px-2 py-0.5 rounded uppercase ${
-                            req.status >= 400 || req.status === 'ERR' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                            req.status >= 300 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            req.status >= 400 || req.status === 'ERR' ? 'bg-error/20 text-error dark:bg-error/30 dark:text-error' :
+                            req.status >= 300 ? 'bg-warning/20 text-warning dark:bg-warning/30 dark:text-warning' :
+                            'bg-success/20 text-success dark:bg-success/30 dark:text-success'
                           }`}>
                             {req.method}
                           </span>
                           <span className={`text-xs font-medium ${
-                            req.status >= 400 || req.status === 'ERR' ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'
+                            req.status >= 400 || req.status === 'ERR' ? 'text-error dark:text-error' : 'text-muted-foreground dark:text-muted-foreground'
                           }`}>
                             {req.status}
                           </span>
                           {(req.count && req.count > 1) && (
-                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                            <span className="text-[10px] bg-muted text-muted-foreground px-1 rounded">
                               {req.count}x
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-gray-500">{req.duration}ms</span>
+                        <span className="text-[10px] text-muted-foreground">{req.duration}ms</span>
                       </div>
-                      <div className="text-[11px] text-gray-700 dark:text-gray-300 break-all">{req.url}</div>
+                      <div className="text-[11px] text-foreground dark:text-foreground break-all">{req.url}</div>
                       {req.error && (
-                        <div className="text-[10px] text-red-500 dark:text-red-400 mt-1 truncate">
+                        <div className="text-[10px] text-error dark:text-error mt-1 truncate">
                           Error: {req.error}
                         </div>
                       )}
@@ -547,9 +547,9 @@ const RecorderLeftPanel = ({
           {!isPreviewMode && activeTab === 'issues' && (
             <div className="space-y-2">
               {detectedIssues.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-500 py-8">
+                <div className="flex items-center justify-center h-full text-muted-foreground py-8">
                   <div className="text-center">
-                    <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                    <CheckCircle className="w-8 h-8 mx-auto mb-2 text-success" />
                     <div className="font-medium">No issues detected</div>
                     <div className="text-xs mt-1">Your app appears to be running smoothly.</div>
                   </div>
@@ -559,8 +559,8 @@ const RecorderLeftPanel = ({
                   <div
                     key={issue.id}
                     className={`p-3 rounded border-l-4 ${
-                      issue.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
-                      issue.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' :
+                      issue.severity === 'high' ? 'border-error bg-error/10 dark:bg-error/20' :
+                      issue.severity === 'medium' ? 'border-warning bg-warning/10 dark:bg-warning/20' :
                       'border-primary bg-teal-50 dark:bg-teal-900/20'
                     }`}
                   >
@@ -568,28 +568,28 @@ const RecorderLeftPanel = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2 mb-1">
                           <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${
-                            issue.severity === 'high' ? 'text-red-600' :
-                            issue.severity === 'medium' ? 'text-orange-500' :
+                            issue.severity === 'high' ? 'text-error' :
+                            issue.severity === 'medium' ? 'text-warning' :
                             'text-primary'
                           }`} />
                           <span className="text-sm font-medium capitalize truncate">
                             {issue.type.replace('_', ' ')}
                           </span>
                           <span className={`text-[10px] px-2 py-1 rounded uppercase font-medium ${
-                            issue.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                            issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-teal-100 text-primary dark:bg-primary/60 dark:text-white'
+                            issue.severity === 'high' ? 'bg-error/20 text-error dark:bg-error/30 dark:text-error' :
+                            issue.severity === 'medium' ? 'bg-warning/20 text-warning dark:bg-warning/30 dark:text-warning' :
+                            'bg-teal-100 text-primary dark:bg-primary/60 dark:text-foreground'
                           }`}>
                             {issue.severity}
                           </span>
                           {(issue.count && issue.count > 1) && (
-                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                            <span className="text-[10px] bg-muted text-muted-foreground px-1 rounded">
                               {issue.count}x
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 break-words">{issue.message}</div>
-                        <div className="text-[10px] text-gray-500">
+                        <div className="text-xs text-muted-foreground dark:text-muted-foreground mb-1 break-words">{issue.message}</div>
+                        <div className="text-[10px] text-muted-foreground">
                           {new Date(issue.time || issue.timestamp).toLocaleTimeString()}
                         </div>
                       </div>
@@ -597,8 +597,8 @@ const RecorderLeftPanel = ({
                         onClick={() => createBugFromIssue(issue)}
                         className={`ml-2 px-2 py-1 text-[10px] rounded transition-colors ${
                           selectedBugs.includes(issue.id)
-                            ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                            : 'bg-red-600 text-white hover:bg-red-700'
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                            : 'bg-error text-error-foreground hover:bg-error/90'
                         }`}
                         disabled={selectedBugs.includes(issue.id)}
                       >
@@ -614,9 +614,9 @@ const RecorderLeftPanel = ({
           {!isPreviewMode && activeTab === 'info' && (
             <div className="text-xs space-y-2">
               <div className="grid grid-cols-1 gap-2">
-                <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Recording Statistics</div>
-                  <div className="space-y-1 text-gray-600 dark:text-gray-400">
+                <div className="p-2 bg-muted dark:bg-muted rounded">
+                  <div className="font-medium text-foreground dark:text-foreground mb-1">Recording Statistics</div>
+                  <div className="space-y-1 text-muted-foreground dark:text-muted-foreground">
                     <div><strong>Console Logs:</strong> {consoleLogs.length}</div>
                     <div><strong>Network Requests:</strong> {networkLogs.length}</div>
                     <div><strong>Issues Found:</strong> {detectedIssues.length}</div>
@@ -627,8 +627,8 @@ const RecorderLeftPanel = ({
 
                 {aiInsightCount > 0 && (
                   <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
-                    <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">AI Analysis</div>
-                    <div className="space-y-1 text-gray-600 dark:text-gray-400">
+                    <div className="font-medium text-foreground dark:text-foreground mb-1">AI Analysis</div>
+                    <div className="space-y-1 text-muted-foreground dark:text-muted-foreground">
                       <div><strong>Total Insights:</strong> {aiInsightCount}</div>
                       <div><strong>Critical/High:</strong> {criticalInsightCount}</div>
                       <div><strong>Automation Ready:</strong> {aiInsights.filter(i => i.automationPotential === 'high').length}</div>

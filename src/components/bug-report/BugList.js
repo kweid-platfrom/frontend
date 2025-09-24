@@ -38,6 +38,9 @@ const BugList = ({
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
     const [loadingActions, setLoadingActions] = useState([]);
 
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(25);
+
 
     const handleSelectAll = useCallback((checked) => {
         if (checked) {
@@ -64,17 +67,17 @@ const BugList = ({
     }, []);
 
     // Enhanced bulk action handler with loading states
-    const handleBulkAction = useCallback(async (actionId, selectedItems ) => {
+    const handleBulkAction = useCallback(async (actionId, selectedItems) => {
         setLoadingActions(prev => [...prev, actionId]);
-        
+
         try {
             // Call the original onBulkAction
             await onBulkAction(actionId, selectedItems);
-            
+
             // Show success notification based on action
             const itemCount = selectedItems.length;
             const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
-            
+
             let successMessage = '';
             switch (actionId) {
                 case 'resolve':
@@ -110,14 +113,14 @@ const BugList = ({
                 default:
                     successMessage = `Successfully processed ${itemCount} ${itemLabel}`;
             }
-            
+
             showNotification({
                 type: 'success',
                 title: 'Bulk Action Complete',
                 message: successMessage,
                 duration: 3000,
             });
-            
+
         } catch (error) {
             console.error('Bulk action failed:', error);
             showNotification({
@@ -440,7 +443,7 @@ const BugList = ({
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
 
             {/* Enhanced Bulk Actions Bar */}
-            <EnhancedBulkActionsBar 
+            <EnhancedBulkActionsBar
                 selectedItems={selectedBugs}
                 onClearSelection={() => onSelectBugs([])}
                 assetType="bugs" // Uses predefined bug configuration
@@ -448,7 +451,7 @@ const BugList = ({
                 onAction={handleBulkAction}
                 loadingActions={loadingActions}
             />
-            
+
             {/* Header Controls */}
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -693,7 +696,7 @@ const BugList = ({
                                                     type="testCases"
                                                 />
                                             </div>
-                                                
+
                                         </div>
                                     </div>
                                 </div>

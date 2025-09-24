@@ -80,9 +80,9 @@ const RecorderTimeline = ({
   const getMarkerColor = (item, type) => {
     if (type === 'ai' && item.color) {
       const colorMap = {
-        red: 'bg-red-600 hover:bg-red-700',
-        yellow: 'bg-yellow-600 hover:bg-yellow-700',
-        green: 'bg-green-600 hover:bg-green-700',
+        red: 'bg-error hover:bg-error/90',
+        yellow: 'bg-warning hover:bg-warning/90',
+        green: 'bg-success hover:bg-success/90',
         blue: 'bg-blue-600 hover:bg-blue-700',
         purple: 'bg-purple-600 hover:bg-purple-700'
       };
@@ -90,16 +90,16 @@ const RecorderTimeline = ({
     }
     
     if (type === 'issue') {
-      return 'bg-red-600 hover:bg-red-700';
+      return 'bg-error hover:bg-error/90';
     }
     
-    return 'bg-gray-600 hover:bg-gray-700';
+    return 'bg-muted hover:bg-muted/90';
   };
 
   return (
-    <div className="space-y-2 p-2 border-t border-gray-200 dark:border-gray-700">
+    <div className="space-y-2 p-2 border-t border-muted dark:border-muted">
       {/* Timeline */}
-      <div className="h-8 bg-gray-200 dark:bg-gray-700 relative rounded cursor-pointer"
+      <div className="h-8 bg-muted dark:bg-muted relative rounded cursor-pointer"
            onClick={(e) => {
              const rect = e.currentTarget.getBoundingClientRect();
              const clickX = e.clientX - rect.left;
@@ -110,7 +110,7 @@ const RecorderTimeline = ({
         
         {/* Progress bar */}
         <div
-          className="h-8 bg-blue-500 transition-all duration-300 rounded"
+          className="h-8 bg-primary transition-all duration-300 rounded"
           style={{ 
             width: parsedDuration > 0 ? `${(currentTime / parsedDuration) * 100}%` : '0%' 
           }}
@@ -128,7 +128,7 @@ const RecorderTimeline = ({
                 e.stopPropagation();
                 seekTo(issueTimeSeconds);
               }}
-              className="absolute w-2 h-8 bg-red-600 cursor-pointer hover:bg-red-700 transition-colors z-10"
+              className="absolute w-2 h-8 bg-error cursor-pointer hover:bg-error/90 transition-colors z-10"
               style={{ left: `${Math.max(0, Math.min(100, leftPercentage))}%` }}
               title={`Issue: ${issue.message} (${formatTime(issueTimeSeconds)})`}
             />
@@ -160,7 +160,7 @@ const RecorderTimeline = ({
         
         {/* Playhead indicator */}
         <div
-          className="absolute top-0 w-0.5 h-8 bg-white shadow-md z-30"
+          className="absolute top-0 w-0.5 h-8 bg-foreground shadow-md z-30"
           style={{ 
             left: parsedDuration > 0 ? `${(currentTime / parsedDuration) * 100}%` : '0%' 
           }}
@@ -170,7 +170,7 @@ const RecorderTimeline = ({
       {/* Legend */}
       <div className="flex items-center justify-between text-xs">
         {/* Time display */}
-        <div className="text-gray-600 dark:text-gray-400">
+        <div className="text-muted-foreground dark:text-muted-foreground">
           {formatTime(currentTime)} / {formatTime(parsedDuration)}
         </div>
         
@@ -178,8 +178,8 @@ const RecorderTimeline = ({
         <div className="flex items-center space-x-4">
           {detectedIssues.length > 0 && (
             <div className="flex items-center space-x-1">
-              <div className="w-2 h-2 bg-red-600 rounded"></div>
-              <span className="text-gray-500 dark:text-gray-400">Issues ({detectedIssues.length})</span>
+              <div className="w-2 h-2 bg-error rounded"></div>
+              <span className="text-muted-foreground dark:text-muted-foreground">Issues ({detectedIssues.length})</span>
             </div>
           )}
           
@@ -187,7 +187,7 @@ const RecorderTimeline = ({
             <div className="flex items-center space-x-1">
               <div className="w-3 h-2 bg-purple-600 rounded" 
                    style={{ clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }}></div>
-              <span className="text-gray-500 dark:text-gray-400">AI Insights ({aiHighlights.length})</span>
+              <span className="text-muted-foreground dark:text-muted-foreground">AI Insights ({aiHighlights.length})</span>
             </div>
           )}
         </div>

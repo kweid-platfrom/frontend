@@ -1,74 +1,122 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import TestCaseTable from '@/components/testCase/TestCaseTable';
 import TestCaseList from '@/components/testCase/TestCaseList';
 import TestCaseModal from '@/components/testCase/TestCaseModal';
 import FilterBar from '@/components/testCase/FilterBar';
 import ImportModal from '@/components/testCase/ImportModal';
 import TraceabilityMatrix from '@/components/testCase/TraceabilityMatrix';
-import { TestManagementTooltips } from '@/components/ai/AppAITooltips';
-import { useTestCases } from '@/hooks/useTestCases';
-import { useUI } from '@/hooks/useUI';
+import { useApp } from '@/context/AppProvider';
 import { useRouter } from 'next/navigation';
 
 const TestCases = () => {
     const router = useRouter();
-    const testCasesHook = useTestCases({ testCases: {}, bugs: {}, auth: {}, suites: {}, ui: {}, subscription: {} }); // Adjust slices as needed
-    const uiHook = useUI();
+    
+    // Use the app context instead of calling hooks directly
+    const {
+        state,
+        actions,
+        isAuthenticated,
+        currentUser,
+        activeSuite,
+        isLoading
+    } = useApp();
 
+    // Extract test case specific data from state
+    const {
+        testCases: testCasesState = {},
+        bugs: bugsState = {},
+        relationships = { testCaseToBugs: {} },
+        subscription = {}
+    } = state;
+
+    // Debug the state structure
     useEffect(() => {
-        console.log('🔍 TestCases Hook Debug:', {
-            hookData: {
-                currentUser: testCasesHook.currentUser,
-                activeSuite: testCasesHook.activeSuite,
-                testCasesLocked: testCasesHook.testCasesLocked,
-                canCreateTestCases: testCasesHook.canCreateTestCases,
-                testCases: testCasesHook.testCases?.length || 0,
-                loading: testCasesHook.loading,
-            },
-            hookMethods: {
-                createTestCase: typeof testCasesHook.createTestCase,
-                updateTestCase: typeof testCasesHook.updateTestCase,
-                deleteTestCase: typeof testCasesHook.deleteTestCase,
-                linkBugToTestCase: typeof testCasesHook.linkBugToTestCase,
-                unlinkBugFromTestCase: typeof testCasesHook.unlinkBugFromTestCase,
-            },
+        console.log('State structure debug:', {
+            fullState: state,
+            testCasesState,
+            bugsState,
+            stateKeys: Object.keys(state),
+            testCasesType: typeof testCasesState,
+            testCasesIsArray: Array.isArray(testCasesState)
         });
-    }, [
-        testCasesHook.currentUser,
-        testCasesHook.activeSuite,
-        testCasesHook.testCasesLocked,
-        testCasesHook.canCreateTestCases,
-        testCasesHook.testCases?.length,
-        testCasesHook.loading,
-        testCasesHook.linkBugToTestCase,
-        testCasesHook.unlinkBugFromTestCase,
-    ]);
+    }, [state, testCasesState, bugsState]);
 
-    const testCasesRef = useRef(testCasesHook.testCases || []);
-    const bugsRef = useRef(testCasesHook.bugs || []);
-    const relationshipsRef = useRef(testCasesHook.relationships || { testCaseToBugs: {} });
+    // Get the actual arrays from the state objects - try multiple possible paths
+    let testCases = [];
+    let bugs = [];
 
+    // Try to extract testCases from various possible state structures
+    if (Array.isArray(testCasesState)) {
+        testCases = testCasesState;
+    } else if (testCasesState?.testCases && Array.isArray(testCasesState.testCases)) {
+        testCases = testCasesState.testCases;
+    } else if (testCasesState?.items && Array.isArray(testCasesState.items)) {
+        testCases = testCasesState.items;
+    } else if (state.testCases && Array.isArray(state.testCases)) {
+        testCases = state.testCases;
+    }
+
+    // Try to extract bugs from various possible state structures  
+    if (Array.isArray(bugsState)) {
+        bugs = bugsState;
+    } else if (bugsState?.bugs && Array.isArray(bugsState.bugs)) {
+        bugs = bugsState.bugs;
+    } else if (bugsState?.items && Array.isArray(bugsState.items)) {
+        bugs = bugsState.items;
+    } else if (state.bugs && Array.isArray(state.bugs)) {
+        bugs = state.bugs;
+    }
+
+    console.log('Final arrays:', { testCases: testCases.length, bugs: bugs.length });
+
+    // Extract actions - fix the destructuring
+    const {
+        testCases: testCaseActions,
+        ui: { showNotification },
+        linking
+    } = actions;
+
+    // Debug the actions structure
     useEffect(() => {
-        testCasesRef.current = testCasesHook.testCases || [];
-    }, [testCasesHook.testCases]);
+        console.log('Actions structure debug:', {
+            testCaseActions: testCaseActions ? Object.keys(testCaseActions) : 'undefined',
+            testCaseActionsArray: Array.isArray(testCaseActions) ? testCaseActions : 'not array',
+            actionsKeys: Object.keys(actions),
+            updateTestCaseType: typeof testCaseActions?.updateTestCase,
+            createTestCaseType: typeof testCaseActions?.createTestCase,
+            deleteTestCaseType: typeof testCaseActions?.deleteTestCase,
+            fullActions: actions
+        });
+    }, [actions, testCaseActions]);
 
-    useEffect(() => {
-        bugsRef.current = testCasesHook.bugs || [];
-    }, [testCasesHook.bugs]);
+    // Since testCaseActions appears to be an array, let's try to extract methods differently
+    const actualTestCaseActions = useMemo(() => {
+        // If it's an array, try to find the actual actions object
+        if (Array.isArray(testCaseActions)) {
+            console.log('testCaseActions is array:', testCaseActions);
+            // Look for actions in the array or use direct actions
+            return {
+                createTestCase: actions.createTestCase,
+                updateTestCase: actions.updateTestCase, 
+                deleteTestCase: actions.deleteTestCase || testCaseActions.find(action => typeof action === 'function')
+            };
+        }
+        return testCaseActions;
+    }, [testCaseActions, actions]);
 
-    useEffect(() => {
-        relationshipsRef.current = testCasesHook.relationships || { testCaseToBugs: {} };
-    }, [testCasesHook.relationships]);
+    console.log('Final actualTestCaseActions:', actualTestCaseActions);
 
+    // Component state
     const [filteredTestCases, setFilteredTestCases] = useState([]);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
     const [viewMode, setViewMode] = useState('table');
+    const [selectedTestCases, setSelectedTestCases] = useState([]);
     const [filters, setFilters] = useState({
         search: '',
         status: 'all',
@@ -84,598 +132,408 @@ const TestCases = () => {
         lastUpdated: 'all',
     });
 
-    useEffect(() => {
-        console.log('🔍 Modal state changed:', {
-            isModalOpen,
-            selectedTestCase: selectedTestCase?.id || null,
-            currentUser: testCasesHook.currentUser?.uid || null,
-            activeSuite: testCasesHook.activeSuite?.id || null,
-            canCreateTestCases: testCasesHook.canCreateTestCases,
-            testCasesLocked: testCasesHook.testCasesLocked,
-        });
-    }, [isModalOpen, selectedTestCase, testCasesHook.currentUser, testCasesHook.activeSuite]);
+    // Check permissions
+    const testCasesLocked = subscription?.testCasesLocked || false;
+    const canCreateTestCases = subscription?.canCreateTestCases !== false;
 
-    const aiMonitoredData = useMemo(() => {
-        const requirements =
-            testCasesHook.activeSuite?.description ||
-            testCasesRef.current
-                .map((tc) => tc.description)
-                .filter((desc) => desc && desc.length > 50)
-                .join(' ')
-                .substring(0, 500) ||
-            'Web application testing requirements';
+    // Filter test cases based on current filters
+    const applyFilters = useCallback((testCasesToFilter, currentFilters) => {
+        if (!Array.isArray(testCasesToFilter)) return [];
 
-        const recentlyUpdated = testCasesRef.current.filter((tc) => {
-            if (!tc.updated_at) return false;
-            const updatedAt = new Date(tc.updated_at);
-            const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            return updatedAt > dayAgo;
-        });
+        return testCasesToFilter.filter((testCase) => {
+            // Search filter
+            if (currentFilters.search) {
+                const searchTerm = currentFilters.search.toLowerCase();
+                const searchableText = [
+                    testCase.title,
+                    testCase.description,
+                    testCase.id?.toString(),
+                    testCase.component,
+                    testCase.assignee,
+                    ...(testCase.tags || [])
+                ].join(' ').toLowerCase();
 
-        const changedComponents = recentlyUpdated
-            .map((tc) => tc.component)
-            .filter((comp) => comp)
-            .filter((comp, index, arr) => arr.indexOf(comp) === index);
+                if (!searchableText.includes(searchTerm)) return false;
+            }
 
-        return {
-            testCases: testCasesRef.current,
-            requirements,
-            changedComponents,
-            recentActivity: recentlyUpdated.map((tc) => ({
-                id: tc.id,
-                type: 'test_case_update',
-                timestamp: tc.updated_at,
-                component: tc.component,
-                status: tc.status,
-            })),
-            activeSuite: testCasesHook.activeSuite,
-            currentUser: testCasesHook.currentUser,
-            filters,
-            viewMode,
-            selectedCount: testCasesHook.selectedTestCases?.length || 0,
-            metrics: {
-                totalTestCases: testCasesRef.current.length,
-                passedTests: testCasesRef.current.filter((tc) => tc.executionStatus === 'passed').length,
-                failedTests: testCasesRef.current.filter((tc) => tc.executionStatus === 'failed').length,
-                blockedTests: testCasesRef.current.filter((tc) => tc.executionStatus === 'blocked').length,
-                notExecutedTests: testCasesRef.current.filter((tc) => tc.executionStatus === 'not_executed').length,
-                automatedTests: testCasesRef.current.filter((tc) => tc.automationStatus === 'automated').length,
-                criticalTests: testCasesRef.current.filter((tc) => tc.priority === 'critical').length,
-                highTests: testCasesRef.current.filter((tc) => tc.priority === 'high').length,
-                components: [...new Set(testCasesRef.current.map((tc) => tc.component).filter(Boolean))],
-                lastUpdateTime:
-                    testCasesRef.current.length > 0
-                        ? Math.max(
-                              ...testCasesRef.current
-                                  .map((tc) => (tc.updated_at ? new Date(tc.updated_at).getTime() : 0))
-                                  .filter((time) => !isNaN(time))
-                          )
-                        : Date.now(),
-            },
-        };
-    }, [
-        testCasesHook.testCases,
-        testCasesHook.activeSuite,
-        testCasesHook.currentUser,
-        testCasesHook.selectedTestCases,
-        filters,
-        viewMode,
-    ]);
+            // Status filters
+            if (currentFilters.status !== 'all' && testCase.status !== currentFilters.status) return false;
+            if (currentFilters.priority !== 'all' && testCase.priority !== currentFilters.priority) return false;
+            if (currentFilters.severity !== 'all' && testCase.severity !== currentFilters.severity) return false;
+            if (currentFilters.executionStatus !== 'all' && testCase.executionStatus !== currentFilters.executionStatus) return false;
+            if (currentFilters.assignee !== 'all' && testCase.assignee !== currentFilters.assignee) return false;
+            if (currentFilters.component !== 'all' && testCase.component !== currentFilters.component) return false;
+            if (currentFilters.testType !== 'all' && testCase.testType !== currentFilters.testType) return false;
+            if (currentFilters.environment !== 'all' && testCase.environment !== currentFilters.environment) return false;
+            if (currentFilters.automationStatus !== 'all' && testCase.automationStatus !== currentFilters.automationStatus) return false;
 
-    const applyFiltersStable = useCallback((currentTestCases, currentFilters) => {
-        if (!Array.isArray(currentTestCases)) return [];
+            // Tags filter
+            if (currentFilters.tags?.length > 0) {
+                const testCaseTags = testCase.tags || [];
+                if (!currentFilters.tags.every(tag => testCaseTags.includes(tag))) return false;
+            }
 
-        let filtered = [...currentTestCases];
-
-        if (currentFilters.search) {
-            const searchTerm = currentFilters.search.toLowerCase();
-            filtered = filtered.filter((tc) => {
-                const searchableFields = [
-                    tc.title?.toLowerCase() || '',
-                    tc.description?.toLowerCase() || '',
-                    tc.id?.toString().toLowerCase() || '',
-                    tc.component?.toLowerCase() || '',
-                    tc.assignee?.toLowerCase() || '',
-                    ...(tc.tags || []).map((tag) => tag.toLowerCase()),
-                ];
-                return searchableFields.some((field) => field.includes(searchTerm));
-            });
-        }
-
-        if (currentFilters.status !== 'all') {
-            filtered = filtered.filter((tc) => tc.status === currentFilters.status);
-        }
-
-        if (currentFilters.priority !== 'all') {
-            filtered = filtered.filter((tc) => tc.priority === currentFilters.priority);
-        }
-
-        if (currentFilters.severity !== 'all') {
-            filtered = filtered.filter((tc) => tc.severity === currentFilters.severity);
-        }
-
-        if (currentFilters.executionStatus !== 'all') {
-            filtered = filtered.filter((tc) => tc.executionStatus === currentFilters.executionStatus);
-        }
-
-        if (currentFilters.assignee !== 'all') {
-            filtered = filtered.filter((tc) =>
-                tc.assignee === currentFilters.assignee || (!tc.assignee && currentFilters.assignee === '')
-            );
-        }
-
-        if (currentFilters.component !== 'all') {
-            filtered = filtered.filter((tc) => tc.component === currentFilters.component);
-        }
-
-        if (currentFilters.testType !== 'all') {
-            filtered = filtered.filter((tc) => tc.testType === currentFilters.testType);
-        }
-
-        if (currentFilters.environment !== 'all') {
-            filtered = filtered.filter((tc) => tc.environment === currentFilters.environment);
-        }
-
-        if (currentFilters.automationStatus !== 'all') {
-            filtered = filtered.filter((tc) => tc.automationStatus === currentFilters.automationStatus);
-        }
-
-        if (currentFilters.tags?.length > 0) {
-            filtered = filtered.filter((tc) =>
-                tc.tags && currentFilters.tags.every((tag) => tc.tags.includes(tag))
-            );
-        }
-
-        if (currentFilters.lastUpdated !== 'all') {
-            const now = new Date();
-            filtered = filtered.filter((tc) => {
-                const updatedAt = tc.updated_at instanceof Date ? tc.updated_at : new Date(tc.updated_at);
-                if (isNaN(updatedAt.getTime())) return false;
-
+            // Date filter
+            if (currentFilters.lastUpdated !== 'all') {
+                const updatedDate = new Date(testCase.updated_at);
+                const now = new Date();
+                
                 switch (currentFilters.lastUpdated) {
                     case 'today':
-                        return updatedAt.toDateString() === now.toDateString();
+                        if (updatedDate.toDateString() !== now.toDateString()) return false;
+                        break;
                     case 'week':
-                        return updatedAt >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        if (updatedDate < new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)) return false;
+                        break;
                     case 'month':
-                        return updatedAt >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                        if (updatedDate < new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) return false;
+                        break;
                     case 'quarter':
-                        return updatedAt >= new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-                    default:
-                        return true;
+                        if (updatedDate < new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)) return false;
+                        break;
                 }
-            });
-        }
+            }
 
-        return filtered;
+            return true;
+        });
     }, []);
 
+    // Update filtered test cases when data or filters change
     useEffect(() => {
-        const newFilteredTestCases = applyFiltersStable(testCasesRef.current, filters);
-        setFilteredTestCases(newFilteredTestCases);
-    }, [testCasesHook.testCases, filters, applyFiltersStable]);
+        const filtered = applyFilters(testCases, filters);
+        setFilteredTestCases(filtered);
+    }, [testCases, filters, applyFilters]);
 
-    const handleError = useCallback(
-        (error, context) => {
-            console.error(`Error in ${context}:`, error);
-            if (uiHook.addNotification) {
-                uiHook.addNotification({
-                    type: 'error',
-                    title: 'Error',
-                    message: `Failed to ${context}: ${error.message}`,
-                    persistent: true,
-                });
-            }
-        },
-        [uiHook.addNotification]
-    );
+    // Error notification helper
+    const showError = useCallback((message, title = 'Error') => {
+        showNotification?.({
+            type: 'error',
+            title,
+            message,
+            persistent: true
+        });
+    }, [showNotification]);
 
-    const handleSaveTestCase = useCallback(
-        async (testCaseData) => {
-            try {
-                console.log('💾 Saving test case:', {
-                    testCaseData: testCaseData.title,
-                    isEdit: !!selectedTestCase,
-                });
+    // Success notification helper
+    const showSuccess = useCallback((message, title = 'Success') => {
+        showNotification?.({
+            type: 'success',
+            title,
+            message
+        });
+    }, [showNotification]);
 
-                if (testCasesHook.testCasesLocked) {
-                    throw new Error('Test cases are locked. Upgrade to access.');
-                }
+    // Check if operations are allowed
+    const checkPermissions = useCallback(() => {
+        if (testCasesLocked) {
+            showError('Test cases are locked. Upgrade to access.', 'Upgrade Required');
+            return false;
+        }
+        if (!canCreateTestCases) {
+            showError('Upgrade to create test cases.', 'Upgrade Required');
+            return false;
+        }
+        return true;
+    }, [testCasesLocked, canCreateTestCases, showError]);
 
-                const timestamp = new Date();
-
-                if (selectedTestCase) {
-                    await testCasesHook.updateTestCase(selectedTestCase.id, {
-                        ...testCaseData,
-                        updated_at: timestamp,
-                    });
-                    uiHook.addNotification?.({
-                        type: 'success',
-                        title: 'Success',
-                        message: 'Test case updated successfully',
-                    });
-                } else {
-                    const result = await testCasesHook.createTestCase({
-                        ...testCaseData,
-                        created_at: timestamp,
-                        updated_at: timestamp,
-                    });
-                    console.log('✅ Test case created:', result);
-                    uiHook.addNotification?.({
-                        type: 'success',
-                        title: 'Success',
-                        message: 'Test case created successfully',
-                    });
-                }
-
-                setIsModalOpen(false);
-                setSelectedTestCase(null);
-            } catch (error) {
-                console.error('❌ Error saving test case:', error);
-                handleError(error, 'save test case');
-            }
-        },
-        [
-            testCasesHook.testCasesLocked,
-            testCasesHook.updateTestCase,
-            testCasesHook.createTestCase,
-            selectedTestCase,
-            uiHook.addNotification,
-            handleError,
-        ]
-    );
-
-    const handleLinkBug = useCallback(
-        async (testCaseId, newBugIds) => {
-            try {
-                if (testCasesHook.testCasesLocked) {
-                    throw new Error('Test cases are locked. Upgrade to access.');
-                }
-
-                if (typeof testCasesHook.linkBugToTestCase !== 'function') {
-                    throw new Error('Bug linking functionality is not available');
-                }
-
-                await testCasesHook.linkBugToTestCase(testCaseId, newBugIds);
-
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: `Linked ${newBugIds.length} bug${newBugIds.length > 1 ? 's' : ''} to test case`,
-                });
-            } catch (error) {
-                handleError(error, 'link bugs');
-            }
-        },
-        [testCasesHook.testCasesLocked, testCasesHook.linkBugToTestCase, uiHook.addNotification, handleError]
-    );
-
+    // Handlers
     const handleCreateTestCase = useCallback(() => {
-        console.log('🚀 Create test case clicked - opening modal');
-
-        if (testCasesHook.testCasesLocked) {
-            console.warn('❌ Test cases locked due to subscription');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Test cases are locked. Upgrade to access.',
-            });
-            return;
-        }
-
-        if (testCasesHook.canCreateTestCases === false) {
-            console.warn('❌ Cannot create test cases due to plan limits');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Upgrade to create test cases.',
-            });
-            return;
-        }
-
-        console.log('✅ Opening modal');
+        if (!checkPermissions()) return;
         setSelectedTestCase(null);
         setIsModalOpen(true);
-    }, [testCasesHook.testCasesLocked, testCasesHook.canCreateTestCases, uiHook.addNotification]);
+    }, [checkPermissions]);
 
-    const handleAIGenerate = useCallback(() => {
-        console.log('🚀 AI Generate clicked - navigating to generation page');
-
-        if (testCasesHook.testCasesLocked) {
-            console.warn('❌ Test cases locked due to subscription');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Test cases are locked. Upgrade to access.',
-            });
+    const handleEditTestCase = useCallback((testCase) => {
+        if (testCasesLocked) {
+            showError('Test cases are locked. Upgrade to access.');
             return;
         }
+        setSelectedTestCase(testCase);
+        setIsModalOpen(true);
+    }, [testCasesLocked, showError]);
 
-        if (testCasesHook.canCreateTestCases === false) {
-            console.warn('❌ Cannot create test cases due to plan limits');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Upgrade to create test cases.',
-            });
-            return;
-        }
+    const handleSaveTestCase = useCallback(async (testCaseData) => {
+        try {
+            if (!checkPermissions()) return;
 
-        console.log('✅ Navigating to AI generation page');
-        router.push('/testcases/generate');
-    }, [testCasesHook.testCasesLocked, testCasesHook.canCreateTestCases, uiHook.addNotification, router]);
+            // Use the corrected actions
+            const createFn = actualTestCaseActions?.createTestCase;
+            const updateFn = actualTestCaseActions?.updateTestCase;
 
-    const handleEditTestCase = useCallback(
-        (testCase) => {
-            if (testCasesHook.testCasesLocked) {
-                uiHook.addNotification?.({
-                    type: 'error',
-                    title: 'Error',
-                    message: 'Test cases are locked. Upgrade to access.',
+            // Check if the required methods exist
+            if (!updateFn || !createFn) {
+                console.error('Test case actions not available:', {
+                    updateTestCase: typeof updateFn,
+                    createTestCase: typeof createFn,
+                    actualTestCaseActions
                 });
+                showError('Test case actions are not available. Please refresh the page.');
                 return;
             }
 
-            setSelectedTestCase(testCase);
-            setIsModalOpen(true);
-        },
-        [testCasesHook.testCasesLocked, uiHook.addNotification]
-    );
+            const timestamp = new Date();
 
-    const handleDeleteTestCase = useCallback(
-        async (id) => {
-            try {
-                if (testCasesHook.testCasesLocked) {
-                    throw new Error('Test cases are locked. Upgrade to access.');
-                }
-
-                await testCasesHook.deleteTestCase(id);
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Test case deleted successfully',
+            if (selectedTestCase?.id) {
+                // Update existing test case
+                await updateFn(selectedTestCase.id, {
+                    ...testCaseData,
+                    updated_at: timestamp
                 });
-            } catch (error) {
-                handleError(error, 'delete test case');
+                showSuccess('Test case updated successfully');
+            } else {
+                // Create new test case
+                await createFn({
+                    ...testCaseData,
+                    created_at: timestamp,
+                    updated_at: timestamp
+                });
+                showSuccess('Test case created successfully');
             }
-        },
-        [testCasesHook.testCasesLocked, testCasesHook.deleteTestCase, uiHook.addNotification, handleError]
-    );
 
-    const handleUpdateExecutionStatus = useCallback(
-        async (testCaseId, newStatus) => {
-            try {
-                if (testCasesHook.testCasesLocked) {
-                    throw new Error('Test cases are locked. Upgrade to access.');
-                }
+            setIsModalOpen(false);
+            setSelectedTestCase(null);
+        } catch (error) {
+            console.error('Error saving test case:', error);
+            showError(error.message || 'Failed to save test case');
+        }
+    }, [selectedTestCase, actualTestCaseActions, checkPermissions, showSuccess, showError]);
 
-                const timestamp = new Date();
-                await testCasesHook.updateTestCase(testCaseId, {
-                    executionStatus: newStatus,
-                    lastExecuted: timestamp,
-                    updated_at: timestamp,
-                });
-
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: `Test case marked as ${newStatus}`,
-                });
-            } catch (error) {
-                handleError(error, 'update execution status');
+    const handleDeleteTestCase = useCallback(async (id) => {
+        try {
+            if (testCasesLocked) {
+                showError('Test cases are locked. Upgrade to access.');
+                return;
             }
-        },
-        [testCasesHook.testCasesLocked, testCasesHook.updateTestCase, uiHook.addNotification, handleError]
-    );
 
-    const handleBulkAction = useCallback(
-        async (action, selectedIds) => {
-            try {
-                if (testCasesHook.testCasesLocked) {
-                    throw new Error('Test cases are locked. Upgrade to access.');
-                }
-
-                const timestamp = new Date();
-
-                switch (action) {
-                    case 'delete':
-                        await Promise.all(selectedIds.map((id) => testCasesHook.deleteTestCase(id)));
-                        break;
-
-                    case 'run':
-                        uiHook.addNotification?.({
-                            type: 'info',
-                            title: 'Running Tests',
-                            message: `Running ${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''}`,
-                        });
-                        return;
-
-                    case 'pass':
-                    case 'fail':
-                    case 'block':
-                        const statusMap = { pass: 'passed', fail: 'failed', block: 'blocked' };
-                        await Promise.all(
-                            selectedIds.map((id) =>
-                                testCasesHook.updateTestCase(id, {
-                                    executionStatus: statusMap[action],
-                                    lastExecuted: timestamp,
-                                    updated_at: timestamp,
-                                })
-                            )
-                        );
-                        break;
-
-                    case 'reset':
-                        await Promise.all(
-                            selectedIds.map((id) =>
-                                testCasesHook.updateTestCase(id, {
-                                    status: 'draft',
-                                    executionStatus: 'not_executed',
-                                    updated_at: timestamp,
-                                })
-                            )
-                        );
-                        break;
-
-                    case 'active':
-                        await Promise.all(
-                            selectedIds.map((id) =>
-                                testCasesHook.updateTestCase(id, {
-                                    status: 'active',
-                                    updated_at: timestamp,
-                                })
-                            )
-                        );
-                        break;
-
-                    case 'archive':
-                        await Promise.all(
-                            selectedIds.map((id) =>
-                                testCasesHook.updateTestCase(id, {
-                                    status: 'archived',
-                                    updated_at: timestamp,
-                                })
-                            )
-                        );
-                        break;
-
-                    default:
-                        await Promise.all(
-                            selectedIds.map((id) =>
-                                testCasesHook.updateTestCase(id, {
-                                    status: action,
-                                    updated_at: timestamp,
-                                })
-                            )
-                        );
-                        break;
-                }
-
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} updated`,
-                });
-            } catch (error) {
-                handleError(error, 'bulk action');
+            const deleteFn = actualTestCaseActions?.deleteTestCase;
+            if (!deleteFn) {
+                showError('Delete function not available.');
+                return;
             }
-        },
-        [
-            testCasesHook.testCasesLocked,
-            testCasesHook.deleteTestCase,
-            testCasesHook.updateTestCase,
-            uiHook.addNotification,
-            handleError,
-        ]
-    );
+
+            await deleteFn(id);
+            showSuccess('Test case deleted successfully');
+        } catch (error) {
+            console.error('Error deleting test case:', error);
+            showError(error.message || 'Failed to delete test case');
+        }
+    }, [actualTestCaseActions, testCasesLocked, showSuccess, showError]);
+
+    const handleUpdateExecutionStatus = useCallback(async (testCaseId, newStatus) => {
+        try {
+            if (testCasesLocked) {
+                showError('Test cases are locked. Upgrade to access.');
+                return;
+            }
+
+            const updateFn = actualTestCaseActions?.updateTestCase;
+            if (!updateFn) {
+                showError('Update function not available.');
+                return;
+            }
+
+            const timestamp = new Date();
+            await updateFn(testCaseId, {
+                executionStatus: newStatus,
+                lastExecuted: timestamp,
+                updated_at: timestamp
+            });
+
+            showSuccess(`Test case marked as ${newStatus}`);
+        } catch (error) {
+            console.error('Error updating execution status:', error);
+            showError(error.message || 'Failed to update execution status');
+        }
+    }, [actualTestCaseActions, testCasesLocked, showSuccess, showError]);
+
+    const handleBulkAction = useCallback(async (action, selectedIds) => {
+        try {
+            if (testCasesLocked) {
+                showError('Test cases are locked. Upgrade to access.');
+                return;
+            }
+
+            const timestamp = new Date();
+            const updates = [];
+
+            switch (action) {
+                case 'delete':
+                    await Promise.all(selectedIds.map(id => testCaseActions.deleteTestCase(id)));
+                    break;
+
+                case 'run':
+                    showNotification?.({
+                        type: 'info',
+                        title: 'Running Tests',
+                        message: `Running ${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''}`
+                    });
+                    return;
+
+                case 'pass':
+                case 'fail':
+                case 'block':
+                    const statusMap = { pass: 'passed', fail: 'failed', block: 'blocked' };
+                    selectedIds.forEach(id => {
+                        updates.push(testCaseActions.updateTestCase(id, {
+                            executionStatus: statusMap[action],
+                            lastExecuted: timestamp,
+                            updated_at: timestamp
+                        }));
+                    });
+                    break;
+
+                case 'reset':
+                    selectedIds.forEach(id => {
+                        updates.push(testCaseActions.updateTestCase(id, {
+                            status: 'draft',
+                            executionStatus: 'not_executed',
+                            updated_at: timestamp
+                        }));
+                    });
+                    break;
+
+                case 'active':
+                case 'archive':
+                    selectedIds.forEach(id => {
+                        updates.push(testCaseActions.updateTestCase(id, {
+                            status: action === 'active' ? 'active' : 'archived',
+                            updated_at: timestamp
+                        }));
+                    });
+                    break;
+
+                default:
+                    selectedIds.forEach(id => {
+                        updates.push(testCaseActions.updateTestCase(id, {
+                            status: action,
+                            updated_at: timestamp
+                        }));
+                    });
+            }
+
+            if (updates.length > 0) {
+                await Promise.all(updates);
+            }
+
+            showSuccess(`${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} updated`);
+        } catch (error) {
+            console.error('Error in bulk action:', error);
+            showError(error.message || 'Failed to perform bulk action');
+        }
+    }, [testCaseActions, testCasesLocked, showNotification, showSuccess, showError]);
+
+    const handleLinkBug = useCallback(async (testCaseId, bugIds) => {
+        try {
+            if (testCasesLocked) {
+                showError('Test cases are locked. Upgrade to access.');
+                return;
+            }
+
+            if (actions.linking?.linkBugsToTestCase) {
+                await actions.linking.linkBugsToTestCase(testCaseId, bugIds);
+                showSuccess(`Linked ${bugIds.length} bug${bugIds.length > 1 ? 's' : ''} to test case`);
+            } else {
+                showError('Bug linking functionality is not available');
+            }
+        } catch (error) {
+            console.error('Error linking bugs:', error);
+            showError(error.message || 'Failed to link bugs');
+        }
+    }, [actions.linking, testCasesLocked, showSuccess, showError]);
+
+    const handleAIGenerate = useCallback(() => {
+        if (!checkPermissions()) return;
+        router.push('/testcases/generate');
+    }, [checkPermissions, router]);
+
+    const handleImportComplete = useCallback(async (importedTestCases) => {
+        setIsImportModalOpen(false);
+        
+        try {
+            if (!checkPermissions()) return;
+
+            const timestamp = new Date();
+            const promises = importedTestCases.map(tc => testCaseActions.createTestCase({
+                ...tc,
+                created_at: timestamp,
+                updated_at: timestamp
+            }));
+
+            await Promise.all(promises);
+            showSuccess(`${importedTestCases.length} test cases imported successfully`);
+        } catch (error) {
+            console.error('Error importing test cases:', error);
+            showError(error.message || 'Failed to import test cases');
+        }
+    }, [testCaseActions, checkPermissions, showSuccess, showError]);
 
     const handleRunNotification = useCallback(() => {
-        uiHook.addNotification?.({
+        showNotification?.({
             type: 'info',
             title: 'Run',
-            message: 'Run functionality not implemented yet',
+            message: 'Run functionality not implemented yet'
         });
-    }, [uiHook.addNotification]);
+    }, [showNotification]);
 
-    const handleImportComplete = useCallback(
-        async (importedTestCases) => {
-            setIsImportModalOpen(false);
+    // Memoized components
+    const tableComponent = useMemo(() => (
+        <TestCaseTable
+            testCases={filteredTestCases}
+            bugs={bugs}
+            relationships={relationships}
+            selectedTestCases={selectedTestCases}
+            onSelectTestCases={setSelectedTestCases}
+            onEdit={handleEditTestCase}
+            onDelete={handleDeleteTestCase}
+            onBulkAction={handleBulkAction}
+            onView={handleEditTestCase}
+            onRun={handleRunNotification}
+            onLinkBug={handleLinkBug}
+            onUpdateExecutionStatus={handleUpdateExecutionStatus}
+        />
+    ), [
+        filteredTestCases,
+        bugs,
+        relationships,
+        selectedTestCases,
+        handleEditTestCase,
+        handleDeleteTestCase,
+        handleBulkAction,
+        handleRunNotification,
+        handleLinkBug,
+        handleUpdateExecutionStatus
+    ]);
 
-            try {
-                if (testCasesHook.testCasesLocked) {
-                    throw new Error('Test cases are locked. Upgrade to access.');
-                }
+    const listComponent = useMemo(() => (
+        <TestCaseList
+            testCases={filteredTestCases}
+            bugs={bugs}
+            relationships={relationships}
+            selectedTestCases={selectedTestCases}
+            onSelectTestCases={setSelectedTestCases}
+            onEdit={handleEditTestCase}
+            onDelete={handleDeleteTestCase}
+            onBulkAction={handleBulkAction}
+            onView={handleEditTestCase}
+            onRun={handleRunNotification}
+            onLinkBug={handleLinkBug}
+            onUpdateExecutionStatus={handleUpdateExecutionStatus}
+        />
+    ), [
+        filteredTestCases,
+        bugs,
+        relationships,
+        selectedTestCases,
+        handleEditTestCase,
+        handleDeleteTestCase,
+        handleBulkAction,
+        handleRunNotification,
+        handleLinkBug,
+        handleUpdateExecutionStatus
+    ]);
 
-                const timestamp = new Date();
-                await Promise.all(
-                    importedTestCases.map((tc) =>
-                        testCasesHook.createTestCase({
-                            ...tc,
-                            created_at: timestamp,
-                            updated_at: timestamp,
-                        })
-                    )
-                );
-
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Test cases imported successfully',
-                });
-            } catch (error) {
-                handleError(error, 'import test cases');
-            }
-        },
-        [testCasesHook.testCasesLocked, testCasesHook.createTestCase, uiHook.addNotification, handleError]
-    );
-
-    const handleCloseModal = useCallback(() => {
-        console.log('🔒 Closing modal');
-        setIsModalOpen(false);
-        setSelectedTestCase(null);
-    }, []);
-
-    const tableComponent = useMemo(
-        () => (
-            <TestCaseTable
-                testCases={filteredTestCases}
-                bugs={bugsRef.current}
-                relationships={relationshipsRef.current}
-                selectedTestCases={testCasesHook.selectedTestCases}
-                onSelectTestCases={testCasesHook.selectTestCases}
-                onEdit={handleEditTestCase}
-                onDelete={handleDeleteTestCase}
-                onBulkAction={handleBulkAction}
-                onView={handleEditTestCase}
-                onRun={handleRunNotification}
-                onLinkBug={handleLinkBug}
-                onUpdateExecutionStatus={handleUpdateExecutionStatus}
-            />
-        ),
-        [
-            filteredTestCases,
-            testCasesHook.selectedTestCases,
-            testCasesHook.selectTestCases,
-            handleEditTestCase,
-            handleDeleteTestCase,
-            handleBulkAction,
-            handleRunNotification,
-            handleLinkBug,
-            handleUpdateExecutionStatus,
-        ]
-    );
-
-    const listComponent = useMemo(
-        () => (
-            <TestCaseList
-                testCases={filteredTestCases}
-                bugs={bugsRef.current}
-                relationships={relationshipsRef.current}
-                selectedTestCases={testCasesHook.selectedTestCases}
-                onSelectTestCases={testCasesHook.selectTestCases}
-                onEdit={handleEditTestCase}
-                onDelete={handleDeleteTestCase}
-                onBulkAction={handleBulkAction}
-                onView={handleEditTestCase}
-                onRun={handleRunNotification}
-                onLinkBug={handleLinkBug}
-                onUpdateExecutionStatus={handleUpdateExecutionStatus}
-            />
-        ),
-        [
-            filteredTestCases,
-            testCasesHook.selectedTestCases,
-            testCasesHook.selectTestCases,
-            handleEditTestCase,
-            handleDeleteTestCase,
-            handleBulkAction,
-            handleRunNotification,
-            handleLinkBug,
-            handleUpdateExecutionStatus,
-        ]
-    );
-
-    if (testCasesHook.loading) {
+    // Loading state
+    if (isLoading) {
         return (
             <div className="min-h-screen bg-background dark:bg-background flex items-center justify-center font-poppins">
                 <div className="text-center">
@@ -686,7 +544,8 @@ const TestCases = () => {
         );
     }
 
-    if (testCasesHook.testCasesLocked) {
+    // Locked state
+    if (testCasesLocked) {
         return (
             <div className="min-h-screen bg-background dark:bg-background font-poppins">
                 <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -694,29 +553,31 @@ const TestCases = () => {
                         <h1 className="text-2xl font-bold text-foreground dark:text-foreground">Test Cases</h1>
                     </div>
                     <div className="bg-card dark:bg-card shadow-theme-md rounded-lg p-6">
-                        <p className="text-muted-foreground dark:text-muted-foreground">Test cases are locked. Upgrade to access.</p>
+                        <p className="text-muted-foreground dark:text-muted-foreground">
+                            Test cases are locked. Upgrade to access.
+                        </p>
                     </div>
                 </div>
             </div>
         );
     }
 
+    // Main component render
     return (
         <div className="min-h-screen bg-background dark:bg-background font-poppins">
-            <TestManagementTooltips
-                testCases={aiMonitoredData.testCases}
-                requirements={aiMonitoredData.requirements}
-                changedComponents={aiMonitoredData.changedComponents}
-            />
-
             <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
+                {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                     <div className="flex items-center">
-                        <h1 className="text-xl sm:text-2xl font-bold text-foreground dark:text-foreground">Test Cases</h1>
+                        <h1 className="text-xl sm:text-2xl font-bold text-foreground dark:text-foreground">
+                            Test Cases
+                        </h1>
                         <span className="ml-2 px-2 py-1 bg-muted dark:bg-muted rounded-full text-xs font-normal text-muted-foreground dark:text-muted-foreground">
                             {filteredTestCases.length} {filteredTestCases.length === 1 ? 'test case' : 'test cases'}
                         </span>
                     </div>
+
+                    {/* Action Buttons */}
                     <div className="flex items-center space-x-2 overflow-x-auto">
                         <button
                             onClick={() => setIsTraceabilityOpen(true)}
@@ -745,27 +606,33 @@ const TestCases = () => {
                     </div>
                 </div>
 
+                {/* Filter Bar */}
                 <div className="test-list-header">
                     <FilterBar
                         filters={filters}
                         onFiltersChange={setFilters}
-                        testCases={testCasesRef.current}
+                        testCases={testCases}
                         viewMode={viewMode}
                         setViewMode={setViewMode}
                     />
                 </div>
 
+                {/* Test Cases View */}
                 <div className="transition-opacity duration-300">
                     {viewMode === 'table' ? tableComponent : listComponent}
                 </div>
 
+                {/* Modals */}
                 {isModalOpen && (
                     <TestCaseModal
                         testCase={selectedTestCase}
-                        onClose={handleCloseModal}
+                        onClose={() => {
+                            setIsModalOpen(false);
+                            setSelectedTestCase(null);
+                        }}
                         onSave={handleSaveTestCase}
-                        activeSuite={testCasesHook.activeSuite || { id: 'default', name: 'Default Suite' }}
-                        currentUser={testCasesHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
+                        activeSuite={activeSuite || { id: 'default', name: 'Default Suite' }}
+                        currentUser={currentUser || { uid: 'anonymous', email: 'anonymous' }}
                     />
                 )}
 
@@ -778,8 +645,8 @@ const TestCases = () => {
 
                 {isTraceabilityOpen && (
                     <TraceabilityMatrix
-                        testCases={testCasesRef.current}
-                        relationships={relationshipsRef.current}
+                        testCases={testCases}
+                        relationships={relationships}
                         onClose={() => setIsTraceabilityOpen(false)}
                     />
                 )}
