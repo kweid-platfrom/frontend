@@ -188,7 +188,7 @@ const ActionDropdown = ({ action, onSelect, isOpen, onToggle, disabled }) => {
         <button
           onClick={() => onToggle(!isOpen)}
           disabled={disabled}
-          className="inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative"
+          className="inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative"
         >
           <ActionIcon className="w-3 h-3 sm:w-4 sm:h-4" />
           <ChevronDown className={`w-2 h-2 sm:w-3 sm:h-3 absolute -bottom-0.5 -right-0.5 bg-white rounded-full border border-gray-300 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -221,7 +221,6 @@ const EnhancedBulkActionsBar = ({
   
   // Display props
   pageTitle = 'items',
-  pageIcon = 'TestTube',
   pageColor = 'blue',
   
   // Actions configuration - can use predefined or custom
@@ -242,17 +241,14 @@ const EnhancedBulkActionsBar = ({
   const { 
     state, 
     actions,
-    activeSuite 
   } = useApp();
 
   // Get bulk actions from app context
   const {
     selectedItems: contextSelectedItems = [],
-    hasSelection = false
   } = state.bulkActions || {};
 
   const {
-    updateBulkSelection,
     clearBulkSelection,
     executeBulkAction
   } = actions.bulk || {};
@@ -290,7 +286,6 @@ const EnhancedBulkActionsBar = ({
     if (actionGroups.length > 0) {
       console.log('Using custom actionGroups');
       return {
-        icon: pageIcon,
         color: pageColor,
         groups: actionGroups
       };
@@ -301,7 +296,7 @@ const EnhancedBulkActionsBar = ({
       const assetConfig = ASSET_ACTION_CONFIGS[assetType];
       console.log('Using predefined config for:', assetType, assetConfig);
       return {
-        icon: pageIcon || assetConfig.icon,
+        icon: assetConfig.icon,
         color: pageColor || assetConfig.color,
         groups: assetConfig.groups
       };
@@ -310,24 +305,16 @@ const EnhancedBulkActionsBar = ({
     console.log('Using default config');
     // Default empty config
     return {
-      icon: pageIcon,
       color: pageColor,
       groups: []
     };
-  }, [assetType, actionGroups, pageIcon, pageColor]);
+  }, [assetType, actionGroups, pageColor]);
 
   // Don't render if no items selected, no portal container, or no actions
   if (!portalContainer || selectedItems.length === 0 || config.groups.length === 0) {
     return null;
   }
 
-  const PageIcon = ICONS[config.icon] || ICONS['Bug'];
-  
-  console.log('Icon selection debug:', {
-    configIcon: config.icon,
-    selectedIcon: PageIcon?.name || 'unknown',
-    availableIcons: Object.keys(ICONS)
-  });
 
   const handleAction = async (actionId, actionConfig, selectedOption = null) => {
     const requiresConfirm = actionConfig.requiresConfirm || actionConfig.destructive;
@@ -341,7 +328,7 @@ const EnhancedBulkActionsBar = ({
           newSet.delete(actionId);
           return newSet;
         });
-      }, 3000);
+      }, 5000);
       return;
     }
 
@@ -418,16 +405,10 @@ const EnhancedBulkActionsBar = ({
       <div className="bg-white border border-gray-300 rounded-xl shadow-xl px-3 sm:px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Selection info */}
-          <div className="flex items-center space-x-2 mr-3 sm:mr-4">
-            <PageIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 flex-shrink-0" />
-            <span className="text-xs sm:text-sm font-medium text-gray-800 whitespace-nowrap">
+          <div className="flex items-center space-x-2 mr-8 sm:mr-4">
+            <span className="text-xs sm:text-sm font-medium text-gray-800 whitespace-nowrap mr-8">
               {selectedItems.length} {pageTitle}{selectedItems.length > 1 ? 's' : ''} selected
             </span>
-            {activeSuite && (
-              <span className="text-xs text-gray-500 hidden sm:inline">
-                in {activeSuite.name}
-              </span>
-            )}
           </div>
           
           {/* Actions */}
@@ -464,7 +445,7 @@ const EnhancedBulkActionsBar = ({
                             ? isConfirming
                               ? 'bg-red-600 text-white shadow-md animate-pulse'
                               : 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
-                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
+                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-primary'
                         } focus:outline-none focus:ring-2 focus:ring-offset-1`}
                       >
                         <ActionIcon className="w-3 h-3 sm:w-4 sm:h-4" />
