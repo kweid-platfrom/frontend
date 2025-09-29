@@ -349,8 +349,8 @@ const BulkSelectionHeader = ({
             </div>
             <span className="text-sm text-gray-600">
                 {selectedRecommendations.length === 0 
-                    ? `Select recommendations (${recommendations.length} total)`
-                    : `${selectedRecommendations.length} of ${recommendations.length} selected`
+                    ? `Select suggestions (${recommendations.length} total)`
+                    : `${selectedRecommendations.length} of ${suggestions.length} selected`
                 }
             </span>
         </div>

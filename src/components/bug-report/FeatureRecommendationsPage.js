@@ -430,75 +430,75 @@ const FeatureRecommendationsPage = () => {
     }, [voteOnRecommendation, currentUser, actions.ui, recommendationsAvailable]);
 
     const handleStatusUpdate = useCallback(async (recId, newStatus) => {
-        if (!currentUser?.uid) {
-            actions.ui.showNotification({
-                id: 'status-no-auth',
-                type: 'error',
-                message: 'You must be logged in to update status',
-                duration: 3000
-            });
-            return;
+    if (!currentUser?.uid) {
+        actions.ui.showNotification({
+            id: 'status-no-auth',
+            type: 'error',
+            message: 'You must be logged in to update status',
+            duration: 3000
+        });
+        return;
+    }
+
+    if (!recommendationsAvailable) {
+        actions.ui.showNotification({
+            id: 'recommendations-unavailable',
+            type: 'error',
+            message: 'Recommendations feature is not available',
+            duration: 3000
+        });
+        return;
+    }
+
+    try {
+        const recommendation = recommendations.find(r => r.id === recId);
+        if (!recommendation) {
+            throw new Error('Recommendation not found');
         }
 
-        if (!recommendationsAvailable) {
-            actions.ui.showNotification({
-                id: 'recommendations-unavailable',
-                type: 'error',
-                message: 'Recommendations feature is not available',
-                duration: 3000
-            });
-            return;
-        }
+        const updateData = {
+            id: recId,
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+            title: recommendation.title,
+            description: recommendation.description,
+            priority: recommendation.priority,
+            category: recommendation.category,
+            impact: recommendation.impact,
+            effort: recommendation.effort
+        };
 
-        try {
-            const recommendation = recommendations.find(r => r.id === recId);
-            if (!recommendation) {
-                throw new Error('Recommendation not found');
-            }
+        const result = await updateRecommendation(updateData);
 
-            const updateData = {
-                id: recId,
-                status: newStatus,
-                updated_at: new Date().toISOString(),
-                title: recommendation.title,
-                description: recommendation.description,
-                priority: recommendation.priority,
-                category: recommendation.category,
-                impact: recommendation.impact,
-                effort: recommendation.effort
-            };
-
-            const result = await updateRecommendation(updateData);
-
-            if (result && result.success === false) {
-                actions.ui.showNotification({
-                    id: 'status-update-error',
-                    type: 'error',
-                    message: result.error?.message || 'Failed to update recommendation status',
-                    duration: 3000
-                });
-                return result;
-            } else {
-                return { success: true };
-            }
-        } catch (error) {
-            console.error('Error updating status:', error);
+        if (result && result.success === false) {
             actions.ui.showNotification({
                 id: 'status-update-error',
                 type: 'error',
-                message: 'Failed to update recommendation status',
+                message: result.error?.message || 'Failed to update recommendation status',
                 duration: 3000
             });
-            return { success: false, error };
+            return result;
+        } else {
+            return { success: true };
         }
-    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable, handleStatusUpdate]);
+    } catch (error) {
+        console.error('Error updating status:', error);
+        actions.ui.showNotification({
+            id: 'status-update-error',
+            type: 'error',
+            message: 'Failed to update recommendation status',
+            duration: 3000
+        });
+        return { success: false, error };
+    }
+}, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable]);
 
     const handleDeleteRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
             actions.ui.showNotification({
                 id: 'delete-no-auth',
                 type: 'error',
-                message: 'You must be logged in to delete recommendations',
+                message: 'You must be logged in to delete Suggestions',
                 duration: 3000
             });
             return;
@@ -508,7 +508,7 @@ const FeatureRecommendationsPage = () => {
             actions.ui.showNotification({
                 id: 'recommendations-unavailable',
                 type: 'error',
-                message: 'Recommendations feature is not available',
+                message: 'Suggestions feature is not available',
                 duration: 3000
             });
             return;
@@ -521,23 +521,23 @@ const FeatureRecommendationsPage = () => {
                 actions.ui.showNotification({
                     id: 'delete-error',
                     type: 'error',
-                    message: result.error?.message || 'Failed to delete recommendation',
+                    message: result.error?.message || 'Failed to delete Suggestion',
                     duration: 3000
                 });
             } else {
                 actions.ui.showNotification({
                     id: 'delete-success',
                     type: 'success',
-                    message: 'Recommendation deleted successfully',
+                    message: 'Suggestion deleted successfully',
                     duration: 2000
                 });
             }
         } catch (error) {
-            console.error('Error deleting recommendation:', error);
+            console.error('Error deleting Suggestion:', error);
             actions.ui.showNotification({
                 id: 'delete-error',
                 type: 'error',
-                message: 'Failed to delete recommendation',
+                message: 'Failed to delete suggestion',
                 duration: 3000
             });
         }
@@ -548,7 +548,7 @@ const FeatureRecommendationsPage = () => {
             actions.ui.showNotification({
                 id: 'archive-no-auth',
                 type: 'error',
-                message: 'You must be logged in to archive recommendations',
+                message: 'You must be logged in to archive suggestions',
                 duration: 3000
             });
             return;
@@ -558,7 +558,7 @@ const FeatureRecommendationsPage = () => {
             actions.ui.showNotification({
                 id: 'recommendations-unavailable',
                 type: 'error',
-                message: 'Recommendations feature is not available',
+                message: 'Suggestions feature is not available',
                 duration: 3000
             });
             return;
@@ -571,23 +571,23 @@ const FeatureRecommendationsPage = () => {
                 actions.ui.showNotification({
                     id: 'archive-error',
                     type: 'error',
-                    message: result.error?.message || 'Failed to archive recommendation',
+                    message: result.error?.message || 'Failed to archive suggestion',
                     duration: 3000
                 });
             } else {
                 actions.ui.showNotification({
                     id: 'archive-success',
                     type: 'success',
-                    message: 'Recommendation archived successfully',
+                    message: 'Suggestion archived successfully',
                     duration: 2000
                 });
             }
         } catch (error) {
-            console.error('Error archiving recommendation:', error);
+            console.error('Error archiving suggestion:', error);
             actions.ui.showNotification({
                 id: 'archive-error',
                 type: 'error',
-                message: 'Failed to archive recommendation',
+                message: 'Failed to archive suggestion',
                 duration: 3000
             });
         }
@@ -599,7 +599,7 @@ const FeatureRecommendationsPage = () => {
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading feature recommendations...</p>
+                    <p className="mt-4 text-gray-600">Loading feature suggestions...</p>
                 </div>
             </div>
         );
@@ -616,7 +616,7 @@ const FeatureRecommendationsPage = () => {
                             Recommendations Feature Unavailable
                         </h3>
                         <p className="text-gray-600 mb-6">
-                            The recommendations feature is currently not available. This might be due to missing configuration or permissions.
+                            The suggestions feature is currently not available. This might be due to missing configuration or permissions.
                         </p>
                         <p className="text-sm text-gray-500">
                             Please check your setup or contact support if you believe this is an error.
@@ -639,7 +639,7 @@ const FeatureRecommendationsPage = () => {
                             </div>
                             <div>
                                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-                                    Feature Recommendations
+                                    Feature Suggestions
                                 </h1>
                                 <p className="text-sm text-gray-600">
                                     Manage feature requests and improvement suggestions
@@ -647,7 +647,7 @@ const FeatureRecommendationsPage = () => {
                             </div>
                         </div>
                         <span className="ml-4 px-3 py-1 bg-gray-200 rounded-full text-sm font-normal">
-                            {filteredRecommendations.length} recommendations
+                            {filteredRecommendations.length} suggestions
                         </span>
                     </div>
                     <div className="flex items-center space-x-3">
@@ -656,7 +656,7 @@ const FeatureRecommendationsPage = () => {
                             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                         >
                             <Plus className="w-4 h-4 mr-2" />
-                            New Recommendation
+                            New
                         </button>
                     </div>
                 </div>
@@ -671,7 +671,7 @@ const FeatureRecommendationsPage = () => {
                                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <input
                                         type="text"
-                                        placeholder="Search recommendations..."
+                                        placeholder="Search Suggestions..."
                                         value={filters.search}
                                         onChange={(e) => setFilters({ search: e.target.value })}
                                         className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"

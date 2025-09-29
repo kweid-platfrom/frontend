@@ -115,14 +115,14 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                 });
                 onClose();
             } else {
-                throw new Error(result?.error?.message || 'Failed to save recommendation');
+                throw new Error(result?.error?.message || 'Failed to save suggestion');
             }
         } catch (error) {
-            console.error('Error submitting recommendation:', error);
+            console.error('Error submitting suggestion:', error);
             actions?.ui?.showNotification({
                 id: 'recommendation-save-error',
                 type: 'error',
-                message: error.message || 'Failed to save recommendation',
+                message: error.message || 'Failed to save suggestion',
                 duration: 3000
             });
         } finally {
@@ -176,7 +176,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
             >
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
                     <h3 className="text-lg font-medium text-gray-900">
-                        {recommendation ? 'Edit Recommendation' : 'New Feature Recommendation'}
+                        {suggestion ? 'Edit suggestion' : 'New Feature Suggestion'}
                     </h3>
                     <button
                         onClick={onClose}
@@ -201,7 +201,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                             className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
                                 errors.title ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            placeholder="Brief title for the feature recommendation"
+                            placeholder="Brief title for the feature suggestion"
                             disabled={isSubmitting}
                             maxLength={200}
                         />
