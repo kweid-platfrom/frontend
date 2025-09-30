@@ -101,7 +101,6 @@
   .theme-loading,
   .theme-loading * {
     transition: none !important;
-    animation-duration: 0s !important;
   }
   
   /* Default smooth transitions for theme changes */
