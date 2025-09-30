@@ -244,8 +244,7 @@ const Login = () => {
                                             />
                                         </div>
                                     </div>
-                                    <h1 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-card-foreground mb-2">Welcome Back</h1>
-                                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6">Your testing hub awaits</p>
+                                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6">Welcome Back, Your testing hub awaits</p>
                                 </div>
                             </div>
                         </div>

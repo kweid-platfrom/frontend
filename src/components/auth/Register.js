@@ -103,7 +103,7 @@ const Register = ({ onSwitchToLogin }) => {
                 <div className="w-full max-w-[320px] xs:max-w-[360px] sm:max-w-md">
                     <div className="bg-white rounded-xl shadow-2xl border border-white/20 p-4 xs:p-5 sm:p-6 md:p-8 relative">
                         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-2xl blur-xl -z-10"></div>
-                        <div className="text-center mb-6 sm:mb-8">
+                        <div className="text-center">
                             <div className="text-center">
                                 <div className="inline-block">
                                     <div className="flex items-center justify-center">
@@ -111,15 +111,14 @@ const Register = ({ onSwitchToLogin }) => {
                                             <Image
                                                 src="/logo.svg"
                                                 alt="Assura Logo"
-                                                width={50}
-                                                height={50}
+                                                width={25}
+                                                height={25}
                                                 className="w-full h-full object-contain"
                                                 priority
                                             />
                                         </div>
                                     </div>
-                                    <h1 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-card-foreground mb-2">Join Assura</h1>
-                                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6">Your QA Workflow Just got reimagined</p>
+                                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground">Join Assura, Experience efficiency</p>
                                 </div>
                             </div>
                         </div>
