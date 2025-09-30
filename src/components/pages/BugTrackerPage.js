@@ -780,7 +780,7 @@ const BugTrackerPage = () => {
                                     }`}
                                 >
                                     <Lightbulb className="w-4 h-4 mr-2" />
-                                    Feature Recommendations
+                                    Suggestions
                                 </button>
                             </div>
                             
@@ -792,7 +792,7 @@ const BugTrackerPage = () => {
                                     className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                                 >
                                     <option value="bugs">Bug Reports</option>
-                                    <option value="recommendations">Feature Recommendations</option>
+                                    <option value="recommendations">Suggestions</option>
                                 </select>
                             </div>
                         </div>

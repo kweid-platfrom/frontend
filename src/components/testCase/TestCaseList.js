@@ -16,15 +16,11 @@ import {
     XCircle,
     Shield,
     Clock,
-    Filter,
     ArrowUpDown,
-    Play,
     Calendar,
     User as UserIcon,
     Tag,
     Settings,
-    MoreHorizontal,
-    Eye,
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
@@ -43,7 +39,7 @@ const TestCaseList = ({
     onLinkBug,
     onUpdateExecutionStatus,
 }) => {
-    const { actions: { ui: { showNotification } } } = useApp();
+    const { actions: { } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
     const [sideModalOpen, setSideModalOpen] = useState(false);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
@@ -104,7 +100,6 @@ const TestCaseList = ({
 
     // Pagination calculations
     const totalItems = sortedTestCases.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedTestCases = sortedTestCases.slice(startIndex, endIndex);
@@ -245,7 +240,7 @@ const TestCaseList = ({
                 loadingActions={[]}
             />
 
-            <div className="max-w-7xl mx-auto">
+            <div className="mx-auto">
                 {/* Modern Header */}
                 <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
                     <div className="px-6 py-4">
