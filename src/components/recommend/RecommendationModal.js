@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { XCircle, Tag } from 'lucide-react';
+import { X, Tag } from 'lucide-react';
 
 // Recommendation Modal Component
 const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, actions }) => {
@@ -176,14 +176,14 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
             >
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
                     <h3 className="text-lg font-medium text-gray-900">
-                        {suggestion ? 'Edit suggestion' : 'New Feature Suggestion'}
+                        {recommendation ? 'Edit recommendation' : 'New Feature Suggestion'}
                     </h3>
                     <button
                         onClick={onClose}
                         className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
                         disabled={isSubmitting}
                     >
-                        <XCircle className="w-5 h-5" />
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
                 
@@ -432,7 +432,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                             {isSubmitting && (
                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                             )}
-                            {isSubmitting ? 'Saving...' : (recommendation ? 'Update' : 'Create')} Recommendation
+                            {isSubmitting ? 'Saving...' : (recommendation ? 'Update' : 'Save')} Suggestion
                         </button>
                     </div>
                 </form>

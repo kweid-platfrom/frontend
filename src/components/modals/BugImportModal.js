@@ -3,8 +3,12 @@ import { createPortal } from 'react-dom';
 import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, X, FileText, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { useApp } from '../../context/AppProvider';
+import { Timestamp } from 'firebase/firestore';
 
-const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook }) => {
+const BugImportModal = ({ isOpen, onClose }) => {
+    // Use the same context as BugReportButton
+    const { currentUser, activeSuite, actions } = useApp();
     const [dragActive, setDragActive] = useState(false);
     const [file, setFile] = useState(null);
     const [parsing, setParsing] = useState(false);
@@ -183,7 +187,7 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
             return;
         }
 
-        // Validate we have the necessary context
+        // Validate context
         if (!activeSuite?.id) {
             toast.error('No active test suite found. Please select a test suite first.');
             return;
@@ -211,7 +215,8 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                 errors: []
             };
 
-            const timestamp = new Date();
+            const currentTimestamp = Timestamp.fromDate(new Date());
+            const userDisplayName = currentUser.displayName || currentUser.email || 'Unknown';
 
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
@@ -253,13 +258,13 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                         tags.push(category.toLowerCase().replace(/\s+/g, '_'));
                     }
 
-                    // Build the bug data object
+                    // Build the bug data object - EXACTLY like BugReportButton does it
                     const bugData = {
-                        title: title,
-                        description: description,
-                        actualBehavior: actualBehavior,
-                        stepsToReproduce: stepsToReproduce,
-                        expectedBehavior: expectedBehavior,
+                        title: title.trim(),
+                        description: description.trim(),
+                        actualBehavior: actualBehavior.trim(),
+                        stepsToReproduce: stepsToReproduce.trim() || "",
+                        expectedBehavior: expectedBehavior.trim() || "",
                         workaround: '',
                         assignedTo: assignedTo,
                         assigned_to: assignedTo,
@@ -289,14 +294,14 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                         viewCount: 0,
                         suiteId: activeSuite.id,
                         created_by: currentUser.uid,
-                        created_at: timestamp,
-                        updated_at: timestamp,
-                        lastActivity: timestamp,
+                        created_at: currentTimestamp,
+                        updated_at: currentTimestamp,
+                        lastActivity: currentTimestamp,
                         lastActivityBy: currentUser.uid,
-                        reportedBy: currentUser.displayName || currentUser.email || 'Unknown',
+                        reportedBy: userDisplayName,
                         reportedByEmail: currentUser.email || '',
                         updated_by: currentUser.uid,
-                        updatedByName: currentUser.displayName || currentUser.email || 'Unknown',
+                        updatedByName: userDisplayName,
                         version: 1,
                         searchTerms: [
                             safeToLowerCase(title),
@@ -309,14 +314,8 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                         ].filter(Boolean)
                     };
 
-                    console.log(`Importing row ${i + 2}:`, {
-                        title: bugData.title,
-                        suiteId: bugData.suiteId,
-                        created_by: bugData.created_by
-                    });
-
-                    // Call bugsHook.createBug directly
-                    await bugsHook.createBug(bugData);
+                    // Call actions.bugs.createBug - same as BugReportButton
+                    await actions.bugs.createBug(bugData);
                     
                     results.success++;
                 } catch (error) {
@@ -326,15 +325,6 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
             }
 
             toast.dismiss(loadingToast);
-            
-            if (results.success === results.total) {
-                toast.success(`Successfully imported all ${results.total} bug reports`);
-            } else if (results.success > 0) {
-                toast.warning(`Imported ${results.success} of ${results.total} bug reports. ${results.errors.length} failed.`);
-            } else {
-                toast.error('Failed to import any bug reports');
-            }
-
             setImportResults(results);
         } catch (error) {
             console.error('Import error:', error);
@@ -562,7 +552,8 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                                             <div className="space-x-2">
                                                 <button
                                                     onClick={handleClose}
-                                                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                                    disabled={importing}
+                                                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     Cancel
                                                 </button>
@@ -572,7 +563,7 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                                                     className="px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center"
                                                 >
                                                     {importing && <RefreshCw className="w-4 h-4 animate-spin mr-2" />}
-                                                    Import {previewData.totalRows} Bug Reports
+                                                    {importing ? 'Importing...' : `Import ${previewData.totalRows} Bug Reports`}
                                                 </button>
                                             </div>
                                         </div>
@@ -581,25 +572,41 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                             </>
                         ) : (
                             <div className="space-y-6">
-                                <div className="text-center">
-                                    <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">Import Complete</h3>
-                                    <p className="text-sm text-gray-600">
-                                        Successfully imported {importResults.success} out of {importResults.total} bug reports
-                                    </p>
+                                <div className="text-center py-4">
+                                    {importResults.success === importResults.total ? (
+                                        <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                                    ) : importResults.success > 0 ? (
+                                        <AlertCircle className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
+                                    ) : (
+                                        <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+                                    )}
+                                    
+                                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Import Complete</h3>
+                                    <div className="text-lg text-gray-700">
+                                        <p className="mb-1">
+                                            Successfully imported <span className="font-bold text-green-600">{importResults.success}</span> of <span className="font-bold">{importResults.total}</span> bug reports
+                                        </p>
+                                        {importResults.errors.length > 0 && (
+                                            <p className="text-red-600">
+                                                {importResults.errors.length} {importResults.errors.length === 1 ? 'error' : 'errors'} occurred
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {importResults.errors.length > 0 && (
-                                    <div className="bg-red-50 rounded-lg p-4">
+                                    <div className="bg-red-50 rounded-lg p-4 border border-red-200">
                                         <div className="flex items-start">
-                                            <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5" />
+                                            <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
                                             <div className="flex-1">
-                                                <h4 className="text-sm font-medium text-red-900">
-                                                    {importResults.errors.length} errors occurred
+                                                <h4 className="text-sm font-semibold text-red-900 mb-2">
+                                                    Import Errors
                                                 </h4>
-                                                <div className="mt-2 text-sm text-red-700 max-h-40 overflow-y-auto">
+                                                <div className="mt-2 text-sm text-red-800 max-h-60 overflow-y-auto space-y-1">
                                                     {importResults.errors.map((error, index) => (
-                                                        <p key={index} className="mb-1">{error}</p>
+                                                        <div key={index} className="py-1 border-b border-red-200 last:border-0">
+                                                            {error}
+                                                        </div>
                                                     ))}
                                                 </div>
                                             </div>
@@ -607,10 +614,10 @@ const BugImportModal = ({ isOpen, onClose, activeSuite, currentUser, bugsHook })
                                     </div>
                                 )}
 
-                                <div className="flex justify-end">
+                                <div className="flex justify-end pt-4 border-t">
                                     <button
                                         onClick={handleClose}
-                                        className="px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700"
+                                        className="px-6 py-2.5 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors"
                                     >
                                         Done
                                     </button>
