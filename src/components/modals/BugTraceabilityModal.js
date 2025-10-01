@@ -16,23 +16,20 @@ import {
 const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedModule, setSelectedModule] = useState('all');
-    const [viewType, setViewType] = useState('matrix'); // matrix, list, stats
+    const [viewType, setViewType] = useState('matrix');
     const [showOnlyLinked, setShowOnlyLinked] = useState(false);
 
-    // Get linked test cases for a bug
     const getLinkedTestCases = useCallback((bugId) => {
         const linkedIds = relationships?.bugToTestCases?.[bugId] || [];
         return testCases?.filter(tc => linkedIds.includes(tc.id)) || [];
     }, [relationships, testCases]);
 
-    // Get linked bugs for a test case
     const getLinkedBugs = useCallback((testCaseId) => {
         const linkedBugIds = Object.keys(relationships?.bugToTestCases || {})
             .filter(bugId => relationships.bugToTestCases[bugId].includes(testCaseId));
         return bugs?.filter(bug => linkedBugIds.includes(bug.id)) || [];
     }, [relationships, bugs]);
 
-    // Get unique modules from bugs and test cases
     const modules = useMemo(() => {
         const moduleSet = new Set();
         bugs?.forEach(bug => {
@@ -44,7 +41,6 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
         return Array.from(moduleSet).sort();
     }, [bugs, testCases]);
 
-    // Filter bugs and test cases based on search and filters
     const filteredBugs = useMemo(() => {
         if (!bugs) return [];
         
@@ -87,7 +83,6 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
         return filtered;
     }, [testCases, searchTerm, selectedModule, showOnlyLinked, getLinkedBugs]);
 
-    // Calculate traceability statistics
     const stats = useMemo(() => {
         const totalBugs = filteredBugs.length;
         const totalTestCases = filteredTestCases.length;
@@ -501,7 +496,7 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
 
     return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-7xl shadow-lg rounded-md bg-gray-50 min-h-[95vh]">
+            <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-7xl shadow-lg rounded-md bg-gray-50 min-h-[95vh] flex flex-col">
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center">
                         <Link className="w-6 h-6 text-teal-600 mr-2" />
@@ -518,7 +513,6 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
                 {/* Controls */}
                 <div className="bg-white rounded-lg p-4 mb-6 shadow-sm">
                     <div className="flex flex-col lg:flex-row gap-4">
-                        {/* Search */}
                         <div className="flex-1">
                             <div className="relative">
                                 <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
@@ -532,7 +526,6 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
                             </div>
                         </div>
 
-                        {/* Module Filter */}
                         <select
                             value={selectedModule}
                             onChange={(e) => setSelectedModule(e.target.value)}
@@ -546,7 +539,6 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
                             ))}
                         </select>
 
-                        {/* Show Only Linked Toggle */}
                         <label className="flex items-center space-x-2 text-sm">
                             <input
                                 type="checkbox"
@@ -557,7 +549,6 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
                             <span>Show only linked items</span>
                         </label>
 
-                        {/* View Type Selector */}
                         <div className="flex items-center space-x-1 border border-gray-300 rounded-md p-1">
                             <button
                                 onClick={() => setViewType('matrix')}
@@ -585,7 +576,7 @@ const BugTraceabilityModal = ({ isOpen, onClose, bugs, testCases, relationships 
                 </div>
 
                 {/* Content */}
-                <div className="bg-white rounded-lg shadow-sm min-h-96">
+                <div className="bg-white rounded-lg shadow-sm flex-1 overflow-y-auto">
                     <div className="p-6">
                         {viewType === 'matrix' && renderMatrixView()}
                         {viewType === 'list' && renderListView()}

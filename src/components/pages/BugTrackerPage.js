@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import BugTable from '@/components/bug-report/BugTable';
 import MinimalBugTable from '@/components/bug-report/MinimalBugTable';
 import BugList from '@/components/bug-report/BugList';
@@ -9,12 +10,15 @@ import FeatureRecommendationsPage from '@/components/bug-report/FeatureRecommend
 import BugReportButton from '@/components/modals/BugReportButton';
 import BugFilterBar from '@/components/bug-report/BugFilterBar';
 import BugDetailsModal from '@/components/modals/BugDetailsModal';
+import BugTraceabilityModal from '@/components/modals/BugTraceabilityModal';
+import BugImportModal from '@/components/modals/BugImportModal';
 import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
-import { 
-    Bug, 
-    Lightbulb, 
-    Minimize, 
+import { useApp } from '@/context/AppProvider';
+import {
+    Bug,
+    Lightbulb,
+    Minimize,
     Maximize,
     Menu,
     X
@@ -72,17 +76,18 @@ const setStoredPageMode = (mode) => {
 const BugTrackerPage = () => {
     const bugsHook = useBugs();
     const uiHook = useUI();
+    const { currentUser, activeSuite } = useApp();
 
     // Mobile menu state
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    // FIXED: Use stable refs like the test cases page
+    // Stable refs
     const bugsRef = useRef(bugsHook.bugs || []);
     const testCasesRef = useRef(bugsHook.testCases || []);
     const relationshipsRef = useRef(bugsHook.relationships || { bugToTestCases: {} });
     const hasInitializedRef = useRef(false);
 
-    // FIXED: Update refs when data changes (exactly like test cases page)
+    // Update refs when data changes
     useEffect(() => {
         bugsRef.current = bugsHook.bugs || [];
     }, [bugsHook.bugs]);
@@ -94,22 +99,23 @@ const BugTrackerPage = () => {
     useEffect(() => {
         relationshipsRef.current = bugsHook.relationships || { bugToTestCases: {} };
     }, [bugsHook.relationships]);
-    
-    // FIXED: Use separate state for filtered bugs (like test cases page does)
+
+    // State for filtered bugs
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [selectedBug, setSelectedBug] = useState(null);
     const [, setIsModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-    
-    // FIXED: Initialize states from localStorage with fallbacks
+
+    // Initialize states from localStorage
     const [viewMode, setViewMode] = useState(() => getStoredViewMode());
     const [pageMode, setPageMode] = useState(() => getStoredPageMode());
     const [bugViewType, setBugViewType] = useState(() => getStoredBugViewType());
-    
-    const [ setIsTraceabilityOpen] = useState(false);
-    const [ setIsImportModalOpen] = useState(false);
-    
-    // FIXED: Stable filter state
+
+    // Modal states for Import and Traceability
+    const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+    // Stable filter state
     const [filters, setFilters] = useState({
         search: '',
         status: 'all',
@@ -159,7 +165,7 @@ const BugTrackerPage = () => {
         },
     ]);
 
-    // FIXED: Persist view mode changes to localStorage
+    // Persist view mode changes to localStorage
     const handleViewModeChange = useCallback((newViewMode) => {
         setViewMode(newViewMode);
         setStoredViewMode(newViewMode);
@@ -168,7 +174,7 @@ const BugTrackerPage = () => {
     const handlePageModeChange = useCallback((newPageMode) => {
         setPageMode(newPageMode);
         setStoredPageMode(newPageMode);
-        setIsMobileMenuOpen(false); // Close mobile menu on page change
+        setIsMobileMenuOpen(false);
     }, []);
 
     const handleBugViewTypeChange = useCallback((newBugViewType) => {
@@ -176,7 +182,7 @@ const BugTrackerPage = () => {
         setStoredBugViewType(newBugViewType);
     }, []);
 
-    // FIXED: Stable filter function (exactly like test cases page)
+    // Stable filter function
     const applyFiltersStable = useCallback((currentBugs, currentFilters) => {
         if (!Array.isArray(currentBugs)) return [];
 
@@ -249,18 +255,18 @@ const BugTrackerPage = () => {
         }
 
         return filtered;
-    }, []); // Empty deps - pure function
+    }, []);
 
-    // FIXED: Apply filters effect using refs (exactly like test cases page)
+    // Apply filters effect using refs
     useEffect(() => {
         const newFilteredBugs = applyFiltersStable(bugsRef.current, filters);
         setFilteredBugs(newFilteredBugs);
     }, [bugsHook.bugs, filters, applyFiltersStable]);
 
-    // FIXED: Stable error handler
+    // Stable error handler
     const handleError = useCallback((error, context) => {
         console.error(`Error in ${context}:`, error);
-        
+
         if (uiHook.addNotification) {
             uiHook.addNotification({
                 type: 'error',
@@ -271,7 +277,7 @@ const BugTrackerPage = () => {
         }
     }, [uiHook.addNotification]);
 
-    // FIXED: Simplified save handler (matching test cases pattern exactly)
+    // Simplified save handler
     const handleSaveBug = useCallback(async (bugData) => {
         try {
             console.log('Saving bug:', { title: bugData.title, isEdit: !!selectedBug });
@@ -314,7 +320,7 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.bugsLocked, bugsHook.updateBug, bugsHook.createBug, selectedBug, uiHook.addNotification, handleError]);
 
-    // FIXED: All handlers with stable dependencies (matching test cases pattern)
+    // All handlers with stable dependencies
     const handleFiltersChange = useCallback((newFilters) => {
         setFilters(newFilters);
     }, []);
@@ -362,30 +368,6 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.bugsLocked, bugsHook.deleteBug, uiHook.addNotification, handleError]);
 
-    const handleDuplicateBug = useCallback(async (bug) => {
-        try {
-            if (bugsHook.bugsLocked) {
-                throw new Error('Bugs are locked. Upgrade to access.');
-            }
-
-            const timestamp = new Date();
-            await bugsHook.createBug({
-                ...bug,
-                title: `${bug.title} (Copy)`,
-                created_at: timestamp,
-                updated_at: timestamp,
-            });
-
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: 'Bug duplicated successfully',
-            });
-        } catch (error) {
-            handleError(error, 'duplicate bug');
-        }
-    }, [bugsHook.bugsLocked, bugsHook.createBug, uiHook.addNotification, handleError]);
-
     const handleLinkTestCase = useCallback(async (bugId, newTestCaseIds) => {
         try {
             if (bugsHook.bugsLocked) {
@@ -417,7 +399,7 @@ const BugTrackerPage = () => {
         handleError
     ]);
 
-    // FIXED: Simplified bulk action handler (matching test cases pattern)
+    // Simplified bulk action handler
     const handleBulkAction = useCallback(async (action, selectedIds) => {
         try {
             if (bugsHook.bugsLocked) {
@@ -431,7 +413,6 @@ const BugTrackerPage = () => {
                     await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id)));
                     break;
                 default:
-                    // Process sequentially like test cases page
                     for (const id of selectedIds) {
                         await bugsHook.updateBug(id, {
                             status: action,
@@ -464,7 +445,7 @@ const BugTrackerPage = () => {
         setSelectedBug(null);
     }, []);
 
-    // FIXED: Simple update handler without complex return logic
+    // Simple update handler
     const handleUpdateBug = useCallback(async (bugId, updates) => {
         try {
             if (bugsHook.bugsLocked) {
@@ -477,12 +458,10 @@ const BugTrackerPage = () => {
                 updated_at: timestamp,
             });
 
-            // Update selectedBug if it's the one being updated
             if (selectedBug && selectedBug.id === bugId) {
                 setSelectedBug(prev => ({ ...prev, ...updates, updated_at: timestamp }));
             }
-            
-            // Only show notification for significant updates
+
             if (Object.keys(updates).length > 1 || (!updates.status && !updates.priority && !updates.severity)) {
                 uiHook.addNotification?.({
                     type: 'success',
@@ -520,7 +499,7 @@ const BugTrackerPage = () => {
 
     const handleUpdateRecommendation = useCallback(async (recData) => {
         try {
-            setRecommendations(prev => 
+            setRecommendations(prev =>
                 prev.map(rec => rec.id === recData.id ? { ...rec, ...recData, updated_at: new Date() } : rec)
             );
             uiHook.addNotification?.({
@@ -535,22 +514,22 @@ const BugTrackerPage = () => {
 
     const handleVote = useCallback(async (recId, voteType, userId) => {
         try {
-            setRecommendations(prev => 
+            setRecommendations(prev =>
                 prev.map(rec => {
                     if (rec.id === recId) {
                         const currentVote = rec.userVotes?.[userId];
                         const updatedRec = { ...rec };
-                        
+
                         if (!updatedRec.userVotes) {
                             updatedRec.userVotes = {};
                         }
-                        
+
                         if (currentVote === 'up') {
                             updatedRec.upvotes = (updatedRec.upvotes || 1) - 1;
                         } else if (currentVote === 'down') {
                             updatedRec.downvotes = (updatedRec.downvotes || 1) - 1;
                         }
-                        
+
                         if (currentVote === voteType) {
                             delete updatedRec.userVotes[userId];
                         } else {
@@ -561,7 +540,7 @@ const BugTrackerPage = () => {
                                 updatedRec.downvotes = (updatedRec.downvotes || 0) + 1;
                             }
                         }
-                        
+
                         return updatedRec;
                     }
                     return rec;
@@ -572,7 +551,7 @@ const BugTrackerPage = () => {
         }
     }, [handleError]);
 
-    // FIXED: Only run debug logging once (like test cases page)
+    // Debug logging once
     useEffect(() => {
         if (!hasInitializedRef.current) {
             console.log('Bugs Hook Debug:', {
@@ -591,7 +570,7 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.updateBug, bugsHook.createBug, bugsHook.deleteBug, bugsHook.bugs?.length, bugsHook.loading, bugsHook.bugsLocked, bugsHook.activeSuite, viewMode, bugViewType, pageMode]);
 
-    // FIXED: Memoize components with stable dependencies (like test cases page)
+    // Memoize components
     const tableComponent = useMemo(() => (
         bugViewType === 'minimal' ? (
             <MinimalBugTable
@@ -611,7 +590,6 @@ const BugTrackerPage = () => {
                 selectedBugs={bugsHook.selectedBugs}
                 onSelectBugs={bugsHook.selectBugs}
                 onEdit={handleEditBug}
-                onDuplicate={handleDuplicateBug}
                 onBulkAction={handleBulkAction}
                 onView={handleViewBug}
                 onLinkTestCase={handleLinkTestCase}
@@ -627,7 +605,6 @@ const BugTrackerPage = () => {
         handleBulkAction,
         handleViewBug,
         handleEditBug,
-        handleDuplicateBug,
         handleLinkTestCase,
         handleUpdateBug
     ]);
@@ -641,7 +618,6 @@ const BugTrackerPage = () => {
             onSelectBugs={bugsHook.selectBugs}
             onEdit={handleEditBug}
             onDelete={handleDeleteBug}
-            onDuplicate={handleDuplicateBug}
             onBulkAction={handleBulkAction}
             onView={handleViewBug}
             onLinkTestCase={handleLinkTestCase}
@@ -653,7 +629,6 @@ const BugTrackerPage = () => {
         bugsHook.selectBugs,
         handleEditBug,
         handleDeleteBug,
-        handleDuplicateBug,
         handleBulkAction,
         handleViewBug,
         handleLinkTestCase,
@@ -666,19 +641,16 @@ const BugTrackerPage = () => {
             fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out
             ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}>
-            {/* Backdrop */}
-            <div 
+            <div
                 className="absolute inset-0 bg-black bg-opacity-50"
                 onClick={() => setIsMobileMenuOpen(false)}
             />
-            
-            {/* Menu Panel */}
+
             <div className={`
                 absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-xl p-4 space-y-3
                 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'}
             `}>
-                {/* Header */}
                 <div className="flex items-center justify-between pb-3 border-b">
                     <h3 className="text-lg font-semibold text-gray-900">Actions</h3>
                     <button
@@ -689,7 +661,6 @@ const BugTrackerPage = () => {
                     </button>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="space-y-3">
                     {bugViewType === 'full' && (
                         <>
@@ -715,7 +686,7 @@ const BugTrackerPage = () => {
                             </button>
                         </>
                     )}
-                    
+
                     <div className="pt-2">
                         <BugReportButton
                             bug={null}
@@ -754,37 +725,32 @@ const BugTrackerPage = () => {
     if (pageMode === 'recommendations') {
         return (
             <div className="min-h-screen bg-gray-50">
-                {/* Responsive Page Mode Toggle */}
                 <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
                     <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
                         <div className="flex items-center justify-between">
-                            {/* Desktop Navigation */}
                             <div className="hidden sm:flex items-center space-x-1">
                                 <button
                                     onClick={() => handlePageModeChange('bugs')}
-                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        pageMode === 'bugs'
-                                            ? 'bg-teal-100 text-teal-700'
-                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                    }`}
+                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'bugs'
+                                        ? 'bg-teal-100 text-teal-700'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                        }`}
                                 >
                                     <Bug className="w-4 h-4 mr-2" />
                                     Bug Reports
                                 </button>
                                 <button
                                     onClick={() => handlePageModeChange('recommendations')}
-                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        pageMode === 'recommendations'
-                                            ? 'bg-teal-100 text-teal-700'
-                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                    }`}
+                                    className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'recommendations'
+                                        ? 'bg-teal-100 text-teal-700'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                        }`}
                                 >
                                     <Lightbulb className="w-4 h-4 mr-2" />
                                     Suggestions
                                 </button>
                             </div>
-                            
-                            {/* Mobile Navigation */}
+
                             <div className="flex sm:hidden items-center space-x-2">
                                 <select
                                     value={pageMode}
@@ -823,11 +789,10 @@ const BugTrackerPage = () => {
                         <div className="hidden sm:flex items-center space-x-1">
                             <button
                                 onClick={() => handlePageModeChange('bugs')}
-                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                    pageMode === 'bugs'
-                                        ? 'bg-teal-100 text-teal-700'
-                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                }`}
+                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'bugs'
+                                    ? 'bg-teal-100 text-teal-700'
+                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                    }`}
                             >
                                 <Bug className="w-4 h-4 mr-2" />
                                 <span className="hidden md:inline">Bug Reports</span>
@@ -835,18 +800,17 @@ const BugTrackerPage = () => {
                             </button>
                             <button
                                 onClick={() => handlePageModeChange('recommendations')}
-                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                    pageMode === 'recommendations'
-                                        ? 'bg-teal-100 text-teal-700'
-                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                }`}
+                                className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'recommendations'
+                                    ? 'bg-teal-100 text-teal-700'
+                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                    }`}
                             >
                                 <Lightbulb className="w-4 h-4 mr-2" />
-                                <span className="hidden md:inline">Feature Recommendations</span>
-                                <span className="md:hidden">Features</span>
+                                <span className="hidden md:inline">Suggestions</span>
+                                <span className="md:hidden">Suggestions</span>
                             </button>
                         </div>
-                        
+
                         {/* Mobile Navigation */}
                         <div className="flex sm:hidden items-center space-x-2">
                             <select
@@ -858,18 +822,17 @@ const BugTrackerPage = () => {
                                 <option value="recommendations">Features</option>
                             </select>
                         </div>
-                        
+
                         {/* Desktop Bug View Type Toggle */}
                         <div className="hidden lg:flex items-center space-x-3">
                             <div className="flex items-center space-x-2">
                                 <span className="text-sm text-gray-600">View:</span>
                                 <button
                                     onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
-                                    className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${
-                                        bugViewType === 'minimal'
-                                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                                    }`}
+                                    className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${bugViewType === 'minimal'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                        }`}
                                 >
                                     {bugViewType === 'minimal' ? (
                                         <>
@@ -890,11 +853,10 @@ const BugTrackerPage = () => {
                         <div className="flex lg:hidden items-center">
                             <button
                                 onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
-                                className={`p-2 rounded-lg transition-all ${
-                                    bugViewType === 'minimal'
-                                        ? 'bg-blue-50 text-blue-700'
-                                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                                }`}
+                                className={`p-2 rounded-lg transition-all ${bugViewType === 'minimal'
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                    }`}
                                 title={`Switch to ${bugViewType === 'full' ? 'minimal' : 'full'} view`}
                             >
                                 {bugViewType === 'minimal' ? (
@@ -932,7 +894,7 @@ const BugTrackerPage = () => {
                                 )}
                             </div>
                         </div>
-                        
+
                         {/* Desktop Action Buttons */}
                         <div className="hidden lg:flex items-center space-x-2">
                             {bugViewType === 'full' && (
@@ -973,7 +935,7 @@ const BugTrackerPage = () => {
                                     compact={true}
                                 />
                             </div>
-                            
+
                             {/* Mobile Menu Button */}
                             {bugViewType === 'full' && (
                                 <button
@@ -1019,8 +981,8 @@ const BugTrackerPage = () => {
                 {/* Mobile Action Menu */}
                 <MobileActionMenu />
 
-                {/* Modals */}
-                {isDetailsModalOpen && selectedBug && (
+                {/* Modals - using React Portal for proper rendering */}
+                {isDetailsModalOpen && selectedBug && typeof document !== 'undefined' && createPortal(
                     <div className="fixed inset-0 z-50 overflow-y-auto">
                         <div className="flex min-h-screen items-center justify-center p-4">
                             <BugDetailsModal
@@ -1030,7 +992,30 @@ const BugTrackerPage = () => {
                                 onClose={handleCloseModal}
                             />
                         </div>
-                    </div>
+                    </div>,
+                    document.body
+                )}
+
+                {isTraceabilityOpen && typeof document !== 'undefined' && createPortal(
+                    <BugTraceabilityModal
+                        isOpen={isTraceabilityOpen}
+                        onClose={() => setIsTraceabilityOpen(false)}
+                        bugs={bugsRef.current}
+                        testCases={testCasesRef.current}
+                        relationships={relationshipsRef.current}
+                    />,
+                    document.body
+                )}
+
+                {isImportModalOpen && typeof document !== 'undefined' && createPortal(
+                    <BugImportModal
+                        isOpen={isImportModalOpen}
+                        onClose={() => setIsImportModalOpen(false)}
+                        activeSuite={activeSuite}
+                        currentUser={currentUser} 
+                        bugsHook={bugsHook}
+                    />,
+                    document.body
                 )}
             </div>
         </div>
