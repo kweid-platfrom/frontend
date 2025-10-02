@@ -645,11 +645,6 @@ const EnhancedBulkActionsBar = ({
   selectedItems = [],
   onClearSelection,
 
-  // Display props
-  pageTitle = 'items',
-  pageIcon = 'TestTube',
-  pageColor = 'blue',
-
   // Actions configuration - can use predefined or custom
   assetType = null, // Use predefined config: 'testCases', 'bugs', 'recordings', etc.
   actionGroups = [], // Custom action groups (overrides assetType)
@@ -696,8 +691,6 @@ const EnhancedBulkActionsBar = ({
     if (actionGroups.length > 0) {
       console.log('Using custom actionGroups');
       return {
-        icon: pageIcon,
-        color: pageColor,
         groups: actionGroups
       };
     }
@@ -707,8 +700,6 @@ const EnhancedBulkActionsBar = ({
       const assetConfig = ASSET_ACTION_CONFIGS[assetType];
       console.log('Using predefined config for:', assetType, assetConfig);
       return {
-        icon: pageIcon || assetConfig.icon,
-        color: pageColor || assetConfig.color,
         groups: assetConfig.groups
       };
     }
@@ -716,24 +707,14 @@ const EnhancedBulkActionsBar = ({
     console.log('Using default config');
     // Default empty config
     return {
-      icon: pageIcon,
-      color: pageColor,
       groups: []
     };
-  }, [assetType, actionGroups, pageIcon, pageColor]);
+  }, [assetType, actionGroups]);
 
   // Don't render if no items selected, no portal container, or no actions
   if (!portalContainer || selectedItems.length === 0 || config.groups.length === 0) {
     return null;
   }
-
-  const PageIcon = ICONS[config.icon] || ICONS['Bug'];
-
-  console.log('Icon selection debug:', {
-    configIcon: config.icon,
-    selectedIcon: PageIcon?.name || 'unknown',
-    availableIcons: Object.keys(ICONS)
-  });
 
   const handleAction = async (actionId, actionConfig, selectedOption = null) => {
     const requiresConfirm = actionConfig.requiresConfirm || actionConfig.destructive;

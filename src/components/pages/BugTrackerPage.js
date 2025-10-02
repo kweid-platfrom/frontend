@@ -16,7 +16,6 @@ import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
 import { useApp } from '@/context/AppProvider';
 import {
-    Bug,
     Lightbulb,
     Minimize,
     Maximize,

@@ -34,12 +34,8 @@ const BugImportModal = ({ isOpen, onClose }) => {
         tags: 'Tags',
         category: 'Category'
     };
-
-    const statusOptions = ['New', 'In Progress', 'Resolved', 'Closed'];
+    
     const severityOptions = ['critical', 'high', 'medium', 'low'];
-    const priorityOptions = ['urgent', 'high', 'medium', 'low'];
-    const environmentOptions = ['Production', 'Staging', 'Development', 'Testing'];
-    const frequencyOptions = ['Always', 'Often', 'Sometimes', 'Rarely', 'Once'];
 
     const resetState = () => {
         setFile(null);
