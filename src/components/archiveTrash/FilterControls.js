@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Search, CheckSquare, AlertTriangle } from 'lucide-react';
+import { Search, CheckSquare, Square } from 'lucide-react';
 
 export const FilterControls = ({
   searchTerm,
@@ -14,6 +14,8 @@ export const FilterControls = ({
   selectedItems,
   onSelectAll
 }) => {
+  const allSelected = filteredItems.length > 0 && selectedItems.length === filteredItems.length;
+
   return (
     <div className="mb-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -28,7 +30,7 @@ export const FilterControls = ({
               className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
@@ -60,26 +62,22 @@ export const FilterControls = ({
         </div>
       </div>
 
+      {/* Select All Checkbox */}
       {filteredItems.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2 px-4 py-2 bg-muted/30rounded-lg">
           <button
             onClick={onSelectAll}
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
-            type="button"
+             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            <CheckSquare className="w-4 h-4" />
-            <span>
-              {selectedItems.length === filteredItems.length ? 'Deselect All' : 'Select All'} 
-              ({filteredItems.length})
-            </span>
+            {allSelected ? (
+              <CheckSquare className="w-5 h-5 text-primary" />
+            ) : (
+              <Square className="w-5 h-5" />
+            )}
           </button>
-
-          {expiredCount > 0 && (
-            <div className="flex items-center space-x-2 text-sm text-red-600">
-              <AlertTriangle className="w-4 h-4" />
-              <span>{expiredCount} expired item{expiredCount !== 1 ? 's' : ''}</span>
-            </div>
-          )}
+          <span className="text-sm text-muted-foreground">
+            {allSelected ? 'Deselect all' : 'Select all'}
+          </span>
         </div>
       )}
     </div>
