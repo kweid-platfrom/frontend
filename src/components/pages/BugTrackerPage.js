@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import BugTable from '@/components/bug-report/BugTable';
 import MinimalBugTable from '@/components/bug-report/MinimalBugTable';
 import BugList from '@/components/bug-report/BugList';
@@ -10,7 +11,6 @@ import FeatureRecommendationsPage from '@/components/bug-report/FeatureRecommend
 import BugReportButton from '@/components/modals/BugReportButton';
 import BugFilterBar from '@/components/bug-report/BugFilterBar';
 import BugDetailsModal from '@/components/modals/BugDetailsModal';
-import BugTraceabilityModal from '@/components/modals/BugTraceabilityModal';
 import BugImportModal from '@/components/modals/BugImportModal';
 import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
@@ -23,6 +23,7 @@ import {
     Menu,
     X
 } from 'lucide-react';
+import { BugAntIcon } from '@heroicons/react/24/outline';
 
 // Helper functions for localStorage
 const getStoredViewMode = () => {
@@ -74,6 +75,7 @@ const setStoredPageMode = (mode) => {
 };
 
 const BugTrackerPage = () => {
+    const router = useRouter();
     const bugsHook = useBugs();
     const uiHook = useUI();
     const { currentUser, activeSuite } = useApp();
@@ -111,8 +113,7 @@ const BugTrackerPage = () => {
     const [pageMode, setPageMode] = useState(() => getStoredPageMode());
     const [bugViewType, setBugViewType] = useState(() => getStoredBugViewType());
 
-    // Modal states for Import and Traceability
-    const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
+    // Modal states - only Import now
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     // Stable filter state
@@ -551,6 +552,11 @@ const BugTrackerPage = () => {
         }
     }, [handleError]);
 
+    // Handler to navigate to traceability page
+    const handleOpenTraceability = useCallback(() => {
+        router.push('/bugs/bug-trace');
+    }, [router]);
+
     // Debug logging once
     useEffect(() => {
         if (!hasInitializedRef.current) {
@@ -666,7 +672,7 @@ const BugTrackerPage = () => {
                         <>
                             <button
                                 onClick={() => {
-                                    setIsTraceabilityOpen(true);
+                                    handleOpenTraceability();
                                     setIsMobileMenuOpen(false);
                                 }}
                                 className="w-full flex items-center px-4 py-3 text-left text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
@@ -736,7 +742,7 @@ const BugTrackerPage = () => {
                                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                         }`}
                                 >
-                                    <Bug className="w-4 h-4 mr-2" />
+                                    <BugAntIcon className="w-4 h-4 mr-2" />
                                     Bug Reports
                                 </button>
                                 <button
@@ -794,7 +800,7 @@ const BugTrackerPage = () => {
                                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                     }`}
                             >
-                                <Bug className="w-4 h-4 mr-2" />
+                                <BugAntIcon className="w-4 h-4 mr-2" />
                                 <span className="hidden md:inline">Bug Reports</span>
                                 <span className="md:hidden">Bugs</span>
                             </button>
@@ -900,7 +906,7 @@ const BugTrackerPage = () => {
                             {bugViewType === 'full' && (
                                 <>
                                     <button
-                                        onClick={() => setIsTraceabilityOpen(true)}
+                                        onClick={handleOpenTraceability}
                                         className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
                                     >
                                         Traceability
@@ -993,17 +999,6 @@ const BugTrackerPage = () => {
                             />
                         </div>
                     </div>,
-                    document.body
-                )}
-
-                {isTraceabilityOpen && typeof document !== 'undefined' && createPortal(
-                    <BugTraceabilityModal
-                        isOpen={isTraceabilityOpen}
-                        onClose={() => setIsTraceabilityOpen(false)}
-                        bugs={bugsRef.current}
-                        testCases={testCasesRef.current}
-                        relationships={relationshipsRef.current}
-                    />,
                     document.body
                 )}
 

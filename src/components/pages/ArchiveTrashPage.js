@@ -451,8 +451,6 @@ const ArchiveTrashPage = () => {
     return <EmptyState type="suite" />;
   }
 
-  const allSelected = filteredItems.length > 0 && selectedItems.length === filteredItems.length;
-
   return (
     <div className="max-w-8xl mx-auto p-6">
       {/* Header */}
