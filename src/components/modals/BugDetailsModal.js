@@ -209,16 +209,16 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                     animate={{ x: 0 }}
                     exit={{ x: '100%' }}
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    className={`fixed inset-y-0 right-0 ${isFullscreen ? 'w-full' : 'w-3/4 max-w-4xl'} bg-background shadow-2xl z-50 overflow-hidden border-l border-border`}
+                    className={`fixed ${isFullscreen ? 'inset-0' : 'inset-y-0 sm:inset-y-0 right-0'} ${isFullscreen ? 'w-full' : 'w-full sm:w-3/4 sm:max-w-4xl'} bg-background shadow-2xl z-50 overflow-hidden ${isFullscreen ? 'border-0' : 'border-l border-border'}`}
                 >
                     <div className="flex flex-col h-full">
                         {/* Header */}
                         <div className="flex-shrink-0 border-b border-border bg-background">
-                            <div className="px-6 py-4">
+                            <div className="px-4 sm:px-6 py-3 sm:py-4">
                                 <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                                    <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
                                         <div className="flex-shrink-0">
-                                            <div className={`p-2.5 rounded-lg ${getSeverityColor(editedBug.severity)} flex items-center justify-center`}>
+                                            <div className={`p-2 rounded-lg ${getSeverityColor(editedBug.severity)} flex items-center justify-center`}>
                                                 {getSeverityIcon(editedBug.severity)}
                                             </div>
                                         </div>
@@ -228,28 +228,28 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                     field="title"
                                                     value={editedBug.title || 'Untitled Bug'}
                                                     type="text"
-                                                    className="text-2xl md:text-3xl font-bold text-foreground leading-tight"
+                                                    className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground leading-tight"
                                                     isTitle={true}
                                                     {...editableFieldProps()}
                                                 />
                                             </div>
-                                            <div className="flex items-center space-x-4 mt-2">
-                                                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                                                    <Bug className="h-4 w-4" />
-                                                    <span className="font-mono bg-muted px-2 py-1 rounded text-xs">
+                                            <div className="flex flex-col gap-2 mt-2">
+                                                <div className="flex items-center space-x-2 text-xs sm:text-sm text-muted-foreground">
+                                                    <Bug className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                                                    <span className="font-mono bg-muted px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-xs">
                                                         #{editedBug.id?.slice(-8) || 'N/A'}
                                                     </span>
                                                     <button onClick={copyBugId} className="hover:text-foreground">
                                                         <Copy className="h-3 w-3" />
                                                     </button>
                                                 </div>
-                                                <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                                                    <Clock className="h-4 w-4" />
+                                                <div className="flex items-center space-x-1 text-xs sm:text-sm text-muted-foreground">
+                                                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                                                     <span>Created {formatDate(editedBug.createdAt) || 'Unknown'}</span>
                                                 </div>
-                                                <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                                                    <User className="h-4 w-4" />
-                                                    <span>{editedBug.reportedBy || editedBug.reportedByEmail?.split('@')[0] || 'Unknown'}</span>
+                                                <div className="flex items-center space-x-1 text-xs sm:text-sm text-muted-foreground">
+                                                    <User className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                                                    <span className="truncate">{editedBug.reportedBy || editedBug.reportedByEmail?.split('@')[0] || 'Unknown'}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -257,7 +257,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                     <div className="flex items-center space-x-2">
                                         <button
                                             onClick={() => setIsFullscreen(!isFullscreen)}
-                                            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                                            className="hidden sm:block p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                                             title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                                         >
                                             <ExternalLink className="h-4 w-4" />
@@ -272,28 +272,28 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                 </div>
 
                                 {/* Status Bar */}
-                                <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-                                    <div className="flex items-center space-x-4">
-                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(editedBug.status)}`}>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-4 pt-4 border-t border-border gap-3 sm:gap-0">
+                                    <div className="flex flex-wrap items-center space-x-2 sm:space-x-4 gap-2 sm:gap-0">
+                                        <div className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(editedBug.status)}`}>
                                             <div className="w-2 h-2 rounded-full bg-current mr-2"></div>
                                             {editedBug.status || 'New'}
                                         </div>
-                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getSeverityColor(editedBug.severity)}`}>
+                                        <div className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getSeverityColor(editedBug.severity)}`}>
                                             {getSeverityIcon(editedBug.severity)}
                                             <span className="ml-1">{editedBug.severity || 'Low'}</span>
                                         </div>
-                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(editedBug.priority)}`}>
+                                        <div className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(editedBug.priority)}`}>
                                             <TrendingUp className="h-3 w-3 mr-1" />
                                             {editedBug.priority || 'Low'} Priority
                                         </div>
                                     </div>
-                                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                    <div className="flex items-center space-x-4 text-xs sm:text-sm text-muted-foreground">
                                         <div className="flex items-center space-x-1">
-                                            <Eye className="h-4 w-4" />
+                                            <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                                             <span>{editedBug.viewCount || 0}</span>
                                         </div>
                                         <div className="flex items-center space-x-1">
-                                            <MessageSquare className="h-4 w-4" />
+                                            <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4" />
                                             <span>{comments.length}</span>
                                         </div>
                                     </div>
@@ -301,24 +301,29 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                             </div>
 
                             {/* Tabs */}
-                            <div className="px-6 border-b border-border">
-                                <nav className="flex space-x-8" aria-label="Tabs">
+                            <div className="px-4 sm:px-6 border-b border-border">
+                                <nav className="flex overflow-x-auto scrollbar-hide space-x-2 sm:space-x-8 pb-2" aria-label="Tabs" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                    <style jsx>{`
+                                        nav::-webkit-scrollbar {
+                                            display: none;
+                                        }
+                                    `}</style>
                                     {tabs.map((tab) => {
                                         const Icon = tab.icon;
                                         return (
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id)}
-                                                className={`${
+                                                className={`flex-shrink-0 ${
                                                     activeTab === tab.id
                                                         ? 'border-primary text-primary bg-accent'
                                                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                                                } whitespace-nowrap flex items-center py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all`}
+                                                } whitespace-nowrap flex items-center py-2 sm:py-3 px-3 sm:px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all min-w-max`}
                                             >
-                                                <Icon className="h-4 w-4 mr-2" />
+                                                <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
                                                 {tab.label}
                                                 {tab.badge > 0 && (
-                                                    <span className="ml-2 bg-primary/10 text-primary py-0.5 px-2 rounded-full text-xs">
+                                                    <span className="ml-1 sm:ml-2 bg-primary/10 text-primary py-0.5 px-1 sm:py-0.5 sm:px-2 rounded-full text-xs">
                                                         {tab.badge}
                                                     </span>
                                                 )}
@@ -331,12 +336,12 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
 
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto">
-                            <div className="p-6">
+                            <div className="p-4 sm:p-6">
                                 {activeTab === 'overview' && (
-                                    <div className="space-y-6">
+                                    <div className="space-y-4 sm:space-y-6">
                                         {/* Quick Actions */}
-                                        <div className="grid grid-cols-4 gap-4">
-                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                                            <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
                                                     field="status"
                                                     value={editedBug.status || 'New'}
@@ -347,7 +352,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                 />
                                                 <p className="text-xs text-muted-foreground mt-1">Status</p>
                                             </div>
-                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                            <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
                                                     field="assignedTo"
                                                     value={editedBug.assignedTo || 'Unassigned'}
@@ -358,13 +363,13 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                 />
                                                 <p className="text-xs text-muted-foreground mt-1">Assignee</p>
                                             </div>
-                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                            <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <div className="text-sm font-medium text-foreground">
                                                     {editedBug.priority || 'Low'}
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-1">Priority (Auto-derived from Severity)</p>
                                             </div>
-                                            <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                            <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
                                                     field="environment"
                                                     value={editedBug.environment || 'Unknown'}
@@ -378,8 +383,8 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
 
                                         {/* Description */}
-                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                            <div className="flex items-center justify-between mb-4">
+                                        <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                            <div className="flex items-center justify-between mb-3 sm:mb-4">
                                                 <h3 className="text-lg font-semibold text-foreground flex items-center">
                                                     <FileText className="h-5 w-5 mr-2 text-primary" />
                                                     Description
@@ -404,8 +409,8 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
 
                                         {/* Reproduction Steps */}
-                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                            <div className="flex items-center justify-between mb-4">
+                                        <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                            <div className="flex items-center justify-between mb-3 sm:mb-4">
                                                 <h3 className="text-lg font-semibold text-foreground flex items-center">
                                                     <Settings className="h-5 w-5 mr-2 text-success" />
                                                     Steps to Reproduce
@@ -430,9 +435,9 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
 
                                         {/* Expected vs Actual Behavior */}
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                                            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <CheckCircle className="h-5 w-5 mr-2 text-success" />
                                                     Expected Behavior
                                                 </h3>
@@ -445,8 +450,8 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                     {...editableFieldProps()}
                                                 />
                                             </div>
-                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <AlertTriangle className="h-5 w-5 mr-2 text-destructive" />
                                                     Actual Behavior
                                                 </h3>
@@ -462,12 +467,12 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
 
                                         {/* Evidence */}
-                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                        <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                            <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                 <Paperclip className="h-5 w-5 mr-2 text-primary/70" />
                                                 Evidence & Attachments
                                             </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
                                                 {editedBug.hasVideoEvidence && (
                                                     <div className="flex items-center p-3 bg-accent rounded-lg border border-accent/30">
                                                         <Video className="h-5 w-5 mr-3 text-primary/70" />
@@ -497,14 +502,14 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                 )}
 
                                 {activeTab === 'details' && (
-                                    <div className="space-y-6">
+                                    <div className="space-y-4 sm:space-y-6">
                                         {/* Technical Details */}
-                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                        <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                            <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                 <Monitor className="h-5 w-5 mr-2 text-primary" />
                                                 Technical Information
                                             </h3>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                                                 <div className="space-y-1">
                                                     <label className="text-sm font-medium text-foreground">Category</label>
                                                     <EditableField
@@ -568,12 +573,12 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
 
                                         {/* Workflow Information */}
-                                        <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                        <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                            <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                 <Users className="h-5 w-5 mr-2 text-success" />
                                                 Workflow Information
                                             </h3>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                                                 <div className="space-y-1">
                                                     <label className="text-sm font-medium text-foreground">Created By</label>
                                                     <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
@@ -620,9 +625,9 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
 
                                         {/* Resolution & Workaround */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                                            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <CheckCircle className="h-5 w-5 mr-2 text-success" />
                                                     Resolution
                                                 </h3>
@@ -635,8 +640,8 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                     {...editableFieldProps()}
                                                 />
                                             </div>
-                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <Settings className="h-5 w-5 mr-2 text-primary" />
                                                     Workaround
                                                 </h3>
@@ -653,8 +658,8 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
 
                                         {/* Resolution History */}
                                         {editedBug.resolutionHistory?.length > 0 && (
-                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <History className="h-5 w-5 mr-2 text-muted-foreground" />
                                                     Resolution History
                                                 </h3>
@@ -677,11 +682,11 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                 )}
 
                                 {activeTab === 'comments' && (
-                                    <div className="space-y-6">
+                                    <div className="space-y-4 sm:space-y-6">
                                         {/* Comments Section */}
                                         <div className="bg-card border border-border rounded-lg shadow-theme-sm">
-                                            <div className="p-6">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                            <div className="p-4 sm:p-6">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <MessageSquare className="h-5 w-5 mr-2 text-primary" />
                                                     Comments & Discussion
                                                     <span className="ml-2 bg-primary/10 text-primary py-1 px-2 rounded-full text-xs">
@@ -700,11 +705,11 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                 )}
 
                                 {activeTab === 'activity' && (
-                                    <div className="space-y-6">
+                                    <div className="space-y-4 sm:space-y-6">
                                         {/* Activity Log Section */}
                                         <div className="bg-card border border-border rounded-lg shadow-theme-sm">
-                                            <div className="p-6">
-                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                            <div className="p-4 sm:p-6">
+                                                <h3 className="text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
                                                     <Activity className="h-5 w-5 mr-2 text-success" />
                                                     Activity Log
                                                 </h3>

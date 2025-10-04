@@ -32,6 +32,7 @@ const BugTable = ({
     const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
     const [loadingActions, setLoadingActions] = useState([]);
+    const [hoveredTitle, setHoveredTitle] = useState(null);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -58,24 +59,23 @@ const BugTable = ({
             key,
             direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
         }));
-        setCurrentPage(1); // Reset to first page when sorting
+        setCurrentPage(1);
     }, []);
 
-    // Enhanced bulk action handler with loading states
-    const handleBulkAction = useCallback(async (actionId, selectedItems) => {
+    // Enhanced bulk action handler with bulk updates for selected bugs
+    const handleBulkAction = useCallback(async (actionId, selectedIds, actionConfig, selectedOption) => {
         setLoadingActions(prev => [...prev, actionId]);
         
         try {
-            // Call the original onBulkAction
-            await onBulkAction(actionId, selectedItems);
+            await onBulkAction(actionId, selectedIds, actionConfig, selectedOption);
             
-            // Show success notification based on action
-            const itemCount = selectedItems.length;
+            const itemCount = selectedIds.length;
             const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
             
             let successMessage = '';
             switch (actionId) {
                 case 'resolve':
+                case 'Resolved':
                     successMessage = `Successfully resolved ${itemCount} ${itemLabel}`;
                     break;
                 case 'close':
@@ -89,6 +89,9 @@ const BugTable = ({
                     break;
                 case 'priority':
                     successMessage = `Successfully updated priority for ${itemCount} ${itemLabel}`;
+                    break;
+                case 'severity':
+                    successMessage = `Successfully updated severity for ${itemCount} ${itemLabel}`;
                     break;
                 case 'add-to-sprint':
                     successMessage = `Successfully added ${itemCount} ${itemLabel} to sprint`;
@@ -153,20 +156,18 @@ const BugTable = ({
         });
     }, [bugs, sortConfig]);
 
-    // Pagination calculations
     const totalItems = sortedBugs.length;
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedBugs = sortedBugs.slice(startIndex, endIndex);
 
-    // Pagination handlers
     const handlePageChange = useCallback((page) => {
         setCurrentPage(page);
     }, []);
 
     const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
         setItemsPerPage(newItemsPerPage);
-        setCurrentPage(1); // Reset to first page
+        setCurrentPage(1);
     }, []);
 
     const handleLinkTestCase = useCallback((bugId, testCaseIds) => {
@@ -175,17 +176,31 @@ const BugTable = ({
         }
     }, [onLinkTestCase]);
 
+    // Bulk update handler for inline edits on selected bugs
     const handleUpdateBug = useCallback(async (bugId, updates) => {
         if (typeof onUpdateBug === 'function') {
             try {
-                const result = await onUpdateBug(bugId, updates);
+                // If multiple bugs are selected and this bug is one of them, update all selected bugs
+                if (selectedBugs.length > 1 && selectedBugs.includes(bugId)) {
+                    const updatePromises = selectedBugs.map(id => onUpdateBug(id, updates));
+                    await Promise.all(updatePromises);
+                    
+                    showNotification({
+                        type: 'success',
+                        title: 'Bulk Update Complete',
+                        message: `Successfully updated ${selectedBugs.length} bugs`,
+                        duration: 3000,
+                    });
+                } else {
+                    const result = await onUpdateBug(bugId, updates);
 
-                if (result && !result.success) {
-                    console.warn('Update failed:', result.error?.message || 'Unknown error');
-                    return result;
+                    if (result && !result.success) {
+                        console.warn('Update failed:', result.error?.message || 'Unknown error');
+                        return result;
+                    }
                 }
 
-                return result;
+                return { success: true };
             } catch (error) {
                 console.error('Error in BugTable handleUpdateBug:', error);
 
@@ -207,7 +222,7 @@ const BugTable = ({
             });
             return { success: false, error: { message: 'Update function not available' } };
         }
-    }, [onUpdateBug, showNotification]);
+    }, [onUpdateBug, selectedBugs, showNotification]);
 
     const getStatusBadge = useCallback((status) => {
         const statusConfig = {
@@ -253,7 +268,6 @@ const BugTable = ({
         return priorityMap[severity?.toLowerCase()] || 'medium';
     }, []);
 
-    // Fixed severity indicator with consistent sizing
     const getSeverityIndicator = useCallback((severity) => {
         const severityColors = {
             critical: 'bg-red-500',
@@ -282,25 +296,20 @@ const BugTable = ({
     }, []);
 
     const formatEvidence = useCallback((evidence) => {
-        // Handle null, undefined, or empty values
         if (!evidence) return 'None';
 
-        // Handle string values
         if (typeof evidence === 'string') {
             return evidence.length > 50 ? evidence.slice(0, 50) + '...' : evidence;
         }
 
-        // Handle array values
         if (Array.isArray(evidence)) {
             return evidence.length ? `${evidence.length} item(s)` : 'None';
         }
 
-        // Handle object values (this is the critical part for AI-generated bugs)
         if (typeof evidence === 'object' && evidence !== null) {
             try {
                 const parts = [];
 
-                // Check for common evidence properties
                 if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
                 if (evidence.browserVersion || evidence.version) {
                     parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
@@ -312,18 +321,15 @@ const BugTable = ({
                         const hostname = new URL(evidence.url).hostname;
                         parts.push(`URL: ${hostname}`);
                     } catch {
-                        // If URL parsing fails, just use the raw URL
                         parts.push(`URL: ${evidence.url}`);
                     }
                 }
 
-                // If we found standard properties, format them nicely
                 if (parts.length > 0) {
                     const result = parts.join(' | ');
                     return result.length > 50 ? result.slice(0, 50) + '...' : result;
                 }
 
-                // If no standard properties, try to create a summary from all properties
                 const allKeys = Object.keys(evidence);
                 if (allKeys.length > 0) {
                     const summary = allKeys.map(key => {
@@ -337,7 +343,6 @@ const BugTable = ({
                     return summary.length > 50 ? summary.slice(0, 50) + '...' : summary;
                 }
 
-                // Fallback if object exists but has no meaningful properties
                 return 'Evidence data';
 
             } catch (error) {
@@ -346,7 +351,6 @@ const BugTable = ({
             }
         }
 
-        // Handle any other data types by converting to string safely
         try {
             const stringValue = String(evidence);
             return stringValue.length > 50 ? stringValue.slice(0, 50) + '...' : stringValue;
@@ -392,20 +396,6 @@ const BugTable = ({
         { value: 'trivial', label: 'Trivial' },
     ], []);
 
-    const environmentOptions = useMemo(() => [
-        { value: 'production', label: 'Production' },
-        { value: 'staging', label: 'Staging' },
-        { value: 'development', label: 'Development' },
-        { value: 'testing', label: 'Testing' },
-    ], []);
-
-    const frequencyOptions = useMemo(() => [
-        { value: 'always', label: 'Always' },
-        { value: 'often', label: 'Often' },
-        { value: 'sometimes', label: 'Sometimes' },
-        { value: 'rarely', label: 'Rarely' },
-    ], []);
-
     const assigneeOptions = useMemo(() => [
         { value: '', label: 'Unassigned' },
         { value: 'user1', label: 'User 1' },
@@ -427,18 +417,18 @@ const BugTable = ({
 
     return (
         <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
-            {/* Enhanced Bulk Actions Bar */}
             <EnhancedBulkActionsBar 
                 selectedItems={selectedBugs}
                 onClearSelection={() => onSelectBugs([])}
-                assetType="bugs" // Uses predefined bug configuration
+                assetType="bugs"
                 pageTitle="bug"
                 onAction={handleBulkAction}
                 loadingActions={loadingActions}
             />
             
             <div className="relative overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                {/* Desktop Table */}
+                <table className="min-w-full divide-y divide-gray-200 hidden md:table">
                     <thead className="bg-gray-50 sticky top-0 z-20">
                         <tr>
                             <th className="px-6 py-3 text-left border-r border-gray-200 w-12 sticky left-0 bg-gray-50 z-30 whitespace-nowrap">
@@ -506,24 +496,6 @@ const BugTable = ({
                             </th>
                             <th
                                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
-                                onClick={() => handleSort('environment')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Environment
-                                    {getSortIcon('environment')}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
-                                onClick={() => handleSort('frequency')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Frequency
-                                    {getSortIcon('frequency')}
-                                </div>
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
                                 onClick={() => handleSort('created_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -558,24 +530,15 @@ const BugTable = ({
                                     {getSortIcon('evidence')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-48 whitespace-nowrap">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48 whitespace-nowrap">
                                 Test Cases
-                            </th>
-                            <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-32 whitespace-nowrap"
-                                onClick={() => handleSort('updated_at')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Last Updated
-                                    {getSortIcon('updated_at')}
-                                </div>
                             </th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {paginatedBugs.length === 0 ? (
                             <tr>
-                                <td colSpan="15" className="px-6 py-12 text-center text-sm text-gray-500">
+                                <td colSpan="12" className="px-6 py-12 text-center text-sm text-gray-500">
                                     <div className="flex flex-col items-center">
                                         <Bug className="w-12 h-12 text-gray-300 mb-4" />
                                         <p>No bugs found</p>
@@ -607,8 +570,17 @@ const BugTable = ({
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-96 sticky left-12 bg-white z-30">
                                             <div className="flex items-center gap-2">
-                                                <div className="flex-1 text-sm font-medium text-gray-900 truncate max-w-[320px]">
+                                                <div 
+                                                    className="flex-1 text-sm font-medium text-gray-900 truncate max-w-[320px] relative"
+                                                    onMouseEnter={() => setHoveredTitle(bug.id)}
+                                                    onMouseLeave={() => setHoveredTitle(null)}
+                                                >
                                                     {bug.title || 'Untitled Bug'}
+                                                    {hoveredTitle === bug.id && bug.title && bug.title.length > 40 && (
+                                                        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded shadow-lg max-w-xs z-50 whitespace-normal">
+                                                            {bug.title}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="flex-shrink-0 border-l border-gray-200 pl-2">
                                                     <button
@@ -667,24 +639,6 @@ const BugTable = ({
                                             />
                                         </td>
                                         <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <InlineEditCell
-                                                value={bug.environment}
-                                                options={environmentOptions}
-                                                onChange={(value) => handleUpdateBug(bug.id, { environment: value })}
-                                                className="text-xs text-gray-600"
-                                                noSearch
-                                            />
-                                        </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <InlineEditCell
-                                                value={bug.frequency}
-                                                options={frequencyOptions}
-                                                onChange={(value) => handleUpdateBug(bug.id, { frequency: value })}
-                                                className="text-xs text-gray-600"
-                                                noSearch
-                                            />
-                                        </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
                                             <div className="text-xs text-gray-500 truncate">
                                                 {bug.created_at && isValidDate(new Date(bug.created_at))
                                                     ? format(new Date(bug.created_at), 'MMM d, yyyy')
@@ -708,7 +662,7 @@ const BugTable = ({
                                                 {formatEvidence(bug.evidence)}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-48 relative">
+                                        <td className="px-6 py-4 w-48 relative">
                                             <div className="w-48">
                                                 <MultiSelectDropdown
                                                     options={testCaseOptions}
@@ -719,23 +673,81 @@ const BugTable = ({
                                                 />
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 w-32">
-                                            <div className="flex items-center text-xs text-gray-500 truncate">
-                                                <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
-                                                {bug.updated_at && isValidDate(new Date(bug.updated_at))
-                                                    ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
-                                                    : 'Unknown'}
-                                            </div>
-                                        </td>
                                     </tr>
                                 );
                             })
                         )}
                     </tbody>
                 </table>
+
+                {/* Mobile Table - Only Checkbox, Title, and Chat Icon */}
+                <div className="md:hidden">
+                    {paginatedBugs.length === 0 ? (
+                        <div className="px-6 py-12 text-center text-sm text-gray-500">
+                            <div className="flex flex-col items-center">
+                                <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                                <p>No bugs found</p>
+                                <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-gray-200">
+                            {paginatedBugs.map((bug) => {
+                                const isSelected = selectedBugs.includes(bug.id);
+                                return (
+                                    <div 
+                                        key={bug.id} 
+                                        className={`flex items-center gap-3 px-4 py-3 ${isSelected ? 'bg-teal-50' : 'bg-white'} hover:bg-gray-50`}
+                                    >
+                                        {/* Checkbox */}
+                                        <div className="flex-shrink-0">
+                                            {isSelected ? (
+                                                <CheckSquare
+                                                    className="w-5 h-5 text-teal-600 cursor-pointer"
+                                                    onClick={() => handleSelectItem(bug.id, false)}
+                                                />
+                                            ) : (
+                                                <Square
+                                                    className="w-5 h-5 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                    onClick={() => handleSelectItem(bug.id, true)}
+                                                />
+                                            )}
+                                        </div>
+
+                                        {/* Title */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-gray-900 truncate">
+                                                {bug.title || 'Untitled Bug'}
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusBadge(bug.status)}`}>
+                                                    {bug.status || 'open'}
+                                                </span>
+                                                <span className="text-xs text-gray-400">
+                                                    #{bug.id?.slice(-6) || 'Unknown'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Chat Icon */}
+                                        <div className="flex-shrink-0">
+                                            <button
+                                                onClick={() => onView(bug)}
+                                                className="p-2 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                title="View bug details"
+                                            >
+                                                <MessageSquare className="w-5 h-5 text-gray-600" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Global Pagination Component */}
+            {/* Pagination */}
             {!loading && totalItems > 0 && (
                 <Pagination
                     currentPage={currentPage}

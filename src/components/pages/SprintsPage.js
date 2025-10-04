@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     Calendar, 
     Plus, 
@@ -25,17 +25,24 @@ const SprintsPage = () => {
 
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [selectedSprint, setSelectedSprint] = useState(null);
-    const [view, setView] = useState('list'); // 'list' or 'dashboard'
+    const [view, setView] = useState('list');
     const [filter, setFilter] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [showOptions, setShowOptions] = useState(null);
+    
+    // Only track suite changes for UI reset - NO manual loading
+    const lastSuiteIdRef = useRef(null);
 
-    // Load sprints when component mounts or activeSuite changes
     useEffect(() => {
-        if (activeSuite?.id && actions.sprints?.loadSprints && !loading && sprints.length === 0) {
-            actions.sprints.loadSprints(activeSuite.id);
+        if (activeSuite?.id !== lastSuiteIdRef.current) {
+            lastSuiteIdRef.current = activeSuite?.id;
+            // Reset view when switching suites
+            if (view === 'dashboard') {
+                setView('list');
+                setSelectedSprint(null);
+            }
         }
-    }, [activeSuite?.id, actions.sprints, loading, sprints.length]);
+    }, [activeSuite?.id, view]);
 
     const getStatusInfo = (status) => {
         switch (status) {
@@ -71,29 +78,22 @@ const SprintsPage = () => {
     };
 
     const filteredSprints = sprints.filter(sprint => {
-        // Filter by status
         if (filter !== 'all' && sprint.status !== filter) return false;
-        
-        // Filter by search term
         if (searchTerm && !sprint.name.toLowerCase().includes(searchTerm.toLowerCase())) {
             return false;
         }
-        
         return true;
     });
 
     const handleSprintCreated = (sprint) => {
         setShowCreateModal(false);
-        // Use correct method name
         if (actions.sprints?.setActiveSprint) {
             actions.sprints.setActiveSprint(sprint);
         }
-        // Don't show additional notification here as it's already shown in the action
     };
 
     const handleSprintClick = (sprint) => {
         setSelectedSprint(sprint);
-        // Use correct method name
         if (actions.sprints?.setActiveSprint) {
             actions.sprints.setActiveSprint(sprint);
         }
@@ -107,7 +107,6 @@ const SprintsPage = () => {
             const result = await actions.sprints.deleteSprint(sprintId, activeSuite.id);
             if (result?.success) {
                 setShowOptions(null);
-                // Don't show additional notification as it's already shown in the action
             }
         } catch (error) {
             console.error('Failed to delete sprint:', error);
@@ -142,7 +141,6 @@ const SprintsPage = () => {
 
     return (
         <div className="p-6">
-            {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-foreground">Sprints</h1>
@@ -157,7 +155,6 @@ const SprintsPage = () => {
                 </button>
             </div>
 
-            {/* Filters and Search */}
             <div className="flex items-center justify-between mb-6 space-x-4">
                 <div className="flex items-center space-x-4">
                     <div className="relative">
@@ -188,7 +185,6 @@ const SprintsPage = () => {
                 </div>
             </div>
 
-            {/* Sprints List */}
             {loading ? (
                 <div className="text-center py-12 text-muted-foreground">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
@@ -254,7 +250,6 @@ const SprintsPage = () => {
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            // TODO: Implement edit functionality
                                                             setShowOptions(null);
                                                         }}
                                                         className="w-full px-3 py-2 text-left text-sm hover:bg-secondary flex items-center space-x-2"

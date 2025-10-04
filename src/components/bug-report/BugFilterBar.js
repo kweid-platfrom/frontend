@@ -11,27 +11,26 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
     const filterOptions = useMemo(() => {
         const statuses = [...new Set(bugs.map(bug => bug.status))];
         const severities = [...new Set(bugs.map(bug => bug.severity))];
-        const priorities = [...new Set(bugs.map(bug => bug.priority))];
         const assignees = [...new Set(bugs.map(bug => bug.assignee).filter(Boolean))];
         const reporters = [...new Set(bugs.map(bug => bug.reporter).filter(Boolean))];
         const allTags = [...new Set(bugs.flatMap(bug => bug.tags || []))];
 
-        return { statuses, severities, priorities, assignees, reporters, allTags };
+        return { statuses, severities, assignees, reporters, allTags };
     }, [bugs]);
 
     const handleFilterChange = (key, value) => {
-        onFiltersChange(prev => ({
-            ...prev,
+        onFiltersChange({
+            ...filters,
             [key]: value
-        }));
-    };
+        });
+    }
 
     const handleTagToggle = (tag) => {
         const currentTags = filters.tags || [];
         const newTags = currentTags.includes(tag)
             ? currentTags.filter(t => t !== tag)
             : [...currentTags, tag];
-        
+
         handleFilterChange('tags', newTags);
     };
 
@@ -39,7 +38,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
         onFiltersChange({
             status: 'all',
             severity: 'all',
-            priority: 'all',
+            priority: 'all', // Added back to ensure compatibility with parent component
             assignee: 'all',
             reporter: 'all',
             tags: [],
@@ -50,28 +49,26 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
     };
 
     const hasActiveFilters = () => {
-        return filters.status !== 'all' || 
-               filters.severity !== 'all' || 
-               filters.priority !== 'all' || 
-               filters.assignee !== 'all' || 
-               filters.reporter !== 'all' || 
-               (filters.tags && filters.tags.length > 0) || 
-               filters.search !== '' ||
-               filters.lastUpdated !== 'all' ||
-               filters.bugType !== 'all';
+        return filters.status !== 'all' ||
+            filters.severity !== 'all' ||
+            filters.assignee !== 'all' ||
+            filters.reporter !== 'all' ||
+            (filters.tags && filters.tags.length > 0) ||
+            filters.search !== '' ||
+            (filters.lastUpdated && filters.lastUpdated !== 'all') ||
+            (filters.bugType && filters.bugType !== 'all');
     };
 
     const getActiveFiltersCount = () => {
         let count = 0;
         if (filters.status !== 'all') count++;
         if (filters.severity !== 'all') count++;
-        if (filters.priority !== 'all') count++;
         if (filters.assignee !== 'all') count++;
         if (filters.reporter !== 'all') count++;
         if (filters.tags && filters.tags.length > 0) count++;
         if (filters.search !== '') count++;
-        if (filters.lastUpdated !== 'all') count++;
-        if (filters.bugType !== 'all') count++;
+        if (filters.lastUpdated && filters.lastUpdated !== 'all') count++;
+        if (filters.bugType && filters.bugType !== 'all') count++;
         return count;
     };
 
@@ -82,11 +79,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
             ${showMobileFilters ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}>
             {/* Backdrop */}
-            <div 
+            <div
                 className="absolute inset-0 bg-black bg-opacity-50"
                 onClick={() => setShowMobileFilters(false)}
             />
-            
+
             {/* Filter Panel */}
             <div className={`
                 absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-xl max-h-[85vh] overflow-y-auto
@@ -166,22 +163,6 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                            <select
-                                value={filters.priority}
-                                onChange={(e) => handleFilterChange('priority', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            >
-                                <option value="all">All Priorities</option>
-                                {filterOptions.priorities.map(priority => (
-                                    <option key={priority} value={priority}>
-                                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Assignee</label>
                             <select
                                 value={filters.assignee}
@@ -229,6 +210,23 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 <option value="quarter">This Quarter</option>
                             </select>
                         </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Bug Type</label>
+                            <select
+                                value={filters.bugType || 'all'}
+                                onChange={(e) => handleFilterChange('bugType', e.target.value)}
+                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            >
+                                <option value="all">All Types</option>
+                                <option value="functional">Functional</option>
+                                <option value="ui">UI/UX</option>
+                                <option value="performance">Performance</option>
+                                <option value="security">Security</option>
+                                <option value="compatibility">Compatibility</option>
+                                <option value="data">Data</option>
+                            </select>
+                        </div>
                     </div>
 
                     {/* Tags */}
@@ -243,11 +241,10 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 <button
                                     key={tag}
                                     onClick={() => handleTagToggle(tag)}
-                                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-                                        filters.tags && filters.tags.includes(tag)
+                                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${filters.tags && filters.tags.includes(tag)
                                             ? 'bg-teal-100 text-teal-800 border-teal-300'
                                             : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
-                                    }`}
+                                        }`}
                                 >
                                     {tag}
                                 </button>
@@ -297,24 +294,22 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     placeholder="Search bugs..."
                                     value={filters.search}
                                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${
-                                        filters.search 
-                                            ? 'bg-teal-50 border-teal-500' 
+                                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${filters.search
+                                            ? 'bg-teal-50 border-teal-500'
                                             : 'border-gray-300'
-                                    }`}
+                                        }`}
                                 />
                                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                             </div>
                         </div>
-                        
+
                         {/* Mobile Filter Button */}
                         <button
                             onClick={() => setShowMobileFilters(true)}
-                            className={`relative px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors ${
-                                hasActiveFilters() 
-                                    ? 'bg-teal-50 text-teal-700 border-teal-500' 
+                            className={`relative px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors ${hasActiveFilters()
+                                    ? 'bg-teal-50 text-teal-700 border-teal-500'
                                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                            }`}
+                                }`}
                         >
                             <Filter className="w-4 h-4" />
                             {hasActiveFilters() && (
@@ -330,11 +325,10 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         <div className="flex items-center space-x-1">
                             <button
                                 onClick={() => setViewMode('list')}
-                                className={`px-3 py-2 text-sm transition-colors duration-200 ${
-                                    viewMode === 'list'
+                                className={`px-3 py-2 text-sm transition-colors duration-200 ${viewMode === 'list'
                                         ? 'bg-teal-600 text-white border-teal-600'
                                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                } border rounded-l-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                    } border rounded-l-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
                                 title="List View"
                             >
                                 <List className="h-4 w-4 mr-1" />
@@ -342,11 +336,10 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             </button>
                             <button
                                 onClick={() => setViewMode('table')}
-                                className={`px-3 py-2 text-sm transition-colors duration-200 ${
-                                    viewMode === 'table'
+                                className={`px-3 py-2 text-sm transition-colors duration-200 ${viewMode === 'table'
                                         ? 'bg-teal-600 text-white border-teal-600'
                                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                } border border-l-0 rounded-r-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                    } border border-l-0 rounded-r-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
                                 title="Table View"
                             >
                                 <Table className="h-4 w-4 mr-1" />
@@ -365,23 +358,22 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                     </div>
                 </div>
 
-                {/* Desktop Layout */}
+                {/* Desktop Layout - Enhanced Responsiveness */}
                 <div className="hidden lg:block">
                     {/* Search and Quick Filters Row */}
-                    <div className="flex items-center gap-4 mb-4 flex-wrap">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:flex lg:items-center lg:gap-4 mb-4 lg:flex-wrap">
                         {/* Search Bar */}
-                        <div className="flex-1 min-w-64 max-w-md">
+                        <div className="flex-1 min-w-0 md:min-w-64 lg:min-w-64 max-w-md lg:max-w-none">
                             <div className="relative">
                                 <input
                                     type="text"
                                     placeholder="Search bugs..."
                                     value={filters.search}
                                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 h-10 ${
-                                        filters.search 
-                                            ? 'bg-teal-50 border-teal-500' 
+                                    className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 h-10 ${filters.search
+                                            ? 'bg-teal-50 border-teal-500'
                                             : 'border-gray-300'
-                                    }`}
+                                        }`}
                                 />
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Search className="h-5 w-5 text-gray-400" />
@@ -389,125 +381,102 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             </div>
                         </div>
 
-                        {/* Quick Filters */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
-                            <select
-                                value={filters.status}
-                                onChange={(e) => handleFilterChange('status', e.target.value)}
-                                className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-32 ${
-                                    filters.status !== 'all' 
-                                        ? 'bg-teal-50 border-teal-500' 
-                                        : 'border-gray-300'
-                                }`}
-                            >
-                                <option value="all">All</option>
-                                {filterOptions.statuses.map(status => (
-                                    <option key={status} value={status}>
-                                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
+                        {/* Quick Filters - Responsive Grid on Smaller Desktop */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center lg:gap-2 lg:flex-1 lg:justify-start mt-4 md:mt-0">
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
+                                <select
+                                    value={filters.status}
+                                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 flex-1 min-w-0 lg:min-w-32 ${filters.status !== 'all'
+                                            ? 'bg-teal-50 border-teal-500'
+                                            : 'border-gray-300'
+                                        }`}
+                                >
+                                    <option value="all">All</option>
+                                    {filterOptions.statuses.map(status => (
+                                        <option key={status} value={status}>
+                                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Severity:</label>
+                                <select
+                                    value={filters.severity}
+                                    onChange={(e) => handleFilterChange('severity', e.target.value)}
+                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 flex-1 min-w-0 lg:min-w-32 ${filters.severity !== 'all'
+                                            ? 'bg-teal-50 border-teal-500'
+                                            : 'border-gray-300'
+                                        }`}
+                                >
+                                    <option value="all">All</option>
+                                    {filterOptions.severities.map(severity => (
+                                        <option key={severity} value={severity}>
+                                            {severity.charAt(0).toUpperCase() + severity.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Assignee:</label>
+                                <select
+                                    value={filters.assignee}
+                                    onChange={(e) => handleFilterChange('assignee', e.target.value)}
+                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 flex-1 min-w-0 lg:min-w-40 ${filters.assignee !== 'all'
+                                            ? 'bg-teal-50 border-teal-500'
+                                            : 'border-gray-300'
+                                        }`}
+                                >
+                                    <option value="all">All</option>
+                                    <option value="">Unassigned</option>
+                                    {filterOptions.assignees.map(assignee => (
+                                        <option key={assignee} value={assignee}>
+                                            {assignee}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Severity:</label>
-                            <select
-                                value={filters.severity}
-                                onChange={(e) => handleFilterChange('severity', e.target.value)}
-                                className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-32 ${
-                                    filters.severity !== 'all' 
-                                        ? 'bg-teal-50 border-teal-500' 
-                                        : 'border-gray-300'
-                                }`}
-                            >
-                                <option value="all">All</option>
-                                {filterOptions.severities.map(severity => (
-                                    <option key={severity} value={severity}>
-                                        {severity.charAt(0).toUpperCase() + severity.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Priority:</label>
-                            <select
-                                value={filters.priority}
-                                onChange={(e) => handleFilterChange('priority', e.target.value)}
-                                className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-32 ${
-                                    filters.priority !== 'all' 
-                                        ? 'bg-teal-50 border-teal-500' 
-                                        : 'border-gray-300'
-                                }`}
-                            >
-                                <option value="all">All</option>
-                                {filterOptions.priorities.map(priority => (
-                                    <option key={priority} value={priority}>
-                                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Assignee:</label>
-                            <select
-                                value={filters.assignee}
-                                onChange={(e) => handleFilterChange('assignee', e.target.value)}
-                                className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 min-w-40 ${
-                                    filters.assignee !== 'all' 
-                                        ? 'bg-teal-50 border-teal-500' 
-                                        : 'border-gray-300'
-                                }`}
-                            >
-                                <option value="all">All</option>
-                                <option value="">Unassigned</option>
-                                {filterOptions.assignees.map(assignee => (
-                                    <option key={assignee} value={assignee}>
-                                        {assignee}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Action Buttons and View Toggle */}
-                        <div className="flex items-center gap-2 ml-auto">
+                        {/* Action Buttons and View Toggle - Responsive */}
+                        <div className="flex items-center justify-end gap-2 mt-4 lg:mt-0 lg:ml-auto lg:flex-none">
                             {hasActiveFilters() && (
                                 <button
                                     onClick={clearFilters}
-                                    className="px-3 py-2 text-sm text-red-600 hover:text-red-800 font-medium h-10"
+                                    className="px-3 py-2 text-sm text-red-600 hover:text-red-800 font-medium h-10 whitespace-nowrap"
                                 >
                                     Clear Filters ({getActiveFiltersCount()})
                                 </button>
                             )}
-                            
+
                             {/* View Mode Buttons */}
                             <div className="flex">
                                 <button
                                     onClick={() => setViewMode('list')}
-                                    className={`px-4 py-3 text-sm transition-colors duration-200 ${
-                                        viewMode === 'list'
+                                    className={`px-4 py-3 text-sm transition-colors duration-200 ${viewMode === 'list'
                                             ? 'bg-teal-600 text-white border-teal-600'
                                             : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                        } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
                                     title="List View"
                                 >
                                     <List className="h-4 w-4" />
                                 </button>
                                 <button
                                     onClick={() => setViewMode('table')}
-                                    className={`px-4 py-3 text-sm transition-colors duration-200 ${
-                                        viewMode === 'table'
+                                    className={`px-4 py-3 text-sm transition-colors duration-200 ${viewMode === 'table'
                                             ? 'bg-teal-600 text-white border-teal-600'
                                             : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                        } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
                                     title="Table View"
                                 >
                                     <Table className="h-4 w-4" />
                                 </button>
                             </div>
-                            
+
                             {/* Expand/Collapse Toggle */}
                             <button
                                 onClick={() => setIsExpanded(!isExpanded)}
@@ -533,11 +502,10 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                             <button
                                                 key={tag}
                                                 onClick={() => handleTagToggle(tag)}
-                                                className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                                                    filters.tags && filters.tags.includes(tag)
+                                                className={`px-3 py-1 text-sm rounded-full border transition-colors ${filters.tags && filters.tags.includes(tag)
                                                         ? 'bg-teal-100 text-teal-800 border-teal-300'
                                                         : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
-                                                }`}
+                                                    }`}
                                             >
                                                 {tag}
                                             </button>
@@ -548,8 +516,8 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     </div>
                                 </div>
 
-                                {/* Advanced Search Options */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Advanced Search Options - Responsive Grid */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Reporter:
@@ -614,7 +582,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         <div className="mt-4 pt-4 border-t">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-medium text-gray-700">Active filters:</span>
-                                
+
                                 {filters.status !== 'all' && (
                                     <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                                         Status: {filters.status}
@@ -626,7 +594,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 )}
-                                
+
                                 {filters.severity !== 'all' && (
                                     <span className="inline-flex items-center px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
                                         Severity: {filters.severity}
@@ -638,19 +606,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 )}
-                                
-                                {filters.priority !== 'all' && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                                        Priority: {filters.priority}
-                                        <button
-                                            onClick={() => handleFilterChange('priority', 'all')}
-                                            className="ml-1 text-yellow-600 hover:text-yellow-800"
-                                        >
-                                            ×
-                                        </button>
-                                    </span>
-                                )}
-                                
+
                                 {filters.assignee !== 'all' && (
                                     <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
                                         Assignee: {filters.assignee || 'Unassigned'}
@@ -662,7 +618,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 )}
-                                
+
                                 {filters.reporter !== 'all' && (
                                     <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                                         Reporter: {filters.reporter || 'Unreported'}
@@ -674,8 +630,8 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 )}
-                                
-                                {filters.lastUpdated !== 'all' && (
+
+                                {(filters.lastUpdated && filters.lastUpdated !== 'all') && (
                                     <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
                                         Last Updated: {filters.lastUpdated}
                                         <button
@@ -686,8 +642,8 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 )}
-                                
-                                {filters.bugType !== 'all' && (
+
+                                {(filters.bugType && filters.bugType !== 'all') && (
                                     <span className="inline-flex items-center px-2 py-1 bg-pink-100 text-pink-800 text-xs rounded-full">
                                         Bug Type: {filters.bugType}
                                         <button
@@ -698,7 +654,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 )}
-                                
+
                                 {filters.tags && filters.tags.map(tag => (
                                     <span key={tag} className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
                                         Tag: {tag}
@@ -710,7 +666,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                         </button>
                                     </span>
                                 ))}
-                                
+
                                 {filters.search && (
                                     <span className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
                                         Search: {filters.search}
