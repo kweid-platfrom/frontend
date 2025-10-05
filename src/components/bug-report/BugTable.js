@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { format } from 'date-fns';
 import { useApp } from '@/context/AppProvider';
 import {
     CheckSquare,
@@ -9,7 +9,6 @@ import {
     ChevronUp,
     ChevronDown,
     Bug,
-    Clock,
     MessageSquare,
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
