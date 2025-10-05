@@ -1,13 +1,67 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Trash2, Archive, Download, Play, CheckCircle, XCircle, RotateCcw,
-  FileText, Bug, TestTube, Video, BarChart3, Lightbulb,
+  FileText, TestTube, Video, BarChart3, Lightbulb,
   Shield, RefreshCw, Eye, Users, Database, FolderOpen,
   GitBranch, Move, Copy, Star, Lock, Unlock, Mail, Bell,
-  Calendar, Clock, Flag, Target, Link2, Bookmark, ChevronDown, X
+  Calendar, Clock, Flag, Target, Link2, Bookmark, ChevronDown, X, 
+  AlertTriangle, Layers
 } from 'lucide-react';
+import { BugAntIcon } from '@heroicons/react/24/outline';
+import { useApp } from '../../context/AppProvider';
+
+// Confirmation Dialog Component
+const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText = "Confirm", confirmColor = "red" }) => {
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 flex items-center justify-center p-4 z-[9999]"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start space-x-3">
+          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+            confirmColor === 'red' ? 'bg-red-100' : 'bg-yellow-100'
+          }`}>
+            <AlertTriangle className={`w-6 h-6 ${
+              confirmColor === 'red' ? 'text-red-600' : 'text-yellow-600'
+            }`} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+            <p className="text-sm text-gray-600">{message}</p>
+          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-3 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-500 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${
+              confirmColor === 'red'
+                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                : 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
+            }`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
 
 // Custom Tooltip component
 const Tooltip = ({ children, text, disabled = false }) => {
@@ -31,560 +85,380 @@ const Tooltip = ({ children, text, disabled = false }) => {
     </div>
   );
 };
+
 const ICONS = {
   Trash2, Archive, Download, Play, CheckCircle, XCircle,
-  RotateCcw, FileText, Bug, TestTube, Video, BarChart3,
+  RotateCcw, FileText, BugAntIcon, TestTube, Video, BarChart3,
   Lightbulb, Target, Shield, RefreshCw, Eye, Users, Database,
   FolderOpen, GitBranch, Move, Copy, Star, Lock, Unlock,
-  Mail, Bell, Calendar, Clock, Flag, Target, Link2, Bookmark,
-  ChevronDown, X
+  Mail, Bell, Calendar, Clock, Flag, Link2, Bookmark,
+  ChevronDown, X, Layers
 };
 
-// Predefined action group configurations for different asset types
-export const ASSET_ACTION_CONFIGS = {
-  testCases: {
-    icon: 'TestTube',
-    color: 'blue',
-    groups: [
-      {
-        name: 'execution',
-        actions: [
-          { id: 'pass', label: 'Pass', icon: 'CheckCircle', color: 'green' },
-          { id: 'fail', label: 'Fail', icon: 'XCircle', color: 'red' },
-          { id: 'block', label: 'Block', icon: 'Shield', color: 'yellow' }
-        ]
-      },
-      {
-        name: 'test',
-        actions: [
-          { id: 'run', label: 'Run', icon: 'Play', color: 'blue' },
-          { id: 'reset', label: 'Reset', icon: 'RefreshCw', color: 'blue' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'add-to-sprint',
-            label: 'Add to Sprint',
-            icon: 'Target',
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          {
-            id: 'assign',
-            label: 'Assign',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'user-1', label: 'John Doe' },
-              { id: 'user-2', label: 'Jane Smith' },
-              { id: 'user-3', label: 'Mike Johnson' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'status',
-        actions: [
-          { id: 'activate', label: 'Activate', icon: 'Eye', color: 'green' },
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+// Function to generate dynamic action configs with real sprint data
+const generateAssetActionConfig = (assetType, sprints = [], users = [], modules = []) => {
+  const sprintOptions = sprints.map(sprint => ({
+    id: sprint.id,
+    label: sprint.name,
+    data: sprint
+  }));
 
-  bugs: {
-    icon: 'Bug',
-    color: 'red',
-    groups: [
-      {
-        name: 'status',
-        actions: [
-          { id: 'open', label: 'Reopen', icon: 'RotateCcw', color: 'blue' },
-          { id: 'resolve', label: 'Resolve', icon: 'CheckCircle', color: 'green' },
-          { id: 'close', label: 'Close', icon: 'XCircle', color: 'red' }
-        ]
-      },
-      {
-        name: 'assignment',
-        actions: [
-          {
-            id: 'assign',
-            label: 'Assign',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'user-1', label: 'John Doe' },
-              { id: 'user-2', label: 'Jane Smith' },
-              { id: 'user-3', label: 'Mike Johnson' }
-            ]
-          },
-          {
-            id: 'severity',
-            label: 'Set Severity',
-            icon: 'Flag',
-            color: 'orange',
-            type: 'select',
-            options: [
-              { id: 'critical', label: 'Critical' },
-              { id: 'high', label: 'High' },
-              { id: 'medium', label: 'Medium' },
-              { id: 'low', label: 'Low' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'add-to-sprint',
-            label: 'Add to Sprint',
-            icon: 'Target',
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-critical', label: 'Critical Bugs' },
-              { id: 'group-ui', label: 'UI Issues' },
-              { id: 'group-backend', label: 'Backend Issues' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+  const userOptions = users.map(user => ({
+    id: user.id || user.uid,
+    label: user.displayName || user.name || user.email,
+    data: user
+  }));
 
-  recordings: {
-    icon: 'Video',
-    color: 'purple',
-    groups: [
-      {
-        name: 'playback',
-        actions: [
-          { id: 'download', label: 'Download', icon: 'Download', color: 'blue' },
-          { id: 'share', label: 'Share', icon: 'Link2', color: 'green' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          { id: 'bookmark', label: 'Bookmark', icon: 'Bookmark', color: 'yellow' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+  const moduleOptions = modules.map(module => ({
+    id: module.id,
+    label: module.name,
+    data: module
+  }));
 
-  sprints: {
-    icon: 'Target',
-    color: 'indigo',
-    groups: [
-      {
-        name: 'status',
-        actions: [
-          { id: 'start', label: 'Start', icon: 'Play', color: 'green' },
-          { id: 'complete', label: 'Complete', icon: 'CheckCircle', color: 'green' },
-          { id: 'pause', label: 'Pause', icon: 'Clock', color: 'yellow' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          { id: 'merge', label: 'Merge', icon: 'GitBranch', color: 'purple' },
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+  const groupingOptions = [
+    { id: 'sprint', label: 'Group by Sprint' },
+    { id: 'module', label: 'Group by Module/Feature' },
+    { id: 'date', label: 'Group by Date' },
+    { id: 'category', label: 'Group by Category' },
+    { id: 'status', label: 'Group by Status' },
+    { id: 'priority', label: 'Group by Priority' }
+  ];
 
-  reports: {
-    icon: 'BarChart3',
-    color: 'green',
-    groups: [
-      {
-        name: 'export',
-        actions: [
-          { id: 'pdf', label: 'Export PDF', icon: 'FileText', color: 'red' },
-          { id: 'csv', label: 'Export CSV', icon: 'Download', color: 'green' },
-          { id: 'excel', label: 'Export Excel', icon: 'FileText', color: 'blue' }
-        ]
-      },
-      {
-        name: 'sharing',
-        actions: [
-          { id: 'share', label: 'Share', icon: 'Link2', color: 'blue' },
-          { id: 'email', label: 'Email', icon: 'Mail', color: 'purple' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+  const configs = {
+    testCases: {
+      icon: 'TestTube',
+      color: 'blue',
+      groups: [
+        {
+          name: 'execution',
+          actions: [
+            { id: 'pass', label: 'Pass', icon: 'CheckCircle', color: 'green' },
+            { id: 'fail', label: 'Fail', icon: 'XCircle', color: 'red' },
+            { id: 'block', label: 'Block', icon: 'Shield', color: 'yellow' }
+          ]
+        },
+        {
+          name: 'test',
+          actions: [
+            { id: 'run', label: 'Run', icon: 'Play', color: 'blue' },
+            { id: 'reset', label: 'Reset', icon: 'RefreshCw', color: 'blue' }
+          ]
+        },
+        {
+          name: 'organization',
+          actions: [
+            ...(sprintOptions.length > 0 ? [{
+              id: 'add-to-sprint',
+              label: 'Add to Sprint',
+              icon: 'Target',
+              color: 'purple',
+              type: 'select',
+              options: sprintOptions
+            }] : []),
+            ...(moduleOptions.length > 0 ? [{
+              id: 'add-to-module',
+              label: 'Add to Module',
+              icon: 'FolderOpen',
+              color: 'indigo',
+              type: 'select',
+              options: moduleOptions
+            }] : []),
+            ...(userOptions.length > 0 ? [{
+              id: 'assign',
+              label: 'Assign',
+              icon: 'Users',
+              color: 'blue',
+              type: 'select',
+              options: userOptions
+            }] : []),
+            {
+              id: 'group',
+              label: 'Group Items',
+              icon: 'Layers',
+              color: 'teal',
+              type: 'select',
+              options: groupingOptions
+            }
+          ]
+        },
+        {
+          name: 'status',
+          actions: [
+            { id: 'activate', label: 'Activate', icon: 'Eye', color: 'green' },
+            { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true, confirmMessage: 'Archive selected test cases?' }
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Delete selected test cases?' }
+          ]
+        }
+      ]
+    },
 
-  documents: {
-    icon: 'FileText',
-    color: 'blue',
-    groups: [
-      {
-        name: 'access',
-        actions: [
-          { id: 'download', label: 'Download', icon: 'Download', color: 'blue' },
-          { id: 'lock', label: 'Lock', icon: 'Lock', color: 'red' },
-          { id: 'unlock', label: 'Unlock', icon: 'Unlock', color: 'green' }
-        ]
-      },
-      {
-        name: 'sharing',
-        actions: [
-          { id: 'share', label: 'Share', icon: 'Link2', color: 'blue' },
-          { id: 'email', label: 'Email', icon: 'Mail', color: 'purple' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          { id: 'move', label: 'Move', icon: 'Move', color: 'purple' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' },
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+    bugs: {
+      icon: 'BugAntIcon',
+      color: 'red',
+      groups: [
+        {
+          name: 'status',
+          actions: [
+            { id: 'open', label: 'Reopen', icon: 'RotateCcw', color: 'blue' },
+            { id: 'resolve', label: 'Resolve', icon: 'CheckCircle', color: 'green' },
+            { id: 'close', label: 'Close', icon: 'XCircle', color: 'red' }
+          ]
+        },
+        {
+          name: 'assignment',
+          actions: [
+            ...(userOptions.length > 0 ? [{
+              id: 'assign',
+              label: 'Assign',
+              icon: 'Users',
+              color: 'blue',
+              type: 'select',
+              options: userOptions
+            }] : []),
+            {
+              id: 'severity',
+              label: 'Set Severity',
+              icon: 'Flag',
+              color: 'orange',
+              type: 'select',
+              options: [
+                { id: 'critical', label: 'Critical' },
+                { id: 'high', label: 'High' },
+                { id: 'medium', label: 'Medium' },
+                { id: 'low', label: 'Low' }
+              ]
+            }
+          ]
+        },
+        {
+          name: 'organization',
+          actions: [
+            ...(sprintOptions.length > 0 ? [{
+              id: 'add-to-sprint',
+              label: 'Add to Sprint',
+              icon: 'Target',
+              color: 'purple',
+              type: 'select',
+              options: sprintOptions
+            }] : []),
+            ...(moduleOptions.length > 0 ? [{
+              id: 'add-to-module',
+              label: 'Add to Module',
+              icon: 'FolderOpen',
+              color: 'indigo',
+              type: 'select',
+              options: moduleOptions
+            }] : []),
+            {
+              id: 'group',
+              label: 'Group Items',
+              icon: 'Layers',
+              color: 'teal',
+              type: 'select',
+              options: groupingOptions
+            }
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true, confirmMessage: 'Archive selected bugs?' },
+            { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Delete selected bugs?' }
+          ]
+        }
+      ]
+    },
 
-  testData: {
-    icon: 'Database',
-    color: 'cyan',
-    groups: [
-      {
-        name: 'data',
-        actions: [
-          { id: 'export', label: 'Export', icon: 'Download', color: 'blue' },
-          { id: 'refresh', label: 'Refresh', icon: 'RefreshCw', color: 'green' },
-          { id: 'validate', label: 'Validate', icon: 'CheckCircle', color: 'green' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          },
-          { id: 'duplicate', label: 'Duplicate', icon: 'Copy', color: 'blue' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+    recordings: {
+      icon: 'Video',
+      color: 'purple',
+      groups: [
+        {
+          name: 'playback',
+          actions: [
+            { id: 'download', label: 'Download', icon: 'Download', color: 'blue' },
+            { id: 'share', label: 'Share', icon: 'Link2', color: 'green' }
+          ]
+        },
+        {
+          name: 'organization',
+          actions: [
+            { id: 'bookmark', label: 'Bookmark', icon: 'Bookmark', color: 'yellow' },
+            {
+              id: 'group',
+              label: 'Group Items',
+              icon: 'Layers',
+              color: 'teal',
+              type: 'select',
+              options: groupingOptions
+            }
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true, confirmMessage: 'Archive selected recordings?' },
+            { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Delete selected recordings?' }
+          ]
+        }
+      ]
+    },
 
-  team: {
-    icon: 'Users',
-    color: 'purple',
-    groups: [
-      {
-        name: 'roles',
-        actions: [
-          { id: 'promote', label: 'Promote', icon: 'Star', color: 'yellow' },
-          {
-            id: 'assign-role',
-            label: 'Assign Role',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'role-admin', label: 'Admin' },
-              { id: 'role-tester', label: 'Tester' },
-              { id: 'role-viewer', label: 'Viewer' }
-            ]
-          },
-          { id: 'permissions', label: 'Set Permissions', icon: 'Shield', color: 'green' }
-        ]
-      },
-      {
-        name: 'communication',
-        actions: [
-          { id: 'notify', label: 'Notify', icon: 'Bell', color: 'blue' },
-          { id: 'email', label: 'Email', icon: 'Mail', color: 'purple' },
-          { id: 'message', label: 'Message', icon: 'Mail', color: 'green' }
-        ]
-      },
-      {
-        name: 'organization',
-        actions: [
-          {
-            id: 'add-to-sprint',
-            label: 'Add to Sprint',
-            icon: 'Target',
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          {
-            id: 'group',
-            label: 'Group',
-            icon: 'FolderOpen',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'group-regression', label: 'Regression Tests' },
-              { id: 'group-smoke', label: 'Smoke Tests' },
-              { id: 'group-integration', label: 'Integration Tests' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'deactivate', label: 'Deactivate', icon: 'Lock', color: 'red' },
-          { id: 'remove', label: 'Remove', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+    recommendations: {
+      icon: 'Lightbulb',
+      color: 'yellow',
+      groups: [
+        {
+          name: 'status',
+          actions: [
+            { id: 'approve', label: 'Approve', icon: 'CheckCircle', color: 'green' },
+            { id: 'reject', label: 'Reject', icon: 'XCircle', color: 'red' },
+            { id: 'review', label: 'Mark for Review', icon: 'Eye', color: 'blue' }
+          ]
+        },
+        {
+          name: 'implementation',
+          actions: [
+            ...(sprintOptions.length > 0 ? [{
+              id: 'add-to-sprint',
+              label: 'Add to Sprint',
+              icon: 'Target',
+              color: 'purple',
+              type: 'select',
+              options: sprintOptions
+            }] : []),
+            ...(userOptions.length > 0 ? [{
+              id: 'assign',
+              label: 'Assign',
+              icon: 'Users',
+              color: 'blue',
+              type: 'select',
+              options: userOptions
+            }] : []),
+            {
+              id: 'priority',
+              label: 'Set Priority',
+              icon: 'Flag',
+              color: 'orange',
+              type: 'select',
+              options: [
+                { id: 'critical', label: 'Critical' },
+                { id: 'high', label: 'High' },
+                { id: 'medium', label: 'Medium' },
+                { id: 'low', label: 'Low' }
+              ]
+            },
+            {
+              id: 'group',
+              label: 'Group Items',
+              icon: 'Layers',
+              color: 'teal',
+              type: 'select',
+              options: groupingOptions
+            }
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true, confirmMessage: 'Archive selected recommendations?' },
+            { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Delete selected recommendations?' }
+          ]
+        }
+      ]
+    },
 
-  recommendations: {
-    icon: 'Lightbulb',
-    color: 'yellow',
-    groups: [
-      {
-        name: 'status',
-        actions: [
-          { id: 'approve', label: 'Approve', icon: 'CheckCircle', color: 'green' },
-          { id: 'reject', label: 'Reject', icon: 'XCircle', color: 'red' },
-          { id: 'review', label: 'Mark for Review', icon: 'Eye', color: 'blue' }
-        ]
-      },
-      {
-        name: 'implementation',
-        actions: [
-          {
-            id: 'add-to-sprint',
-            label: 'Add to Sprint',
-            icon: 'Target',
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          },
-          {
-            id: 'assign',
-            label: 'Assign',
-            icon: 'Users',
-            color: 'blue',
-            type: 'select',
-            options: [
-              { id: 'user-1', label: 'John Doe' },
-              { id: 'user-2', label: 'Jane Smith' },
-              { id: 'user-3', label: 'Mike Johnson' }
-            ]
-          },
-          {
-            id: 'severity',
-            label: 'Set Severity',
-            icon: 'Flag',
-            color: 'orange',
-            type: 'select',
-            options: [
-              { id: 'critical', label: 'Critical' },
-              { id: 'high', label: 'High' },
-              { id: 'medium', label: 'Medium' },
-              { id: 'low', label: 'Low' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true },
-          { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+    sprints: {
+      icon: 'Target',
+      color: 'purple',
+      groups: [
+        {
+          name: 'status',
+          actions: [
+            { id: 'start', label: 'Start Sprint', icon: 'Play', color: 'green' },
+            { id: 'complete', label: 'Complete Sprint', icon: 'CheckCircle', color: 'blue' },
+            { id: 'close', label: 'Close Sprint', icon: 'XCircle', color: 'gray' }
+          ]
+        },
+        {
+          name: 'organization',
+          actions: [
+            {
+              id: 'group',
+              label: 'Group Items',
+              icon: 'Layers',
+              color: 'teal',
+              type: 'select',
+              options: [
+                { id: 'date', label: 'Group by Date' },
+                { id: 'status', label: 'Group by Status' }
+              ]
+            }
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true, confirmMessage: 'Archive selected sprints?' },
+            { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Delete selected sprints?' }
+          ]
+        }
+      ]
+    },
 
-  archive: {
-    icon: 'Archive',
-    color: 'gray',
-    groups: [
-      {
-        name: 'restore',
-        actions: [
-          { id: 'restore', label: 'Restore', icon: 'RotateCcw', color: 'blue' },
-          {
-            id: 'restore-to-sprint',
-            label: 'Restore to Sprint',
-            icon: 'Target',
-            color: 'purple',
-            type: 'select',
-            options: [
-              { id: 'sprint-1', label: 'Sprint 1' },
-              { id: 'sprint-2', label: 'Sprint 2' },
-              { id: 'sprint-3', label: 'Sprint 3' }
-            ]
-          }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'permanent-delete', label: 'Delete Forever', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  },
+    archive: {
+      icon: 'Archive',
+      color: 'gray',
+      groups: [
+        {
+          name: 'restore',
+          actions: [
+            { id: 'restore', label: 'Restore', icon: 'RotateCcw', color: 'blue' },
+            ...(sprintOptions.length > 0 ? [{
+              id: 'restore-to-sprint',
+              label: 'Restore to Sprint',
+              icon: 'Target',
+              color: 'purple',
+              type: 'select',
+              options: sprintOptions
+            }] : [])
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'permanent-delete', label: 'Delete Forever', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Permanently delete selected items? This cannot be undone.' }
+          ]
+        }
+      ]
+    },
 
-  trash: {
-    icon: 'Trash2',
-    color: 'red',
-    groups: [
-      {
-        name: 'restore',
-        actions: [
-          { id: 'restore', label: 'Restore', icon: 'RotateCcw', color: 'blue' }
-        ]
-      },
-      {
-        name: 'actions',
-        actions: [
-          { id: 'permanent-delete', label: 'Delete Forever', icon: 'Trash2', color: 'red', destructive: true }
-        ]
-      }
-    ]
-  }
+    trash: {
+      icon: 'Trash2',
+      color: 'red',
+      groups: [
+        {
+          name: 'restore',
+          actions: [
+            { id: 'restore', label: 'Restore', icon: 'RotateCcw', color: 'blue' }
+          ]
+        },
+        {
+          name: 'actions',
+          actions: [
+            { id: 'permanent-delete', label: 'Delete Forever', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Permanently delete selected items? This cannot be undone.' }
+          ]
+        }
+      ]
+    }
+  };
+
+  return configs[assetType] || { groups: [] };
 };
 
 // Dropdown component for select actions
@@ -613,7 +487,7 @@ const ActionDropdown = ({ action, onSelect, isOpen, onToggle, disabled }) => {
       <Tooltip text={action.label} disabled={isOpen}>
         <button
           onClick={() => onToggle(!isOpen)}
-          disabled={disabled}
+          disabled={disabled || !action.options || action.options.length === 0}
           className="inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative"
         >
           <ActionIcon className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -621,10 +495,10 @@ const ActionDropdown = ({ action, onSelect, isOpen, onToggle, disabled }) => {
         </button>
       </Tooltip>
 
-      {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 w-48 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+      {isOpen && action.options && action.options.length > 0 && (
+        <div className="absolute bottom-full mb-2 left-0 w-48 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
           <div className="py-1">
-            {action.options?.map((option) => (
+            {action.options.map((option) => (
               <button
                 key={option.id}
                 onClick={() => onSelect(action.id, option)}
@@ -641,41 +515,30 @@ const ActionDropdown = ({ action, onSelect, isOpen, onToggle, disabled }) => {
 };
 
 const EnhancedBulkActionsBar = ({
-  // Selection props
   selectedItems = [],
   onClearSelection,
-
-  // Actions configuration - can use predefined or custom
-  assetType = null, // Use predefined config: 'testCases', 'bugs', 'recordings', etc.
-  actionGroups = [], // Custom action groups (overrides assetType)
-
-  // Action handler
+  assetType = null,
+  actionGroups = [],
   onAction,
-
-  // Portal configuration
   portalId = 'bulk-actions-portal',
-
-  // Loading states
   loadingActions = [],
 }) => {
-  const [confirmingActions, setConfirmingActions] = useState(new Set());
+  const { state } = useApp();
   const [openDropdowns, setOpenDropdowns] = useState({});
   const [portalContainer, setPortalContainer] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, config: null, option: null });
 
   useEffect(() => {
-    // Create or find portal container
     let container = document.getElementById(portalId);
     if (!container) {
       container = document.createElement('div');
       container.id = portalId;
-      // Changed positioning to center the bar in the middle of the page
       container.className = 'fixed inset-x-0 bottom-8 pointer-events-none z-50 flex items-center justify-center';
       document.body.appendChild(container);
     }
     setPortalContainer(container);
 
     return () => {
-      // Clean up portal if it's empty
       const existingContainer = document.getElementById(portalId);
       if (existingContainer && existingContainer.children.length === 0) {
         document.body.removeChild(existingContainer);
@@ -683,68 +546,68 @@ const EnhancedBulkActionsBar = ({
     };
   }, [portalId]);
 
-  // Determine configuration to use
+  const sprints = useMemo(() => {
+    return state.sprints?.sprints || [];
+  }, [state.sprints]);
+
+  const teamMembers = useMemo(() => {
+    return state.team?.members || [];
+  }, [state.team]);
+
+  const modules = useMemo(() => {
+    return state.modules?.modules || [];
+  }, [state.modules]);
+
   const config = useMemo(() => {
-    console.log('BulkActionsBar config debug:', { assetType, actionGroups });
-
-    // If custom actionGroups provided, use them
     if (actionGroups.length > 0) {
-      console.log('Using custom actionGroups');
-      return {
-        groups: actionGroups
-      };
+      return { groups: actionGroups };
     }
 
-    // Otherwise, use predefined asset config
-    if (assetType && ASSET_ACTION_CONFIGS[assetType]) {
-      const assetConfig = ASSET_ACTION_CONFIGS[assetType];
-      console.log('Using predefined config for:', assetType, assetConfig);
-      return {
-        groups: assetConfig.groups
-      };
+    if (assetType) {
+      return generateAssetActionConfig(assetType, sprints, teamMembers, modules);
     }
 
-    console.log('Using default config');
-    // Default empty config
-    return {
-      groups: []
-    };
-  }, [assetType, actionGroups]);
+    return { groups: [] };
+  }, [assetType, actionGroups, sprints, teamMembers, modules]);
 
-  // Don't render if no items selected, no portal container, or no actions
-  if (!portalContainer || selectedItems.length === 0 || config.groups.length === 0) {
+  if (!portalContainer || config.groups.length === 0 || selectedItems.length === 0) {
     return null;
   }
 
   const handleAction = async (actionId, actionConfig, selectedOption = null) => {
     const requiresConfirm = actionConfig.requiresConfirm || actionConfig.destructive;
 
-    if (requiresConfirm && !confirmingActions.has(actionId)) {
-      setConfirmingActions(prev => new Set([...prev, actionId]));
-      // Reset confirmation after 3 seconds
-      setTimeout(() => {
-        setConfirmingActions(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(actionId);
-          return newSet;
-        });
-      }, 3000);
+    if (requiresConfirm) {
+      setConfirmDialog({
+        isOpen: true,
+        action: actionId,
+        config: actionConfig,
+        option: selectedOption
+      });
       return;
     }
 
+    executeAction(actionId, actionConfig, selectedOption);
+  };
+
+  const executeAction = async (actionId, actionConfig, selectedOption = null) => {
     try {
       await onAction(actionId, selectedItems, actionConfig, selectedOption);
       onClearSelection();
-      setConfirmingActions(new Set());
       setOpenDropdowns({});
     } catch (error) {
-      console.error(`Error executing bulk action ${actionId}:`, error);
-      setConfirmingActions(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(actionId);
-        return newSet;
-      });
+      console.error('Action failed:', error);
     }
+  };
+
+  const handleConfirmDialogConfirm = () => {
+    const { action, config, option } = confirmDialog;
+    setConfirmDialog({ isOpen: false, action: null, config: null, option: null });
+    executeAction(action, config, option);
+  };
+
+  const handleConfirmDialogClose = () => {
+    setConfirmDialog({ isOpen: false, action: null, config: null, option: null });
   };
 
   const handleDropdownSelect = (actionId, selectedOption) => {
@@ -765,96 +628,88 @@ const EnhancedBulkActionsBar = ({
 
   const handleCancel = () => {
     onClearSelection();
-    setConfirmingActions(new Set());
     setOpenDropdowns({});
   };
 
   return createPortal(
-    <div className="pointer-events-auto mx-2 sm:mx-4">
-      <div className="bg-white border border-gray-300 rounded-xl shadow-xl px-3 sm:px-4 py-3">
-        <div className="flex items-center justify-between">
-          {/* Selection info */}
-          <div className="flex items-center space-x-2 mr-3 sm:mr-4">
-            <span className="text-xs sm:text-sm font-medium text-gray-800 whitespace-nowrap">
-              {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
-            </span>
-          </div>
+    <>
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={handleConfirmDialogClose}
+        onConfirm={handleConfirmDialogConfirm}
+        title={confirmDialog.config?.destructive ? "Confirm Deletion" : "Confirm Action"}
+        message={confirmDialog.config?.confirmMessage || "Are you sure you want to proceed with this action?"}
+        confirmText={confirmDialog.config?.destructive ? "Delete" : "Confirm"}
+        confirmColor={confirmDialog.config?.destructive ? "red" : "yellow"}
+      />
 
-          {/* Actions */}
-          <div className="flex items-center space-x-1 sm:space-x-2">
-            {config.groups.map((group, groupIndex) => (
-              <div key={group.name || groupIndex} className="flex items-center space-x-1 sm:space-x-2">
-                {group.actions.map((action) => {
-                  const ActionIcon = ICONS[action.icon];
-                  const isConfirming = confirmingActions.has(action.id);
-                  const isLoading = loadingActions.includes(action.id);
-                  const requiresConfirm = action.requiresConfirm || action.destructive;
+      <div className="pointer-events-auto mx-2 sm:mx-4">
+        <div className="bg-white border border-gray-300 rounded-md shadow-xl px-3 sm:px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 mr-3 sm:mr-4">
+              <span className="text-xs sm:text-sm font-medium text-gray-800 whitespace-nowrap">
+                {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
+              </span>
+            </div>
 
-                  // Handle select type actions
-                  if (action.type === 'select') {
+            <div className="flex items-center space-x-1 sm:space-x-2">
+              {config.groups.map((group, groupIndex) => (
+                <div key={group.name || groupIndex} className="flex items-center space-x-1 sm:space-x-2">
+                  {group.actions.map((action) => {
+                    const ActionIcon = ICONS[action.icon];
+                    const isLoading = loadingActions.includes(action.id);
+
+                    if (action.type === 'select') {
+                      return (
+                        <ActionDropdown
+                          key={action.id}
+                          action={action}
+                          onSelect={handleDropdownSelect}
+                          isOpen={openDropdowns[action.id] || false}
+                          onToggle={(isOpen) => handleDropdownToggle(action.id, isOpen)}
+                          disabled={isLoading}
+                        />
+                      );
+                    }
+
                     return (
-                      <ActionDropdown
-                        key={action.id}
-                        action={action}
-                        onSelect={handleDropdownSelect}
-                        isOpen={openDropdowns[action.id] || false}
-                        onToggle={(isOpen) => handleDropdownToggle(action.id, isOpen)}
-                        disabled={isLoading}
-                      />
-                    );
-                  }
-
-                  // Regular action buttons
-                  return (
-                    <Tooltip key={action.id} text={isConfirming ? 'Click again to confirm' : action.label}>
-                      <button
-                        onClick={() => handleAction(action.id, action)}
-                        disabled={isLoading}
-                        className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${requiresConfirm
-                            ? isConfirming
-                              ? 'bg-red-600 text-white shadow-md animate-pulse'
-                              : 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
-                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
+                      <Tooltip key={action.id} text={action.label}>
+                        <button
+                          onClick={() => handleAction(action.id, action)}
+                          disabled={isLoading}
+                          className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            action.destructive || action.requiresConfirm
+                              ? 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
+                              : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
                           } focus:outline-none focus:ring-2 focus:ring-offset-1`}
-                      >
-                        <ActionIcon className={`w-3 h-3 sm:w-4 sm:h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                      </button>
-                    </Tooltip>
-                  );
-                })}
+                        >
+                          <ActionIcon className={`w-3 h-3 sm:w-4 sm:h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
 
-                {/* Group separator */}
-                {groupIndex < config.groups.length - 1 && (
-                  <div className="w-px h-4 sm:h-6 bg-gray-300 mx-0.5 sm:mx-1" />
-                )}
-              </div>
-            ))}
+                  {groupIndex < config.groups.length - 1 && (
+                    <div className="w-px h-4 sm:h-6 bg-gray-300 mx-0.5 sm:mx-1" />
+                  )}
+                </div>
+              ))}
 
-            {/* Cancel button */}
-            <Tooltip text="Cancel selection">
-              <button
-                onClick={handleCancel}
-                className="ml-2 sm:ml-4 w-8 h-8 sm:w-10 sm:h-10 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-3 h-3 sm:w-4 sm:h-4" />
-              </button>
-            </Tooltip>
+              <Tooltip text="Cancel selection">
+                <button
+                  onClick={handleCancel}
+                  className="ml-2 sm:ml-4 w-8 h-8 sm:w-10 sm:h-10 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-3 h-3 sm:w-4 sm:h-4" />
+                </button>
+              </Tooltip>
+            </div>
           </div>
         </div>
       </div>
-    </div>,
+    </>,
     portalContainer
   );
-};
-
-// Helper function to get predefined asset config
-export const getAssetConfig = (assetType) => {
-  return ASSET_ACTION_CONFIGS[assetType] || null;
-};
-
-// Helper function to get all available asset types
-export const getAvailableAssetTypes = () => {
-  return Object.keys(ASSET_ACTION_CONFIGS);
 };
 
 export default EnhancedBulkActionsBar;

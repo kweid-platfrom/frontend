@@ -420,27 +420,159 @@ const TestCases = () => {
         }
     }, [testCasesHook.testCasesLocked, testCasesHook.updateTestCase, uiHook.addNotification, handleError]);
 
-    const handleBulkAction = useCallback(async (action, selectedIds) => {
+    const handleBulkAction = useCallback(async (action, selectedIds, actionConfig, selectedOption) => {
         try {
             if (testCasesHook.testCasesLocked) {
                 throw new Error('Test cases are locked. Upgrade to access.');
             }
-
+    
             const timestamp = new Date();
-
+    
+            // Handle undo action
+            if (action === 'undo' && actionConfig?.originalAction) {
+                const originalAction = actionConfig.originalAction;
+                
+                switch (originalAction) {
+                    case 'add-to-sprint':
+                        // Remove items from sprint
+                        await Promise.all(
+                            selectedIds.map((id) =>
+                                testCasesHook.updateTestCase(id, {
+                                    sprintId: null,
+                                    updated_at: timestamp,
+                                })
+                            )
+                        );
+                        break;
+                    
+                    case 'assign':
+                        // Unassign items
+                        await Promise.all(
+                            selectedIds.map((id) =>
+                                testCasesHook.updateTestCase(id, {
+                                    assignee: null,
+                                    updated_at: timestamp,
+                                })
+                            )
+                        );
+                        break;
+                    
+                    case 'delete':
+                    case 'archive':
+                    case 'pass':
+                    case 'fail':
+                    case 'block':
+                    case 'activate':
+                        // Restore previous state - you'll need to store the previous state
+                        // For now, just restore to draft/not_executed
+                        await Promise.all(
+                            selectedIds.map((id) =>
+                                testCasesHook.updateTestCase(id, {
+                                    status: 'draft',
+                                    executionStatus: 'not_executed',
+                                    updated_at: timestamp,
+                                })
+                            )
+                        );
+                        break;
+                }
+    
+                uiHook.addNotification?.({
+                    type: 'success',
+                    title: 'Undone',
+                    message: 'Action has been undone',
+                });
+                return;
+            }
+    
+            // Handle regular actions
             switch (action) {
+                case 'add-to-sprint':
+                    if (!selectedOption?.id) {
+                        throw new Error('No sprint selected');
+                    }
+                    await Promise.all(
+                        selectedIds.map((id) =>
+                            testCasesHook.updateTestCase(id, {
+                                sprintId: selectedOption.id,
+                                sprintName: selectedOption.label,
+                                updated_at: timestamp,
+                            })
+                        )
+                    );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `Added ${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} to ${selectedOption.label}`,
+                    });
+                    break;
+    
+                case 'add-to-module':
+                    if (!selectedOption?.id) {
+                        throw new Error('No module selected');
+                    }
+                    await Promise.all(
+                        selectedIds.map((id) =>
+                            testCasesHook.updateTestCase(id, {
+                                moduleId: selectedOption.id,
+                                moduleName: selectedOption.label,
+                                updated_at: timestamp,
+                            })
+                        )
+                    );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `Added ${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} to ${selectedOption.label}`,
+                    });
+                    break;
+    
+                case 'assign':
+                    if (!selectedOption?.id) {
+                        throw new Error('No user selected');
+                    }
+                    await Promise.all(
+                        selectedIds.map((id) =>
+                            testCasesHook.updateTestCase(id, {
+                                assignee: selectedOption.id,
+                                assigneeName: selectedOption.label,
+                                updated_at: timestamp,
+                            })
+                        )
+                    );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `Assigned ${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} to ${selectedOption.label}`,
+                    });
+                    break;
+    
+                case 'group':
+                    // Handle grouping - this might just be a UI change
+                    uiHook.addNotification?.({
+                        type: 'info',
+                        title: 'Grouped',
+                        message: `Items grouped by ${selectedOption?.label || 'category'}`,
+                    });
+                    break;
+    
                 case 'delete':
                     await Promise.all(selectedIds.map((id) => testCasesHook.deleteTestCase(id)));
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} deleted`,
+                    });
                     break;
-
+    
                 case 'run':
                     uiHook.addNotification?.({
                         type: 'info',
                         title: 'Running Tests',
                         message: `Running ${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''}`,
                     });
-                    return;
-
+                    break;
+    
                 case 'pass':
                 case 'fail':
                 case 'block':
@@ -454,8 +586,13 @@ const TestCases = () => {
                             })
                         )
                     );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} marked as ${statusMap[action]}`,
+                    });
                     break;
-
+    
                 case 'reset':
                     await Promise.all(
                         selectedIds.map((id) =>
@@ -466,9 +603,14 @@ const TestCases = () => {
                             })
                         )
                     );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} reset`,
+                    });
                     break;
-
-                case 'active':
+    
+                case 'activate':
                     await Promise.all(
                         selectedIds.map((id) =>
                             testCasesHook.updateTestCase(id, {
@@ -477,8 +619,13 @@ const TestCases = () => {
                             })
                         )
                     );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} activated`,
+                    });
                     break;
-
+    
                 case 'archive':
                     await Promise.all(
                         selectedIds.map((id) =>
@@ -488,9 +635,24 @@ const TestCases = () => {
                             })
                         )
                     );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} archived`,
+                    });
                     break;
-
+    
+                case 'duplicate':
+                    // Handle duplication logic if needed
+                    uiHook.addNotification?.({
+                        type: 'info',
+                        title: 'Info',
+                        message: 'Duplication not yet implemented',
+                    });
+                    break;
+    
                 default:
+                    // For any other status updates
                     await Promise.all(
                         selectedIds.map((id) =>
                             testCasesHook.updateTestCase(id, {
@@ -499,14 +661,13 @@ const TestCases = () => {
                             })
                         )
                     );
+                    uiHook.addNotification?.({
+                        type: 'success',
+                        title: 'Success',
+                        message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} updated`,
+                    });
                     break;
             }
-
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: `${selectedIds.length} test case${selectedIds.length > 1 ? 's' : ''} updated`,
-            });
         } catch (error) {
             handleError(error, 'bulk action');
         }

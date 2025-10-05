@@ -29,116 +29,116 @@ class FirestoreService extends BaseFirestoreService {
             create: async (suiteId, recordingData, sprintId = null) => {
                 return await this.assets.createRecording(suiteId, recordingData, sprintId);
             },
-            
+
             createRecording: async (suiteId, recordingData, sprintId = null) => {
                 return await this.assets.createRecording(suiteId, recordingData, sprintId);
             },
-            
+
             // Upload and create in one operation
             uploadAndCreate: async (suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) => {
                 return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
             },
-            
+
             uploadAndCreateRecording: async (suiteId, recordingBlob, metadata = {}, sprintId = null, onProgress = null) => {
                 return await this.assets.uploadAndCreateRecording(suiteId, recordingBlob, metadata, sprintId, onProgress);
             },
-            
+
             // Read operations - FIXED: Always exclude deleted/archived by default
             get: async (recordingId, suiteId, sprintId = null) => {
                 return await this.assets.getRecording(recordingId, suiteId, sprintId);
             },
-            
+
             getRecording: async (recordingId, suiteId, sprintId = null) => {
                 return await this.assets.getRecording(recordingId, suiteId, sprintId);
             },
-            
+
             getAll: async (suiteId, sprintId = null, options = {}) => {
                 // FIXED: Default to exclude deleted and archived
-                const defaultOptions = { 
-                    excludeStatus: ['deleted', 'archived'], 
-                    ...options 
+                const defaultOptions = {
+                    excludeStatus: ['deleted', 'archived'],
+                    ...options
                 };
                 return await this.assets.getRecordings(suiteId, sprintId, defaultOptions);
             },
-            
+
             getRecordings: async (suiteId, sprintId = null, options = {}) => {
                 // FIXED: Default to exclude deleted and archived
-                const defaultOptions = { 
-                    excludeStatus: ['deleted', 'archived'], 
-                    ...options 
+                const defaultOptions = {
+                    excludeStatus: ['deleted', 'archived'],
+                    ...options
                 };
                 return await this.assets.getRecordings(suiteId, sprintId, defaultOptions);
             },
-            
+
             // Update operations
             update: async (recordingId, updates, suiteId, sprintId = null) => {
                 return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
             },
-            
+
             updateRecording: async (recordingId, updates, suiteId, sprintId = null) => {
                 return await this.assets.updateRecording(recordingId, updates, suiteId, sprintId);
             },
-            
+
             // Delete operations
             delete: async (recordingId, suiteId, sprintId = null) => {
                 return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
             },
-            
+
             deleteRecording: async (recordingId, suiteId, sprintId = null) => {
                 return await this.assets.deleteRecording(recordingId, suiteId, sprintId);
             },
-            
+
             // Subscribe to real-time updates - FIXED: Filter out deleted/archived
             subscribe: (suiteId, callback, errorCallback = null, sprintId = null) => {
                 return this.assets.subscribeToRecordings(suiteId, (recordings) => {
                     // Filter out deleted and archived items from real-time updates
-                    const activeRecordings = recordings.filter(recording => 
+                    const activeRecordings = recordings.filter(recording =>
                         recording.status !== 'deleted' && recording.status !== 'archived'
                     );
                     callback(activeRecordings);
                 }, errorCallback, sprintId);
             },
-            
+
             subscribeToRecordings: (suiteId, callback, errorCallback = null, sprintId = null) => {
                 return this.assets.subscribeToRecordings(suiteId, (recordings) => {
                     // Filter out deleted and archived items from real-time updates
-                    const activeRecordings = recordings.filter(recording => 
+                    const activeRecordings = recordings.filter(recording =>
                         recording.status !== 'deleted' && recording.status !== 'archived'
                     );
                     callback(activeRecordings);
                 }, errorCallback, sprintId);
             },
-            
+
             // Service status and utility methods
             getServiceStatus: async () => {
                 return await this.assets.getRecordingServiceStatus();
             },
-            
+
             testYouTubeConnection: async () => {
                 return await this.assets.testYouTubeConnection();
             },
-            
+
             isYouTubeAvailable: async () => {
                 return await this.assets.isYouTubeAvailable();
             },
-            
+
             getStatistics: async (suiteId, sprintId = null) => {
                 return await this.assets.getRecordingStatistics(suiteId, sprintId);
             },
-            
+
             // URL utility methods
             getPlaybackUrl: (recordingData) => {
                 return this.assets.recordingService.getPlaybackUrl(recordingData);
             },
-            
+
             getVideoUrl: (recordingData) => {
                 return this.assets.recordingService.getVideoUrl(recordingData);
             },
-            
+
             getRecordingInfo: (recordingData) => {
                 return this.assets.recordingService.getRecordingInfo(recordingData);
             },
-            
+
             validateRecordingData: (recordingData) => {
                 return this.assets.recordingService.validateRecordingData(recordingData);
             }
@@ -506,7 +506,7 @@ class FirestoreService extends BaseFirestoreService {
     subscribeToRecordings(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.assets.subscribeToRecordings(suiteId, (recordings) => {
             // Filter out deleted and archived items from real-time updates
-            const activeRecordings = recordings.filter(recording => 
+            const activeRecordings = recordings.filter(recording =>
                 recording.status !== 'deleted' && recording.status !== 'archived'
             );
             callback(activeRecordings);
@@ -559,7 +559,7 @@ class FirestoreService extends BaseFirestoreService {
     subscribeToBugs(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.bugs.subscribeToBugs(suiteId, (bugs) => {
             // Filter out deleted and archived items from real-time updates
-            const activeBugs = bugs.filter(bug => 
+            const activeBugs = bugs.filter(bug =>
                 bug.status !== 'deleted' && bug.status !== 'archived'
             );
             callback(activeBugs);
@@ -596,7 +596,7 @@ class FirestoreService extends BaseFirestoreService {
     subscribeToTestCases(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.assets.subscribeToTestCases(suiteId, (testCases) => {
             // Filter out deleted and archived items from real-time updates
-            const activeTestCases = testCases.filter(testCase => 
+            const activeTestCases = testCases.filter(testCase =>
                 testCase.status !== 'deleted' && testCase.status !== 'archived'
             );
             callback(activeTestCases);
@@ -633,7 +633,7 @@ class FirestoreService extends BaseFirestoreService {
     subscribeToRecommendations(suiteId, callback, errorCallback = null, sprintId = null) {
         return this.bugs.subscribeToRecommendations(suiteId, (recommendations) => {
             // Filter out deleted and archived items from real-time updates
-            const activeRecommendations = recommendations.filter(rec => 
+            const activeRecommendations = recommendations.filter(rec =>
                 rec.status !== 'deleted' && rec.status !== 'archived'
             );
             callback(activeRecommendations);
@@ -688,9 +688,9 @@ class FirestoreService extends BaseFirestoreService {
         }
 
         if (!recordingId || !bugId || !suiteId) {
-            return { 
-                success: false, 
-                error: { message: 'Recording ID, Bug ID, and Suite ID are all required' } 
+            return {
+                success: false,
+                error: { message: 'Recording ID, Bug ID, and Suite ID are all required' }
             };
         }
 
@@ -735,13 +735,13 @@ class FirestoreService extends BaseFirestoreService {
                 }, suiteId, sprintId);
 
                 if (bugUpdate.success) {
-                    return { 
-                        success: true, 
-                        data: { 
-                            recordingId, 
+                    return {
+                        success: true,
+                        data: {
+                            recordingId,
                             bugId,
                             unlinkedAt: new Date().toISOString()
-                        } 
+                        }
                     };
                 } else {
                     // Rollback recording update if bug update fails
@@ -758,12 +758,12 @@ class FirestoreService extends BaseFirestoreService {
 
         } catch (error) {
             console.error('Error unlinking recording from bug:', error);
-            return { 
-                success: false, 
-                error: { 
+            return {
+                success: false,
+                error: {
                     message: `Failed to unlink recording from bug: ${error.message}`,
                     details: error.stack
-                } 
+                }
             };
         }
     }
@@ -798,11 +798,536 @@ class FirestoreService extends BaseFirestoreService {
     subscribeToSprints(suiteId, callback, errorCallback = null) {
         return this.assets.subscribeToSprints(suiteId, (sprints) => {
             // Filter out deleted and archived items from real-time updates
-            const activeSprints = sprints.filter(sprint => 
+            const activeSprints = sprints.filter(sprint =>
                 sprint.status !== 'deleted' && sprint.status !== 'archived'
             );
             callback(activeSprints);
         }, errorCallback);
+    }
+
+
+    // ========================
+    // DOCUMENTS METHODS
+    // ========================
+
+    async createDocument(suiteId, documentData, sprintId = null) {
+        return await this.assets.createDocument(suiteId, documentData, sprintId);
+    }
+
+    async getDocument(documentId, suiteId, sprintId = null) {
+        return await this.assets.getDocument(documentId, suiteId, sprintId);
+    }
+
+    async getDocuments(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
+        return await this.assets.getDocuments(suiteId, sprintId, defaultOptions);
+    }
+
+    async getAllDocuments(suiteId, sprintId = null, includeStatus = ['active']) {
+        return await this.assets.getDocuments(suiteId, sprintId, { includeStatus });
+    }
+
+    async updateDocument(documentId, updates, suiteId, sprintId = null) {
+        return await this.assets.updateDocument(documentId, updates, suiteId, sprintId);
+    }
+
+    async deleteDocument(documentId, suiteId, sprintId = null) {
+        return await this.archiveTrash.deleteDocument(suiteId, documentId, sprintId, 'User deletion');
+    }
+
+    subscribeToDocuments(suiteId, callback, errorCallback = null, sprintId = null) {
+        return this.assets.subscribeToDocuments(suiteId, (documents) => {
+            const activeDocuments = documents.filter(doc =>
+                doc.status !== 'deleted' && doc.status !== 'archived'
+            );
+            callback(activeDocuments);
+        }, errorCallback, sprintId);
+    }
+
+    // ========================
+    // TEST DATA METHODS
+    // ========================
+
+    async createTestData(suiteId, testData, sprintId = null) {
+        return await this.assets.createTestData(suiteId, testData, sprintId);
+    }
+
+    async getTestDataById(dataId, suiteId, sprintId = null) {
+        return await this.assets.getTestDataById(dataId, suiteId, sprintId);
+    }
+
+    async getTestData(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = { excludeStatus: ['deleted', 'archived'], ...options };
+        return await this.assets.getTestData(suiteId, sprintId, defaultOptions);
+    }
+
+    async getAllTestData(suiteId, sprintId = null, options = {}) {
+        return await this.assets.getTestData(suiteId, sprintId, { includeAll: true, ...options });
+    }
+
+    async updateTestData(dataId, updates, suiteId, sprintId = null) {
+        return await this.assets.updateTestData(dataId, updates, suiteId, sprintId);
+    }
+
+    async deleteTestData(dataId, suiteId, sprintId = null) {
+        return await this.archiveTrash.deleteTestData(suiteId, dataId, sprintId, 'User deletion');
+    }
+
+    subscribeToTestData(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
+        return this.assets.subscribeToTestData(suiteId, (testDataItems) => {
+            const activeData = testDataItems.filter(item =>
+                item.status !== 'deleted' && item.status !== 'archived'
+            );
+            callback(activeData);
+        }, errorCallback, sprintId, options);
+    }
+
+    // Bulk operations for test data
+    async bulkImportTestData(suiteId, testDataArray, sprintId = null) {
+        return await this.assets.bulkImportTestData(suiteId, testDataArray, sprintId);
+    }
+
+    async exportTestData(suiteId, sprintId = null, options = {}) {
+        return await this.assets.exportTestData(suiteId, sprintId, options);
+    }
+
+    // ========================
+    // ENHANCED ARCHIVE OPERATIONS FOR DOCUMENTS AND TEST DATA
+    // ========================
+
+    async archiveDocument(suiteId, documentId, sprintId = null, reason = 'User archive') {
+        return await this.archiveTrash.archiveDocument(suiteId, documentId, sprintId, reason);
+    }
+
+    async unarchiveDocument(suiteId, documentId, sprintId = null) {
+        return await this.archiveTrash.unarchiveDocument(suiteId, documentId, sprintId);
+    }
+
+    async restoreDocumentFromTrash(suiteId, documentId, sprintId = null) {
+        return await this.archiveTrash.restoreDocument(suiteId, documentId, sprintId);
+    }
+
+    async permanentlyDeleteDocument(suiteId, documentId, sprintId = null) {
+        return await this.archiveTrash.permanentlyDeleteDocument(suiteId, documentId, sprintId);
+    }
+
+    async archiveTestData(suiteId, dataId, sprintId = null, reason = 'User archive') {
+        return await this.archiveTrash.archiveTestData(suiteId, dataId, sprintId, reason);
+    }
+
+    async unarchiveTestData(suiteId, dataId, sprintId = null) {
+        return await this.archiveTrash.unarchiveTestData(suiteId, dataId, sprintId);
+    }
+
+    async restoreTestDataFromTrash(suiteId, dataId, sprintId = null) {
+        return await this.archiveTrash.restoreTestData(suiteId, dataId, sprintId);
+    }
+
+    async permanentlyDeleteTestData(suiteId, dataId, sprintId = null) {
+        return await this.archiveTrash.permanentlyDeleteTestData(suiteId, dataId, sprintId);
+    }
+
+    // ========================
+    // QUERY ARCHIVED/TRASHED DOCUMENTS AND TEST DATA
+    // ========================
+
+    async getArchivedDocuments(suiteId, sprintId = null) {
+        return await this.archiveTrash.getArchivedAssets(suiteId, 'documents', sprintId);
+    }
+
+    async getTrashedDocuments(suiteId, sprintId = null) {
+        return await this.archiveTrash.getTrashedAssets(suiteId, 'documents', sprintId);
+    }
+
+    async getArchivedTestData(suiteId, sprintId = null) {
+        return await this.archiveTrash.getArchivedAssets(suiteId, 'testData', sprintId);
+    }
+
+    async getTrashedTestData(suiteId, sprintId = null) {
+        return await this.archiveTrash.getTrashedAssets(suiteId, 'testData', sprintId);
+    }
+
+    // ========================
+    // BULK OPERATIONS FOR DOCUMENTS AND TEST DATA
+    // ========================
+
+    async bulkArchiveDocuments(suiteId, documentIds, sprintId = null, reason = 'Bulk archive') {
+        return await this.bulkArchive(suiteId, 'documents', documentIds, sprintId, reason);
+    }
+
+    async bulkDeleteDocuments(suiteId, documentIds, sprintId = null, reason = 'Bulk deletion') {
+        return await this.bulkDelete(suiteId, 'documents', documentIds, sprintId, reason);
+    }
+
+    async bulkRestoreDocuments(suiteId, documentIds, sprintId = null, fromTrash = false) {
+        return await this.bulkRestore(suiteId, 'documents', documentIds, sprintId, fromTrash);
+    }
+
+    async bulkPermanentDeleteDocuments(suiteId, documentIds, sprintId = null) {
+        return await this.bulkPermanentDelete(suiteId, 'documents', documentIds, sprintId);
+    }
+
+    async bulkArchiveTestData(suiteId, dataIds, sprintId = null, reason = 'Bulk archive') {
+        return await this.bulkArchive(suiteId, 'testData', dataIds, sprintId, reason);
+    }
+
+    async bulkDeleteTestData(suiteId, dataIds, sprintId = null, reason = 'Bulk deletion') {
+        return await this.bulkDelete(suiteId, 'testData', dataIds, sprintId, reason);
+    }
+
+    async bulkRestoreTestData(suiteId, dataIds, sprintId = null, fromTrash = false) {
+        return await this.bulkRestore(suiteId, 'testData', dataIds, sprintId, fromTrash);
+    }
+
+    async bulkPermanentDeleteTestData(suiteId, dataIds, sprintId = null) {
+        return await this.bulkPermanentDelete(suiteId, 'testData', dataIds, sprintId);
+    }
+
+    // ========================
+    // DOCUMENT VERSIONING
+    // ========================
+
+    async getDocumentVersionHistory(suiteId, documentId, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'read');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions' } };
+        }
+
+        try {
+            // Get the current document
+            const docResult = await this.getDocument(documentId, suiteId, sprintId);
+            if (!docResult.success) {
+                return docResult;
+            }
+
+            // Build version history from metadata
+            const doc = docResult.data;
+            const versions = [];
+
+            // Current version
+            versions.push({
+                version: doc.version,
+                content: doc.content,
+                updatedAt: doc.updated_at,
+                updatedBy: doc.updated_by
+            });
+
+            // Previous versions (if stored in metadata)
+            if (doc.metadata?.versionHistory) {
+                versions.push(...doc.metadata.versionHistory);
+            }
+
+            return {
+                success: true,
+                data: {
+                    documentId,
+                    currentVersion: doc.version,
+                    versions: versions.sort((a, b) =>
+                        new Date(b.updatedAt) - new Date(a.updatedAt)
+                    )
+                }
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: { message: `Failed to get version history: ${error.message}` }
+            };
+        }
+    }
+
+    // ========================
+    // TEST DATA UTILITIES
+    // ========================
+
+    async validateTestData(suiteId, dataId, sprintId = null) {
+        const result = await this.getTestDataById(dataId, suiteId, sprintId);
+
+        if (!result.success) {
+            return result;
+        }
+
+        const testData = result.data;
+        const validation = {
+            isValid: true,
+            errors: [],
+            warnings: []
+        };
+
+        // Validate against schema if present
+        if (testData.schema) {
+            try {
+                // Simple schema validation (you can enhance this with a proper JSON schema validator)
+                const requiredFields = testData.schema.required || [];
+                const dataKeys = Object.keys(testData.data);
+
+                for (const field of requiredFields) {
+                    if (!dataKeys.includes(field)) {
+                        validation.errors.push(`Missing required field: ${field}`);
+                        validation.isValid = false;
+                    }
+                }
+            } catch (error) {
+                validation.warnings.push(`Schema validation failed: ${error.message}`);
+            }
+        }
+
+        // Check if data is empty
+        if (!testData.data || Object.keys(testData.data).length === 0) {
+            validation.warnings.push('Test data is empty');
+        }
+
+        // Check if test data is active
+        if (!testData.isActive) {
+            validation.warnings.push('Test data is marked as inactive');
+        }
+
+        return {
+            success: true,
+            data: {
+                testDataId: dataId,
+                validation
+            }
+        };
+    }
+
+    async duplicateTestData(suiteId, dataId, sprintId = null, newName = null) {
+        const result = await this.getTestDataById(dataId, suiteId, sprintId);
+
+        if (!result.success) {
+            return result;
+        }
+
+        const originalData = result.data;
+        const duplicateData = {
+            ...originalData,
+            name: newName || `${originalData.name} (Copy)`,
+            version: '1.0',
+            created_at: undefined,
+            updated_at: undefined,
+            id: undefined
+        };
+
+        return await this.createTestData(suiteId, duplicateData, sprintId);
+    }
+
+    async mergeTestData(suiteId, sourceDataIds, targetName, sprintId = null) {
+        const userId = this.getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: { message: 'User not authenticated' } };
+        }
+
+        const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+        if (!hasAccess) {
+            return { success: false, error: { message: 'Insufficient permissions' } };
+        }
+
+        try {
+            const mergedData = {};
+            const sources = [];
+
+            // Fetch and merge all source test data
+            for (const dataId of sourceDataIds) {
+                const result = await this.getTestDataById(dataId, suiteId, sprintId);
+                if (result.success) {
+                    Object.assign(mergedData, result.data.data);
+                    sources.push({
+                        id: dataId,
+                        name: result.data.name
+                    });
+                }
+            }
+
+            // Create new test data with merged content
+            const newTestData = {
+                name: targetName,
+                type: 'json',
+                data: mergedData,
+                description: `Merged from: ${sources.map(s => s.name).join(', ')}`,
+                metadata: {
+                    mergedFrom: sources,
+                    mergedAt: new Date().toISOString()
+                }
+            };
+
+            return await this.createTestData(suiteId, newTestData, sprintId);
+        } catch (error) {
+            return {
+                success: false,
+                error: { message: `Failed to merge test data: ${error.message}` }
+            };
+        }
+    }
+
+    // ========================
+    // STATISTICS FOR DOCUMENTS AND TEST DATA
+    // ========================
+
+    async getDocumentStatistics(suiteId, sprintId = null) {
+        const documents = await this.getDocuments(suiteId, sprintId, {
+            includeStatus: ['active', 'archived']
+        });
+
+        if (!documents.success) {
+            return documents;
+        }
+
+        const stats = {
+            total: documents.data.length,
+            byType: {},
+            byFormat: {},
+            byStatus: {},
+            totalSize: 0,
+            withAttachments: 0,
+            recentlyUpdated: 0
+        };
+
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        documents.data.forEach(doc => {
+            // Type stats
+            stats.byType[doc.type] = (stats.byType[doc.type] || 0) + 1;
+
+            // Format stats
+            stats.byFormat[doc.format] = (stats.byFormat[doc.format] || 0) + 1;
+
+            // Status stats
+            stats.byStatus[doc.status] = (stats.byStatus[doc.status] || 0) + 1;
+
+            // Size calculation (approximate)
+            stats.totalSize += (doc.content?.length || 0);
+
+            // Attachments
+            if (doc.attachments?.length > 0) stats.withAttachments++;
+
+            // Recently updated
+            const updatedAt = doc.updated_at?.toDate ? doc.updated_at.toDate() : new Date(doc.updated_at);
+            if (updatedAt > oneDayAgo) stats.recentlyUpdated++;
+        });
+
+        return {
+            success: true,
+            data: stats
+        };
+    }
+
+    async getTestDataStatistics(suiteId, sprintId = null) {
+        const testData = await this.getTestData(suiteId, sprintId, {
+            includeStatus: ['active', 'archived']
+        });
+
+        if (!testData.success) {
+            return testData;
+        }
+
+        const stats = {
+            total: testData.data.length,
+            byType: {},
+            byEnvironment: {},
+            byStatus: {},
+            active: 0,
+            inactive: 0,
+            withSchema: 0,
+            totalRecords: 0
+        };
+
+        testData.data.forEach(data => {
+            // Type stats
+            stats.byType[data.type] = (stats.byType[data.type] || 0) + 1;
+
+            // Environment stats
+            stats.byEnvironment[data.environment] = (stats.byEnvironment[data.environment] || 0) + 1;
+
+            // Status stats
+            stats.byStatus[data.status] = (stats.byStatus[data.status] || 0) + 1;
+
+            // Active/Inactive
+            if (data.isActive) stats.active++;
+            else stats.inactive++;
+
+            // Schema validation
+            if (data.schema) stats.withSchema++;
+
+            // Count records
+            if (data.data && typeof data.data === 'object') {
+                if (Array.isArray(data.data)) {
+                    stats.totalRecords += data.data.length;
+                } else {
+                    stats.totalRecords += Object.keys(data.data).length;
+                }
+            }
+        });
+
+        return {
+            success: true,
+            data: stats
+        };
+    }
+
+    // ========================
+    // SEARCH FUNCTIONALITY
+    // ========================
+
+    async searchDocuments(suiteId, searchQuery, sprintId = null, options = {}) {
+        const documents = await this.getDocuments(suiteId, sprintId, options);
+
+        if (!documents.success) {
+            return documents;
+        }
+
+        const query = searchQuery.toLowerCase();
+        const results = documents.data.filter(doc => {
+            return (
+                doc.title?.toLowerCase().includes(query) ||
+                doc.content?.toLowerCase().includes(query) ||
+                doc.tags?.some(tag => tag.toLowerCase().includes(query)) ||
+                doc.type?.toLowerCase().includes(query)
+            );
+        });
+
+        return {
+            success: true,
+            data: results,
+            meta: {
+                query: searchQuery,
+                totalResults: results.length,
+                totalSearched: documents.data.length
+            }
+        };
+    }
+
+    async searchTestData(suiteId, searchQuery, sprintId = null, options = {}) {
+        const testData = await this.getTestData(suiteId, sprintId, options);
+
+        if (!testData.success) {
+            return testData;
+        }
+
+        const query = searchQuery.toLowerCase();
+        const results = testData.data.filter(data => {
+            return (
+                data.name?.toLowerCase().includes(query) ||
+                data.description?.toLowerCase().includes(query) ||
+                data.tags?.some(tag => tag.toLowerCase().includes(query)) ||
+                data.type?.toLowerCase().includes(query) ||
+                data.environment?.toLowerCase().includes(query) ||
+                JSON.stringify(data.data).toLowerCase().includes(query)
+            );
+        });
+
+        return {
+            success: true,
+            data: results,
+            meta: {
+                query: searchQuery,
+                totalResults: results.length,
+                totalSearched: testData.data.length
+            }
+        };
     }
 
     // ========================

@@ -68,12 +68,12 @@ const BugList = ({
     }, []);
 
     // Enhanced bulk action handler with loading states
-    const handleBulkAction = useCallback(async (actionId, selectedItems ) => {
+    const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig, selectedOption) => {
         setLoadingActions(prev => [...prev, actionId]);
         
         try {
             // Call the original onBulkAction
-            await onBulkAction(actionId, selectedItems);
+            await onBulkAction(actionId, selectedItems, actionConfig, selectedOption);
             
             // Show success notification based on action
             const itemCount = selectedItems.length;

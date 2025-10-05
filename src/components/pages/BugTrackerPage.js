@@ -127,44 +127,6 @@ const BugTrackerPage = () => {
         lastUpdated: 'all',
     });
 
-    // Mock recommendations data
-    const [recommendations, setRecommendations] = useState([
-        {
-            id: 'rec1',
-            title: 'Improve Dashboard Performance',
-            description: 'The main dashboard takes too long to load when there are many test cases. We should implement pagination and lazy loading.',
-            rationale: 'Better user experience and reduced server load',
-            status: 'under-review',
-            priority: 'high',
-            category: 'performance',
-            impact: 'high',
-            effort: 'medium',
-            created_by: 'user1',
-            created_at: new Date('2024-01-15'),
-            updated_at: new Date('2024-01-20'),
-            upvotes: 8,
-            downvotes: 1,
-            tags: ['dashboard', 'performance', 'ux'],
-        },
-        {
-            id: 'rec2',
-            title: 'Dark Mode Support',
-            description: 'Add dark mode theme option for better user experience during night work sessions.',
-            rationale: 'Many users work late hours and dark mode reduces eye strain',
-            status: 'approved',
-            priority: 'medium',
-            category: 'ui-ux',
-            impact: 'medium',
-            effort: 'small',
-            created_by: 'user2',
-            created_at: new Date('2024-01-10'),
-            updated_at: new Date('2024-01-25'),
-            upvotes: 15,
-            downvotes: 2,
-            tags: ['ui', 'accessibility', 'theme'],
-        },
-    ]);
-
     // Persist view mode changes to localStorage
     const handleViewModeChange = useCallback((newViewMode) => {
         setViewMode(newViewMode);
@@ -399,8 +361,9 @@ const BugTrackerPage = () => {
         handleError
     ]);
 
-    // Simplified bulk action handler
-    const handleBulkAction = useCallback(async (action, selectedIds) => {
+    // Simplified bulk action handler with proper field mapping
+    const handleBulkAction = useCallback(async (actionId, selectedIds, actionConfig, selectedOption) => {
+        console.log('BULK ACTION:', actionId, 'OPTION:', selectedOption);
         try {
             if (bugsHook.bugsLocked) {
                 throw new Error('Bugs are locked. Upgrade to access.');
@@ -408,25 +371,86 @@ const BugTrackerPage = () => {
 
             const timestamp = new Date();
 
-            switch (action) {
-                case 'delete':
-                    await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id)));
-                    break;
-                default:
-                    for (const id of selectedIds) {
-                        await bugsHook.updateBug(id, {
-                            status: action,
-                            updated_at: timestamp,
-                        });
-                    }
-                    break;
+            // Handle delete action
+            if (actionId === 'delete' || actionId === 'permanent-delete') {
+                await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id)));
+                uiHook.addNotification?.({
+                    type: 'success',
+                    title: 'Success',
+                    message: `${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} deleted`,
+                });
+                return;
             }
 
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: `${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} updated`,
-            });
+            // Map action IDs to proper bug field updates
+            const updates = {};
+
+            // Status actions
+            if (['open', 'resolved', 'close'].includes(actionId)) {
+                updates.status = actionId === 'open' ? 'Open' :
+                    actionId === 'resolved' ? 'Resolved' :
+                        'Closed';
+            }
+            // Archive action
+            else if (actionId === 'archive') {
+                updates.status = 'Archived';
+            }
+            // Restore action
+            else if (actionId === 'restore') {
+                updates.status = 'Open';
+            }
+            // Assignment actions with select dropdown
+            else if (actionId === 'assign' && selectedOption) {
+                updates.assignee = selectedOption.id;
+            }
+            // Severity action with select dropdown
+            else if (actionId === 'severity' && selectedOption) {
+                // Use the selectedOption.id directly - it should already be in correct format
+                updates.severity = selectedOption.id;
+            }
+            // Priority actions
+            else if (['low', 'medium', 'high', 'critical'].includes(actionId)) {
+                updates.priority = actionId.charAt(0).toUpperCase() + actionId.slice(1);
+            }
+
+            // Handle sprint assignment separately
+            if (actionId === 'add-to-sprint' && selectedOption) {
+                const sprintId = selectedOption.id;
+
+                // Update each bug to include the sprintId
+                for (const bugId of selectedIds) {
+                    await bugsHook.updateBug(bugId, {
+                        sprintId: sprintId,
+                        updated_at: timestamp,
+                    });
+                }
+
+                uiHook.addNotification?.({
+                    type: 'success',
+                    title: 'Success',
+                    message: `Added ${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} to ${selectedOption.label}`,
+                });
+                return; // Exit early
+            }
+
+            // Group actions
+            else if (actionId === 'group' && selectedOption) {
+                updates.group = selectedOption.id;
+            }
+            else {
+                console.warn('Unknown bulk action:', actionId);
+                return;
+            }
+
+            // Apply updates to all selected bugs
+            for (const id of selectedIds) {
+                await bugsHook.updateBug(id, {
+                    ...updates,
+                    updated_at: timestamp,
+                });
+            }
+
+            // Note: Notification is handled by bugsHook.updateBug or other listeners
         } catch (error) {
             handleError(error, 'bulk action');
         }
@@ -474,82 +498,6 @@ const BugTrackerPage = () => {
             handleError(error, 'update bug');
         }
     }, [bugsHook.bugsLocked, bugsHook.updateBug, selectedBug, uiHook.addNotification, handleError]);
-
-    // Recommendation handlers
-    const handleCreateRecommendation = useCallback(async (recData) => {
-        try {
-            const newRec = {
-                ...recData,
-                id: `rec-${Date.now()}`,
-                created_at: new Date(),
-                updated_at: new Date(),
-                upvotes: 0,
-                downvotes: 0,
-            };
-            setRecommendations(prev => [...prev, newRec]);
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: 'Feature recommendation created successfully',
-            });
-        } catch (error) {
-            handleError(error, 'create recommendation');
-        }
-    }, [uiHook.addNotification, handleError]);
-
-    const handleUpdateRecommendation = useCallback(async (recData) => {
-        try {
-            setRecommendations(prev =>
-                prev.map(rec => rec.id === recData.id ? { ...rec, ...recData, updated_at: new Date() } : rec)
-            );
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: 'Feature recommendation updated successfully',
-            });
-        } catch (error) {
-            handleError(error, 'update recommendation');
-        }
-    }, [uiHook.addNotification, handleError]);
-
-    const handleVote = useCallback(async (recId, voteType, userId) => {
-        try {
-            setRecommendations(prev =>
-                prev.map(rec => {
-                    if (rec.id === recId) {
-                        const currentVote = rec.userVotes?.[userId];
-                        const updatedRec = { ...rec };
-
-                        if (!updatedRec.userVotes) {
-                            updatedRec.userVotes = {};
-                        }
-
-                        if (currentVote === 'up') {
-                            updatedRec.upvotes = (updatedRec.upvotes || 1) - 1;
-                        } else if (currentVote === 'down') {
-                            updatedRec.downvotes = (updatedRec.downvotes || 1) - 1;
-                        }
-
-                        if (currentVote === voteType) {
-                            delete updatedRec.userVotes[userId];
-                        } else {
-                            updatedRec.userVotes[userId] = voteType;
-                            if (voteType === 'up') {
-                                updatedRec.upvotes = (updatedRec.upvotes || 0) + 1;
-                            } else {
-                                updatedRec.downvotes = (updatedRec.downvotes || 0) + 1;
-                            }
-                        }
-
-                        return updatedRec;
-                    }
-                    return rec;
-                })
-            );
-        } catch (error) {
-            handleError(error, 'vote on recommendation');
-        }
-    }, [handleError]);
 
     // Handler to navigate to traceability page
     const handleOpenTraceability = useCallback(() => {
@@ -770,22 +718,14 @@ const BugTrackerPage = () => {
                     </div>
                 </div>
 
-                <FeatureRecommendationsPage
-                    recommendations={recommendations}
-                    loading={false}
-                    onCreateRecommendation={handleCreateRecommendation}
-                    onUpdateRecommendation={handleUpdateRecommendation}
-                    onVote={handleVote}
-                    currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
-                    teamMembers={bugsHook.teamMembers || []}
-                />
+                <FeatureRecommendationsPage />
             </div>
         );
     }
 
     // Main Bugs page
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen">
             {/* Responsive Page Mode Toggle */}
             <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
                 <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
@@ -859,7 +799,7 @@ const BugTrackerPage = () => {
                             <button
                                 onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
                                 className={`p-2 rounded-lg transition-all ${bugViewType === 'minimal'
-                                    ? 'bg-blue-50 text-blue-700'
+                                    ? 'bg-blue-50 text-primary'
                                     : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                                     }`}
                                 title={`Switch to ${bugViewType === 'full' ? 'minimal' : 'full'} view`}
@@ -893,7 +833,7 @@ const BugTrackerPage = () => {
                                     {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
                                 </span>
                                 {bugViewType === 'minimal' && (
-                                    <span className="hidden sm:inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                    <span className="hidden sm:inline-flex px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
                                         Developer Focus Mode
                                     </span>
                                 )}
@@ -1006,7 +946,7 @@ const BugTrackerPage = () => {
                         isOpen={isImportModalOpen}
                         onClose={() => setIsImportModalOpen(false)}
                         activeSuite={activeSuite}
-                        currentUser={currentUser} 
+                        currentUser={currentUser}
                         bugsHook={bugsHook}
                     />,
                     document.body

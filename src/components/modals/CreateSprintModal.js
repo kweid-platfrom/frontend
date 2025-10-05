@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Calendar, Target, Clock, AlertCircle } from 'lucide-react';
+import { useApp } from '../../context/AppProvider';
 
 const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
+    const { actions } = useApp();
+    
     const [formData, setFormData] = useState({
         name: '',
         description: '',
@@ -12,6 +16,12 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
     });
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
 
     const validateForm = () => {
         const newErrors = {};
@@ -47,7 +57,12 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
     const handleSubmit = async () => {
         if (!validateForm()) return;
         if (!suiteId) {
-            actions.ui?.showError?.('Please select a test suite first');
+            actions.ui?.showNotification?.({
+                id: 'no-suite-error',
+                type: 'error',
+                message: 'Please select a test suite first',
+                duration: 3000
+            });
             return;
         }
 
@@ -68,7 +83,7 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                 }
             };
 
-            const result = await actions.sprints?.createSprint?.(suiteId, sprintData);
+            const result = await actions.sprints?.createSprint?.(sprintData, { activeSuite: { id: suiteId } });
             
             if (result?.success) {
                 onSprintCreated?.(result.data);
@@ -84,14 +99,24 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                 });
                 setErrors({});
                 
-                actions.ui?.showNotification?.('success', `Sprint "${sprintData.name}" created successfully!`, 3000);
+                actions.ui?.showNotification?.({
+                    id: 'sprint-created',
+                    type: 'success',
+                    message: `Sprint "${sprintData.name}" created successfully!`,
+                    duration: 3000
+                });
             } else {
                 throw new Error(result?.error?.message || 'Failed to create sprint');
             }
             
         } catch (error) {
             console.error('Error creating sprint:', error);
-            actions.ui?.showError?.(error.message || 'Failed to create sprint');
+            actions.ui?.showNotification?.({
+                id: 'sprint-create-error',
+                type: 'error',
+                message: error.message || 'Failed to create sprint',
+                duration: 5000
+            });
         } finally {
             setLoading(false);
         }
@@ -104,20 +129,27 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
         }
     };
 
-    if (!isOpen) return null;
+    if (!isOpen || !mounted) return null;
 
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    const modalContent = (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div 
+                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                onClick={onCancel}
+            />
+            
+            {/* Modal */}
+            <div className="relative bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold text-gray-900">Create New Sprint</h2>
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <h2 className="text-xl font-semibold text-foreground">Create New Sprint</h2>
                     <button
                         onClick={onCancel}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="p-2 hover:bg-secondary rounded-lg transition-colors"
                         disabled={loading}
                     >
-                        <X className="h-5 w-5 text-gray-500" />
+                        <X className="h-5 w-5 text-muted-foreground" />
                     </button>
                 </div>
 
@@ -125,15 +157,15 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                 <div className="p-6 space-y-6">
                     {/* Sprint Name */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                             Sprint Name *
                         </label>
                         <input
                             type="text"
                             value={formData.name}
                             onChange={(e) => handleChange('name', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                errors.name ? 'border-red-500' : 'border-gray-300'
+                            className={`w-full px-3 py-2 border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary ${
+                                errors.name ? 'border-red-500' : 'border-border'
                             }`}
                             placeholder="e.g., Sprint 1, User Authentication Sprint"
                             disabled={loading}
@@ -148,14 +180,14 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
 
                     {/* Description */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                             Description
                         </label>
                         <textarea
                             value={formData.description}
                             onChange={(e) => handleChange('description', e.target.value)}
                             rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                             placeholder="Brief description of sprint objectives and scope..."
                             disabled={loading}
                         />
@@ -164,17 +196,17 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                     {/* Date Range */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Start Date *
                             </label>
                             <div className="relative">
-                                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <input
                                     type="date"
                                     value={formData.startDate}
                                     onChange={(e) => handleChange('startDate', e.target.value)}
-                                    className={`w-full pl-10 pr-3 py-2 border rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                        errors.startDate ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full pl-10 pr-3 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary ${
+                                        errors.startDate ? 'border-red-500' : 'border-border'
                                     }`}
                                     disabled={loading}
                                 />
@@ -188,17 +220,17 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 End Date *
                             </label>
                             <div className="relative">
-                                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <input
                                     type="date"
                                     value={formData.endDate}
                                     onChange={(e) => handleChange('endDate', e.target.value)}
-                                    className={`w-full pl-10 pr-3 py-2 border rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                        errors.endDate ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full pl-10 pr-3 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary ${
+                                        errors.endDate ? 'border-red-500' : 'border-border'
                                     }`}
                                     disabled={loading}
                                 />
@@ -214,16 +246,16 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
 
                     {/* Goals */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                             Sprint Goals
                         </label>
                         <div className="relative">
-                            <Target className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                            <Target className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <textarea
                                 value={formData.goals}
                                 onChange={(e) => handleChange('goals', e.target.value)}
                                 rows={3}
-                                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                className="w-full pl-10 pr-3 py-2 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                                 placeholder="Key objectives and deliverables for this sprint..."
                                 disabled={loading}
                             />
@@ -232,13 +264,13 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
 
                     {/* Status */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                             Initial Status
                         </label>
                         <select
                             value={formData.status}
                             onChange={(e) => handleChange('status', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                             disabled={loading}
                         >
                             <option value="planning">Planning</option>
@@ -248,11 +280,11 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                    <div className="flex justify-end space-x-3 pt-4 border-t border-border">
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 rounded-lg border border-gray-300 transition-colors"
+                            className="px-4 py-2 text-sm font-medium text-foreground hover:text-foreground/80 bg-background hover:bg-secondary rounded-lg border border-border transition-colors"
                             disabled={loading}
                         >
                             Cancel
@@ -260,7 +292,7 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                         <button
                             type="button"
                             onClick={handleSubmit}
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={loading}
                         >
                             {loading ? 'Creating...' : 'Create Sprint'}
@@ -270,6 +302,8 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
             </div>
         </div>
     );
+
+    return createPortal(modalContent, document.body);
 };
 
 export default CreateSprintModal;
