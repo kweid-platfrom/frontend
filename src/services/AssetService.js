@@ -56,7 +56,7 @@ export class AssetService extends BaseFirestoreService {
             lastActivity: new Date()
         }, true);
 
-        return await this.updateDocument(collectionPath, assetId, data);
+        return await super.updateDocument(collectionPath, assetId, data);
     }
 
     async deleteSuiteAsset(suiteId, assetType, assetId, sprintId = null) {
