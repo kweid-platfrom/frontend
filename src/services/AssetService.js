@@ -630,7 +630,6 @@ export class AssetService extends BaseFirestoreService {
                 };
             }
 
-            const token = await this.getFirebaseToken();
             const exportUrl = `/api/docs/export?docId=${document.docId}&format=${format}`;
 
             return {

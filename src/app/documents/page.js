@@ -11,7 +11,7 @@ import { useApp } from '@/context/AppProvider';
 
 export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: propSprintId = null }) {
     // Get context
-    const { activeSuite, actions, state } = useApp();
+    const { activeSuite, actions } = useApp();
     
     // Extract actual string IDs - handle if objects are passed
     const suiteId = typeof propSuiteId === 'string' 
@@ -103,7 +103,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         setShowEditor(true);
     };
 
-    const handleSaveSuccess = (savedDoc) => {
+    const handleSaveSuccess = () => {
         setShowEditor(false);
         setSelectedDocument(null);
         loadDocuments();

@@ -1,5 +1,5 @@
 // app/api/docs/list/route.js - List documents
-async function listDocsHandler(request, { user }) {
+async function listDocsHandler() {
     try {
         const { drive } = getGoogleClients();
 

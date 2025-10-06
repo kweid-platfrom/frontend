@@ -1,5 +1,5 @@
 // app/api/docs/export/route.js - Export Google Doc
-async function exportDocHandler(request, { user }) {
+async function exportDocHandler(request, { }) {
     try {
         const { searchParams } = new URL(request.url);
         const docId = searchParams.get('docId');

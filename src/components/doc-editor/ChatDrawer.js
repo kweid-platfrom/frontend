@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, Send, Tag, User, Smile, Paperclip, Search, Loader2
 } from 'lucide-react';
+import Image from 'next/image';
 
 export default function ChatDrawer({ 
   isOpen, 
@@ -203,10 +204,12 @@ export default function ChatDrawer({
                       <div className={`w-7 h-7 flex-shrink-0 ${!showAvatar && 'opacity-0'}`}>
                         {!isOwn && (
                           comment.userAvatar ? (
-                            <img 
+                            <Image 
                               src={comment.userAvatar} 
                               alt={comment.userName}
                               className="w-7 h-7 rounded-full object-cover"
+                              width={28}
+                              height={28}
                             />
                           ) : (
                             <div className="w-7 h-7 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
@@ -389,10 +392,12 @@ export default function ChatDrawer({
             <div className="space-y-2">
               <div className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg">
                 {currentUser.avatar ? (
-                  <img 
+                  <Image
                     src={currentUser.avatar} 
                     alt={currentUser.name}
                     className="w-8 h-8 rounded-full object-cover"
+                    width={32}
+                    height={32}
                   />
                 ) : (
                   <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-teal-600 rounded-full flex items-center justify-center text-white font-bold text-xs">

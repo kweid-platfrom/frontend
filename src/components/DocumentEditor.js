@@ -152,7 +152,6 @@ export default function DocumentEditor({
 
   const handleChange = useCallback((editorState, editor) => {
     editorState.read(() => {
-      const root = $getRoot();
       const htmlString = $generateHtmlFromNodes(editor, null);
       setContent(htmlString);
       setHasUnsavedChanges(true);

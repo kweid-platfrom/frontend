@@ -9,7 +9,7 @@ export async function POST(request) {
             );
         }
 
-        const { docId, emails, role, userId } = await request.json();
+        const { docId, emails, role } = await request.json();
 
         if (!docId || !emails || !Array.isArray(emails)) {
             return NextResponse.json(
