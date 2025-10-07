@@ -10,10 +10,18 @@ import AppHeader from './AppHeader';
 import FeatureAccessBanner from '../common/FeatureAccessBanner';
 import NotificationCenter from '../notifications/NotificationCenter';
 
-const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false, disableNavigation = false }) => {
+const PageLayout = ({ 
+    title, 
+    children, 
+    toolbar = null, 
+    requiresTestSuite = false, 
+    disableNavigation = false,
+    onCreateDocument = null 
+}) => {
     const pathname = usePathname();
     const { state } = useApp();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [setShowBugForm] = useState(false);
 
     const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
     const isPublicRoute = publicRoutes.includes(pathname);
@@ -53,6 +61,10 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
             setSidebarOpen(false);
         }
     }, [disableNavigation]);
+
+    const handleSetActivePage = useCallback((page) => {
+        console.log('Active page:', page);
+    }, []);
 
     if (isPublicRoute) {
         return <>{children}</>;
@@ -173,20 +185,21 @@ const PageLayout = ({ title, children, toolbar = null, requiresTestSuite = false
             </Head>
             <div className="flex h-screen bg-background overflow-hidden">
                 {/* Sidebar */}
-                <AppSidebar 
+                <AppSidebar
                     open={sidebarOpen}
                     onClose={handleSidebarClose}
                     activeModule={pathname.split('/')[1] || 'dashboard'}
-                    onNavigate={() => {}}
+                    onNavigate={() => { }}
                     disabled={disableNavigation}
                 />
 
                 <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                     {/* Header */}
-                    <AppHeader 
+                    <AppHeader
                         onMenuClick={handleSidebarToggle}
-                        setShowBugForm={() => {}}
-                        setActivePage={() => {}}
+                        setShowBugForm={setShowBugForm}
+                        setActivePage={handleSetActivePage}
+                        onCreateDocument={onCreateDocument}
                         disabled={disableNavigation}
                     />
 
