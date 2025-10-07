@@ -18,10 +18,10 @@ const HeaderButtons = ({
     disabled = false
 }) => {
     const [showMobileMenu, setShowMobileMenu] = useState(false);
-    const [mobileMenuPosition, setMobileMenuPosition] = useState({ 
-        top: 0, 
-        left: 0, 
-        right: 'auto' 
+    const [mobileMenuPosition, setMobileMenuPosition] = useState({
+        top: 0,
+        left: 0,
+        right: 'auto'
     });
 
     const mobileMenuRef = useRef(null);
@@ -52,7 +52,7 @@ const HeaderButtons = ({
 
     useEffect(() => {
         if (disabled) return;
-        
+
         const handleClickOutside = (event) => {
             if (
                 mobileMenuRef.current &&
@@ -326,4 +326,3 @@ const HeaderButtons = ({
 };
 
 export default HeaderButtons;
-            

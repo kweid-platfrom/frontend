@@ -2,6 +2,7 @@
 //@ts-nocheck
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     FileText, Plus, Search, Trash2, Archive, ExternalLink,
     Edit, Download, Share2, Copy, MoreVertical, ArchiveRestore, Loader2,
@@ -13,6 +14,7 @@ import { useApp } from '@/context/AppProvider';
 export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: propSprintId = null }) {
     // Get context
     const { activeSuite, actions } = useApp();
+    const searchParams = useSearchParams();
     
     // Extract actual string IDs - handle if objects are passed
     const suiteId = typeof propSuiteId === 'string' 
@@ -23,21 +25,14 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         ? propSprintId
         : propSprintId?.id || null;
     
-    // Log for debugging
-    useEffect(() => {
-        console.log('DocumentsDashboard IDs:', { 
-            suiteId, 
-            sprintId,
-            propSuiteId,
-            activeSuiteId: activeSuite?.id 
-        });
-    }, [suiteId, sprintId, propSuiteId, activeSuite]);
+    // Check if we should auto-open create mode from URL
+    const shouldAutoCreate = searchParams?.get('create') === 'true';
     
     const [documents, setDocuments] = useState([]);
     const [archivedDocs, setArchivedDocs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [showEditor, setShowEditor] = useState(false);
+    const [showEditor, setShowEditor] = useState(shouldAutoCreate);
     const [selectedDocument, setSelectedDocument] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
@@ -46,6 +41,25 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
     const [viewMode, setViewMode] = useState('grid');
     const [showArchived, setShowArchived] = useState(false);
     const [selectedDocs, setSelectedDocs] = useState([]);
+    
+    // Log for debugging
+    useEffect(() => {
+        console.log('DocumentsDashboard IDs:', { 
+            suiteId, 
+            sprintId,
+            propSuiteId,
+            activeSuiteId: activeSuite?.id,
+            shouldAutoCreate 
+        });
+    }, [suiteId, sprintId, propSuiteId, activeSuite, shouldAutoCreate]);
+    
+    // Auto-open editor if create=true in URL
+    useEffect(() => {
+        if (shouldAutoCreate && suiteId) {
+            setShowEditor(true);
+            setSelectedDocument(null);
+        }
+    }, [shouldAutoCreate, suiteId]);
 
     useEffect(() => {
         if (suiteId) {
@@ -108,6 +122,13 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         setShowEditor(false);
         setSelectedDocument(null);
         loadDocuments();
+        
+        // Clear the create parameter from URL if present
+        if (shouldAutoCreate && window.history.replaceState) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('create');
+            window.history.replaceState({}, '', url);
+        }
     };
 
     const handleDelete = async (docId) => {
@@ -278,10 +299,17 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                 onCancel={() => {
                     setShowEditor(false);
                     setSelectedDocument(null);
+                    
+                    // Clear the create parameter from URL if present
+                    if (shouldAutoCreate && window.history.replaceState) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('create');
+                        window.history.replaceState({}, '', url);
+                    }
                 }}
             />
         );
-    }
+    };
 
     if (!suiteId) {
         return (
@@ -320,10 +348,10 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                         {!showArchived && (
                             <button
                                 onClick={handleCreateNew}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded hover:bg-primary/80 transition-colors"
                             >
                                 <Plus className="w-5 h-5" />
-                                New Document
+                                New
                             </button>
                         )}
                     </div>
@@ -338,14 +366,14 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search documents by title, content, or tags..."
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
                         />
                     </div>
 
                     <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
                     >
                         <option value="all">All Types</option>
                         {documentTypes.map(type => (
@@ -358,7 +386,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
                     >
                         <option value="created_at">Created Date</option>
                         <option value="updated_at">Modified Date</option>
@@ -395,7 +423,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                 {/* Bulk Actions Bar */}
                 {selectedDocs.length > 0 && (
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-                        <span className="text-sm text-blue-900">
+                        <span className="text-sm text-orange-900">
                             {selectedDocs.length} document{selectedDocs.length > 1 ? 's' : ''} selected
                         </span>
                         <div className="flex gap-2">
@@ -429,7 +457,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                 {loading ? (
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center">
-                            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+                            <Loader2 className="w-12 h-12 text-orange-600 animate-spin mx-auto mb-4" />
                             <p className="text-gray-600">Loading documents...</p>
                         </div>
                     </div>
@@ -454,7 +482,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                             {!searchQuery && filterType === 'all' && !showArchived && (
                                 <button
                                     onClick={handleCreateNew}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/80 transition-colors"
                                 >
                                     Create Document
                                 </button>
@@ -549,7 +577,7 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onArch
     };
 
     return (
-        <div className={`bg-white rounded-lg border hover:shadow-lg transition-shadow ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+        <div className={`bg-white rounded-lg border hover:shadow-lg transition-shadow ${isSelected ? 'border-orange-500 ring-1 ring-orange-200' : 'border-gray-200'
             }`}>
             <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
@@ -561,7 +589,7 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onArch
                             className="mt-1 rounded"
                         />
                         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-5 h-5 text-blue-600" />
+                            <FileText className="w-5 h-5 text-orange-600" />
                         </div>
                         <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1">
@@ -675,7 +703,7 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onArch
                         href={document.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="flex items-center justify-center gap-2 w-full px-3 py-2 text-sm text-orange-600 hover:bg-blue-50 rounded-lg transition-colors"
                     >
                         <ExternalLink className="w-4 h-4" />
                         Open in Google Docs
@@ -686,7 +714,7 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onArch
     );
 }
 
-// Document Row Component for List View (keeping it as is but adding backdrop for menu)
+// Document Row Component for List View
 function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onArchive, onUnarchive, onDuplicate, onExport, onShare, showArchived }) {
     const [showMenu, setShowMenu] = useState(false);
 

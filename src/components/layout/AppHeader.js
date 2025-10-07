@@ -17,12 +17,18 @@ import UserMenuDropdown from '../UserMenuDropdown';
 import SuiteSelector from './head/SuiteSelector';
 import CalendarTime from './head/CalendarTime';
 import HeaderSearch from './head/HeaderSearch';
-import HeaderButtons from './head//HeaderButtons';
+import HeaderButtons from './head/HeaderButtons';
 import AddUserButton from './head/AddUserButton';
 import { safeArray, safeLength, safeMap } from '../../utils/safeArrayUtils';
 
 
-const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = false }) => {
+const AppHeader = ({ 
+    onMenuClick, 
+    setShowBugForm, 
+    setActivePage, 
+    onCreateDocument,
+    disabled = false 
+}) => {
     const { state, actions } = useApp();
     const router = useRouter();
 
@@ -138,11 +144,41 @@ const AppHeader = ({ onMenuClick, setShowBugForm, setActivePage, disabled = fals
         setShowCreateSprintModal(false);
         actions.ui.showNotification('success', `Sprint "${sprint.name}" created successfully!`, 3000);
     };
-
-    // Document creation handler
+    
+    // Document creation handler - FIXED
     const handleCreateDocument = () => {
         if (disabled) return;
-        router.push('/documents/create');
+        
+        if (!activeSuite) {
+            actions.ui.showError('Please select a test suite first');
+            return;
+        }
+        
+        // Priority 1: Use parent callback if provided
+        if (onCreateDocument && typeof onCreateDocument === 'function') {
+            onCreateDocument();
+            return;
+        }
+        
+        // Priority 2: Use context action if available
+        if (actions.documents?.showDocumentEditor) {
+            actions.documents.showDocumentEditor();
+            return;
+        }
+        
+        // Priority 3: Navigate to documents page with create flag
+        const suiteId = activeSuite.id;
+        const activeSprint = state.sprints?.activeSprint;
+        const sprintId = activeSprint?.id;
+        
+        if (sprintId) {
+            router.push(`/documents?suiteId=${suiteId}&sprintId=${sprintId}&create=true`);
+        } else {
+            router.push(`/documents?suiteId=${suiteId}&create=true`);
+        }
+        
+        // Show success notification
+        actions.ui.showNotification('info', 'Opening document editor...', 2000);
     };
 
     // Get unread notifications count
