@@ -23,7 +23,7 @@ import ChatDrawer from '../components/doc-editor/ChatDrawer';
 import ShareModal from '../components/doc-editor/ShareModal';
 import { useApp } from '../context/AppProvider';
 import FirestoreService from '../services';
-import { CommentsService } from '../services/CommentsService';
+import CommentsService from '../services/commentsService'
 
 // Auto-save hook
 function useAutoSave(callback, delay = 10000) {
