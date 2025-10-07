@@ -1,5 +1,10 @@
 // app/api/docs/update/route.js - Update Google Doc content
-async function updateDocHandler(request, { user }) {
+import { NextResponse } from 'next/server';
+import googleDocsService from '../../../../lib/goggleDocsService';
+
+export const dynamic = 'force-dynamic';
+
+export async function PUT(request) {
     try {
         const { docId, content } = await request.json();
 
@@ -10,40 +15,20 @@ async function updateDocHandler(request, { user }) {
             );
         }
 
-        const { docs } = getGoogleClients();
+        if (!content) {
+            return NextResponse.json(
+                { error: 'Content is required' },
+                { status: 400 }
+            );
+        }
 
-        // Get current document to determine end index
-        const doc = await docs.documents.get({ documentId: docId });
-        const endIndex = doc.data.body.content[doc.data.body.content.length - 1].endIndex;
-
-        // Replace all content
-        await docs.documents.batchUpdate({
-            documentId: docId,
-            requestBody: {
-                requests: [
-                    {
-                        deleteContentRange: {
-                            range: {
-                                startIndex: 1,
-                                endIndex: endIndex - 1
-                            }
-                        }
-                    },
-                    {
-                        insertText: {
-                            location: { index: 1 },
-                            text: content
-                        }
-                    }
-                ]
-            }
-        });
+        // Update the Google Doc
+        const result = await googleDocsService.updateDocument(docId, content);
 
         return NextResponse.json({
             success: true,
-            docId,
-            updatedBy: user.uid,
-            updatedAt: new Date().toISOString()
+            docId: result.docId,
+            updatedAt: result.updatedAt
         });
 
     } catch (error) {
@@ -54,5 +39,3 @@ async function updateDocHandler(request, { user }) {
         );
     }
 }
-
-export const PUT = withAuth(updateDocHandler);

@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { withAuth } from '@/lib/firebaseAuthMiddleware';
 
+export const dynamic = 'force-dynamic';
+
 function getGoogleClients() {
     const auth = new google.auth.GoogleAuth({
         credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
@@ -20,7 +22,7 @@ function getGoogleClients() {
 
 async function createDocHandler(request, { user }) {
     try {
-        const { title, content, suiteId, sprintId } = await request.json();
+        const { title, content } = await request.json();
 
         if (!title) {
             return NextResponse.json(

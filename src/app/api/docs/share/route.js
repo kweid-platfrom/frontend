@@ -1,14 +1,11 @@
 // app/api/docs/share/route.js - Share Google Doc
+import { NextResponse } from 'next/server';
+import googleDocsService from '../../../../lib/goggleDocsService';
+
+export const dynamic = 'force-dynamic';
+
 export async function POST(request) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
         const { docId, emails, role } = await request.json();
 
         if (!docId || !emails || !Array.isArray(emails)) {
@@ -18,33 +15,25 @@ export async function POST(request) {
             );
         }
 
-        const { drive } = getGoogleClients();
-        const permissions = [];
-
-        // Add permissions for each email
-        for (const email of emails) {
-            const permission = await drive.permissions.create({
-                fileId: docId,
-                requestBody: {
-                    type: 'user',
-                    role: role || 'reader',
-                    emailAddress: email
-                },
-                sendNotificationEmail: true
-            });
-
-            permissions.push({
-                email,
-                role: role || 'reader',
-                permissionId: permission.data.id
-            });
+        if (emails.length === 0) {
+            return NextResponse.json(
+                { error: 'At least one email is required' },
+                { status: 400 }
+            );
         }
+
+        // Valid roles: reader, writer, commenter
+        const validRoles = ['reader', 'writer', 'commenter'];
+        const shareRole = role && validRoles.includes(role) ? role : 'reader';
+
+        // Share the document
+        const result = await googleDocsService.shareDocument(docId, emails, shareRole);
 
         return NextResponse.json({
             success: true,
-            docId,
-            permissions,
-            sharedAt: new Date().toISOString()
+            docId: result.docId,
+            permissions: result.permissions,
+            sharedAt: result.sharedAt
         });
 
     } catch (error) {

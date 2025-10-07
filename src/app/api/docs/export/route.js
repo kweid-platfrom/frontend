@@ -1,5 +1,27 @@
 // app/api/docs/export/route.js - Export Google Doc
-async function exportDocHandler(request, { }) {
+import { NextResponse } from 'next/server';
+import { google } from 'googleapis';
+import { withAuth } from '@/lib/firebaseAuthMiddleware';
+
+// Add this to tell Next.js this is a dynamic route
+export const dynamic = 'force-dynamic';
+
+function getGoogleClients() {
+    const auth = new google.auth.GoogleAuth({
+        credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
+        scopes: [
+            'https://www.googleapis.com/auth/documents',
+            'https://www.googleapis.com/auth/drive'
+        ]
+    });
+
+    return {
+        docs: google.docs({ version: 'v1', auth }),
+        drive: google.drive({ version: 'v3', auth })
+    };
+}
+
+async function exportDocHandler(request) {
     try {
         const { searchParams } = new URL(request.url);
         const docId = searchParams.get('docId');

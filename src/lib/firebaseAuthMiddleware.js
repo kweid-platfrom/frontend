@@ -1,4 +1,5 @@
 // lib/firebaseAuthMiddleware.js - Verify Firebase tokens in API routes
+import { NextResponse } from 'next/server';
 import admin from './firebaseAdmin';
 
 /**
@@ -38,23 +39,21 @@ export async function verifyFirebaseAuth(request) {
 
 /**
  * Wrapper for API routes that require authentication
- * @param {Function} handler - The API route handler function
- * @returns {Function} Wrapped handler with authentication
+ * @template {(req: any, ctx: any) => any} T
+ * @param {T} handler - The API route handler function
+ * @returns {(req: any, ctx: any) => Promise<Response>} Wrapped handler with authentication
  */
 export function withAuth(handler) {
-    return async (request, context) => {
+    return async function POST(request, context) {
         const { user, error } = await verifyFirebaseAuth(request);
 
         if (error || !user) {
-            return new Response(
-                JSON.stringify({ 
+            return NextResponse.json(
+                { 
                     success: false, 
                     error: { message: error || 'Authentication required' } 
-                }),
-                { 
-                    status: 401,
-                    headers: { 'Content-Type': 'application/json' }
-                }
+                },
+                { status: 401 }
             );
         }
 
