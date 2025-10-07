@@ -1,3 +1,5 @@
+'use client'
+
 export const getFirebaseErrorMessage = (error) => {
     // Debug logging for development
     if (process.env.NODE_ENV === 'development') {

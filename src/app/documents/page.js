@@ -1,10 +1,6 @@
-import React from 'react';
-import DocumentsPage from '@/components/pages/DocumentsPage';
 
-const Documents = () => {
-    return (
-            <DocumentsPage />
-    );
-};
+import DocumentsDashboard from '@/components/pages/DocumentsPage';
 
-export default Documents;
+export default function DocumentsPage() {
+  return <DocumentsDashboard />;
+}

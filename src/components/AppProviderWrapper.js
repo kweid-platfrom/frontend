@@ -10,7 +10,6 @@ import Login from './auth/Login';
 import PageLayout from './layout/PageLayout';
 import CreateSuiteModal from './modals/createSuiteModal';
 import TipsMode from './TipsMode';
-import { toast } from 'sonner';
 
 // Persistent storage for tracking user interactions
 const STORAGE_KEY = 'userAppInteractions';
@@ -57,7 +56,6 @@ const ProtectedRouteContent = ({ children }) => {
   const bypassTipsModeRoutes = ['/documents', '/documents/create'];
   const interactiveRoutes = ['/test-cases', '/bugs', '/sprints', '/dashboard'];
   const shouldBypassTipsMode = bypassTipsModeRoutes.some((route) => pathname.startsWith(route));
-
 
   // Track user interactions
   const trackInteraction = useCallback(() => {
@@ -123,18 +121,34 @@ const ProtectedRouteContent = ({ children }) => {
           await actions.suites.activateSuite(suiteData);
           trackInteraction(); // Count suite creation as an interaction
         }
-        toast.success('Test suite created successfully!', { duration: 5000 });
+        
+        // Use centralized notification system instead of direct toast
+        actions.ui.showNotification({
+          id: `suite-created-${Date.now()}`,
+          type: 'success',
+          message: 'Test suite created successfully!',
+          duration: 5000
+        });
+        
         setShowCreateSuiteModal(false);
         setShowTipsMode(interactionCount < INTERACTION_THRESHOLD && !shouldBypassTipsMode);
         setAppReady(true);
       } catch (error) {
         console.error('Error after suite creation:', error);
-        toast.error('Suite created but failed to reload. Please refresh.');
+        
+        // Use centralized notification system for errors
+        actions.ui.showNotification({
+          id: `suite-error-${Date.now()}`,
+          type: 'error',
+          message: 'Suite created but failed to reload. Please refresh.',
+          duration: 5000
+        });
+        
         setShowCreateSuiteModal(false);
         setAppReady(true);
       }
     },
-    [actions.suites, interactionCount, shouldBypassTipsMode, trackInteraction]
+    [actions.suites, actions.ui, interactionCount, shouldBypassTipsMode, trackInteraction]
   );
 
   const handleTipsSuiteCreated = useCallback(
@@ -145,18 +159,33 @@ const ProtectedRouteContent = ({ children }) => {
           await actions.suites.activateSuite(newSuite);
           trackInteraction(); // Count suite creation as an interaction
         }
-        toast.success('Test suite created successfully!', { duration: 5000 });
+        
+        // Use centralized notification system
+        actions.ui.showNotification({
+          id: `tips-suite-created-${Date.now()}`,
+          type: 'success',
+          message: 'Test suite created successfully!',
+          duration: 5000
+        });
+        
         setShowTipsMode(interactionCount < INTERACTION_THRESHOLD && !shouldBypassTipsMode);
         setAppReady(true);
       } catch (error) {
         console.error('Error after tips suite creation:', error);
-        toast.error('Suite created but failed to reload. Please refresh.');
+        
+        // Use centralized notification system for errors
+        actions.ui.showNotification({
+          id: `tips-suite-error-${Date.now()}`,
+          type: 'error',
+          message: 'Suite created but failed to reload. Please refresh.',
+          duration: 5000
+        });
       }
     },
-    [actions.suites, interactionCount, shouldBypassTipsMode, trackInteraction]
+    [actions.suites, actions.ui, interactionCount, shouldBypassTipsMode, trackInteraction]
   );
 
-  // Main effect for authentication and suite handling (rest of your existing logic remains the same)
+  // Main effect for authentication and suite handling
   useEffect(() => {
     let mounted = true;
 
@@ -203,7 +232,14 @@ const ProtectedRouteContent = ({ children }) => {
           await actions.subscription.handleTrialExpiry(state.suites, actions.suites, actions.ui);
         } catch (error) {
           console.error('Error handling trial expiry:', error);
-          toast.error(error.message || 'Error updating subscription.');
+          
+          // Use centralized notification system
+          actions.ui.showNotification({
+            id: `trial-expiry-error-${Date.now()}`,
+            type: 'error',
+            message: error.message || 'Error updating subscription.',
+            duration: 5000
+          });
         }
         setAppReady(false);
         return;
@@ -329,7 +365,7 @@ const ProtectedRouteContent = ({ children }) => {
           trialDaysRemaining={state.subscription.trialDaysRemaining}
           isOrganizationAccount={state.auth.currentUser?.accountType === 'organization'}
           onSuiteCreated={handleTipsSuiteCreated}
-          onInteraction={trackInteraction} // Pass interaction handler for TipsMode actions
+          onInteraction={trackInteraction}
         />
         <div id="modal-root" />
         <div id="toast-root" />
