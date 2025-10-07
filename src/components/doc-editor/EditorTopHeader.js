@@ -52,7 +52,7 @@ export default function EditorTopHeader({
         <select
           value={type}
           onChange={(e) => handleTypeChange(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-orange-500 focus:border-transparent"
         >
           <option value="general">General</option>
           <option value="test-plan">Test Plan</option>
@@ -80,14 +80,14 @@ export default function EditorTopHeader({
         <div className="relative">
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
-            className="px-4 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+            className="px-4 py-1.5 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             Export
           </button>
           
           {showExportMenu && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded shadow-lg border border-gray-200 py-1 z-20">
               <button
                 onClick={() => { onExport('pdf'); setShowExportMenu(false); }}
                 className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
@@ -125,7 +125,7 @@ export default function EditorTopHeader({
         {/* Share Button */}
         <button
           onClick={onToggleShare}
-          className="px-4 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+          className="px-4 py-1.5 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center gap-2"
         >
           <Share2 className="w-4 h-4" />
           Share
@@ -137,7 +137,7 @@ export default function EditorTopHeader({
             href={documentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-1.5 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-2"
+            className="px-4 py-1.5 text-sm text-orange-600 border border-orange-300 rounded hover:bg-blue-50 transition-colors flex items-center gap-2"
           >
             <Eye className="w-4 h-4" />
             Google Docs
@@ -147,9 +147,9 @@ export default function EditorTopHeader({
         {/* Chat Toggle */}
         <button
           onClick={onToggleChat}
-          className={`px-4 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+          className={`px-4 py-1.5 text-sm rounded transition-colors flex items-center gap-2 ${
             chatOpen 
-              ? 'bg-blue-600 text-white' 
+              ? 'bg-primary text-white' 
               : 'text-gray-700 border border-gray-300 hover:bg-gray-50'
           }`}
         >
