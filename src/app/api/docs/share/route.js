@@ -1,49 +1,21 @@
-// app/api/docs/share/route.js - Share Google Doc
 import { NextResponse } from 'next/server';
-import googleDocsService from '../../../../lib/goggleDocsService';
-
-export const dynamic = 'force-dynamic';
+import googleDocsService from '@/lib/googleDocsService';
+import { auth } from '@/config/firebase-admin';
 
 export async function POST(request) {
     try {
-        const { docId, emails, role } = await request.json();
-
-        if (!docId || !emails || !Array.isArray(emails)) {
-            return NextResponse.json(
-                { error: 'Document ID and emails array are required' },
-                { status: 400 }
-            );
+        const authHeader = request.headers.get('Authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
-        if (emails.length === 0) {
-            return NextResponse.json(
-                { error: 'At least one email is required' },
-                { status: 400 }
-            );
-        }
+        await auth.verifyIdToken(authHeader.substring(7));
 
-        // Valid roles: reader, writer, commenter
-        const validRoles = ['reader', 'writer', 'commenter'];
-        const shareRole = role && validRoles.includes(role) ? role : 'reader';
+        const { docId, emails, role = 'reader' } = await request.json();
+        const shareResult = await googleDocsService.shareDocument(docId, emails, role);
 
-        // Share the document
-        const result = await googleDocsService.shareDocument(docId, emails, shareRole);
-
-        return NextResponse.json({
-            success: true,
-            docId: result.docId,
-            permissions: result.permissions,
-            sharedAt: result.sharedAt
-        });
-
+        return NextResponse.json(shareResult);
     } catch (error) {
-        console.error('Error sharing Google Doc:', error);
-        return NextResponse.json(
-            { 
-                error: 'Failed to share document',
-                message: error.message 
-            },
-            { status: 500 }
-        );
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

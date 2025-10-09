@@ -266,47 +266,78 @@ export class AssetService extends BaseFirestoreService {
     // ========================
 
     async createDocument(suiteId, documentData, sprintId = null) {
+        console.log('AssetService.createDocument called:', { suiteId, documentData, sprintId });
+
         const userId = this.getCurrentUserId();
         if (!userId) {
+            console.error('User not authenticated');
             return { success: false, error: { message: 'User not authenticated' } };
         }
 
-        const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
-        if (!hasAccess) {
-            return { success: false, error: { message: 'Insufficient permissions to create document' } };
+        if (!suiteId) {
+            console.error('Suite ID is required');
+            return { success: false, error: { message: 'Suite ID is required' } };
         }
 
         try {
+            // Validate access first
+            console.log('Validating test suite access...');
+            const hasAccess = await this.testSuiteService.validateTestSuiteAccess(suiteId, 'write');
+            if (!hasAccess) {
+                console.error('Access validation failed');
+                return { success: false, error: { message: 'Insufficient permissions to create document' } };
+            }
+            console.log('Access validation passed');
+
             // Get suite name for folder organization
-            const suiteResult = await this.testSuiteService.getTestSuite(suiteId);
-            const suiteName = suiteResult.success ? suiteResult.data.name : suiteId;
+            console.log('Fetching suite details...');
+            const suiteName = suiteId;
+            console.log('Suite name:', suiteName);
+
+            // Get Firebase token for API authentication
+            console.log('Getting Firebase token...');
+            const token = await this.getFirebaseToken();
+            if (!token) {
+                console.error('Failed to get Firebase token');
+                return { success: false, error: { message: 'Authentication token not available' } };
+            }
+            console.log('Firebase token obtained');
 
             // Create Google Doc in Drive folder
+            console.log('Calling Google Docs API...');
             const response = await fetch('/api/docs/create', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${await this.getFirebaseToken()}`
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     title: documentData.title || 'Untitled Document',
                     suiteId,
                     suiteName,
-                    sprintId
+                    sprintId,
+                    content: documentData.content || ''
                 })
             });
 
+            console.log('API response status:', response.status);
+
             if (!response.ok) {
-                throw new Error('Failed to create Google Doc');
+                const errorText = await response.text();
+                console.error('API request failed:', errorText);
+                throw new Error(`Failed to create Google Doc: ${response.status} ${errorText}`);
             }
 
             const googleDocData = await response.json();
+            console.log('Google Doc API response:', googleDocData);
 
             if (!googleDocData.success) {
+                console.error('Google Doc creation failed:', googleDocData.error);
                 throw new Error(googleDocData.error || 'Google Doc creation failed');
             }
 
             // Store ONLY metadata in Firestore
+            console.log('Preparing Firestore metadata...');
             const metadata = {
                 title: documentData.title || 'Untitled Document',
                 type: documentData.type || 'general',
@@ -319,29 +350,97 @@ export class AssetService extends BaseFirestoreService {
 
                 // Metadata
                 status: 'active',
-                suiteId,
-                ...(sprintId && { sprintId })
+                suite_id: suiteId,
+                suiteId: suiteId, // Keep both for compatibility
+                ...(sprintId && {
+                    sprint_id: sprintId,
+                    sprintId: sprintId
+                })
             };
 
-            return await this.createSuiteAsset(suiteId, 'documents', metadata, sprintId);
+            console.log('Creating Firestore record with metadata:', {
+                hasSuiteId: !!metadata.suite_id,
+                suite_id: metadata.suite_id,
+                hasDocId: !!metadata.docId,
+                title: metadata.title
+            });
+
+            // Create in Firestore using createSuiteAsset
+            const firestoreResult = await this.createSuiteAsset(suiteId, 'documents', metadata, sprintId);
+
+            console.log('Firestore creation result:', {
+                success: firestoreResult.success,
+                hasData: !!firestoreResult.data,
+                error: firestoreResult.error
+            });
+
+            if (!firestoreResult.success) {
+                // If Firestore creation fails, try to clean up the Google Doc
+                console.warn('Firestore creation failed, attempting to cleanup Google Doc...');
+                try {
+                    await fetch('/api/docs/delete', {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ docId: googleDocData.docId })
+                    });
+                    console.log('Google Doc cleanup successful');
+                } catch (cleanupError) {
+                    console.error('Failed to cleanup Google Doc:', cleanupError);
+                }
+
+                return firestoreResult;
+            }
+
+            console.log('Document created successfully:', firestoreResult.data.id);
+
+            return {
+                success: true,
+                data: {
+                    ...firestoreResult.data,
+                    googleDoc: googleDocData
+                }
+            };
 
         } catch (error) {
-            console.error('Error creating document:', error);
+            console.error('Error in createDocument:', {
+                message: error.message,
+                stack: error.stack,
+                suiteId,
+                documentData
+            });
+
             return {
                 success: false,
                 error: {
                     message: `Failed to create document: ${error.message}`,
-                    code: error.code
+                    code: error.code,
+                    details: error.stack
                 }
             };
         }
     }
 
     async getFirebaseToken() {
-        // Helper to get Firebase ID token for API calls
-        const { auth } = await import('../config/firebase');
-        const user = auth.currentUser;
-        return user ? await user.getIdToken() : null;
+        try {
+            // Dynamic import to avoid issues
+            const { auth } = await import('../config/firebase');
+            const user = auth.currentUser;
+
+            if (!user) {
+                console.error('No current user for token generation');
+                return null;
+            }
+
+            const token = await user.getIdToken();
+            console.log('Firebase token generated successfully');
+            return token;
+        } catch (error) {
+            console.error('Error getting Firebase token:', error);
+            return null;
+        }
     }
 
 

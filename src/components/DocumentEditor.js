@@ -63,7 +63,7 @@ function SetContentPlugin({ content, shouldUpdate, isHtml }) {
       editor.update(() => {
         const root = $getRoot();
         root.clear();
-        
+
         if (isHtml) {
           // Parse HTML content
           const parser = new DOMParser();
@@ -94,14 +94,14 @@ export default function DocumentEditor({
 }) {
   // Get context
   const { currentUser, activeSuite, actions } = useApp();
-  
+
   // Use suite from context if not provided
   const suiteId = propSuiteId || activeSuite?.id;
   const sprintId = propSprintId;
-  
+
   // Initialize CommentsService
   const commentsServiceRef = useRef(null);
-  
+
   useEffect(() => {
     if (!commentsServiceRef.current) {
       commentsServiceRef.current = new CommentsService(FirestoreService);
@@ -160,18 +160,41 @@ export default function DocumentEditor({
 
   const performSave = async () => {
     if (!title.trim()) return;
-    
+
     // For new documents, need at least some content
     if (!existingDocument && !content.trim()) return;
 
     setIsSaving(true);
 
     try {
-      // Use the documents action from context
+      console.log('DocumentEditor.performSave - Parameters:', {
+        suiteId,
+        sprintId,
+        title,
+        hasContent: !!content,
+        isUpdate: !!existingDocument
+      });
+
+      // FIXED: Correct parameter order - suiteId FIRST, then documentData, then sprintId
       const result = existingDocument
-        ? await actions.documents.updateDocument(existingDocument.id, { title, content, type, tags }, suiteId, sprintId)
-        : await actions.documents.createDocument({ title, content, type, tags }, suiteId, sprintId);
-      
+        ? await actions.documents.updateDocument(
+          existingDocument.id,
+          { title, content, type, tags },
+          suiteId,
+          sprintId
+        )
+        : await actions.documents.createDocument(
+          suiteId,  // ✅ suiteId FIRST
+          { title, content, type, tags },  // ✅ documentData SECOND
+          sprintId  // ✅ sprintId THIRD
+        );
+
+      console.log('Save result:', {
+        success: result.success,
+        hasData: !!result.data,
+        error: result.error
+      });
+
       if (result.success) {
         setDocumentUrl(result.data.url || result.data.googleDoc?.url || '');
         setLastSaved(new Date());
@@ -179,9 +202,19 @@ export default function DocumentEditor({
         if (!existingDocument && onSaveSuccess) {
           onSaveSuccess(result.data);
         }
+      } else {
+        console.error('Save failed:', result.error);
+        alert(`Failed to save: ${result.error?.message || result.error || 'Unknown error'}`);
       }
     } catch (err) {
       console.error('Save error:', err);
+
+      // Show user-friendly error message
+      if (err.code === 'permission-denied') {
+        alert('Permission denied. Please check your Firestore security rules.');
+      } else {
+        alert(`Failed to save document: ${err.message}`);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -201,7 +234,7 @@ export default function DocumentEditor({
     setIsHtmlContent(true);
     setShouldUpdateContent(true);
     setHasUnsavedChanges(true);
-    
+
     // Reset the update flag after a short delay
     setTimeout(() => {
       setShouldUpdateContent(false);
@@ -281,18 +314,17 @@ export default function DocumentEditor({
         {/* Main Content Area - Split Layout */}
         <div className="flex-1 overflow-hidden flex">
           {/* Editor Area */}
-          <div 
-            className={`transition-all duration-300 ease-in-out overflow-auto ${
-              chatOpen ? 'w-[75%]' : 'w-full'
-            }`}
+          <div
+            className={`transition-all duration-300 ease-in-out overflow-auto ${chatOpen ? 'w-[75%]' : 'w-full'
+              }`}
           >
             <div className="max-w-5xl mx-auto py-8 px-6">
               <div className="bg-white rounded-lg shadow-sm min-h-[900px] p-16 relative">
                 <RichTextPlugin
                   contentEditable={
-                    <ContentEditable 
-                      className="min-h-[850px] outline-none focus:outline-none" 
-                      style={{ 
+                    <ContentEditable
+                      className="min-h-[850px] outline-none focus:outline-none"
+                      style={{
                         fontSize: '16px',
                         lineHeight: '1.8',
                         fontFamily: 'Arial, sans-serif'
@@ -311,8 +343,8 @@ export default function DocumentEditor({
                 <LinkPlugin />
                 <AutoFocusPlugin />
                 <OnChangePlugin onChange={handleChange} ignoreSelectionChange />
-                <SetContentPlugin 
-                  content={templateContent || existingDocument?.content} 
+                <SetContentPlugin
+                  content={templateContent || existingDocument?.content}
                   shouldUpdate={shouldUpdateContent || !existingDocument}
                   isHtml={isHtmlContent}
                 />

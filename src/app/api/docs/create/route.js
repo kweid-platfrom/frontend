@@ -1,87 +1,130 @@
-// app/api/docs/create/route.js - Create Google Doc with Firebase Auth
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
-import { withAuth } from '@/lib/firebaseAuthMiddleware';
+import googleDocsService from '@/lib/googleDocsService';
+import { auth } from '@/config/firebase-admin';
 
-export const dynamic = 'force-dynamic';
-
-function getGoogleClients() {
-    const auth = new google.auth.GoogleAuth({
-        credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
-        scopes: [
-            'https://www.googleapis.com/auth/documents',
-            'https://www.googleapis.com/auth/drive'
-        ]
-    });
-
-    return {
-        docs: google.docs({ version: 'v1', auth }),
-        drive: google.drive({ version: 'v3', auth })
-    };
-}
-
-async function createDocHandler(request, { user }) {
+export async function POST(request) {
+    console.log('=== API /docs/create called ===');
+    
     try {
-        const { title, content } = await request.json();
-
-        if (!title) {
+        // Verify authentication
+        const authHeader = request.headers.get('Authorization');
+        console.log('Auth header present:', !!authHeader);
+        
+        if (!authHeader?.startsWith('Bearer ')) {
+            console.error('Missing or invalid authorization header');
             return NextResponse.json(
-                { error: 'Title is required' },
+                { success: false, error: 'Unauthorized - Missing Bearer token' }, 
+                { status: 401 }
+            );
+        }
+
+        const token = authHeader.substring(7);
+        console.log('Verifying ID token...');
+        
+        let decodedToken;
+        try {
+            decodedToken = await auth.verifyIdToken(token);
+            console.log('Token verified for user:', decodedToken.uid);
+        } catch (verifyError) {
+            console.error('Token verification failed:', verifyError);
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized - Invalid token' }, 
+                { status: 401 }
+            );
+        }
+
+        // Parse request body
+        const body = await request.json();
+        console.log('Request body:', {
+            hasTitle: !!body.title,
+            hasSuiteId: !!body.suiteId,
+            hasSuiteName: !!body.suiteName,
+            hasSprintId: !!body.sprintId,
+            hasContent: !!body.content
+        });
+
+        const { title, suiteId, suiteName, sprintId, content } = body;
+
+        if (!title || !suiteId) {
+            console.error('Missing required fields');
+            return NextResponse.json(
+                { success: false, error: 'Title and Suite ID are required' },
                 { status: 400 }
             );
         }
 
-        const { docs, drive } = getGoogleClients();
-
-        // Create blank Google Doc
-        const createResponse = await docs.documents.create({
-            requestBody: { title }
-        });
-
-        const docId = createResponse.data.documentId;
-
-        // Insert content if provided
-        if (content && content.trim()) {
-            await docs.documents.batchUpdate({
-                documentId: docId,
-                requestBody: {
-                    requests: [{
-                        insertText: {
-                            location: { index: 1 },
-                            text: content
-                        }
-                    }]
+        // Determine target folder
+        let targetFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+        
+        // Create folder structure if no root folder specified
+        if (!targetFolderId) {
+            console.log('No root folder specified, creating folder structure...');
+            try {
+                const rootFolderId = await googleDocsService.getOrCreateFolder('QA Test Suites');
+                console.log('Root folder ID:', rootFolderId);
+                
+                targetFolderId = await googleDocsService.getOrCreateFolder(
+                    suiteName || suiteId, 
+                    rootFolderId
+                );
+                console.log('Suite folder ID:', targetFolderId);
+                
+                if (sprintId) {
+                    targetFolderId = await googleDocsService.getOrCreateFolder(
+                        `Sprint ${sprintId}`, 
+                        targetFolderId
+                    );
+                    console.log('Sprint folder ID:', targetFolderId);
                 }
-            });
+            } catch (folderError) {
+                console.warn('Failed to create folder structure:', folderError);
+                // Continue without folder organization
+                targetFolderId = null;
+            }
+        } else {
+            console.log('Using root folder from env:', targetFolderId);
         }
 
-        // Set permissions
-        await drive.permissions.create({
-            fileId: docId,
-            requestBody: {
-                type: 'anyone',
-                role: 'writer'
-            }
+        // Create the Google Doc
+        console.log('Creating Google Doc...');
+        const docResult = await googleDocsService.createDocument(
+            title, 
+            content || '', 
+            targetFolderId
+        );
+        console.log('Google Doc created:', {
+            docId: docResult.docId,
+            url: docResult.url
         });
 
-        const url = `https://docs.google.com/document/d/${docId}/edit`;
-
-        return NextResponse.json({
+        // Return success response
+        const response = {
             success: true,
-            docId,
-            url,
-            title,
-            createdBy: user.uid,
-            createdAt: new Date().toISOString()
-        });
+            docId: docResult.docId,
+            url: docResult.url,
+            title: docResult.title,
+            folderId: targetFolderId,
+            createdAt: docResult.createdAt
+        };
+        
+        console.log('Returning success response:', response);
+        return NextResponse.json(response);
 
     } catch (error) {
-        console.error('Error creating Google Doc:', error);
+        console.error('=== API /docs/create error ===');
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+        
         return NextResponse.json(
-            { error: 'Failed to create document', message: error.message },
+            { 
+                success: false, 
+                error: error.message,
+                details: error.stack 
+            }, 
             { status: 500 }
         );
     }
 }
-
-export const POST = withAuth(createDocHandler);
