@@ -1,0 +1,88 @@
+// config/firebase-admin.js
+import admin from 'firebase-admin';
+
+// Initialize Firebase Admin SDK
+if (!admin.apps.length) {
+    try {
+        let credential;
+
+        // Check if using Base64 encoded service account (RECOMMENDED)
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+            console.log('Using FIREBASE_SERVICE_ACCOUNT_BASE64');
+            
+            // Decode from Base64
+            const serviceAccountJson = Buffer.from(
+                process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 
+                'base64'
+            ).toString('utf8');
+            
+            const serviceAccount = JSON.parse(serviceAccountJson);
+            credential = admin.credential.cert(serviceAccount);
+            
+            admin.initializeApp({
+                credential: credential,
+                projectId: serviceAccount.project_id
+            });
+        }
+        // Check if using service account JSON string
+        else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+            console.log('Using FIREBASE_SERVICE_ACCOUNT_KEY');
+            
+            // Try to parse with multiple escape fixes
+            let serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+            
+            // Remove any outer quotes if present
+            serviceAccountString = serviceAccountString.trim();
+            if (serviceAccountString.startsWith('"') && serviceAccountString.endsWith('"')) {
+                serviceAccountString = serviceAccountString.slice(1, -1);
+            }
+            if (serviceAccountString.startsWith("'") && serviceAccountString.endsWith("'")) {
+                serviceAccountString = serviceAccountString.slice(1, -1);
+            }
+            
+            // Fix escaped characters
+            serviceAccountString = serviceAccountString
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\\'/g, "'")
+                .replace(/\\\\/g, '\\');
+            
+            const serviceAccount = JSON.parse(serviceAccountString);
+            credential = admin.credential.cert(serviceAccount);
+            
+            admin.initializeApp({
+                credential: credential,
+                projectId: serviceAccount.project_id
+            });
+        } 
+        // Fallback to individual env vars
+        else if (process.env.FIREBASE_PRIVATE_KEY) {
+            console.log('Using individual Firebase env vars');
+            
+            const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+            
+            credential = admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey: privateKey
+            });
+
+            admin.initializeApp({
+                credential: credential,
+                projectId: process.env.FIREBASE_PROJECT_ID
+            });
+        } 
+        else {
+            throw new Error('No Firebase credentials found in environment variables');
+        }
+
+        console.log('✅ Firebase Admin initialized successfully');
+    } catch (error) {
+        console.error('Error details:', error);
+        throw error;
+    }
+}
+
+export const auth = admin.auth();
+export const firestore = admin.firestore();
+export default admin;

@@ -19,10 +19,22 @@ function SelectGroup({
 }
 
 function SelectValue({
+  className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />
+  return (
+    <SelectPrimitive.Value
+      data-slot="select-value"
+      className={cn(
+        // Ensures text truncates instead of overlapping
+        "block truncate text-left max-w-[calc(100%-1.5rem)]",
+        className
+      )}
+      {...props}
+    />
+  )
 }
+
 
 function SelectTrigger({
   className,
