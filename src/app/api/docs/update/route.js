@@ -1,41 +1,21 @@
-// app/api/docs/update/route.js - Update Google Doc content
 import { NextResponse } from 'next/server';
-import googleDocsService from '../../../../lib/goggleDocsService';
-
-export const dynamic = 'force-dynamic';
+import googleDocsService from '@/lib/googleDocsService';
+import { auth } from '@/config/firebase-admin';
 
 export async function PUT(request) {
     try {
+        const authHeader = request.headers.get('Authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
+        await auth.verifyIdToken(authHeader.substring(7));
+
         const { docId, content } = await request.json();
+        const updateResult = await googleDocsService.updateDocument(docId, content);
 
-        if (!docId) {
-            return NextResponse.json(
-                { error: 'Document ID is required' },
-                { status: 400 }
-            );
-        }
-
-        if (!content) {
-            return NextResponse.json(
-                { error: 'Content is required' },
-                { status: 400 }
-            );
-        }
-
-        // Update the Google Doc
-        const result = await googleDocsService.updateDocument(docId, content);
-
-        return NextResponse.json({
-            success: true,
-            docId: result.docId,
-            updatedAt: result.updatedAt
-        });
-
+        return NextResponse.json({ success: true, ...updateResult });
     } catch (error) {
-        console.error('Error updating Google Doc:', error);
-        return NextResponse.json(
-            { error: 'Failed to update document', message: error.message },
-            { status: 500 }
-        );
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

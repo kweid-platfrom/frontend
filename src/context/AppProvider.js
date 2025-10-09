@@ -1292,29 +1292,29 @@ export const AppProvider = ({ children }) => {
                     ...slices.bugs.actions,
                     // CRITICAL FIX: Explicitly expose updateBug with fallback logic
                     updateBug: async (bugId, updates, suiteId = null, sprintId = null) => {
-                        console.log('🐛 AppProvider.bugs.updateBug called:', { 
-                            bugId, 
+                        console.log('🐛 AppProvider.bugs.updateBug called:', {
+                            bugId,
                             updates: typeof updates === 'object' ? Object.keys(updates) : updates,
-                            suiteId, 
+                            suiteId,
                             sprintId,
                             activeSuiteId: slices.suites.state.activeSuite?.id
                         });
-                        
+
                         // Determine final suiteId
                         let finalSuiteId = suiteId;
-                        
+
                         // Fallback 1: Try to extract from updates object
                         if (!finalSuiteId && updates?.suite_id) {
                             finalSuiteId = updates.suite_id;
                             console.log('📌 Using suite_id from updates:', finalSuiteId);
                         }
-                        
+
                         // Fallback 2: Use active suite
                         if (!finalSuiteId && slices.suites.state.activeSuite?.id) {
                             finalSuiteId = slices.suites.state.activeSuite.id;
                             console.log('📌 Using active suite ID:', finalSuiteId);
                         }
-                        
+
                         if (!finalSuiteId) {
                             console.error('❌ No suite ID available for bug update');
                             slices.ui.actions.showNotification?.({
@@ -1323,22 +1323,22 @@ export const AppProvider = ({ children }) => {
                                 message: 'Cannot update bug: Suite ID is missing',
                                 duration: 5000,
                             });
-                            return { 
-                                success: false, 
-                                error: { message: 'Suite ID is required but not provided' } 
+                            return {
+                                success: false,
+                                error: { message: 'Suite ID is required but not provided' }
                             };
                         }
-                        
+
                         console.log('✅ Calling FirestoreService.updateBug with:', {
                             bugId,
                             finalSuiteId,
                             sprintId
                         });
-                        
+
                         try {
                             const result = await FirestoreService.updateBug(bugId, updates, finalSuiteId, sprintId);
                             console.log('📊 FirestoreService.updateBug result:', result);
-                            
+
                             if (!result.success) {
                                 slices.ui.actions.showNotification?.({
                                     id: 'bug-update-failed',
@@ -1347,7 +1347,7 @@ export const AppProvider = ({ children }) => {
                                     duration: 5000,
                                 });
                             }
-                            
+
                             return result;
                         } catch (error) {
                             console.error('💥 Exception in updateBug:', error);
@@ -1424,8 +1424,181 @@ export const AppProvider = ({ children }) => {
                 // NEW: Documents actions
                 documents: {
                     ...slices.documents?.actions,
-                    createDocument: FirestoreService.createDocument.bind(FirestoreService),
-                    updateDocument: FirestoreService.updateDocument.bind(FirestoreService),
+
+                    // FIXED: Wrapper to ensure correct parameter order
+                    createDocument: async (suiteId, documentData, sprintId = null) => {
+                        console.log('📄 AppProvider.documents.createDocument called:', {
+                            suiteId,
+                            documentDataKeys: typeof documentData === 'object' ? Object.keys(documentData) : typeof documentData,
+                            sprintId,
+                            activeSuiteId: slices.suites.state.activeSuite?.id
+                        });
+
+                        // Validate suiteId
+                        let finalSuiteId = suiteId;
+
+                        // Fallback to active suite if not provided
+                        if (!finalSuiteId && slices.suites.state.activeSuite?.id) {
+                            finalSuiteId = slices.suites.state.activeSuite.id;
+                            console.log('📌 Using active suite ID:', finalSuiteId);
+                        }
+
+                        if (!finalSuiteId || typeof finalSuiteId !== 'string') {
+                            console.error('❌ Invalid suite ID for document creation:', finalSuiteId);
+                            slices.ui.actions.showNotification?.({
+                                id: 'doc-create-no-suite',
+                                type: 'error',
+                                message: 'Cannot create document: Suite ID is missing or invalid',
+                                duration: 5000,
+                            });
+                            return {
+                                success: false,
+                                error: { message: 'Suite ID is required but not provided or invalid' }
+                            };
+                        }
+
+                        // Validate documentData
+                        if (!documentData || typeof documentData !== 'object') {
+                            console.error('❌ Invalid document data:', documentData);
+                            return {
+                                success: false,
+                                error: { message: 'Invalid document data provided' }
+                            };
+                        }
+
+                        console.log('✅ Calling FirestoreService.createDocument with:', {
+                            suiteId: finalSuiteId,
+                            title: documentData.title,
+                            type: documentData.type,
+                            sprintId
+                        });
+
+                        try {
+                            const result = await FirestoreService.createDocument(
+                                finalSuiteId,
+                                documentData,
+                                sprintId
+                            );
+
+                            console.log('📊 FirestoreService.createDocument result:', {
+                                success: result.success,
+                                hasData: !!result.data,
+                                error: result.error
+                            });
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'doc-create-success',
+                                    type: 'success',
+                                    message: `Document "${documentData.title || 'Untitled'}" created successfully`,
+                                    duration: 3000,
+                                });
+                            } else {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'doc-create-failed',
+                                    type: 'error',
+                                    message: result.error?.message || 'Failed to create document',
+                                    duration: 5000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('💥 Exception in createDocument:', error);
+                            slices.ui.actions.showNotification?.({
+                                id: 'doc-create-exception',
+                                type: 'error',
+                                message: `Create failed: ${error.message}`,
+                                duration: 5000,
+                            });
+                            return {
+                                success: false,
+                                error: { message: error.message }
+                            };
+                        }
+                    },
+
+                    // FIXED: Wrapper for updateDocument
+                    updateDocument: async (documentId, updates, suiteId = null, sprintId = null) => {
+                        console.log('📝 AppProvider.documents.updateDocument called:', {
+                            documentId,
+                            updatesKeys: typeof updates === 'object' ? Object.keys(updates) : typeof updates,
+                            suiteId,
+                            sprintId,
+                            activeSuiteId: slices.suites.state.activeSuite?.id
+                        });
+
+                        // Determine final suiteId
+                        let finalSuiteId = suiteId;
+
+                        // Fallback to active suite
+                        if (!finalSuiteId && slices.suites.state.activeSuite?.id) {
+                            finalSuiteId = slices.suites.state.activeSuite.id;
+                            console.log('📌 Using active suite ID:', finalSuiteId);
+                        }
+
+                        if (!finalSuiteId) {
+                            console.error('❌ No suite ID available for document update');
+                            slices.ui.actions.showNotification?.({
+                                id: 'doc-update-no-suite',
+                                type: 'error',
+                                message: 'Cannot update document: Suite ID is missing',
+                                duration: 5000,
+                            });
+                            return {
+                                success: false,
+                                error: { message: 'Suite ID is required but not provided' }
+                            };
+                        }
+
+                        console.log('✅ Calling FirestoreService.updateDocument with:', {
+                            documentId,
+                            finalSuiteId,
+                            sprintId
+                        });
+
+                        try {
+                            const result = await FirestoreService.updateDocument(
+                                documentId,
+                                updates,
+                                finalSuiteId,
+                                sprintId
+                            );
+
+                            console.log('📊 FirestoreService.updateDocument result:', result);
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'doc-update-success',
+                                    type: 'success',
+                                    message: 'Document updated successfully',
+                                    duration: 3000,
+                                });
+                            } else {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'doc-update-failed',
+                                    type: 'error',
+                                    message: result.error?.message || 'Failed to update document',
+                                    duration: 5000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('💥 Exception in updateDocument:', error);
+                            slices.ui.actions.showNotification?.({
+                                id: 'doc-update-exception',
+                                type: 'error',
+                                message: `Update failed: ${error.message}`,
+                                duration: 5000,
+                            });
+                            return {
+                                success: false,
+                                error: { message: error.message }
+                            };
+                        }
+                    },
+
                     getDocument: FirestoreService.getDocument.bind(FirestoreService),
                     getDocuments: FirestoreService.getDocuments.bind(FirestoreService),
                     deleteDocument: enhancedDeleteDocument,

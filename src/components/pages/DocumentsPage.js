@@ -373,7 +373,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                     <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
+                        className="px-8 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
                     >
                         <option value="all">All Types</option>
                         {documentTypes.map(type => (
@@ -386,7 +386,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
+                        className="px-8 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-orange-500 focus:border-transparent"
                     >
                         <option value="created_at">Created Date</option>
                         <option value="updated_at">Modified Date</option>

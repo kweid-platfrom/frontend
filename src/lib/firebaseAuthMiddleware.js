@@ -1,6 +1,6 @@
 // lib/firebaseAuthMiddleware.js - Verify Firebase tokens in API routes
 import { NextResponse } from 'next/server';
-import admin from './firebaseAdmin';
+import admin from '@/config/firebase-admin';
 
 /**
  * Verify Firebase ID token from request headers
