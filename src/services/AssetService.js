@@ -122,14 +122,18 @@ export class AssetService extends BaseFirestoreService {
             ...assetData
         });
 
-        // ✅ FIXED: Directly call the base Firestore operation
-        // Avoid the naming conflict by using the base method directly
         try {
-            const docRef = await this.addDocument(collectionPath, data);
-            return {
-                success: true,
-                data: { id: docRef.id, ...data }
-            };
+            // Use the base class createDocument method from BaseFirestoreService
+            const result = await super.createDocument(collectionPath, data);
+
+            if (result.success) {
+                return {
+                    success: true,
+                    data: { id: result.docId || result.data?.id, ...result.data }
+                };
+            }
+
+            return result;
         } catch (error) {
             console.error(`Error creating ${assetType}:`, error);
             return {
