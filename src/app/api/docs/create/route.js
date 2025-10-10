@@ -56,6 +56,10 @@ export async function POST(request) {
         // Determine target folder
         let targetFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
         
+        console.log('🔍 Environment check:');
+        console.log('   - GOOGLE_DRIVE_ROOT_FOLDER_ID:', targetFolderId);
+        console.log('   - Will use folder:', !!targetFolderId);
+        
         // Create folder structure if no root folder specified
         if (!targetFolderId) {
             console.log('No root folder specified, creating folder structure...');
