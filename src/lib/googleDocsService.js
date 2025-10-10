@@ -181,11 +181,6 @@ class GoogleDocsService {
             console.log('   - parentFolderId:', parentFolderId);
             console.log('   - GOOGLE_DRIVE_ROOT_FOLDER_ID env:', process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
             
-            // Create blank document with optional parent folder
-            const requestBody = { 
-                title,
-                ...(parentFolderId && { parents: [parentFolderId] })
-            };
             
             // If we have a parent folder, create via Drive API
             let docId;
