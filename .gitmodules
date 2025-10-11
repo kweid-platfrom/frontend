@@ -1,0 +1,3 @@
+[submodule "src/learning-module"]
+	path = src/learning-module
+	url = https://github.com/fid37is/learning-module.git
