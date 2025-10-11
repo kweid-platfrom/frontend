@@ -100,6 +100,7 @@ const Home = () => {
     const [billingCycle, setBillingCycle] = useState("monthly");
     const [activeSection, setActiveSection] = useState("home");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const LEARN_URL = process.env.NEXT_PUBLIC_LEARN_URL || 'http://localhost:3001';
     const { isInitialized } = useGlobalTheme();
 
     const pricingPlans = [
@@ -184,7 +185,7 @@ const Home = () => {
     };
 
     const handleLearn = () => {
-        window.location.href = '/learn';
+        window.open(LEARN_URL, '_blank', 'noopener,noreferrer');
     };
 
     useEffect(() => {
@@ -317,7 +318,7 @@ const Home = () => {
                             ))}
                             <button
                                 onClick={() => {
-                                    window.location.href = '/learn';
+                                    handleLearn();
                                     setMobileMenuOpen(false);
                                 }}
                                 className="w-full bg-gradient-to-r from-orange-500 to-teal-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 hover:from-orange-700 hover:to-teal-800 shadow-md hover:shadow-lg flex items-center justify-center space-x-2"
