@@ -100,7 +100,7 @@ const Home = () => {
     const [billingCycle, setBillingCycle] = useState("monthly");
     const [activeSection, setActiveSection] = useState("home");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const LEARN_URL = process.env.NEXT_PUBLIC_LEARN_URL || 'http://localhost:3001';
+    const LEARN_URL = process.env.NEXT_PUBLIC_LEARN_URL;
     const { isInitialized } = useGlobalTheme();
 
     const pricingPlans = [
