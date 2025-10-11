@@ -1,10 +1,9 @@
-// app/learn/page.jsx
+// src/app/learn/[topicId]/page.jsx
 'use client';
 
 import dynamic from 'next/dynamic';
 
-// Lazy-load the submodule’s homepage
-const TopicDetailPage = dynamic(() => import('../../../learning-module/app/learn/[topicId]/page'), {
+const TopicDetailPage = dynamic(() => import('@learning-module/app/learn/[topicId]/page'), {
   ssr: false,
 });
 

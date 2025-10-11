@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@learning-module/*": ["./src/learning-module/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/hooks/old-hooks/authService.ts", "next.config.js", ".next/types/app/api/docs/share/route.js", ".next/types/app/api/docs/list/route.js", ".next/types/app/api/docs/export/route.js", ".next/types/app/api/docs/delete/route.js", ".next/types/app/api/docs/create/route.js"],
