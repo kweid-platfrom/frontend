@@ -100,7 +100,7 @@ const Home = () => {
     const [billingCycle, setBillingCycle] = useState("monthly");
     const [activeSection, setActiveSection] = useState("home");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const LEARN_URL = process.env.NEXT_PUBLIC_LEARN_URL || 'http://localhost:3001';
+    const LEARN_URL = process.env.NEXT_PUBLIC_LEARN_URL;
     const { isInitialized } = useGlobalTheme();
 
     const pricingPlans = [
@@ -255,7 +255,7 @@ const Home = () => {
                             {/* Learn Button */}
                             <button
                                 onClick={handleLearn}
-                                className="relative font-medium transition-all duration-300 px-4 py-2 text-sm lg:text-base bg-gradient-to-r from-teal-500 to-orange-500 text-white rounded hover:from-teal-700 hover:to-orange-700 shadow-md hover:shadow-lg flex items-center space-x-2 group"
+                                className="relative font-medium transition-all duration-300 px-4 py-2 text-sm lg:text-base text-orange-500 rounded hover:bg-gray-50 shadow-md hover:shadow-lg flex items-center space-x-2 group"
                             >
                                 <GraduationCap className="h-4 w-4 group-hover:rotate-12 transition-transform duration-300" />
                                 <span>Learn</span>
