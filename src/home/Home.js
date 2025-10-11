@@ -17,7 +17,8 @@ import {
     X,
     Shield,
     Rocket,
-    Target
+    Target,
+    GraduationCap
 } from "lucide-react";
 import Image from "next/image";
 import { useGlobalTheme } from '../providers/GlobalThemeProvider';
@@ -60,7 +61,7 @@ const Features = () => {
 
     return (
         <section id="features" className="py-16 sm:py-20 lg:py-32 bg-muted">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6">
                 <div className="text-center mb-12 sm:mb-16 lg:mb-20">
                     <div className="inline-flex items-center space-x-2 bg-card rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-6 sm:mb-8 shadow-theme-sm border border-border">
                         <Target className="h-3 sm:h-4 w-3 sm:w-4 text-teal-600" />
@@ -99,6 +100,7 @@ const Home = () => {
     const [billingCycle, setBillingCycle] = useState("monthly");
     const [activeSection, setActiveSection] = useState("home");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const LEARN_URL = process.env.NEXT_PUBLIC_LEARN_URL;
     const { isInitialized } = useGlobalTheme();
 
     const pricingPlans = [
@@ -182,6 +184,10 @@ const Home = () => {
         window.location.href = '/register';
     };
 
+    const handleLearn = () => {
+        window.open(LEARN_URL, '_blank', 'noopener,noreferrer');
+    };
+
     useEffect(() => {
         const handleScroll = () => {
             const sections = ['home', 'features', 'pricing', 'testimonials'];
@@ -245,19 +251,28 @@ const Home = () => {
                                     {item.label}
                                 </button>
                             ))}
+
+                            {/* Learn Button */}
+                            <button
+                                onClick={handleLearn}
+                                className="relative font-medium transition-all duration-300 px-4 py-2 text-sm lg:text-base text-orange-500 rounded hover:bg-gray-50 shadow-md hover:shadow-lg flex items-center space-x-2 group"
+                            >
+                                <GraduationCap className="h-4 w-4 group-hover:rotate-12 transition-transform duration-300" />
+                                <span>Learn</span>
+                            </button>
                         </div>
 
                         <div className="hidden md:flex items-center space-x-2 lg:space-x-4">
                             <ThemeToggle className="text-muted-foreground hover:text-foreground" />
                             <button
                                 onClick={handleSignIn}
-                                className="text-muted-foreground hover:text-foreground font-medium transition-colors px-3 lg:px-4 py-2 rounded-lg hover:bg-muted text-sm lg:text-base"
+                                className="text-muted-foreground hover:text-foreground font-medium transition-colors px-3 lg:px-4 py-2 rounded hover:bg-muted text-sm lg:text-base"
                             >
                                 Sign In
                             </button>
                             <button
                                 onClick={handleStartTrial}
-                                className="bg-teal-600 hover:bg-teal-700 text-white px-4 lg:px-6 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-theme-lg text-sm lg:text-base"
+                                className="bg-teal-600 hover:bg-teal-700 text-white px-4 lg:px-6 py-2 rounded font-medium transition-all duration-200 hover:shadow-theme-lg text-sm lg:text-base"
                             >
                                 Start Free Trial
                             </button>
@@ -301,6 +316,17 @@ const Home = () => {
                                     </span>
                                 </button>
                             ))}
+                            <button
+                                onClick={() => {
+                                    handleLearn();
+                                    setMobileMenuOpen(false);
+                                }}
+                                className="w-full bg-gradient-to-r from-orange-500 to-teal-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 hover:from-orange-700 hover:to-teal-800 shadow-md hover:shadow-lg flex items-center justify-center space-x-2"
+                            >
+                                <GraduationCap className="h-5 w-5" />
+                                <span>Start Learning</span>
+                            </button>
+                            <div className="pt-3 space-y-3 border-t border-border"></div>
                             <div className="pt-3 space-y-3 border-t border-border">
                                 <div className="flex items-center justify-between px-3 py-2">
                                     <span className="text-sm font-medium text-muted-foreground">Theme</span>
