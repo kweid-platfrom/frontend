@@ -1,1 +1,0 @@
-export { default } from '@learning-module/app/learn/[topicId]/page';
