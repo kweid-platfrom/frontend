@@ -356,9 +356,6 @@ const ArchiveTrashPage = () => {
 
     if (!currentSuiteId || !item?.id) return;
 
-    const itemName = item.name || item.title || `${item.type.slice(0, -1)} #${item.id}`;
-    if (!window.confirm(`Permanently delete "${itemName}"? This cannot be undone.`)) return;
-
     try {
       const result = await currentActions.archive.permanentlyDelete(currentSuiteId, item.type, item.id, item.sprint_id);
       if (result?.success) {

@@ -18,7 +18,9 @@ const INTERACTION_THRESHOLD = 2;
 const AppProviderWrapper = ({ children }) => {
   const pathname = usePathname();
   const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
-  const isPublicRoute = publicRoutes.includes(pathname);
+  
+  // FIXED: Check if path starts with /learn (catches /learn, /learn/*, /learn/test-types, etc.)
+  const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/learn');
 
   if (isPublicRoute) {
     return <PublicRouteContent>{children}</PublicRouteContent>;
