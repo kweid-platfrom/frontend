@@ -127,7 +127,9 @@ export const useRecordings = () => {
 
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
         const previewUrl = URL.createObjectURL(blob);
-        const duration = recordingState.duration;
+        // Use ref value instead of state to avoid stale closure
+        const duration = timerRef.current ? 
+          Math.floor((Date.now() - timerRef.startTime) / 1000) : 0;
 
         console.log('📦 Creating preview with:', {
           blobSize: blob.size,
@@ -166,13 +168,17 @@ export const useRecordings = () => {
       // Handle stream end (user clicks browser's stop sharing button)
       stream.getVideoTracks()[0].addEventListener('ended', () => {
         console.log('🎬 Stream ended by user');
-        stopRecording();
+        if (mediaRecorderRef.current && 
+            mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
       });
 
       mediaRecorder.start(1000); // Collect data every second
 
       // Start timer
       const startTime = Date.now();
+      timerRef.startTime = startTime;
       timerRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         setRecordingState(prev => ({
@@ -212,11 +218,12 @@ export const useRecordings = () => {
 
       return { success: false, error };
     }
-  }, [actions.ui, captureConsoleLogs, recordingState.duration]);
+  }, [actions.ui, captureConsoleLogs]);
 
   // Pause recording
   const pauseRecording = useCallback(() => {
-    if (mediaRecorderRef.current && recordingState.isRecording && !recordingState.isPaused) {
+    if (mediaRecorderRef.current && 
+        mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.pause();
       clearInterval(timerRef.current);
       setRecordingState(prev => ({
@@ -226,41 +233,52 @@ export const useRecordings = () => {
       }));
       console.log('⏸️ Recording paused');
     }
-  }, [recordingState.isRecording, recordingState.isPaused]);
+  }, []);
 
   // Resume recording
   const resumeRecording = useCallback(() => {
-    if (mediaRecorderRef.current && recordingState.isRecording && recordingState.isPaused) {
+    if (mediaRecorderRef.current && 
+        mediaRecorderRef.current.state === 'paused') {
       mediaRecorderRef.current.resume();
       
-      // Resume timer
-      const pausedDuration = recordingState.duration;
-      const startTime = Date.now() - (pausedDuration * 1000);
-      timerRef.current = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setRecordingState(prev => ({
-          ...prev,
-          duration: elapsed
-        }));
-      }, 1000);
+      // Resume timer - recalculate start time based on current duration
+      setRecordingState(prev => {
+        const pausedDuration = prev.duration;
+        const startTime = Date.now() - (pausedDuration * 1000);
+        timerRef.startTime = startTime;
+        
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+        
+        timerRef.current = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          setRecordingState(state => ({
+            ...state,
+            duration: elapsed
+          }));
+        }, 1000);
 
-      setRecordingState(prev => ({
-        ...prev,
-        isPaused: false,
-        status: 'recording'
-      }));
+        return {
+          ...prev,
+          isPaused: false,
+          status: 'recording'
+        };
+      });
+      
       console.log('▶️ Recording resumed');
     }
-  }, [recordingState.isRecording, recordingState.isPaused, recordingState.duration]);
+  }, []);
 
   // Stop recording
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && recordingState.isRecording) {
+    if (mediaRecorderRef.current && 
+        mediaRecorderRef.current.state !== 'inactive') {
       console.log('🛑 Stopping recording...');
       clearInterval(timerRef.current);
       mediaRecorderRef.current.stop();
     }
-  }, [recordingState.isRecording]);
+  }, []);
 
   // Clear preview
   const clearPreview = useCallback(() => {
@@ -272,12 +290,13 @@ export const useRecordings = () => {
     console.log('🗑️ Preview cleared');
   }, [previewData]);
 
-  // Cleanup
+  // Cleanup - NO DEPENDENCIES to prevent infinite loops
   const cleanup = useCallback(() => {
     console.log('🧹 Cleaning up recording resources...');
     
     // Stop recording if active
-    if (mediaRecorderRef.current && recordingState.isRecording) {
+    if (mediaRecorderRef.current && 
+        mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
 
@@ -291,9 +310,10 @@ export const useRecordings = () => {
       clearInterval(timerRef.current);
     }
 
-    // Clear preview
-    if (previewData?.previewUrl) {
-      URL.revokeObjectURL(previewData.previewUrl);
+    // Clear preview URL if it exists
+    const currentPreviewUrl = previewData?.previewUrl;
+    if (currentPreviewUrl) {
+      URL.revokeObjectURL(currentPreviewUrl);
     }
 
     // Reset refs
@@ -315,7 +335,7 @@ export const useRecordings = () => {
     setPreviewData(null);
 
     console.log('✅ Cleanup complete');
-  }, [recordingState.isRecording, previewData]);
+  }, []); // Empty dependencies - cleanup should only access refs
 
   // Create recording (save to Firestore)
   const createRecording = useCallback(async (recordingData) => {
