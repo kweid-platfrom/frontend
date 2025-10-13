@@ -1,36 +1,53 @@
 'use client';
 import React, { useEffect } from 'react';
-import { toast } from 'sonner';
+import { useApp } from '../../context/AppProvider';
 import RecorderControls from './RecorderControls';
 import RecorderPreviewModal from './RecorderPreviewModal';
-import { useRecording } from '../../hooks/useRecording';
+import { useRecordings } from '../../hooks/useRecording';
 
 const EnhancedScreenRecorder = ({
-  activeSuite,
-  firestoreService,
   onClose,
   mode = 'recorder',
   existingRecording = null
 }) => {
+  // Get app context for notifications and active suite
+  const { 
+    activeSuite, 
+    actions: { ui: uiActions },
+    state: { suites: { activeSuite: contextActiveSuite } }
+  } = useApp();
+
+  const finalActiveSuite = activeSuite || contextActiveSuite;
+
   const {
     state: recordingState,
     actions: recordingActions,
     hasPreview,
     previewData
-  } = useRecording();
+  } = useRecordings();
 
   console.log('EnhancedScreenRecorder render:', {
     mode,
     hasPreview,
     previewDataExists: !!previewData,
     previewDataBlob: !!previewData?.blob,
-    previewDataDuration: previewData?.duration
+    previewDataDuration: previewData?.duration,
+    hasActiveSuite: !!finalActiveSuite
   });
+
+  // Make notification function globally available for RecorderActions
+  useEffect(() => {
+    if (uiActions?.showNotification) {
+      window.showNotification = uiActions.showNotification;
+    }
+    return () => {
+      delete window.showNotification;
+    };
+  }, [uiActions]);
 
   // Cleanup when component unmounts
   useEffect(() => {
     return () => {
-      // Only cleanup if we're closing the entire recorder, not just switching views
       console.log('EnhancedScreenRecorder unmounting, cleaning up resources');
       recordingActions.cleanup();
     };
@@ -40,16 +57,17 @@ const EnhancedScreenRecorder = ({
   if (mode === 'viewer' && existingRecording) {
     return (
       <RecorderPreviewModal
-        activeSuite={activeSuite}
-        firestoreService={firestoreService}
+        activeSuite={finalActiveSuite}
+        firestoreService={window.FirestoreService} // Access global service
         onClose={onClose}
         previewUrl={existingRecording.videoUrl}
-        blob={null} // No blob for existing recordings
+        blob={null}
         duration={existingRecording.durationSeconds || existingRecording.duration || 0}
         consoleLogs={existingRecording.consoleLogs || []}
         networkLogs={existingRecording.networkLogs || []}
         detectedIssues={existingRecording.detectedIssues || []}
         comments={existingRecording.comments || []}
+        isSavedRecording={true}
       />
     );
   }
@@ -67,8 +85,8 @@ const EnhancedScreenRecorder = ({
 
     return (
       <RecorderPreviewModal
-        activeSuite={activeSuite}
-        firestoreService={firestoreService}
+        activeSuite={finalActiveSuite}
+        firestoreService={window.FirestoreService}
         onClose={(shouldCleanup = false) => {
           recordingActions.clearPreview();
           if (shouldCleanup) {
@@ -77,12 +95,13 @@ const EnhancedScreenRecorder = ({
           if (onClose) onClose();
         }}
         previewUrl={previewData.previewUrl}
-        blob={previewData.blob} // This should be the actual blob
+        blob={previewData.blob}
         duration={previewData.duration}
         consoleLogs={previewData.data?.consoleLogs || []}
         networkLogs={previewData.data?.networkLogs || []}
         detectedIssues={previewData.data?.detectedIssues || []}
         comments={previewData.data?.comments || []}
+        isSavedRecording={false}
       />
     );
   }
@@ -95,8 +114,13 @@ const EnhancedScreenRecorder = ({
       recordingState={recordingState}
       actions={recordingActions}
       onStart={async () => {
-        if (!activeSuite?.id) {
-          toast.error('Please select a test suite first');
+        if (!finalActiveSuite?.id) {
+          uiActions?.showNotification?.({
+            id: 'recording-no-suite',
+            type: 'error',
+            message: 'Please select a test suite first',
+            duration: 3000
+          });
           return;
         }
         await recordingActions.startRecording();

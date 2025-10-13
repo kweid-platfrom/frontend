@@ -1,75 +1,105 @@
-import FirestoreService from '../../services';
+// context/hooks/useRecording.js
+import { useReducer } from 'react';
 
-export const useRecording = (slices) => {
-    const saveRecording = async (blob, networkErrors) => {
-        try {
-            const recordingId = `rec_${Date.now()}`;
-            const recordingData = {
-                id: recordingId,
-                url: URL.createObjectURL(blob),
-                size: blob.size,
-                created_at: new Date().toISOString(),
-                networkErrors,
-                suiteId: slices.suites.state.activeSuite?.id,
-            };
+export const useRecordings = () => {
+    const initialState = {
+        recordings: [],
+        loading: false,
+        error: null,
+    };
 
-            const result = await slices.recordings.actions.createRecording(slices.suites.state, {
-                recordings: slices.recordings.actions,
-                ui: slices.ui.actions,
-                bugs: slices.bugs.actions,
-            })(recordingData);
-
-            if (result.success && networkErrors.length > 0) {
-                const bugData = {
-                    title: `Network Error: ${networkErrors[0].status || 'Unknown'}`,
-                    description: `Auto-detected network error during recording:\n${JSON.stringify(networkErrors, null, 2)}`,
-                    status: 'open',
-                    severity: 'high',
-                    created_at: new Date().toISOString(),
-                    recordingIds: [recordingId],
+    const recordingsReducer = (state, action) => {
+        switch (action.type) {
+            case 'LOAD_START':
+                return {
+                    ...state,
+                    loading: true,
+                    error: null,
                 };
-                const bugResult = await slices.bugs.actions.createBug(bugData);
-                if (bugResult.success) {
-                    await FirestoreService.recordings.linkRecordingToBug(recordingId, bugResult.data.id);
-                    slices.recordings.actions.updateRecording(recordingId, { bugId: bugResult.data.id });
-                }
-                slices.ui.actions.showNotification?.({
-                    id: 'bug-created-network-error',
-                    type: 'info',
-                    message: 'Bug created for network error',
-                    duration: 3000,
-                });
-            }
-            return result;
-        } catch (error) {
-            slices.ui.actions.showNotification?.({
-                id: 'save-recording-failed',
-                type: 'error',
-                message: 'Failed to save recording',
-                duration: 5000,
-            });
-            throw error;
+            case 'LOAD_SUCCESS':
+                console.log('📦 Recordings slice: LOAD_SUCCESS with', action.payload?.length || 0, 'recordings');
+                return {
+                    ...state,
+                    recordings: action.payload || [],
+                    loading: false,
+                    error: null,
+                };
+            case 'LOAD_FAILURE':
+                return {
+                    ...state,
+                    recordings: [],
+                    loading: false,
+                    error: action.payload,
+                };
+            case 'ADD_RECORDING':
+                return {
+                    ...state,
+                    recordings: [action.payload, ...state.recordings],
+                    loading: false,
+                    error: null,
+                };
+            case 'UPDATE_RECORDING':
+                return {
+                    ...state,
+                    recordings: state.recordings.map(r =>
+                        r.id === action.payload.id 
+                            ? { ...r, ...action.payload.updates } 
+                            : r
+                    ),
+                };
+            case 'DELETE_RECORDING':
+                return {
+                    ...state,
+                    recordings: state.recordings.filter(r => r.id !== action.payload),
+                };
+            case 'CLEAR_RECORDINGS':
+                return initialState;
+            default:
+                return state;
         }
     };
 
-    const linkRecordingToBug = async (recordingId, bugId) => {
-        return handleFirebaseOperation(
-            () => FirestoreService.recordings.linkRecordingToBug(recordingId, bugId),
-            'Recording linked to bug',
-            (errorMessage) =>
-                slices.ui.actions.showNotification?.({
-                    id: `link-recording-bug-error-${Date.now()}`,
-                    type: 'error',
-                    message: errorMessage,
-                    duration: 5000,
-                })
-        ).then((result) => {
-            if (result.success) {
-                slices.recordings.actions.updateRecording(recordingId, { bugId });
-            }
-            return result;
-        });
+    const [state, dispatch] = useReducer(recordingsReducer, initialState);
+
+    const actions = {
+        loadRecordingsStart: () => {
+            console.log('📦 Recordings slice: loadRecordingsStart');
+            dispatch({ type: 'LOAD_START' });
+        },
+        loadRecordingsSuccess: (recordings) => {
+            console.log('📦 Recordings slice: loadRecordingsSuccess with', recordings?.length || 0, 'recordings');
+            dispatch({ type: 'LOAD_SUCCESS', payload: recordings });
+        },
+        loadRecordingsFailure: (error) => {
+            console.error('📦 Recordings slice: loadRecordingsFailure', error);
+            dispatch({ type: 'LOAD_FAILURE', payload: error });
+        },
+        addRecording: (recording) => {
+            console.log('📦 Recordings slice: addRecording', recording.id);
+            dispatch({ type: 'ADD_RECORDING', payload: recording });
+        },
+        updateRecording: (id, updates) => {
+            console.log('📦 Recordings slice: updateRecording', id);
+            dispatch({ type: 'UPDATE_RECORDING', payload: { id, updates } });
+        },
+        deleteRecording: (id) => {
+            console.log('📦 Recordings slice: deleteRecording', id);
+            dispatch({ type: 'DELETE_RECORDING', payload: id });
+        },
+        clearRecordings: () => {
+            console.log('📦 Recordings slice: clearRecordings');
+            dispatch({ type: 'CLEAR_RECORDINGS' });
+        },
     };
 
-    return { saveRecording, linkRecordingToBug };
+    console.log('📦 Recordings slice state:', {
+        recordingsCount: state.recordings.length,
+        loading: state.loading,
+        error: state.error
+    });
+
+    return {
+        state,
+        actions,
+    };
 };
