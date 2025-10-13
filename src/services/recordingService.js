@@ -1,9 +1,7 @@
 // lib/recordingService.js - Simplified without playlist functionality
 const recordingService = new class RecordingService {
   constructor() {
-    this.apiBaseUrl = process.env.NODE_ENV === 'production'
-      ? 'https://your-domain.com/api'
-      : '/api';
+    this.apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
   }
 
   // Upload to YouTube without playlist assignment
@@ -127,7 +125,7 @@ const recordingService = new class RecordingService {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`Upload attempt ${attempt}/${maxRetries} - File size: ${blob.size} bytes, Duration: ${videoDuration}s`);
-        
+
         const result = await this.uploadToYouTube(blob, metadata, (progress) => {
           if (onProgress) {
             const attemptProgress = progress / maxRetries;
@@ -302,7 +300,7 @@ const recordingService = new class RecordingService {
 
   validateRecordingData(recordingData) {
     const errors = [];
-    
+
     if (!recordingData) {
       errors.push('No recording data provided');
       return { valid: false, errors };
