@@ -2,6 +2,18 @@
 import { NextResponse } from 'next/server';
 import { youTubeService } from '../../../../lib/YoutubeService';
 
+// CORS headers configuration
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS() {
+    return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request) {
     try {
         const formData = await request.formData();
@@ -11,7 +23,7 @@ export async function POST(request) {
         if (!videoFile || videoFile.size === 0) {
             return NextResponse.json(
                 { success: false, error: { message: 'Invalid or empty video file' } },
-                { status: 400 }
+                { status: 400, headers: corsHeaders }
             );
         }
 
@@ -29,7 +41,7 @@ export async function POST(request) {
         });
 
         const uploadResult = await youTubeService.uploadVideo(videoBlob, metadata);
-        return NextResponse.json(uploadResult);
+        return NextResponse.json(uploadResult, { headers: corsHeaders });
 
     } catch (error) {
         console.error('API error:', error);
@@ -38,7 +50,7 @@ export async function POST(request) {
                 success: false, 
                 error: { message: error.message || 'Internal server error' } 
             },
-            { status: 500 }
+            { status: 500, headers: corsHeaders }
         );
     }
 }
@@ -54,11 +66,11 @@ export async function GET() {
                 environment: process.env.NODE_ENV,
                 timestamp: new Date().toISOString()
             }
-        });
+        }, { headers: corsHeaders });
     } catch (error) {
         return NextResponse.json(
             { success: false, error: { message: error.message } },
-            { status: 500 }
+            { status: 500, headers: corsHeaders }
         );
     }
 }
