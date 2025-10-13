@@ -7,7 +7,7 @@ import { useAI } from './hooks/useAI';
 import { useTestCases } from './hooks/useTestCases';
 import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
-import { useRecording } from './hooks/useRecording';
+import { useRecordings } from './hooks/useRecording';
 import { useRecommendations } from '../hooks/useRecommendations';
 import { getFirebaseErrorMessage } from '../utils/firebaseErrorHandler';
 import FirestoreService from '../services';
@@ -47,7 +47,7 @@ export const AppProvider = ({ children }) => {
         addBugsToSprint,
     } = useAssetLinking(slices);
 
-    const { saveRecording, linkRecordingToBug } = useRecording(slices);
+    const { saveRecording, linkRecordingToBug } = useRecordings(slices);
 
     // Always call useRecommendations hook, but conditionally use its return values
     const recommendationsHook = useRecommendations(
@@ -1368,6 +1368,7 @@ export const AppProvider = ({ children }) => {
                 },
                 recordings: {
                     ...slices.recordings.actions,
+                    createRecording: FirestoreService.createRecording.bind(FirestoreService),
                     saveRecording,
                     linkRecordingToBug,
                     deleteRecording: enhancedDeleteRecording,

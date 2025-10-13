@@ -1,446 +1,425 @@
+// hooks/useRecording.js
 'use client';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { useApp } from '../context/AppProvider';
 
-export const useRecording = () => {
-  const [state, setState] = useState({
+export const useRecordings = () => {
+  const { 
+    state, 
+    actions,
+    activeSuite 
+  } = useApp();
+
+  // Preview state
+  const [hasPreview, setHasPreview] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+
+  // Recording state
+  const [recordingState, setRecordingState] = useState({
     isRecording: false,
     isPaused: false,
-    recordingTime: 0,
-    showCountdown: 0,
-    micMuted: false
+    duration: 0,
+    status: 'idle' // idle, recording, paused, stopped
   });
-
-  const [data, setData] = useState({
-    consoleLogs: [],
-    networkLogs: [],
-    detectedIssues: [],
-    comments: []
-  });
-
-  const [previewData, setPreviewData] = useState(null);
-  const [error, setError] = useState(null);
 
   // Refs for recording
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
-  const originalConsoleRef = useRef({});
-  const originalFetchRef = useRef(null);
+  const consoleLogsRef = useRef([]);
+  const networkLogsRef = useRef([]);
+  const detectedIssuesRef = useRef([]);
 
-  // Simple console capture
-  const startConsoleCapture = useCallback(() => {
-    ['log', 'error', 'warn'].forEach(level => {
-      originalConsoleRef.current[level] = console[level];
-      console[level] = (...args) => {
-        const logEntry = {
-          level,
-          message: args.join(' '),
-          time: new Date().toISOString(),
-          timestamp: Date.now()
-        };
-        
-        setData(prev => ({
-          ...prev,
-          consoleLogs: [...prev.consoleLogs, logEntry]
-        }));
-        originalConsoleRef.current[level].apply(console, args);
-      };
-    });
-  }, []);
+  // Get recordings from app state
+  const recordings = state.recordings?.recordings || [];
+  const loading = state.recordings?.loading || false;
+  const currentUser = state.auth?.currentUser;
+  const isTrialActive = state.subscription?.isTrialActive;
 
-  // Simple network capture
-  const startNetworkCapture = useCallback(() => {
-    originalFetchRef.current = window.fetch;
-    window.fetch = async (...args) => {
-      const startTime = Date.now();
-      try {
-        const response = await originalFetchRef.current(...args);
-        const networkEntry = {
-          url: args[0],
-          method: args[1]?.method || 'GET',
-          status: response.status,
-          time: new Date().toISOString(),
-          timestamp: startTime
-        };
-        
-        setData(prev => ({
-          ...prev,
-          networkLogs: [...prev.networkLogs, networkEntry]
-        }));
-        return response;
-      } catch (error) {
-        const networkEntry = {
-          url: args[0],
-          method: args[1]?.method || 'GET',
-          status: 'ERROR',
-          error: error.message,
-          time: new Date().toISOString(),
-          timestamp: startTime
-        };
-        
-        setData(prev => ({
-          ...prev,
-          networkLogs: [...prev.networkLogs, networkEntry]
-        }));
-        throw error;
-      }
+  // Capture console logs
+  const captureConsoleLogs = useCallback(() => {
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+
+    console.log = (...args) => {
+      consoleLogsRef.current.push({
+        type: 'log',
+        message: args.join(' '),
+        timestamp: Date.now()
+      });
+      originalLog.apply(console, args);
+    };
+
+    console.warn = (...args) => {
+      consoleLogsRef.current.push({
+        type: 'warn',
+        message: args.join(' '),
+        timestamp: Date.now()
+      });
+      originalWarn.apply(console, args);
+    };
+
+    console.error = (...args) => {
+      consoleLogsRef.current.push({
+        type: 'error',
+        message: args.join(' '),
+        timestamp: Date.now()
+      });
+      detectedIssuesRef.current.push({
+        type: 'console_error',
+        severity: 'high',
+        message: args.join(' '),
+        time: Date.now()
+      });
+      originalError.apply(console, args);
+    };
+
+    return () => {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
     };
   }, []);
 
-  // Stop captures
-  const stopCaptures = useCallback(() => {
-    // Restore console
-    Object.keys(originalConsoleRef.current).forEach(level => {
-      console[level] = originalConsoleRef.current[level];
-    });
-    originalConsoleRef.current = {};
+  // Start recording
+  const startRecording = useCallback(async () => {
+    try {
+      console.log('🎬 Starting recording...');
+      
+      // Request screen capture
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { 
+          mediaSource: 'screen',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: true
+      });
 
-    // Restore fetch
-    if (originalFetchRef.current) {
-      window.fetch = originalFetchRef.current;
-      originalFetchRef.current = null;
+      streamRef.current = stream;
+
+      // Initialize MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: 2500000
+      });
+
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+      consoleLogsRef.current = [];
+      networkLogsRef.current = [];
+      detectedIssuesRef.current = [];
+
+      // Capture console logs
+      const restoreConsole = captureConsoleLogs();
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        console.log('🎬 Recording stopped, processing...');
+        restoreConsole();
+
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const previewUrl = URL.createObjectURL(blob);
+        const duration = recordingState.duration;
+
+        console.log('📦 Creating preview with:', {
+          blobSize: blob.size,
+          duration,
+          consoleLogsCount: consoleLogsRef.current.length,
+          networkLogsCount: networkLogsRef.current.length,
+          issuesCount: detectedIssuesRef.current.length
+        });
+
+        setPreviewData({
+          blob,
+          previewUrl,
+          duration,
+          data: {
+            consoleLogs: consoleLogsRef.current,
+            networkLogs: networkLogsRef.current,
+            detectedIssues: detectedIssuesRef.current,
+            comments: []
+          }
+        });
+        setHasPreview(true);
+
+        // Stop all tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
+
+        setRecordingState({
+          isRecording: false,
+          isPaused: false,
+          duration: 0,
+          status: 'stopped'
+        });
+      };
+
+      // Handle stream end (user clicks browser's stop sharing button)
+      stream.getVideoTracks()[0].addEventListener('ended', () => {
+        console.log('🎬 Stream ended by user');
+        stopRecording();
+      });
+
+      mediaRecorder.start(1000); // Collect data every second
+
+      // Start timer
+      const startTime = Date.now();
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setRecordingState(prev => ({
+          ...prev,
+          duration: elapsed
+        }));
+      }, 1000);
+
+      setRecordingState({
+        isRecording: true,
+        isPaused: false,
+        duration: 0,
+        status: 'recording'
+      });
+
+      actions.ui?.showNotification?.({
+        id: 'recording-started',
+        type: 'success',
+        message: 'Recording started',
+        duration: 3000
+      });
+
+      console.log('✅ Recording started successfully');
+      return { success: true };
+
+    } catch (error) {
+      console.error('❌ Failed to start recording:', error);
+      
+      actions.ui?.showNotification?.({
+        id: 'recording-error',
+        type: 'error',
+        message: error.name === 'NotAllowedError' 
+          ? 'Screen recording permission denied' 
+          : `Failed to start recording: ${error.message}`,
+        duration: 5000
+      });
+
+      return { success: false, error };
     }
-  }, []);
+  }, [actions.ui, captureConsoleLogs, recordingState.duration]);
 
-  // Timer functions
-  const startTimer = useCallback(() => {
-    timerRef.current = setInterval(() => {
-      setState(prev => 
-        prev.isPaused ? prev : { ...prev, recordingTime: prev.recordingTime + 1 }
-      );
-    }, 1000);
-  }, []);
+  // Pause recording
+  const pauseRecording = useCallback(() => {
+    if (mediaRecorderRef.current && recordingState.isRecording && !recordingState.isPaused) {
+      mediaRecorderRef.current.pause();
+      clearInterval(timerRef.current);
+      setRecordingState(prev => ({
+        ...prev,
+        isPaused: true,
+        status: 'paused'
+      }));
+      console.log('⏸️ Recording paused');
+    }
+  }, [recordingState.isRecording, recordingState.isPaused]);
 
-  const stopTimer = useCallback(() => {
+  // Resume recording
+  const resumeRecording = useCallback(() => {
+    if (mediaRecorderRef.current && recordingState.isRecording && recordingState.isPaused) {
+      mediaRecorderRef.current.resume();
+      
+      // Resume timer
+      const pausedDuration = recordingState.duration;
+      const startTime = Date.now() - (pausedDuration * 1000);
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setRecordingState(prev => ({
+          ...prev,
+          duration: elapsed
+        }));
+      }, 1000);
+
+      setRecordingState(prev => ({
+        ...prev,
+        isPaused: false,
+        status: 'recording'
+      }));
+      console.log('▶️ Recording resumed');
+    }
+  }, [recordingState.isRecording, recordingState.isPaused, recordingState.duration]);
+
+  // Stop recording
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && recordingState.isRecording) {
+      console.log('🛑 Stopping recording...');
+      clearInterval(timerRef.current);
+      mediaRecorderRef.current.stop();
+    }
+  }, [recordingState.isRecording]);
+
+  // Clear preview
+  const clearPreview = useCallback(() => {
+    if (previewData?.previewUrl) {
+      URL.revokeObjectURL(previewData.previewUrl);
+    }
+    setPreviewData(null);
+    setHasPreview(false);
+    console.log('🗑️ Preview cleared');
+  }, [previewData]);
+
+  // Cleanup
+  const cleanup = useCallback(() => {
+    console.log('🧹 Cleaning up recording resources...');
+    
+    // Stop recording if active
+    if (mediaRecorderRef.current && recordingState.isRecording) {
+      mediaRecorderRef.current.stop();
+    }
+
+    // Stop all media tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+
+    // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
-      timerRef.current = null;
     }
-  }, []);
 
-  // Countdown
-  const showCountdown = useCallback(() => {
-    return new Promise(resolve => {
-      let count = 3;
-      setState(prev => ({ ...prev, showCountdown: count }));
-      
-      const countdown = setInterval(() => {
-        count--;
-        if (count > 0) {
-          setState(prev => ({ ...prev, showCountdown: count }));
-        } else {
-          setState(prev => ({ ...prev, showCountdown: 0 }));
-          clearInterval(countdown);
-          resolve();
-        }
-      }, 1000);
+    // Clear preview
+    if (previewData?.previewUrl) {
+      URL.revokeObjectURL(previewData.previewUrl);
+    }
+
+    // Reset refs
+    mediaRecorderRef.current = null;
+    streamRef.current = null;
+    chunksRef.current = [];
+    consoleLogsRef.current = [];
+    networkLogsRef.current = [];
+    detectedIssuesRef.current = [];
+
+    // Reset state
+    setRecordingState({
+      isRecording: false,
+      isPaused: false,
+      duration: 0,
+      status: 'idle'
     });
-  }, []);
+    setHasPreview(false);
+    setPreviewData(null);
 
-  // Process recording data when it stops
-  const processRecordingData = useCallback(async (blob, finalData) => {
-    console.log('Processing recording data:', {
-      blobSize: blob.size,
-      blobType: blob.type,
-      dataKeys: Object.keys(finalData)
-    });
+    console.log('✅ Cleanup complete');
+  }, [recordingState.isRecording, previewData]);
 
-    const url = URL.createObjectURL(blob);
-    
-    // Try to get video duration
-    let duration = 30; // default fallback
-    
-    try {
-      duration = await new Promise((resolve) => {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        
-        const timeout = setTimeout(() => {
-          console.warn('Video duration detection timeout');
-          resolve(30); // fallback
-        }, 3000);
-        
-        video.onloadedmetadata = () => {
-          clearTimeout(timeout);
-          const videoDuration = video.duration;
-          console.log('Video duration detected:', videoDuration);
-          resolve(videoDuration && isFinite(videoDuration) && videoDuration > 0 ? videoDuration : 30);
-        };
-
-        video.onerror = (error) => {
-          clearTimeout(timeout);
-          console.warn('Video duration detection error:', error);
-          resolve(30); // fallback
-        };
-
-        video.src = url;
+  // Create recording (save to Firestore)
+  const createRecording = useCallback(async (recordingData) => {
+    if (!activeSuite?.id) {
+      actions.ui?.showNotification?.({
+        id: 'no-active-suite',
+        type: 'error',
+        message: 'No active suite selected',
+        duration: 3000
       });
+      return { success: false, error: { message: 'No active suite' } };
+    }
+
+    try {
+      const result = await actions.recordings.createRecording(recordingData, activeSuite.id);
+      return result;
     } catch (error) {
-      console.warn('Failed to detect video duration:', error);
-      duration = 30; // fallback
+      console.error('Failed to create recording:', error);
+      return { success: false, error };
+    }
+  }, [activeSuite, actions]);
+
+  // Delete recording
+  const deleteRecording = useCallback(async (recordingId) => {
+    if (!activeSuite?.id) {
+      return { success: false, error: { message: 'No active suite' } };
     }
 
-    console.log('Final duration determined:', duration);
-
-    // Create preview data
-    const preview = {
-      previewUrl: url,
-      blob: blob,
-      duration: duration,
-      data: finalData
-    };
-
-    console.log('Setting preview data:', {
-      hasBlob: !!preview.blob,
-      blobSize: preview.blob?.size,
-      duration: preview.duration,
-      hasUrl: !!preview.previewUrl
-    });
-
-    setPreviewData(preview);
-  }, []);
-
-  const actions = {
-    async startRecording() {
-      try {
-        setError(null);
-        console.log('Starting recording...');
-        
-        // Clear previous data
-        setData({
-          consoleLogs: [],
-          networkLogs: [],
-          detectedIssues: [],
-          comments: []
-        });
-        setState(prev => ({ ...prev, recordingTime: 0 }));
-        setPreviewData(null);
-
-        // Start captures
-        startConsoleCapture();
-        startNetworkCapture();
-
-        // Get screen capture
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { cursor: 'always' },
-          audio: true,
-        });
-
-        streamRef.current = stream;
-
-        // Show countdown AFTER getting permissions
-        await showCountdown();
-
-        // Create recorder with explicit MIME type check
-        let mimeType = 'video/webm; codecs=vp9';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/webm; codecs=vp8';
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = 'video/webm';
-          }
-        }
-
-        const recorder = new MediaRecorder(stream, { mimeType });
-        chunksRef.current = [];
-
-        recorder.ondataavailable = (e) => {
-          console.log('Data available:', e.data.size, 'bytes');
-          if (e.data.size > 0) {
-            chunksRef.current.push(e.data);
-          }
-        };
-
-        recorder.onstop = async () => {
-          console.log('Recorder stopped, processing data...', {
-            chunksCount: chunksRef.current.length,
-            totalSize: chunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0)
-          });
-
-          // Create blob immediately
-          const blob = new Blob(chunksRef.current, { type: mimeType });
-          
-          console.log('Blob created:', {
-            size: blob.size,
-            type: blob.type
-          });
-
-          // Get current data state at time of stopping
-          setData(currentData => {
-            // Detect issues
-            const issues = [];
-            
-            currentData.consoleLogs.forEach(log => {
-              if (log.level === 'error' || log.level === 'warn') {
-                issues.push({
-                  id: `console_${log.timestamp}`,
-                  type: 'console_error',
-                  message: log.message,
-                  severity: log.level === 'error' ? 'high' : 'medium',
-                  source: 'console',
-                  time: log.time,
-                  timestamp: log.timestamp
-                });
-              }
-            });
-
-            currentData.networkLogs.forEach(req => {
-              if (req.status >= 400 || req.status === 'ERROR') {
-                issues.push({
-                  id: `network_${req.timestamp}`,
-                  type: 'network_error',
-                  message: `${req.method} ${req.url} - ${req.status}`,
-                  severity: req.status >= 500 || req.status === 'ERROR' ? 'high' : 'medium',
-                  source: 'network',
-                  time: req.time,
-                  timestamp: req.timestamp
-                });
-              }
-            });
-
-            const finalData = { ...currentData, detectedIssues: issues };
-            
-            console.log('Final data prepared:', {
-              consoleLogs: finalData.consoleLogs.length,
-              networkLogs: finalData.networkLogs.length,
-              detectedIssues: finalData.detectedIssues.length,
-              comments: finalData.comments.length
-            });
-
-            // Process recording data asynchronously
-            processRecordingData(blob, finalData);
-            
-            return finalData;
-          });
-
-          setState(prev => ({ 
-            ...prev, 
-            isRecording: false, 
-            isPaused: false 
-          }));
-          stopTimer();
-          stopCaptures();
-        };
-
-        recorder.onerror = (event) => {
-          console.error('MediaRecorder error:', event);
-          setError('Recording failed: ' + (event.error?.message || 'Unknown error'));
-        };
-
-        recorder.start(1000); // Collect data every second
-        mediaRecorderRef.current = recorder;
-        
-        console.log('MediaRecorder started:', {
-          state: recorder.state,
-          mimeType: recorder.mimeType
-        });
-        
-        setState(prev => ({ ...prev, isRecording: true }));
-        startTimer();
-
-        return { success: true };
-      } catch (error) {
-        console.error('Failed to start recording:', error);
-        setError(error.message);
-        stopCaptures();
-        return { success: false, error: error.message };
-      }
-    },
-
-    pauseRecording() {
-      if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.pause();
-        setState(prev => ({ ...prev, isPaused: true }));
-      }
-    },
-
-    resumeRecording() {
-      if (mediaRecorderRef.current?.state === 'paused') {
-        mediaRecorderRef.current.resume();
-        setState(prev => ({ ...prev, isPaused: false }));
-      }
-    },
-
-    stopRecording() {
-      console.log('Stop recording requested');
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        console.log('Stopping MediaRecorder...');
-        mediaRecorderRef.current.stop();
-      }
-      if (streamRef.current) {
-        console.log('Stopping stream tracks...');
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
-    },
-
-    toggleMute() {
-      const newMutedState = !state.micMuted;
-      setState(prev => ({ ...prev, micMuted: newMutedState }));
-      
-      if (streamRef.current) {
-        streamRef.current.getAudioTracks().forEach(track => {
-          track.enabled = !newMutedState;
-        });
-      }
-    },
-
-    addComment(text, videoTime) {
-      const comment = {
-        id: `comment_${Date.now()}`,
-        text: text.trim(),
-        time: parseFloat(videoTime.toFixed(1)),
-        timestamp: Date.now(),
-        createdAt: new Date().toISOString()
-      };
-      
-      setData(prev => ({
-        ...prev,
-        comments: [...prev.comments, comment]
-      }));
-      
-      return comment;
-    },
-
-    clearPreview() {
-      console.log('Clearing preview data');
-      if (previewData?.previewUrl) {
-        URL.revokeObjectURL(previewData.previewUrl);
-      }
-      setPreviewData(null);
-    },
-
-    clearError() {
-      setError(null);
+    try {
+      const result = await actions.recordings.deleteRecording(recordingId, activeSuite.id);
+      return result;
+    } catch (error) {
+      console.error('Failed to delete recording:', error);
+      return { success: false, error };
     }
-  };
+  }, [activeSuite, actions]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      console.log('useRecording cleanup');
-      if (previewData?.previewUrl) {
-        URL.revokeObjectURL(previewData.previewUrl);
-      }
-      stopCaptures();
-      stopTimer();
-    };
-  }, [previewData?.previewUrl, stopCaptures, stopTimer]);
+  // Link recording to bug
+  const linkRecordingToBug = useCallback(async (recordingId, bugId) => {
+    if (!activeSuite?.id) {
+      return { success: false, error: { message: 'No active suite' } };
+    }
+
+    try {
+      const result = await actions.linking.linkRecordingToBug?.(recordingId, bugId, activeSuite.id);
+      return result || { success: false, error: { message: 'Method not available' } };
+    } catch (error) {
+      console.error('Failed to link recording to bug:', error);
+      return { success: false, error };
+    }
+  }, [activeSuite, actions]);
+
+  // Create bug from recording
+  const createBug = useCallback(async (bugData) => {
+    if (!activeSuite?.id) {
+      return { success: false, error: { message: 'No active suite' } };
+    }
+
+    try {
+      const result = await actions.bugs.createBug?.(bugData, activeSuite.id);
+      return result || { success: false, error: { message: 'Method not available' } };
+    } catch (error) {
+      console.error('Failed to create bug:', error);
+      return { success: false, error };
+    }
+  }, [activeSuite, actions]);
 
   return {
-    state,
-    data,
+    // State
+    state: recordingState,
+    recordings,
+    activeSuite,
+    loading,
+    currentUser,
+    isTrialActive,
+    
+    // Preview state
+    hasPreview,
     previewData,
-    error,
-    actions,
-    isActive: state.isRecording || state.isPaused,
-    hasPreview: !!previewData,
-    hasError: !!error,
-    formatTime: (seconds) => {
-      if (!isFinite(seconds) || seconds < 0) return '0:00';
-      const sec = Math.floor(seconds % 60).toString().padStart(2, '0');
-      const min = Math.floor(seconds / 60).toString();
-      return `${min}:${sec}`;
-    }
+    
+    // Actions
+    actions: {
+      startRecording,
+      stopRecording,
+      pauseRecording,
+      resumeRecording,
+      clearPreview,
+      cleanup,
+      createRecording,
+      deleteRecording,
+      linkRecordingToBug,
+      createBug,
+    },
+
+    // Convenience methods
+    startRecording,
+    stopRecording,
+    pauseRecording,
+    resumeRecording,
+    clearPreview,
+    cleanup,
+    createRecording,
+    deleteRecording,
+    linkRecordingToBug,
+    createBug,
   };
 };

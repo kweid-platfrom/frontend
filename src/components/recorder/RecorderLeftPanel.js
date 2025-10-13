@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal, Network, Bug, CheckCircle, AlertTriangle, MessageSquare, Info, Bot, } from 'lucide-react';
-import { useRecording } from '../../hooks/useRecording';
+import { useRecordings } from '../../hooks/useRecording';
 import AIHighlights from './AIHighlights';
 
 const RecorderLeftPanel = ({ 
@@ -28,7 +28,7 @@ const RecorderLeftPanel = ({
   const commentsEndRef = useRef(null);
   
   // Get recording orchestrator for adding comments during live recording
-  const { actions: recordingActions, isActive } = useRecording();
+  const { actions: recordingActions, isActive } = useRecordings();
 
   const formatTime = (s) => {
     const sec = Math.floor(s % 60).toString().padStart(2, '0');
