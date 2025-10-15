@@ -1,4 +1,4 @@
-// lib/recordingService.js - Simplified without playlist functionality
+// lib/recordingService.js - Fixed with correct privacy status format
 const recordingService = new class RecordingService {
   constructor() {
     this.apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
@@ -23,6 +23,9 @@ const recordingService = new class RecordingService {
     try {
       console.log('Uploading to YouTube via API...');
 
+      // FIXED: Normalize privacy status to lowercase
+      const privacyStatus = (metadata.privacy || 'unlisted').toLowerCase();
+
       // Create form data with simplified metadata (no playlist)
       const formData = new FormData();
       formData.append('video', blob, `recording_${Date.now()}.webm`);
@@ -30,7 +33,7 @@ const recordingService = new class RecordingService {
         title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
         description: metadata.description || 'Screen recording from QA testing',
         tags: metadata.tags || ['qa-testing', 'screen-recording'],
-        privacy: metadata.privacy || 'private',
+        privacy: privacyStatus, // FIXED: Use lowercase privacy status
         categoryId: metadata.categoryId || '28',
         suiteId: metadata.suiteId,
         suiteName: metadata.suiteName
@@ -118,13 +121,18 @@ const recordingService = new class RecordingService {
   async uploadToYouTubeWithRetry(blob, metadata = {}, onProgress = null, maxRetries = 3) {
     let lastError = null;
 
+    // FIXED: Normalize privacy status to lowercase
+    if (metadata.privacy) {
+      metadata.privacy = metadata.privacy.toLowerCase();
+    }
+
     // Get actual video duration
     const videoDuration = await this.getVideoDuration(blob);
     metadata.duration = videoDuration;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`Upload attempt ${attempt}/${maxRetries} - File size: ${blob.size} bytes, Duration: ${videoDuration}s`);
+        console.log(`Upload attempt ${attempt}/${maxRetries} - File size: ${blob.size} bytes, Duration: ${videoDuration}s, Privacy: ${metadata.privacy || 'unlisted'}`);
 
         const result = await this.uploadToYouTube(blob, metadata, (progress) => {
           if (onProgress) {
@@ -160,6 +168,11 @@ const recordingService = new class RecordingService {
         lastError: lastError
       }
     };
+  }
+
+  // Alias for compatibility with AssetService
+  async uploadRecordingWithRetry(blob, metadata = {}, onProgress = null, maxRetries = 3) {
+    return this.uploadToYouTubeWithRetry(blob, metadata, onProgress, maxRetries);
   }
 
   // Get recordings for suite (API call - no playlist logic)
@@ -220,6 +233,53 @@ const recordingService = new class RecordingService {
       return {
         success: false,
         error: { message: error.message || 'Failed to delete recording' }
+      };
+    }
+  }
+
+  // Update video metadata (for privacy changes, etc.)
+  async updateVideoMetadata(recordingData, updates) {
+    if (!recordingData || !updates) {
+      return { success: false, error: { message: 'Invalid parameters' } };
+    }
+
+    const videoId = recordingData.youtubeId || recordingData.videoId;
+    if (!videoId) {
+      return { success: false, error: { message: 'No video ID found' } };
+    }
+
+    try {
+      // FIXED: Normalize privacy status if provided
+      if (updates.privacy) {
+        updates.privacy = updates.privacy.toLowerCase();
+      }
+
+      const response = await fetch(`${this.apiBaseUrl}/recordings/update-metadata`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId,
+          updates: {
+            title: updates.title,
+            description: updates.description,
+            privacy: updates.privacy
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Metadata update failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating video metadata:', error);
+      return {
+        success: false,
+        error: { message: error.message || 'Failed to update metadata' }
       };
     }
   }
@@ -319,6 +379,14 @@ const recordingService = new class RecordingService {
       valid: errors.length === 0,
       errors
     };
+  }
+
+  // Helper to normalize privacy status across the application
+  normalizePrivacyStatus(privacy) {
+    if (!privacy) return 'unlisted';
+    const normalized = privacy.toLowerCase().trim();
+    const validStatuses = ['public', 'unlisted', 'private'];
+    return validStatuses.includes(normalized) ? normalized : 'unlisted';
   }
 }();
 

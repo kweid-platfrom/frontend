@@ -96,28 +96,23 @@ console.log('Firebase Config:', {
     appId: currentConfig.appId || 'Missing',
 });
 
-// Additional validation - warn about missing environment variables
-const requiredVars = environment === "development" 
-    ? [
-        'NEXT_PUBLIC_DEV_FIREBASE_API_KEY',
-        'NEXT_PUBLIC_DEV_FIREBASE_AUTH_DOMAIN',
-        'NEXT_PUBLIC_DEV_FIREBASE_PROJECT_ID',
-        'NEXT_PUBLIC_DEV_FIREBASE_STORAGE_BUCKET',
-        'NEXT_PUBLIC_DEV_FIREBASE_MESSAGING_SENDER_ID',
-        'NEXT_PUBLIC_DEV_FIREBASE_APP_ID'
-    ]
-    : [
-        'NEXT_PUBLIC_FIREBASE_API_KEY',
-        'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
-        'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
-        'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
-        'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-        'NEXT_PUBLIC_FIREBASE_APP_ID'
-    ];
+// Check if any config values are actually undefined
+const configEntries = Object.entries(currentConfig);
+const missingValues = configEntries.filter(([, value]) => !value);
 
-const missingVars = requiredVars.filter(varName => !process.env[varName]);
-if (missingVars.length > 0) {
-    console.warn(`Missing environment variables for ${environment}:`, missingVars);
+if (missingValues.length > 0) {
+    const missingKeys = missingValues.map(([key]) => key);
+    console.warn(
+        `⚠️ Missing Firebase configuration for ${environment}:`,
+        missingKeys
+    );
+    console.warn(
+        `Expected environment variables: ${environment === "development" 
+            ? "NEXT_PUBLIC_DEV_FIREBASE_*" 
+            : "NEXT_PUBLIC_FIREBASE_*"}`
+    );
+} else {
+    console.log(`✅ All Firebase configuration loaded for ${environment}`);
 }
 
 // Initialize Firebase
