@@ -131,7 +131,7 @@ export const useRecordings = () => {
         const duration = timerRef.current ? 
           Math.floor((Date.now() - timerRef.startTime) / 1000) : 0;
 
-        console.log('📦 Creating preview with:', {
+        console.log(' Creating preview with:', {
           blobSize: blob.size,
           duration,
           consoleLogsCount: consoleLogsRef.current.length,

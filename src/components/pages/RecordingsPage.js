@@ -1,8 +1,8 @@
 'use client';
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { 
-  Video, 
-  Play, 
+import {
+  Video,
+  Play,
   Trash2,
   Search,
   Grid,
@@ -13,11 +13,13 @@ import {
   Square,
   Bug
 } from 'lucide-react';
-import EnhancedScreenRecorder from '../recorder/EnhancedScreenRecorder';
 import ScreenRecorderButton from '../recorder/ScreenRecorderButton';
 import { useRecordings } from '@/hooks/useRecording';
 import Image from 'next/image';
-import { useUI } from '@/hooks/useUI';
+import { useApp } from '@/context/AppProvider';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import Pagination from '../common/Pagination';
+import RecordingViewerModal from '../viewer/RecordingViewerModal';
 
 // Utility function to extract YouTube video ID
 const getYouTubeVideoId = (url) => {
@@ -40,12 +42,12 @@ const isYouTubeUrl = (url) => {
 };
 
 // Recording Card Component
-const RecordingCard = ({ 
-  recording, 
-  viewMode, 
-  onView, 
-  onShare, 
-  onDelete, 
+const RecordingCard = ({
+  recording,
+  viewMode,
+  onView,
+  onShare,
+  onDelete,
   formatDuration,
   formatDate,
   isSelected,
@@ -56,10 +58,10 @@ const RecordingCard = ({
   const [thumbnailError, setThumbnailError] = useState(false);
   const videoRef = useRef(null);
   const hoverTimerRef = useRef(null);
-  
+
   // Extract YouTube video ID if available
-  const youtubeVideoId = useMemo(() => 
-    getYouTubeVideoId(recording.videoUrl), 
+  const youtubeVideoId = useMemo(() =>
+    getYouTubeVideoId(recording.videoUrl),
     [recording.videoUrl]
   );
   const isYouTubeVideo = isYouTubeUrl(recording.videoUrl);
@@ -69,8 +71,8 @@ const RecordingCard = ({
     // Start playing after 5 seconds
     hoverTimerRef.current = setTimeout(() => {
       if (!isYouTubeVideo && videoRef.current && recording.videoUrl) {
-        videoRef.current.play().catch(err => {
-          console.log('Video play failed:', err);
+        videoRef.current.play().catch(() => {
+          // Silent catch - video play failed
         });
       }
       setIsPlaying(true);
@@ -100,16 +102,17 @@ const RecordingCard = ({
 
   if (viewMode === 'list') {
     return (
-      <div 
-        className={`flex items-center p-4 rounded-lg border transition-all ${
-          isSelected 
-            ? 'bg-teal-50 dark:bg-primary/20 border-primary dark:border-bg-primary/30 shadow-md' 
-            : 'bg-card border-border hover:shadow-lg'
-        }`}
+      <div
+        className={`flex items-center p-3 rounded-lg border transition-all ${isSelected
+          ? 'bg-teal-50 dark:bg-primary/20 border-primary dark:border-bg-primary/30 shadow-md'
+          : 'bg-card border-border hover:shadow-lg'
+          }`}
       >
         {/* Checkbox - Always visible when selected */}
-        <div 
-          className={`mr-3 transition-opacity ${isSelected || isHovering ? 'opacity-100' : 'opacity-0'}`}
+        <div
+          className={`mr-3 transition-opacity ${isSelected || isHovering ? 'opacity-100' : 'opacity-30'}`}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelect(recording.id);
@@ -117,30 +120,34 @@ const RecordingCard = ({
         >
           <button className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
             {isSelected ? (
-              <CheckSquare className="w-5 h-5 text-primary dark:text-primary" />
+              <CheckSquare className="w-4 h-4 text-primary dark:text-primary" />
             ) : (
-              <Square className="w-5 h-5 text-gray-400" />
+              <Square className="w-4 h-4 text-gray-400" />
             )}
           </button>
         </div>
 
-        <div className="w-16 h-12 bg-muted rounded flex items-center justify-center mr-4 overflow-hidden flex-shrink-0">
+        <div className="w-12 h-9 bg-muted rounded flex items-center justify-center mr-4 overflow-hidden flex-shrink-0">
           {isYouTubeVideo && youtubeVideoId ? (
             <Image
               src={`https://img.youtube.com/vi/${youtubeVideoId}/default.jpg`}
               alt="Video thumbnail"
+              width={35}
+              height={35}
               className="w-full h-full object-cover"
               onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextElementSibling.style.display = 'flex';
+                e.currentTarget.style.display = 'none';
+                if (e.currentTarget.nextElementSibling) {
+                  e.currentTarget.nextElementSibling.style.display = 'flex';
+                }
               }}
             />
           ) : null}
           <div className={`w-full h-full flex items-center justify-center ${isYouTubeVideo && youtubeVideoId ? 'hidden' : ''}`}>
-            <Video className="w-6 h-6 text-muted-foreground" />
+            <Video className="w-5 h-5 text-muted-foreground" />
           </div>
         </div>
-        
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
@@ -185,15 +192,14 @@ const RecordingCard = ({
 
   // Grid view - Two row card
   return (
-    <div 
-      className={`rounded-lg border overflow-hidden transition-all duration-300 ${
-        isSelected 
-          ? 'bg-teal-50 dark:bg-primary/20 border-primary dark:border-primary shadow-xl ring-1 ring-primary/50' 
-          : 'bg-card border-border hover:shadow-xl'
-      }`}
+    <div
+      className={`rounded-md border overflow-hidden transition-all duration-300 ${isSelected
+        ? 'bg-teal-50 dark:bg-primary/20 border-primary dark:border-primary shadow-xl ring-1 ring-primary/50'
+        : 'bg-card border-border hover:shadow-xl'
+        }`}
     >
       {/* First Row - Video Preview */}
-      <div 
+      <div
         className="relative aspect-video bg-muted cursor-pointer group"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -204,18 +210,20 @@ const RecordingCard = ({
             {/* YouTube Thumbnail (shown when not playing) */}
             {!isPlaying && (
               <>
-                <img
+                <Image
                   src={`https://img.youtube.com/vi/${youtubeVideoId}/maxresdefault.jpg`}
                   alt="Video thumbnail"
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                   onError={(e) => {
+                    const target = e.currentTarget;
                     // Try different thumbnail qualities in order
-                    if (e.target.src.includes('maxresdefault')) {
-                      e.target.src = `https://img.youtube.com/vi/${youtubeVideoId}/sddefault.jpg`;
-                    } else if (e.target.src.includes('sddefault')) {
-                      e.target.src = `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`;
-                    } else if (e.target.src.includes('hqdefault')) {
-                      e.target.src = `https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`;
+                    if (target.src.includes('maxresdefault')) {
+                      target.src = `https://img.youtube.com/vi/${youtubeVideoId}/sddefault.jpg`;
+                    } else if (target.src.includes('sddefault')) {
+                      target.src = `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`;
+                    } else if (target.src.includes('hqdefault')) {
+                      target.src = `https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`;
                     } else {
                       setThumbnailError(true);
                     }
@@ -225,14 +233,14 @@ const RecordingCard = ({
                 {thumbnailError && (
                   <div className="absolute inset-0 flex items-center justify-center bg-muted">
                     <div className="text-center">
-                      <Video className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
+                      <Video className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-xs text-muted-foreground">Processing video...</p>
                     </div>
                   </div>
                 )}
               </>
             )}
-            
+
             {/* YouTube Embed (shown when playing) */}
             {isPlaying && (
               <iframe
@@ -240,6 +248,7 @@ const RecordingCard = ({
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
+                title="YouTube video player"
               />
             )}
           </>
@@ -254,59 +263,57 @@ const RecordingCard = ({
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <Play className="w-12 h-12 text-muted-foreground" />
+            <Play className="w-8 h-8 text-muted-foreground" />
           </div>
         )}
-        
+
         {/* Overlay for non-playing state */}
         {!isPlaying && (
           <div className="absolute inset-0 bg-black/20 flex items-center justify-center group-hover:bg-black/30 transition-colors">
-            <Play className="w-12 h-12 text-white/80" />
+            <Play className="w-8 h-8 text-white/80" />
           </div>
         )}
 
         {/* Select checkbox - Top Left (always visible when selected or hovering) */}
-        <div 
-          className={`absolute top-3 left-3 transition-opacity duration-200 ${
-            isSelected || isHovering ? 'opacity-100' : 'opacity-0'
-          }`}
+        <div
+          className={`absolute top-2 left-2 transition-opacity duration-200 ${isSelected || isHovering ? 'opacity-100' : 'opacity-0'
+            }`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelect(recording.id);
           }}
         >
-          <button className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded hover:bg-white dark:hover:bg-gray-700 transition-colors shadow-lg">
+          <button className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1 rounded hover:bg-white dark:hover:bg-gray-700 transition-colors shadow-lg">
             {isSelected ? (
-              <CheckSquare className="w-5 h-5 text-primary dark:text-primary" />
+              <CheckSquare className="w-4 h-4 text-primary dark:text-primary" />
             ) : (
-              <Square className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <Square className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             )}
           </button>
         </div>
 
         {/* Copy Link Button - Top Right (visible on hover) */}
-        <div 
-          className={`absolute top-3 right-3 transition-opacity duration-200 ${
-            isHovering ? 'opacity-100' : 'opacity-0'
-          }`}
+        <div
+          className={`absolute top-2 right-2 transition-opacity duration-200 ${isHovering ? 'opacity-100' : 'opacity-0'
+            }`}
           onClick={(e) => {
             e.stopPropagation();
             onShare(recording);
           }}
         >
-          <button className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded hover:bg-white dark:hover:bg-gray-700 transition-colors shadow-lg">
-            <Link2 className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+          <button className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1 rounded hover:bg-white dark:hover:bg-gray-700 transition-colors shadow-lg">
+            <Link2 className="w-4 h-4 text-gray-700 dark:text-gray-300" />
           </button>
         </div>
 
         {/* Duration - Bottom Left (glassy background) */}
-        <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm text-white text-xs font-medium px-2.5 py-1 rounded">
+        <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium px-2 py-0.5 rounded">
           {formatDuration(recording.duration)}
         </div>
 
         {/* Issues Badge - Bottom Right */}
         {recording.detectedIssues?.length > 0 && (
-          <div className="absolute bottom-3 right-3 bg-red-600/90 backdrop-blur-sm text-white text-xs font-medium px-2 py-1 rounded flex items-center space-x-1">
+          <div className="absolute bottom-2 right-2 bg-red-600/90 backdrop-blur-sm text-white text-[11px] font-medium px-1.5 py-0.5 rounded flex items-center space-x-1">
             <Bug className="w-3 h-3" />
             <span>{recording.detectedIssues.length}</span>
           </div>
@@ -314,40 +321,40 @@ const RecordingCard = ({
       </div>
 
       {/* Second Row - Info */}
-      <div className="p-4">
+      <div className="p-3">
         {/* Console Stats and Delete Icon */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-3 text-[11px] text-muted-foreground">
             <div className="flex items-center space-x-1">
-              <div className="w-2 h-2 bg-primary rounded-full"></div>
+              <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
               <span>{recording.consoleLogs?.length || 0} logs</span>
             </div>
             <div className="flex items-center space-x-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
               <span>{recording.networkLogs?.length || 0} requests</span>
             </div>
           </div>
-          
+
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDelete(recording.id);
             }}
-            className="p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+            className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3 h-3" />
           </button>
         </div>
 
         {/* Date */}
-        <div className="text-xs text-muted-foreground mb-2">
+        <div className="text-[11px] text-muted-foreground mb-1">
           {formatDate(recording.created_at)}
         </div>
 
         {/* Title */}
-        <h3 className="font-medium text-foreground text-sm line-clamp-2">
+        <h2 className="font-medium text-foreground text-sm line-clamp-2">
           {recording.title || 'Untitled Recording'}
-        </h3>
+        </h2>
       </div>
     </div>
   );
@@ -356,15 +363,17 @@ const RecordingCard = ({
 const Recordings = () => {
   // Get data from hooks
   const recordingsHook = useRecordings();
-  const uiHook = useUI();
+  const { actions } = useApp();
 
   const [viewingRecording, setViewingRecording] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const [selectedRecordings, setSelectedRecordings] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const recordings = recordingsHook.recordings || [];
+  const recordings = useMemo(() => recordingsHook.recordings || [], [recordingsHook.recordings]);
   const activeSuite = recordingsHook.activeSuite;
   const isLoading = recordingsHook.loading;
   const isTrialActive = recordingsHook.isTrialActive;
@@ -376,11 +385,16 @@ const Recordings = () => {
   const filteredRecordings = useMemo(() => {
     return recordings.filter(recording => {
       const matchesSearch = recording.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           recording.description?.toLowerCase().includes(searchTerm.toLowerCase());
+        recording.description?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = filterStatus === 'all' || recording.status === filterStatus;
       return matchesSearch && matchesFilter;
     });
   }, [recordings, searchTerm, filterStatus]);
+
+  const paginatedRecordings = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredRecordings.slice(start, start + itemsPerPage);
+  }, [filteredRecordings, currentPage, itemsPerPage]);
 
   const handleViewRecording = useCallback((recording) => {
     setViewingRecording(recording);
@@ -393,39 +407,47 @@ const Recordings = () => {
     }
     try {
       await recordingsHook.deleteRecording(recordingId);
-      // Remove from selected if it was selected
       setSelectedRecordings(prev => prev.filter(id => id !== recordingId));
-      uiHook.addNotification?.({
+      actions.ui.showNotification({
+        id: `delete-success-${Date.now()}`,
         type: 'success',
         title: 'Success',
         message: 'Recording deleted successfully',
+        duration: 3000,
       });
-    } catch (err) {
-      console.error('Error deleting recording:', err);
-      uiHook.addNotification?.({
+    } catch (error) {
+      actions.ui.showNotification({
+        id: `delete-error-${Date.now()}`,
         type: 'error',
         title: 'Error',
-        message: `Failed to delete recording: ${err.message}`,
+        message: `Failed to delete recording: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        duration: 5000,
       });
     }
-  }, [hasActiveSuite, recordingsHook.deleteRecording, uiHook.addNotification]);
+  }, [hasActiveSuite, recordingsHook, actions.ui]);
 
-  const handleShareRecording = useCallback((recording) => {
-    const shareUrl = `${window.location.origin}/recordings/${recording.id}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      uiHook.addNotification?.({
+  const handleShareRecording = useCallback(async (recording) => {
+    try {
+      const shareUrl = `${window.location.origin}/recordings/${recording.id}`;
+      await navigator.clipboard.writeText(shareUrl);
+      actions.ui.showNotification({
+        id: `share-success-${Date.now()}`,
         type: 'success',
         title: 'Link Copied',
-        message: 'Recording link copied to clipboard!',
+        message: 'Recording link copied! Recipient must be logged in to view.',
+        duration: 3000,
       });
-    }).catch(() => {
-      uiHook.addNotification?.({
+    } catch {
+      const shareUrl = `${window.location.origin}/recordings/${recording.id}`;
+      actions.ui.showNotification({
+        id: `share-error-${Date.now()}`,
         type: 'error',
         title: 'Error',
         message: `Failed to copy link. URL: ${shareUrl}`,
+        duration: 5000,
       });
-    });
-  }, [uiHook.addNotification]);
+    }
+  }, [actions.ui]);
 
   const handleToggleSelect = useCallback((recordingId) => {
     setSelectedRecordings(prev => {
@@ -436,6 +458,14 @@ const Recordings = () => {
       }
     });
   }, []);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedRecordings.length === filteredRecordings.length) {
+      setSelectedRecordings([]);
+    } else {
+      setSelectedRecordings(filteredRecordings.map(recording => recording.id));
+    }
+  }, [selectedRecordings.length, filteredRecordings]);
 
   const formatDuration = (duration) => {
     if (typeof duration === 'string') return duration;
@@ -452,6 +482,108 @@ const Recordings = () => {
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString();
   };
+
+  const actionGroups = useMemo(() => ([
+    {
+      name: 'playback',
+      actions: [
+        { id: 'download', label: 'Download', icon: 'Download', color: 'blue' },
+        { id: 'share', label: 'Share', icon: 'Link2', color: 'green' }
+      ]
+    },
+    {
+      name: 'actions',
+      actions: [
+        { id: 'archive', label: 'Archive', icon: 'Archive', color: 'gray', requiresConfirm: true, confirmMessage: 'Archive selected recordings?' },
+        { id: 'delete', label: 'Delete', icon: 'Trash2', color: 'red', destructive: true, confirmMessage: 'Delete selected recordings?' }
+      ]
+    }
+  ]), []);
+
+  const handleBulkAction = useCallback(async (actionId, selectedIds) => {
+    switch (actionId) {
+      case 'download':
+        selectedIds.forEach((id, index) => {
+          const rec = recordings.find(r => r.id === id);
+          if (rec && rec.videoUrl) {
+            setTimeout(() => {
+              const a = document.createElement('a');
+              a.href = rec.videoUrl;
+              a.download = rec.title ? `${rec.title}.mp4` : `recording_${id}.mp4`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }, index * 300);
+          }
+        });
+        actions.ui.showNotification({
+          id: `download-success-${Date.now()}`,
+          type: 'success',
+          title: 'Download Started',
+          message: `Downloading ${selectedIds.length} recording(s)`,
+          duration: 3000,
+        });
+        break;
+      case 'share':
+        if (selectedIds.length > 1) {
+          actions.ui.showNotification({
+            id: `share-info-${Date.now()}`,
+            type: 'info',
+            title: 'Multiple Selections',
+            message: 'Please share recordings one at a time.',
+            duration: 5000,
+          });
+          break;
+        }
+        {
+          const id = selectedIds[0];
+          const rec = recordings.find(r => r.id === id);
+          if (rec) {
+            const shareUrl = `${window.location.origin}/recordings/${id}`;
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              actions.ui.showNotification({
+                id: `share-success-${Date.now()}`,
+                type: 'success',
+                title: 'Link Copied',
+                message: 'Recording link copied! Recipient must be logged in to view.',
+                duration: 3000,
+              });
+            } catch {
+              actions.ui.showNotification({
+                id: `share-error-${Date.now()}`,
+                type: 'error',
+                title: 'Error',
+                message: `Failed to copy link. URL: ${shareUrl}`,
+                duration: 5000,
+              });
+            }
+          }
+        }
+        break;
+      case 'archive':
+        await Promise.all(selectedIds.map(id => recordingsHook.updateRecording(id, { status: 'archived' })));
+        actions.ui.showNotification({
+          id: `archive-success-${Date.now()}`,
+          type: 'success',
+          title: 'Archived',
+          message: `Archived ${selectedIds.length} recording(s)`,
+          duration: 3000,
+        });
+        break;
+      case 'delete':
+        await Promise.all(selectedIds.map(id => recordingsHook.deleteRecording(id)));
+        actions.ui.showNotification({
+          id: `delete-success-${Date.now()}`,
+          type: 'success',
+          title: 'Deleted',
+          message: `Deleted ${selectedIds.length} recording(s)`,
+          duration: 3000,
+        });
+        break;
+    }
+    setSelectedRecordings([]);
+  }, [recordings, actions.ui, recordingsHook]);
 
   // Loading state
   if (isLoading) {
@@ -529,9 +661,21 @@ const Recordings = () => {
             isPrimary={true}
           />
         </div>
-        
+
         <div className="flex items-center justify-between mb-6 bg-card p-4 rounded-lg border border-border shadow-sm">
           <div className="flex items-center space-x-4">
+            {filteredRecordings.length > 0 && (
+              <button
+                onClick={handleSelectAll}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              >
+                {selectedRecordings.length === filteredRecordings.length ? (
+                  <CheckSquare className="w-5 h-5 text-primary" />
+                ) : (
+                  <Square className="w-5 h-5 text-gray-400" />
+                )}
+              </button>
+            )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <input
@@ -557,27 +701,25 @@ const Recordings = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded transition-colors ${
-                viewMode === 'grid' 
-                  ? 'bg-teal-100 text-primary dark:bg-primary/30 dark:text-primary' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
+              className={`p-2 rounded transition-colors ${viewMode === 'grid'
+                ? 'bg-teal-100 text-primary dark:bg-primary/30 dark:text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
             >
               <Grid className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded transition-colors ${
-                viewMode === 'list' 
-                  ? 'bg-teal-100 text-primary dark:bg-primary/30 dark:text-primary' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
+              className={`p-2 rounded transition-colors ${viewMode === 'list'
+                ? 'bg-teal-100 text-primary dark:bg-primary/30 dark:text-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
             >
               <List className="w-4 h-4" />
             </button>
           </div>
         </div>
-        
+
         <div className="bg-card rounded-lg border border-border shadow-sm min-h-96">
           {filteredRecordings.length === 0 ? (
             <div className="flex items-center justify-center h-64">
@@ -593,11 +735,11 @@ const Recordings = () => {
             </div>
           ) : (
             <div className="p-6">
-              <div className={viewMode === 'grid' 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+              <div className={viewMode === 'grid'
+                ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
                 : "space-y-4"
               }>
-                {filteredRecordings.map((recording) => (
+                {paginatedRecordings.map((recording) => (
                   <RecordingCard
                     key={recording.id}
                     recording={recording}
@@ -615,16 +757,31 @@ const Recordings = () => {
             </div>
           )}
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredRecordings.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(val) => {
+            setItemsPerPage(val);
+            setCurrentPage(1);
+          }}
+        />
       </div>
-      
+
       {viewingRecording && (
-        <EnhancedScreenRecorder
-          mode="viewer"
-          activeSuite={activeSuite}
-          existingRecording={viewingRecording}
+        <RecordingViewerModal
+          recording={viewingRecording}
           onClose={() => setViewingRecording(null)}
         />
       )}
+
+      <EnhancedBulkActionsBar
+        selectedItems={selectedRecordings}
+        onClearSelection={() => setSelectedRecordings([])}
+        actionGroups={actionGroups}
+        onAction={handleBulkAction}
+      />
     </div>
   );
 };

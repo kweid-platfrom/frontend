@@ -11,42 +11,82 @@ const formatTime = (s) => {
   return `${min}:${sec}`;
 };
 
+export { createOptimizedLogger };
+
 // Optimized logging - only capture errors/failures
 const createOptimizedLogger = () => {
   const logs = [];
   const networkRequests = [];
   let isCapturing = false;
-  const MAX_LOGS = 100; // Limit to prevent memory bloat
-  const MAX_MESSAGE_LENGTH = 500; // Truncate long messages
-  
+  const MAX_LOGS = 200; // Increased limit
+  const MAX_MESSAGE_LENGTH = 1000; // Increased message length
+
+  // Store original console methods
+  const originalLog = console.log;
   const originalError = console.error;
   const originalWarn = console.warn;
+  const originalInfo = console.info;
   const originalFetch = window.fetch;
-  
+  const originalXHR = window.XMLHttpRequest.prototype.open;
+
   const start = () => {
     if (isCapturing) return;
     isCapturing = true;
     logs.length = 0;
     networkRequests.length = 0;
-    
-    // Only capture errors and warnings (not regular logs)
+
+    console.log('🎥 Recording logger started - capturing all logs');
+
+    // Capture ALL console.log calls
+    console.log = (...args) => {
+      if (isCapturing && logs.length < MAX_LOGS) {
+        logs.push({
+          level: 'log',
+          message: args.map(arg => {
+            try {
+              return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+            } catch {
+              return String(arg);
+            }
+          }).join(' ').substring(0, MAX_MESSAGE_LENGTH),
+          time: new Date().toISOString(),
+          timestamp: Date.now()
+        });
+      }
+      originalLog.apply(console, args);
+    };
+
+    // Capture console.error
     console.error = (...args) => {
       if (isCapturing && logs.length < MAX_LOGS) {
         logs.push({
           level: 'error',
-          message: args.map(String).join(' ').substring(0, MAX_MESSAGE_LENGTH),
+          message: args.map(arg => {
+            try {
+              return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+            } catch {
+              return String(arg);
+            }
+          }).join(' ').substring(0, MAX_MESSAGE_LENGTH),
           time: new Date().toISOString(),
           timestamp: Date.now()
         });
       }
       originalError.apply(console, args);
     };
-    
+
+    // Capture console.warn
     console.warn = (...args) => {
       if (isCapturing && logs.length < MAX_LOGS) {
         logs.push({
           level: 'warn',
-          message: args.map(String).join(' ').substring(0, MAX_MESSAGE_LENGTH),
+          message: args.map(arg => {
+            try {
+              return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+            } catch {
+              return String(arg);
+            }
+          }).join(' ').substring(0, MAX_MESSAGE_LENGTH),
           time: new Date().toISOString(),
           timestamp: Date.now()
         });
@@ -54,47 +94,108 @@ const createOptimizedLogger = () => {
       originalWarn.apply(console, args);
     };
 
-    // Only capture failed network requests (4xx, 5xx, errors)
+    // Capture console.info
+    console.info = (...args) => {
+      if (isCapturing && logs.length < MAX_LOGS) {
+        logs.push({
+          level: 'info',
+          message: args.map(arg => {
+            try {
+              return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+            } catch {
+              return String(arg);
+            }
+          }).join(' ').substring(0, MAX_MESSAGE_LENGTH),
+          time: new Date().toISOString(),
+          timestamp: Date.now()
+        });
+      }
+      originalInfo.apply(console, args);
+    };
+
+    // Capture ALL fetch requests (not just errors)
     window.fetch = async (...args) => {
       const startTime = Date.now();
+      const url = String(args[0]);
+      const method = args[1]?.method || 'GET';
+
       try {
         const response = await originalFetch(...args);
-        // Only capture failures and errors
-        if (isCapturing && response.status >= 400 && networkRequests.length < MAX_LOGS) {
-          networkRequests.push({
-            url: String(args[0]).substring(0, 100), // Truncate URL
-            method: args[1]?.method || 'GET',
-            status: response.status,
-            duration: Date.now() - startTime,
-            time: new Date().toISOString(),
-            timestamp: Date.now()
-          });
-        }
-        return response;
-      } catch (err) {
-        // Always capture network errors
+
+        // Capture ALL requests, not just errors
         if (isCapturing && networkRequests.length < MAX_LOGS) {
           networkRequests.push({
-            url: String(args[0]).substring(0, 100),
-            method: args[1]?.method || 'GET',
-            status: 'ERROR',
+            id: `fetch_${Date.now()}_${Math.random()}`,
+            url: url.substring(0, 200),
+            method: method,
+            status: response.status,
+            statusText: response.statusText,
+            duration: Date.now() - startTime,
+            time: new Date().toISOString(),
+            timestamp: Date.now(),
+            type: 'fetch'
+          });
+        }
+
+        return response;
+      } catch (err) {
+        if (isCapturing && networkRequests.length < MAX_LOGS) {
+          networkRequests.push({
+            id: `fetch_error_${Date.now()}_${Math.random()}`,
+            url: url.substring(0, 200),
+            method: method,
+            status: 'ERR',
+            statusText: 'Network Error',
             duration: Date.now() - startTime,
             error: err.message?.substring(0, 200),
             time: new Date().toISOString(),
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            type: 'fetch'
           });
         }
         throw err;
       }
+    };
+
+    // Capture XMLHttpRequest
+    window.XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      const startTime = Date.now();
+
+      this.addEventListener('loadend', function () {
+        if (isCapturing && networkRequests.length < MAX_LOGS) {
+          networkRequests.push({
+            id: `xhr_${Date.now()}_${Math.random()}`,
+            url: String(url).substring(0, 200),
+            method: method,
+            status: this.status,
+            statusText: this.statusText,
+            duration: Date.now() - startTime,
+            time: new Date().toISOString(),
+            timestamp: Date.now(),
+            type: 'xhr'
+          });
+        }
+      });
+
+      return originalXHR.apply(this, [method, url, ...rest]);
     };
   };
 
   const stop = () => {
     if (!isCapturing) return;
     isCapturing = false;
+
+    console.log = originalLog;
     console.error = originalError;
     console.warn = originalWarn;
+    console.info = originalInfo;
     window.fetch = originalFetch;
+    window.XMLHttpRequest.prototype.open = originalXHR;
+
+    console.log('🎥 Recording logger stopped - captured:', {
+      consoleLogs: logs.length,
+      networkRequests: networkRequests.length
+    });
   };
 
   const getData = () => ({
@@ -118,10 +219,13 @@ class OptimizedRecordingStore {
       duration: "0:00",
       micMuted: false,
     };
-    
+
     this.listeners = new Set();
     this.recorder = null;
-    this.stream = null;
+    this.displayStream = null;
+    this.micStream = null;
+    this.combinedStream = null;
+    this.micTrack = null;
     this.chunks = [];
     this.timer = null;
     this.logger = null;
@@ -131,10 +235,9 @@ class OptimizedRecordingStore {
   setState(updates) {
     const hasChanges = Object.keys(updates).some(key => this.state[key] !== updates[key]);
     if (!hasChanges) return;
-    
+
     this.state = { ...this.state, ...updates };
-    
-    // Batch state updates to prevent excessive re-renders
+
     if (!this.updateScheduled) {
       this.updateScheduled = true;
       requestAnimationFrame(() => {
@@ -157,30 +260,61 @@ class OptimizedRecordingStore {
         micMuted: false
       });
 
-      // Start optimized logging
       this.logger = createOptimizedLogger();
       this.logger.start();
 
-      // Get screen capture with optimized settings
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { 
+      // Get display stream with system audio
+      this.displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
           cursor: "always",
-          frameRate: 15 // Reduced framerate for better performance
+          frameRate: 15
         },
-        audio: true,
+        audio: true, // System audio
       });
 
-      this.stream = stream;
+      // Get microphone audio separately
+      try {
+        this.micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (micError) {
+        console.warn('Microphone access denied:', micError);
+      }
+
+      // Combine streams
+      this.combinedStream = new MediaStream();
+
+      // Add video from display
+      this.displayStream.getVideoTracks().forEach(track => {
+        this.combinedStream.addTrack(track);
+      });
+
+      // Add system audio from display
+      this.displayStream.getAudioTracks().forEach(track => {
+        this.combinedStream.addTrack(track);
+      });
+
+      // Add microphone audio if available
+      if (this.micStream) {
+        this.micStream.getAudioTracks().forEach(track => {
+          this.combinedStream.addTrack(track);
+          this.micTrack = track; // Store for mute control
+        });
+      }
+
       await this.showCountdown();
 
-      // Use more efficient codec settings
-      this.recorder = new MediaRecorder(stream, {
-        mimeType: "video/webm;codecs=vp8", // VP8 is lighter than VP9
-        videoBitsPerSecond: 1000000 // Reduced bitrate
+      this.recorder = new MediaRecorder(this.combinedStream, {
+        mimeType: "video/webm;codecs=vp8",
+        videoBitsPerSecond: 1000000
       });
 
       this.chunks = [];
-      
+
       this.recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
           this.chunks.push(e.data);
@@ -189,22 +323,20 @@ class OptimizedRecordingStore {
 
       this.recorder.onstop = () => {
         this.logger.stop();
-        
+
         const blob = new Blob(this.chunks, { type: "video/webm" });
         const url = URL.createObjectURL(blob);
         this.setState({ previewUrl: url });
 
-        // Process data asynchronously to not block UI
         requestIdleCallback(() => {
           this.processRecordingData(url, blob);
         });
       };
 
-      // Use larger chunks for better performance
       this.recorder.start(3000);
       this.setState({ isRecording: true });
       this.startTimer();
-      
+
     } catch (err) {
       console.error('Recording failed:', err);
       this.cleanup();
@@ -218,21 +350,19 @@ class OptimizedRecordingStore {
       this.setState({ duration: formatTime(video.duration) });
     };
 
-    // Get logged data and detect issues
     const logData = this.logger.getData();
     const issues = this.detectIssues(logData);
-    
-    // Store complete data for preview including the blob
+
     this.previewData = {
       previewUrl: url,
-      blob: blob, // Include the actual blob
+      blob: blob,
       duration: video.duration || 0,
       consoleLogs: logData.consoleLogs,
       networkLogs: logData.networkLogs,
       detectedIssues: issues,
       comments: []
     };
-    
+
     this.setState({ showPreview: true });
     this.cleanup();
   }
@@ -241,7 +371,7 @@ class OptimizedRecordingStore {
     return new Promise(resolve => {
       let count = 3;
       this.setState({ showCountdown: count });
-      
+
       const timer = setInterval(() => {
         count--;
         if (count > 0) {
@@ -257,31 +387,60 @@ class OptimizedRecordingStore {
 
   detectIssues(data) {
     const issues = [];
-    
-    // Only process errors and warnings (already filtered by logger)
-    data.consoleLogs.forEach(log => {
-      issues.push({
-        id: `console_${log.timestamp}`,
-        type: 'console_error',
-        message: log.message,
-        severity: log.level === 'error' ? 'high' : 'medium',
-        source: 'console',
-        time: log.time,
-        timestamp: log.timestamp
-      });
-    });
 
-    // Only failed network requests (already filtered by logger)
-    data.networkLogs.forEach(req => {
-      issues.push({
-        id: `network_${req.timestamp}`,
-        type: 'network_error',
-        message: `${req.method} ${req.url} - ${req.status}${req.error ? ` (${req.error})` : ''}`,
-        severity: req.status >= 500 || req.status === 'ERROR' ? 'high' : 'medium',
-        source: 'network',
-        time: req.time,
-        timestamp: req.timestamp
+    // Only flag ERROR level console logs as issues
+    data.consoleLogs
+      .filter(log => log.level === 'error')
+      .forEach(log => {
+        issues.push({
+          id: `console_${log.timestamp}`,
+          type: 'console_error',
+          message: log.message,
+          severity: 'high',
+          source: 'console',
+          time: log.time,
+          timestamp: log.timestamp
+        });
       });
+
+    // Only flag WARN level as medium severity issues
+    data.consoleLogs
+      .filter(log => log.level === 'warn')
+      .forEach(log => {
+        issues.push({
+          id: `console_warn_${log.timestamp}`,
+          type: 'console_warning',
+          message: log.message,
+          severity: 'medium',
+          source: 'console',
+          time: log.time,
+          timestamp: log.timestamp
+        });
+      });
+
+    // Only flag failed network requests (4xx, 5xx, ERR) as issues
+    data.networkLogs
+      .filter(req => req.status >= 400 || req.status === 'ERR')
+      .forEach(req => {
+        issues.push({
+          id: `network_${req.timestamp}`,
+          type: 'network_error',
+          message: `${req.method} ${req.url} - ${req.status}${req.error ? ` (${req.error})` : ''}`,
+          severity: req.status >= 500 || req.status === 'ERR' ? 'high' : 'medium',
+          source: 'network',
+          time: req.time,
+          timestamp: req.timestamp,
+          requestData: req
+        });
+      });
+
+    console.log('🐛 Issues detected:', {
+      total: issues.length,
+      byType: {
+        errors: issues.filter(i => i.type === 'console_error').length,
+        warnings: issues.filter(i => i.type === 'console_warning').length,
+        network: issues.filter(i => i.type === 'network_error').length
+      }
     });
 
     return issues;
@@ -311,16 +470,14 @@ class OptimizedRecordingStore {
   toggleMute() {
     const newMutedState = !this.state.micMuted;
     this.setState({ micMuted: newMutedState });
-    
-    if (this.stream) {
-      this.stream.getAudioTracks().forEach(track => {
-        track.enabled = !newMutedState;
-      });
+
+    // Only toggle microphone track, not system audio
+    if (this.micTrack) {
+      this.micTrack.enabled = !newMutedState;
     }
   }
 
   startTimer() {
-    // Update timer less frequently to save CPU
     this.timer = setInterval(() => {
       if (!this.state.isPaused) {
         this.setState({ recordingTime: this.state.recordingTime + 1 });
@@ -333,22 +490,29 @@ class OptimizedRecordingStore {
       clearInterval(this.timer);
       this.timer = null;
     }
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
-      this.stream = null;
+    if (this.displayStream) {
+      this.displayStream.getTracks().forEach(track => track.stop());
+      this.displayStream = null;
+    }
+    if (this.micStream) {
+      this.micStream.getTracks().forEach(track => track.stop());
+      this.micStream = null;
+    }
+    if (this.combinedStream) {
+      this.combinedStream.getTracks().forEach(track => track.stop());
+      this.combinedStream = null;
     }
     if (this.logger) {
       this.logger.stop();
       this.logger = null;
     }
     this.recorder = null;
-    // Clear chunks to free memory
+    this.micTrack = null;
     this.chunks = [];
   }
 
   setShowPreview(value) {
     this.setState({ showPreview: value });
-    // Clear preview data when closing to free memory
     if (!value) {
       if (this.previewData?.previewUrl) {
         URL.revokeObjectURL(this.previewData.previewUrl);
@@ -370,12 +534,11 @@ class OptimizedRecordingStore {
   }
 }
 
-// Use optimized store
 const store = new OptimizedRecordingStore();
 
 const useRecordingStore = () => {
   const [state, setState] = useState(store.state);
-  
+
   useEffect(() => {
     return store.subscribe(setState);
   }, []);
@@ -393,7 +556,7 @@ const useRecordingStore = () => {
 };
 
 const ScreenRecorderButton = ({ disabled = false, className = "", variant = "ghost", isPrimary = false }) => {
-  const { activeSuite, ui, actions } = useApp(); // Get actions from AppProvider
+  const { activeSuite, ui, actions } = useApp();
   const { state, actions: recordingActions } = useRecordingStore();
 
   const handleStart = useCallback(async () => {
@@ -413,16 +576,16 @@ const ScreenRecorderButton = ({ disabled = false, className = "", variant = "gho
 
   return (
     <>
-      <RecorderControls 
-        disabled={disabled} 
-        className={className} 
-        variant={variant} 
+      <RecorderControls
+        disabled={disabled}
+        className={className}
+        variant={variant}
         isPrimary={isPrimary}
         onStart={handleStart}
         recordingState={state}
         actions={recordingActions}
       />
-      
+
       {isPrimary && state.showCountdown > 0 && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="text-white text-9xl font-bold animate-bounce">
@@ -430,11 +593,11 @@ const ScreenRecorderButton = ({ disabled = false, className = "", variant = "gho
           </div>
         </div>
       )}
-      
+
       {isPrimary && state.showPreview && (
         <RecorderPreviewModal
           activeSuite={activeSuite}
-          firestoreService={actions} // Use real actions from AppProvider
+          firestoreService={actions}
           onClose={() => recordingActions.setShowPreview(false)}
           previewUrl={previewData.previewUrl}
           blob={previewData.blob}
