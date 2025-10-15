@@ -17,7 +17,7 @@ export const useRecordings = () => {
                     error: null,
                 };
             case 'LOAD_SUCCESS':
-                console.log('📦 Recordings slice: LOAD_SUCCESS with', action.payload?.length || 0, 'recordings');
+                console.log(' Recordings slice: LOAD_SUCCESS with', action.payload?.length || 0, 'recordings');
                 return {
                     ...state,
                     recordings: action.payload || [],
@@ -63,36 +63,36 @@ export const useRecordings = () => {
 
     const actions = {
         loadRecordingsStart: () => {
-            console.log('📦 Recordings slice: loadRecordingsStart');
+            console.log(' Recordings slice: loadRecordingsStart');
             dispatch({ type: 'LOAD_START' });
         },
         loadRecordingsSuccess: (recordings) => {
-            console.log('📦 Recordings slice: loadRecordingsSuccess with', recordings?.length || 0, 'recordings');
+            console.log(' Recordings slice: loadRecordingsSuccess with', recordings?.length || 0, 'recordings');
             dispatch({ type: 'LOAD_SUCCESS', payload: recordings });
         },
         loadRecordingsFailure: (error) => {
-            console.error('📦 Recordings slice: loadRecordingsFailure', error);
+            console.error(' Recordings slice: loadRecordingsFailure', error);
             dispatch({ type: 'LOAD_FAILURE', payload: error });
         },
         addRecording: (recording) => {
-            console.log('📦 Recordings slice: addRecording', recording.id);
+            console.log(' Recordings slice: addRecording', recording.id);
             dispatch({ type: 'ADD_RECORDING', payload: recording });
         },
         updateRecording: (id, updates) => {
-            console.log('📦 Recordings slice: updateRecording', id);
+            console.log(' Recordings slice: updateRecording', id);
             dispatch({ type: 'UPDATE_RECORDING', payload: { id, updates } });
         },
         deleteRecording: (id) => {
-            console.log('📦 Recordings slice: deleteRecording', id);
+            console.log(' Recordings slice: deleteRecording', id);
             dispatch({ type: 'DELETE_RECORDING', payload: id });
         },
         clearRecordings: () => {
-            console.log('📦 Recordings slice: clearRecordings');
+            console.log(' Recordings slice: clearRecordings');
             dispatch({ type: 'CLEAR_RECORDINGS' });
         },
     };
 
-    console.log('📦 Recordings slice state:', {
+    console.log(' Recordings slice state:', {
         recordingsCount: state.recordings.length,
         loading: state.loading,
         error: state.error

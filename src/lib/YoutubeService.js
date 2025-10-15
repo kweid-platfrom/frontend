@@ -1,4 +1,4 @@
-// lib/youtube-service.js - Fixed version with better error handling
+// lib/youtube-service.js - Fixed version with correct privacy status handling
 export class SimplifiedYouTubeService {
     constructor() {
         this.clientId = process.env.YOUTUBE_CLIENT_ID;
@@ -81,10 +81,7 @@ export class SimplifiedYouTubeService {
                     }
                 } catch (parseError) {
                     console.error('Failed to parse error response:', parseError, responseText);
-                    // Fallback to the message from the outer scope if available
-                    if (!errorMessage) {
-                        errorMessage = message || 'An unexpected error occurred.';
-                    }
+                    errorMessage = responseText || 'An unexpected error occurred.';
                 }
 
                 // Provide specific guidance based on error
@@ -128,15 +125,34 @@ export class SimplifiedYouTubeService {
         }
     }
 
+    // FIXED: Helper method to normalize privacy status
+    normalizePrivacyStatus(privacy) {
+        if (!privacy) return 'unlisted';
+        
+        const normalized = privacy.toLowerCase().trim();
+        const validStatuses = ['public', 'unlisted', 'private'];
+        
+        if (!validStatuses.includes(normalized)) {
+            console.warn(`⚠️ Invalid privacy status "${privacy}", defaulting to "unlisted"`);
+            return 'unlisted';
+        }
+        
+        return normalized;
+    }
+
     async uploadVideo(videoBlob, metadata = {}) {
         try {
             await this.initialize();
             await this.ensureValidToken();
 
+            // FIXED: Normalize privacy status to lowercase
+            const privacyStatus = this.normalizePrivacyStatus(metadata.privacy);
+
             console.log('📤 Starting YouTube upload:', {
                 title: metadata.title,
                 fileSize: `${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`,
-                type: videoBlob.type
+                type: videoBlob.type,
+                privacy: privacyStatus // Log the normalized privacy status
             });
 
             const finalMetadata = {
@@ -147,7 +163,7 @@ export class SimplifiedYouTubeService {
                     categoryId: metadata.categoryId || '28'
                 },
                 status: {
-                    privacyStatus: metadata.privacy || 'unlisted',
+                    privacyStatus: privacyStatus, // FIXED: Use normalized lowercase privacy status
                     selfDeclaredMadeForKids: false
                 }
             };

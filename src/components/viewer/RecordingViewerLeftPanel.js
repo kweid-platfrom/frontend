@@ -1,0 +1,594 @@
+// components/viewer/RecordingViewerLeftPanel.jsx
+'use client'
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Terminal, Network, Bug, Info, MessageSquare, CheckCircle, AlertTriangle, Bot } from 'lucide-react';
+import AIHighlights from '../recorder/AIHighlights';
+
+const RecordingViewerLeftPanel = ({ 
+  recording,
+  videoRef,
+  activeSuite,
+  firestoreService,
+  onAddComment
+}) => {
+  const [activeTab, setActiveTab] = useState('comments');
+  const [commentText, setCommentText] = useState('');
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [selectedBugs, setSelectedBugs] = useState([]);
+  const [showAIInsights, setShowAIInsights] = useState(true);
+  const [aiInsights, setAiInsights] = useState([]);
+  const commentsEndRef = useRef(null);
+
+  const formatTime = (s) => {
+    if (!s || isNaN(s)) return '0:00';
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    const min = Math.floor(s / 60).toString();
+    return `${min}:${sec}`;
+  };
+
+  const seekTo = (seconds) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = seconds;
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+    }
+  };
+
+  // Update current video time
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const updateTime = () => setCurrentVideoTime(video.currentTime);
+    video.addEventListener('timeupdate', updateTime);
+    return () => video.removeEventListener('timeupdate', updateTime);
+  }, [videoRef]);
+
+  // Scroll to latest comment
+  useEffect(() => {
+    if (activeTab === 'comments') {
+      commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [recording?.comments, activeTab]);
+
+  const addCommentAtCurrentTime = (text) => {
+    if (!text.trim() || !videoRef.current) return;
+    
+    const currentTime = videoRef.current.currentTime;
+    const comment = {
+      id: `comment_${Date.now()}_${Math.random()}`,
+      text: text.trim(),
+      time: Number(currentTime.toFixed(1)),
+      timeStr: formatTime(currentTime),
+      createdAt: new Date().toISOString(),
+    };
+    
+    if (onAddComment) {
+      onAddComment(comment);
+    }
+    
+    setCommentText('');
+    setActiveTab('comments');
+  };
+
+  // Create bug from detected issue
+  const createBugFromIssue = async (issue) => {
+    if (!activeSuite?.id || !firestoreService) {
+      alert('Please select a test suite first.');
+      return;
+    }
+    
+    try {
+      const bugData = {
+        title: `Bug: ${issue.message.substring(0, 100)}${issue.message.length > 100 ? '...' : ''}`,
+        description: `Automatically detected issue from screen recording\n\nType: ${issue.type}\nSeverity: ${issue.severity}\nTime: ${issue.time}\n\nDetails: ${issue.message}`,
+        severity: issue.severity,
+        status: 'open',
+        source: 'screen_recording',
+        recordingData: {
+          consoleLogs: issue.source === 'console' ? [issue] : [],
+          networkLogs: issue.source === 'network' ? [issue.requestData] : [],
+        },
+      };
+      
+      const result = await firestoreService.createBug(activeSuite.id, bugData);
+      if (result.success) {
+        setSelectedBugs(prev => [...prev, issue.id]);
+        alert('Bug created successfully!');
+      } else {
+        throw new Error(result.error?.message || 'Failed to create bug');
+      }
+    } catch (err) {
+      console.error('Failed to create bug:', err);
+      alert('Failed to create bug: ' + err.message);
+    }
+  };
+
+  // Handle AI insights actions
+  const handleSaveInsights = (insights) => {
+    console.log('Saving AI insights:', insights);
+    setAiInsights(insights);
+    
+    // Create downloadable JSON file
+    const insightsData = {
+      recordingId: recording?.id || `recording_${Date.now()}`,
+      recordingTitle: recording?.title || 'Untitled Recording',
+      timestamp: new Date().toISOString(),
+      totalInsights: insights.length,
+      insights: insights,
+      metadata: {
+        consoleLogs: recording?.consoleLogs?.length || 0,
+        networkLogs: recording?.networkLogs?.length || 0,
+        detectedIssues: recording?.detectedIssues?.length || 0,
+        duration: recording?.duration || 0
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(insightsData, null, 2)], { 
+      type: 'application/json' 
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-insights-${recording?.title || 'recording'}-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Handle test case creation from AI insight
+  const handleCreateTestCaseFromInsight = async (insight) => {
+    if (!activeSuite?.id || !firestoreService) {
+      alert('Please select a test suite first.');
+      return;
+    }
+
+    try {
+      const testCaseData = {
+        title: insight.title || `Test: ${insight.description.substring(0, 80)}...`,
+        description: insight.description,
+        priority: insight.severity === 'critical' ? 'Critical' : 
+                 insight.severity === 'high' ? 'High' :
+                 insight.severity === 'medium' ? 'Medium' : 'Low',
+        category: insight.category || 'AI Generated',
+        steps: [
+          'Navigate to the affected area identified by AI analysis',
+          'Reproduce the scenario that triggered the insight',
+          'Verify the expected behavior matches requirements'
+        ],
+        expectedResult: insight.recommendation || 'System should behave as expected without issues',
+        tags: [...(insight.tags || []), 'ai-generated', 'from-recording'],
+        source: 'ai_insight',
+        automationPotential: insight.automationPotential || 'medium',
+        confidence: insight.confidence || 0,
+        recordingTime: insight.time || 0,
+        recordingId: recording?.id
+      };
+
+      const result = await firestoreService.createTestCase(activeSuite.id, testCaseData);
+      if (result.success) {
+        alert(`Test case created successfully: ${testCaseData.title}`);
+      } else {
+        throw new Error(result.error?.message || 'Failed to create test case');
+      }
+    } catch (error) {
+      console.error('Failed to create test case from insight:', error);
+      alert('Failed to create test case: ' + error.message);
+    }
+  };
+
+  // Handle bug creation from AI insight
+  const handleCreateBugFromInsight = async (insight) => {
+    if (!activeSuite?.id || !firestoreService) {
+      alert('Please select a test suite first.');
+      return;
+    }
+
+    try {
+      const bugData = {
+        title: `AI Bug: ${insight.title || insight.description.substring(0, 80)}...`,
+        description: `Bug identified by AI analysis\n\n${insight.description}\n\nRecommendation: ${insight.recommendation || 'Review and fix the identified issue'}`,
+        severity: insight.severity || 'medium',
+        status: 'open',
+        source: 'ai_insight',
+        category: insight.category || 'AI Detected',
+        tags: [...(insight.tags || []), 'ai-detected', 'from-recording'],
+        confidence: insight.confidence || 0,
+        recordingTime: insight.time || 0,
+        automationPotential: insight.automationPotential || 'medium',
+        recordingId: recording?.id,
+        recordingData: {
+          aiInsight: insight,
+          relatedLogs: insight.relatedLogs || [],
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      const result = await firestoreService.createBug(activeSuite.id, bugData);
+      if (result.success) {
+        alert(`Bug created successfully: ${bugData.title}`);
+      } else {
+        throw new Error(result.error?.message || 'Failed to create bug');
+      }
+    } catch (error) {
+      console.error('Failed to create bug from insight:', error);
+      alert('Failed to create bug: ' + error.message);
+    }
+  };
+
+  const toggleAIInsights = () => {
+    setShowAIInsights(!showAIInsights);
+  };
+
+  const tabs = [
+    { id: 'comments', label: 'Comments', icon: MessageSquare, count: recording?.comments?.length || 0 },
+    { id: 'console', label: 'Console', icon: Terminal, count: recording?.consoleLogs?.length || 0 },
+    { id: 'network', label: 'Network', icon: Network, count: recording?.networkLogs?.length || 0 },
+    { id: 'issues', label: 'Issues', icon: Bug, count: recording?.detectedIssues?.length || 0 },
+    { id: 'info', label: 'Info', icon: Info, count: 0 }
+  ];
+
+  // Get AI insights count for display
+  const aiInsightCount = aiInsights.length;
+  const criticalInsightCount = aiInsights.filter(insight => 
+    insight.severity === 'critical' || insight.severity === 'high'
+  ).length;
+
+  return (
+    <div className="w-full h-full flex flex-col">
+      {/* AI Insights Section - 50% */}
+      <div className="h-1/2 flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex flex-col">
+        {/* AI Toggle Button with Stats */}
+        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={toggleAIInsights}
+            className="w-full flex items-center justify-between p-2 rounded text-sm font-medium transition-colors bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+          >
+            <div className="flex items-center space-x-2">
+              <Bot className="w-4 h-4 text-purple-500" />
+              <span>AI Insights</span>
+              {aiInsightCount > 0 && (
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full">
+                    {aiInsightCount}
+                  </span>
+                  {criticalInsightCount > 0 && (
+                    <span className="text-xs bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300 px-2 py-0.5 rounded-full">
+                      {criticalInsightCount} critical
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400">
+              {showAIInsights ? 'ON' : 'OFF'}
+            </div>
+          </button>
+        </div>
+
+        {/* AI Insights Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          {showAIInsights ? (
+            <div className="p-3">
+              <AIHighlights
+                consoleLogs={recording?.consoleLogs || []}
+                networkLogs={recording?.networkLogs || []}
+                detectedIssues={recording?.detectedIssues || []}
+                duration={recording?.duration || 0}
+                onSeekTo={seekTo}
+                isEnabled={showAIInsights}
+                onToggle={toggleAIInsights}
+                onSaveHighlights={handleSaveInsights}
+                onCreateTestCase={handleCreateTestCaseFromInsight}
+                onCreateBug={handleCreateBugFromInsight}
+                className="space-y-2"
+              />
+            </div>
+          ) : (
+            <div className="p-6 text-center">
+              <Bot className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+              <div className="text-sm text-gray-500 mb-2">AI Insights</div>
+              <div className="text-xs text-gray-400 mb-4">
+                Toggle AI Insights ON to view intelligent analysis of your recording
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Comments/DevTools Section - 50% */}
+      <div className="h-1/2 flex-shrink-0 flex flex-col">
+        {/* Comment Input - Above tabs */}
+        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex space-x-2">
+            <input
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Add a comment at current time..."
+              className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-2 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  addCommentAtCurrentTime(commentText);
+                }
+              }}
+            />
+            <button
+              onClick={() => addCommentAtCurrentTime(commentText)}
+              disabled={!commentText.trim()}
+              className="px-3 py-1 text-xs bg-orange-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-colors whitespace-nowrap"
+            >
+              @ {formatTime(currentVideoTime)}
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex overflow-x-auto overflow-y-hidden border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+          {tabs.map(({ id, label, icon: Icon, count }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex-shrink-0 px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap flex items-center space-x-1 transition-colors ${
+                activeTab === id
+                  ? 'border-teal-500 text-teal-600 dark:text-teal-400 bg-white dark:bg-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              <Icon className="w-3 h-3" />
+              <span>{label}</span>
+              {count > 0 && (
+                <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${
+                  activeTab === id 
+                    ? 'bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300' 
+                    : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400'
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content - Vertically Scrollable */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {/* Comments Tab */}
+          {activeTab === 'comments' && (
+            <div className="space-y-2">
+              {(!recording?.comments || recording.comments.length === 0) ? (
+                <div className="text-gray-500 text-sm text-center py-8">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <div>No comments added yet</div>
+                  <div className="text-xs mt-1">Add a comment above to get started</div>
+                </div>
+              ) : (
+                <>
+                  {recording.comments
+                    .slice()
+                    .sort((a, b) => a.time - b.time)
+                    .map(comment => (
+                      <div key={comment.id} className="p-3 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between mb-2">
+                          <button
+                            onClick={() => seekTo(comment.time)}
+                            className="text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 font-medium text-sm hover:underline"
+                          >
+                            [{comment.timeStr || formatTime(comment.time)}]
+                          </button>
+                          <span className="text-gray-400 text-[10px]">
+                            {new Date(comment.createdAt || comment.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300 break-words">{comment.text}</div>
+                      </div>
+                    ))}
+                  <div ref={commentsEndRef} />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Console Tab */}
+          {activeTab === 'console' && (
+            <div className="space-y-1">
+              {(!recording?.consoleLogs || recording.consoleLogs.length === 0) ? (
+                <div className="text-gray-500 text-sm text-center py-8">
+                  <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <div>No console logs captured</div>
+                </div>
+              ) : (
+                recording.consoleLogs
+                  .slice()
+                  .reverse()
+                  .map((log, i) => (
+                    <div key={`${log.timestamp}-${i}`} className="text-xs border border-gray-100 dark:border-gray-700 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-gray-400 text-[10px]">
+                          {new Date(log.time || log.timestamp).toLocaleTimeString()}
+                        </span>
+                        <div className="flex items-center space-x-1">
+                          <span className={`font-medium text-[10px] px-2 py-0.5 rounded ${
+                            log.level === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                            log.level === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                            'bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300'
+                          }`}>
+                            {log.level?.toUpperCase() || 'LOG'}
+                          </span>
+                          {(log.count && log.count > 1) && (
+                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                              {log.count}x
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-gray-700 dark:text-gray-300 break-words">{log.message}</div>
+                    </div>
+                  ))
+              )}
+            </div>
+          )}
+
+          {/* Network Tab */}
+          {activeTab === 'network' && (
+            <div className="space-y-2">
+              {(!recording?.networkLogs || recording.networkLogs.length === 0) ? (
+                <div className="text-gray-500 text-sm text-center py-8">
+                  <Network className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <div>No network requests captured</div>
+                </div>
+              ) : (
+                recording.networkLogs
+                  .slice()
+                  .reverse()
+                  .map((req, i) => (
+                    <div
+                      key={req.id || `${req.timestamp}-${i}`}
+                      className="p-2 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded uppercase ${
+                            req.status >= 400 || req.status === 'ERR' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                            req.status >= 300 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                            'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                          }`}>
+                            {req.method}
+                          </span>
+                          <span className={`text-xs font-medium ${
+                            req.status >= 400 || req.status === 'ERR' ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'
+                          }`}>
+                            {req.status}
+                          </span>
+                          {(req.count && req.count > 1) && (
+                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                              {req.count}x
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-gray-500">{req.duration}ms</span>
+                      </div>
+                      <div className="text-[11px] text-gray-700 dark:text-gray-300 break-all">{req.url}</div>
+                      {req.error && (
+                        <div className="text-[10px] text-red-500 dark:text-red-400 mt-1 truncate">
+                          Error: {req.error}
+                        </div>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
+          )}
+
+          {/* Issues Tab */}
+          {activeTab === 'issues' && (
+            <div className="space-y-2">
+              {(!recording?.detectedIssues || recording.detectedIssues.length === 0) ? (
+                <div className="flex items-center justify-center text-gray-500 py-8">
+                  <div className="text-center">
+                    <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                    <div className="font-medium">No issues detected</div>
+                    <div className="text-xs mt-1">Recording ran smoothly</div>
+                  </div>
+                </div>
+              ) : (
+                recording.detectedIssues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className={`p-3 rounded border-l-4 ${
+                      issue.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
+                      issue.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' :
+                      'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${
+                            issue.severity === 'high' ? 'text-red-600' :
+                            issue.severity === 'medium' ? 'text-orange-500' :
+                            'text-teal-600'
+                          }`} />
+                          <span className="text-sm font-medium capitalize truncate">
+                            {issue.type.replace('_', ' ')}
+                          </span>
+                          <span className={`text-[10px] px-2 py-1 rounded uppercase font-medium ${
+                            issue.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                            issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                            'bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300'
+                          }`}>
+                            {issue.severity}
+                          </span>
+                          {(issue.count && issue.count > 1) && (
+                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                              {issue.count}x
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 break-words">{issue.message}</div>
+                        <button
+                          onClick={() => seekTo(issue.time)}
+                          className="text-[10px] text-teal-600 hover:text-teal-700 dark:text-teal-400 hover:underline"
+                        >
+                          Jump to {formatTime(issue.time)}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => createBugFromIssue(issue)}
+                        className={`ml-2 px-2 py-1 text-[10px] rounded transition-colors ${
+                          selectedBugs.includes(issue.id)
+                            ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                            : 'bg-red-600 text-white hover:bg-red-700'
+                        }`}
+                        disabled={selectedBugs.includes(issue.id)}
+                      >
+                        {selectedBugs.includes(issue.id) ? 'Created' : 'Create Bug'}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Info Tab */}
+          {activeTab === 'info' && (
+            <div className="text-xs space-y-2">
+              <div className="grid grid-cols-1 gap-2">
+                <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                  <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Recording Statistics</div>
+                  <div className="space-y-1 text-gray-600 dark:text-gray-400">
+                    <div><strong>Console Logs:</strong> {recording?.consoleLogs?.length || 0}</div>
+                    <div><strong>Network Requests:</strong> {recording?.networkLogs?.length || 0}</div>
+                    <div><strong>Issues Found:</strong> {recording?.detectedIssues?.length || 0}</div>
+                    <div><strong>Comments:</strong> {recording?.comments?.length || 0}</div>
+                    <div><strong>Duration:</strong> {formatTime(recording?.duration || 0)}</div>
+                  </div>
+                </div>
+
+                {aiInsightCount > 0 && (
+                  <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                    <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">AI Analysis</div>
+                    <div className="space-y-1 text-gray-600 dark:text-gray-400">
+                      <div><strong>Total Insights:</strong> {aiInsightCount}</div>
+                      <div><strong>Critical/High:</strong> {criticalInsightCount}</div>
+                      <div><strong>Automation Ready:</strong> {aiInsights.filter(i => i.automationPotential === 'high').length}</div>
+                      <div><strong>Avg Confidence:</strong> {
+                        aiInsights.length > 0 
+                          ? Math.round(aiInsights.reduce((sum, i) => sum + (i.confidence || 0), 0) / aiInsights.length * 100)
+                          : 0
+                      }%</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RecordingViewerLeftPanel;

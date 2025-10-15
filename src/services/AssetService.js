@@ -1108,7 +1108,7 @@ export class AssetService extends BaseFirestoreService {
                     title: metadata.title || `Recording - ${new Date().toLocaleDateString()}`,
                     description: metadata.description || 'Screen recording from QA testing',
                     tags: metadata.tags || ['qa-testing', 'screen-recording'],
-                    privacy: metadata.privacy || 'private'
+                    privacy: metadata.privacy || 'unlisted'
                 },
                 onProgress,
                 2 // maxRetries
@@ -1390,7 +1390,7 @@ export class AssetService extends BaseFirestoreService {
                     {
                         title: updates.title,
                         description: updates.description,
-                        privacy: updates.privacy || 'private'
+                        privacy: updates.privacy || 'unlisted'
                     },
                     null, // onProgress - could be passed from updates if needed
                     2 // maxRetries
