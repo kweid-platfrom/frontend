@@ -150,21 +150,21 @@ const MinimalBugTable = ({
             open: 'bg-red-100 text-red-800 border-red-200',
             'in-progress': 'bg-yellow-100 text-yellow-800 border-yellow-200',
             resolved: 'bg-green-100 text-green-800 border-green-200',
-            closed: 'bg-gray-100 text-gray-800 border-gray-200',
+            closed: 'bg-muted text-muted-foreground border-border',
             duplicate: 'bg-purple-100 text-purple-800 border-purple-200',
             'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200',
         };
-        return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return statusConfig[status?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getSortIcon = useCallback((columnKey) => {
         if (sortConfig.key !== columnKey) {
-            return <ChevronUp className="w-3 h-3 text-gray-400" />;
+            return <ChevronUp className="w-3 h-3 text-muted-foreground" />;
         }
         return sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-3 h-3 text-gray-600" />
+            <ChevronUp className="w-3 h-3 text-card-foreground" />
         ) : (
-            <ChevronDown className="w-3 h-3 text-gray-600" />
+            <ChevronDown className="w-3 h-3 text-card-foreground" />
         );
     }, [sortConfig]);
 
@@ -207,17 +207,17 @@ const MinimalBugTable = ({
 
     if (loading) {
         return (
-            <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+            <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
                 <div className="px-6 py-12 text-center">
                     <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-teal-600"></div>
-                    <p className="mt-2 text-sm text-gray-500">Loading minimal bug reports...</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Loading minimal bug reports...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+        <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
             <EnhancedBulkActionsBar
                 selectedItems={selectedBugs}
                 onClearSelection={() => onSelectBugs([])}
@@ -228,21 +228,21 @@ const MinimalBugTable = ({
             />
             
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-6 py-4 border-b border-border">
                 <div className="flex items-center gap-2">
-                    <Terminal className="w-5 h-5 text-gray-600" />
-                    <h3 className="text-lg font-medium text-gray-900">Minimal Bug Reports</h3>
-                    <span className="text-sm text-gray-500">
+                    <Terminal className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="text-lg font-medium text-card-foreground">Minimal Bug Reports</h3>
+                    <span className="text-sm text-muted-foreground">
                         - Focused view for quick developer action
                     </span>
                 </div>
             </div>
 
             <div className="relative overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0 z-20">
+                <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted sticky top-0 z-20">
                         <tr>
-                            <th className="px-6 py-3 text-left border-r border-gray-200 w-12 sticky left-0 bg-gray-50 z-30">
+                            <th className="px-6 py-3 text-left border-r border-border w-12 sticky left-0 bg-muted z-30">
                                 <div className="flex items-center">
                                     {isAllSelected ? (
                                         <CheckSquare
@@ -251,14 +251,14 @@ const MinimalBugTable = ({
                                         />
                                     ) : (
                                         <Square
-                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                            className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-teal-600 transition-colors"
                                             onClick={() => handleSelectAll(true)}
                                         />
                                     )}
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border w-32"
                                 onClick={() => handleSort('module')}
                             >
                                 <div className="flex items-center gap-1">
@@ -267,7 +267,7 @@ const MinimalBugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border"
                                 onClick={() => handleSort('title')}
                             >
                                 <div className="flex items-center gap-1">
@@ -276,7 +276,7 @@ const MinimalBugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border w-32"
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -284,11 +284,11 @@ const MinimalBugTable = ({
                                     {getSortIcon('status')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-r border-border">
                                 Console Log
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-32"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors w-32"
                                 onClick={() => handleSort('updated_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -298,14 +298,14 @@ const MinimalBugTable = ({
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-card divide-y divide-border">
                         {paginatedBugs.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="px-6 py-12 text-center text-sm text-gray-500">
+                                <td colSpan="6" className="px-6 py-12 text-center text-sm text-muted-foreground">
                                     <div className="flex flex-col items-center">
-                                        <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                                        <Bug className="w-12 h-12 text-muted-foreground mb-4" />
                                         <p>No bugs found</p>
-                                        <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Create your first bug report to get started</p>
                                     </div>
                                 </td>
                             </tr>
@@ -316,8 +316,8 @@ const MinimalBugTable = ({
                                 const consoleLog = formatConsoleLog(bug.console_log || bug.log || bug.error_log);
 
                                 return (
-                                    <tr key={bug.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-teal-50' : ''}`}>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-12 sticky left-0 bg-white z-30">
+                                    <tr key={bug.id} className={`hover:bg-accent transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
+                                        <td className="px-6 py-4 border-r border-border w-12 sticky left-0 bg-card z-30">
                                             <div className="flex items-center">
                                                 {isSelected ? (
                                                     <CheckSquare
@@ -326,37 +326,37 @@ const MinimalBugTable = ({
                                                     />
                                                 ) : (
                                                     <Square
-                                                        className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                        className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-teal-600 transition-colors"
                                                         onClick={() => handleSelectItem(bug.id, true)}
                                                     />
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                        <td className="px-6 py-4 border-r border-border w-32">
                                             <div className="flex items-center gap-2">
-                                                <FileText className="w-4 h-4 text-gray-400" />
-                                                <span className="text-sm font-medium text-gray-900">
+                                                <FileText className="w-4 h-4 text-muted-foreground" />
+                                                <span className="text-sm font-medium text-card-foreground">
                                                     {getModuleInfo(bug)}
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200">
+                                        <td className="px-6 py-4 border-r border-border">
                                             <div className="max-w-md">
-                                                <div className="text-sm font-medium text-gray-900 mb-1">
+                                                <div className="text-sm font-medium text-card-foreground mb-1">
                                                     {bug.title || 'Untitled Bug'}
                                                 </div>
-                                                <div className="text-xs text-gray-600 line-clamp-2">
+                                                <div className="text-xs text-muted-foreground line-clamp-2">
                                                     {bug.description || 'No description provided'}
                                                 </div>
                                                 <button
                                                     onClick={() => onView(bug)}
-                                                    className="mt-2 text-xs text-teal-600 hover:text-teal-800 hover:underline"
+                                                    className="mt-2 text-xs text-teal-600 hover:text-teal-800 hover:underline transition-colors"
                                                 >
                                                     View full details →
                                                 </button>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                        <td className="px-6 py-4 border-r border-border w-32">
                                             <InlineEditCell
                                                 value={bug.status}
                                                 options={statusOptions}
@@ -365,12 +365,12 @@ const MinimalBugTable = ({
                                                 noSearch
                                             />
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200">
+                                        <td className="px-6 py-4 border-r border-border">
                                             <div className="max-w-lg">
                                                 <div className="flex items-start gap-2">
-                                                    <Code className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                                    <Code className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                                                     <div className="flex-1 min-w-0">
-                                                        <div className={`text-xs font-mono bg-gray-900 text-green-400 p-3 rounded border ${isLogExpanded ? '' : 'max-h-20 overflow-hidden'}`}>
+                                                        <div className={`text-xs font-mono bg-gray-900 text-green-400 p-3 rounded border border-gray-700 ${isLogExpanded ? '' : 'max-h-20 overflow-hidden'}`}>
                                                             <pre className="whitespace-pre-wrap break-words">
                                                                 {consoleLog}
                                                             </pre>
@@ -378,7 +378,7 @@ const MinimalBugTable = ({
                                                         {consoleLog.length > 200 && (
                                                             <button
                                                                 onClick={() => toggleLogExpansion(bug.id)}
-                                                                className="mt-2 text-xs text-teal-600 hover:text-teal-800 hover:underline"
+                                                                className="mt-2 text-xs text-teal-600 hover:text-teal-800 hover:underline transition-colors"
                                                             >
                                                                 {isLogExpanded ? 'Show less' : 'Show more'}
                                                             </button>
@@ -388,7 +388,7 @@ const MinimalBugTable = ({
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 w-32">
-                                            <div className="flex items-center text-xs text-gray-500">
+                                            <div className="flex items-center text-xs text-muted-foreground">
                                                 <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
                                                 {bug.updated_at && isValidDate(new Date(bug.updated_at))
                                                     ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })

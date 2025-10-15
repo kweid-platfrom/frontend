@@ -171,16 +171,16 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
             onClick={handleBackdropClick}
         >
             <div 
-                className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" 
+                className="bg-card rounded-lg shadow-theme-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" 
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-                    <h3 className="text-lg font-medium text-gray-900">
+                <div className="px-6 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-card">
+                    <h3 className="text-lg font-medium text-card-foreground">
                         {recommendation ? 'Edit recommendation' : 'New Feature Suggestion'}
                     </h3>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                        className="text-muted-foreground hover:text-card-foreground p-1 rounded-full hover:bg-accent transition-colors"
                         disabled={isSubmitting}
                     >
                         <X className="w-5 h-5" />
@@ -190,7 +190,7 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                 <form onSubmit={handleSubmit} className="px-6 py-4 space-y-6">
                     {/* Title */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-card-foreground mb-1">
                             Title <span className="text-red-500">*</span>
                         </label>
                         <input
@@ -198,20 +198,20 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                             required
                             value={formData.title}
                             onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
-                                errors.title ? 'border-red-300' : 'border-gray-300'
+                            className={`w-full px-3 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring ${
+                                errors.title ? 'border-red-300' : 'border-input'
                             }`}
                             placeholder="Brief title for the feature suggestion"
                             disabled={isSubmitting}
                             maxLength={200}
                         />
                         {errors.title && <p className="mt-1 text-sm text-red-600">{errors.title}</p>}
-                        <p className="mt-1 text-xs text-gray-500">{formData.title.length}/200 characters</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formData.title.length}/200 characters</p>
                     </div>
 
                     {/* Description */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-card-foreground mb-1">
                             Description <span className="text-red-500">*</span>
                         </label>
                         <textarea
@@ -219,28 +219,28 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                             rows={4}
                             value={formData.description}
                             onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
-                                errors.description ? 'border-red-300' : 'border-gray-300'
+                            className={`w-full px-3 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring ${
+                                errors.description ? 'border-red-300' : 'border-input'
                             }`}
                             placeholder="Detailed description of the feature or improvement..."
                             disabled={isSubmitting}
                             maxLength={1000}
                         />
                         {errors.description && <p className="mt-1 text-sm text-red-600">{errors.description}</p>}
-                        <p className="mt-1 text-xs text-gray-500">{formData.description.length}/1000 characters</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formData.description.length}/1000 characters</p>
                     </div>
 
                     {/* Form Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Status */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-card-foreground mb-1">
                                 Status
                             </label>
                             <select
                                 value={formData.status}
                                 onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                 disabled={isSubmitting}
                             >
                                 <option value="under-review">Under Review</option>
@@ -254,13 +254,13 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                         {/* Priority */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-card-foreground mb-1">
                                 Priority
                             </label>
                             <select
                                 value={formData.priority}
                                 onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                 disabled={isSubmitting}
                             >
                                 <option value="critical">Critical</option>
@@ -272,13 +272,13 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                         {/* Category */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-card-foreground mb-1">
                                 Category
                             </label>
                             <select
                                 value={formData.category}
                                 onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                 disabled={isSubmitting}
                             >
                                 <option value="ui-ux">UI/UX</option>
@@ -294,13 +294,13 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                         {/* Impact */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-card-foreground mb-1">
                                 Expected Impact
                             </label>
                             <select
                                 value={formData.impact}
                                 onChange={(e) => setFormData(prev => ({ ...prev, impact: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                 disabled={isSubmitting}
                             >
                                 <option value="high">High Impact</option>
@@ -311,13 +311,13 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                         {/* Effort */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-card-foreground mb-1">
                                 Development Effort
                             </label>
                             <select
                                 value={formData.effort}
                                 onChange={(e) => setFormData(prev => ({ ...prev, effort: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                 disabled={isSubmitting}
                             >
                                 <option value="small">Small (1-2 days)</option>
@@ -328,14 +328,14 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                         {/* Assignee */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-card-foreground mb-1">
                                 Assignee (Optional)
                             </label>
                             <input
                                 type="text"
                                 value={formData.assignee}
                                 onChange={(e) => setFormData(prev => ({ ...prev, assignee: e.target.value }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                 placeholder="Assign to team member"
                                 disabled={isSubmitting}
                                 maxLength={100}
@@ -345,31 +345,31 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                     {/* Business Rationale */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-card-foreground mb-1">
                             Business Rationale
                         </label>
                         <textarea
                             rows={3}
                             value={formData.rationale}
                             onChange={(e) => setFormData(prev => ({ ...prev, rationale: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                             placeholder="Why is this feature important? What business value does it provide?"
                             disabled={isSubmitting}
                             maxLength={500}
                         />
-                        <p className="mt-1 text-xs text-gray-500">{formData.rationale.length}/500 characters</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formData.rationale.length}/500 characters</p>
                     </div>
 
                     {/* Tags */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-card-foreground mb-1">
                             Tags (comma-separated, max 10)
                         </label>
                         <input
                             type="text"
                             value={formData.tags.join(', ')}
                             onChange={handleTagsChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                             placeholder="e.g. mobile, dashboard, user-experience"
                             disabled={isSubmitting}
                         />
@@ -398,15 +398,15 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
 
                     {/* Due Date */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-card-foreground mb-1">
                             Due Date (Optional)
                         </label>
                         <input
                             type="date"
                             value={formData.due_date}
                             onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
-                                errors.due_date ? 'border-red-300' : 'border-gray-300'
+                            className={`w-full px-3 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring ${
+                                errors.due_date ? 'border-red-300' : 'border-input'
                             }`}
                             disabled={isSubmitting}
                             min={new Date().toISOString().split('T')[0]}
@@ -415,22 +415,22 @@ const RecommendationModal = ({ recommendation, onSave, onClose, currentUser, act
                     </div>
 
                     {/* Form Actions */}
-                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-border">
                         <button
                             type="button"
                             onClick={onClose}
                             disabled={isSubmitting}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50"
+                            className="px-4 py-2 text-sm font-medium text-card-foreground bg-card border border-border rounded-md hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring disabled:opacity-50 transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isSubmitting || !formData.title.trim() || !formData.description.trim()}
-                            className="px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary border border-transparent rounded-md hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                         >
                             {isSubmitting && (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground"></div>
                             )}
                             {isSubmitting ? 'Saving...' : (recommendation ? 'Update' : 'Save')} Suggestion
                         </button>

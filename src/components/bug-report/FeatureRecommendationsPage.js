@@ -430,68 +430,68 @@ const FeatureRecommendationsPage = () => {
     }, [voteOnRecommendation, currentUser, actions.ui, recommendationsAvailable]);
 
     const handleStatusUpdate = useCallback(async (recId, newStatus) => {
-    if (!currentUser?.uid) {
-        actions.ui.showNotification({
-            id: 'status-no-auth',
-            type: 'error',
-            message: 'You must be logged in to update status',
-            duration: 3000
-        });
-        return;
-    }
-
-    if (!recommendationsAvailable) {
-        actions.ui.showNotification({
-            id: 'recommendations-unavailable',
-            type: 'error',
-            message: 'Recommendations feature is not available',
-            duration: 3000
-        });
-        return;
-    }
-
-    try {
-        const recommendation = recommendations.find(r => r.id === recId);
-        if (!recommendation) {
-            throw new Error('Recommendation not found');
+        if (!currentUser?.uid) {
+            actions.ui.showNotification({
+                id: 'status-no-auth',
+                type: 'error',
+                message: 'You must be logged in to update status',
+                duration: 3000
+            });
+            return;
         }
 
-        const updateData = {
-            id: recId,
-            status: newStatus,
-            updated_at: new Date().toISOString(),
-            title: recommendation.title,
-            description: recommendation.description,
-            priority: recommendation.priority,
-            category: recommendation.category,
-            impact: recommendation.impact,
-            effort: recommendation.effort
-        };
+        if (!recommendationsAvailable) {
+            actions.ui.showNotification({
+                id: 'recommendations-unavailable',
+                type: 'error',
+                message: 'Recommendations feature is not available',
+                duration: 3000
+            });
+            return;
+        }
 
-        const result = await updateRecommendation(updateData);
+        try {
+            const recommendation = recommendations.find(r => r.id === recId);
+            if (!recommendation) {
+                throw new Error('Recommendation not found');
+            }
 
-        if (result && result.success === false) {
+            const updateData = {
+                id: recId,
+                status: newStatus,
+                updated_at: new Date().toISOString(),
+                title: recommendation.title,
+                description: recommendation.description,
+                priority: recommendation.priority,
+                category: recommendation.category,
+                impact: recommendation.impact,
+                effort: recommendation.effort
+            };
+
+            const result = await updateRecommendation(updateData);
+
+            if (result && result.success === false) {
+                actions.ui.showNotification({
+                    id: 'status-update-error',
+                    type: 'error',
+                    message: result.error?.message || 'Failed to update recommendation status',
+                    duration: 3000
+                });
+                return result;
+            } else {
+                return { success: true };
+            }
+        } catch (error) {
+            console.error('Error updating status:', error);
             actions.ui.showNotification({
                 id: 'status-update-error',
                 type: 'error',
-                message: result.error?.message || 'Failed to update recommendation status',
+                message: 'Failed to update recommendation status',
                 duration: 3000
             });
-            return result;
-        } else {
-            return { success: true };
+            return { success: false, error };
         }
-    } catch (error) {
-        console.error('Error updating status:', error);
-        actions.ui.showNotification({
-            id: 'status-update-error',
-            type: 'error',
-            message: 'Failed to update recommendation status',
-            duration: 3000
-        });
-        return { success: false, error };
-    }
-}, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable]);
+    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable]);
 
     const handleDeleteRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
@@ -596,10 +596,10 @@ const FeatureRecommendationsPage = () => {
     // Show loading state
     if (isLoading || recommendationsLoading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading feature suggestions...</p>
+                    <p className="mt-4 text-muted-foreground">Loading feature suggestions...</p>
                 </div>
             </div>
         );
@@ -608,17 +608,17 @@ const FeatureRecommendationsPage = () => {
     // Show feature unavailable message
     if (!recommendationsAvailable) {
         return (
-            <div className="min-h-screen bg-gray-50">
+            <div className="min-h-screen bg-background">
                 <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-                        <Lightbulb className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12 text-center">
+                        <Lightbulb className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-card-foreground mb-2">
                             Recommendations Feature Unavailable
                         </h3>
-                        <p className="text-gray-600 mb-6">
+                        <p className="text-muted-foreground mb-6">
                             The suggestions feature is currently not available. This might be due to missing configuration or permissions.
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted-foreground">
                             Please check your setup or contact support if you believe this is an error.
                         </p>
                     </div>
@@ -628,7 +628,7 @@ const FeatureRecommendationsPage = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-background">
             <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -638,22 +638,22 @@ const FeatureRecommendationsPage = () => {
                                 <Lightbulb className="w-6 h-6 text-teal-600" />
                             </div>
                             <div>
-                                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+                                <h1 className="text-xl sm:text-2xl font-bold text-foreground">
                                     Feature Suggestions
                                 </h1>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-muted-foreground">
                                     Manage feature requests and improvement suggestions
                                 </p>
                             </div>
                         </div>
-                        <span className="ml-4 px-3 py-1 bg-gray-200 rounded-full text-sm font-normal">
+                        <span className="ml-4 px-3 py-1 bg-muted rounded-full text-sm font-normal text-muted-foreground">
                             {filteredRecommendations.length} suggestions
                         </span>
                     </div>
                     <div className="flex items-center space-x-3">
                         <button
                             onClick={handleCreateRecommendation}
-                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-theme-sm text-sm font-medium rounded-md text-primary-foreground bg-primary hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring transition-colors"
                         >
                             <Plus className="w-4 h-4 mr-2" />
                             New
@@ -662,19 +662,19 @@ const FeatureRecommendationsPage = () => {
                 </div>
 
                 {/* Filters and Search */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+                <div className="bg-card rounded-lg shadow-theme-sm border border-border mb-6">
                     <div className="px-6 py-4">
                         <div className="flex flex-col lg:flex-row gap-4">
                             {/* Search */}
                             <div className="flex-1">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                     <input
                                         type="text"
                                         placeholder="Search Suggestions..."
                                         value={filters.search}
                                         onChange={(e) => setFilters({ search: e.target.value })}
-                                        className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                        className="pl-10 pr-4 py-2 w-full bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                                     />
                                 </div>
                             </div>
@@ -684,7 +684,7 @@ const FeatureRecommendationsPage = () => {
                                 <select
                                     value={filters.status}
                                     onChange={(e) => setFilters({ status: e.target.value })}
-                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                                 >
                                     <option value="all">All Status</option>
                                     <option value="under-review">Under Review</option>
@@ -698,7 +698,7 @@ const FeatureRecommendationsPage = () => {
                                 <select
                                     value={filters.priority}
                                     onChange={(e) => setFilters({ priority: e.target.value })}
-                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                                 >
                                     <option value="all">All Priority</option>
                                     <option value="critical">Critical</option>
@@ -710,7 +710,7 @@ const FeatureRecommendationsPage = () => {
                                 <select
                                     value={filters.category}
                                     onChange={(e) => setFilters({ category: e.target.value })}
-                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                                 >
                                     <option value="all">All Categories</option>
                                     <option value="ui-ux">UI/UX</option>
@@ -726,7 +726,7 @@ const FeatureRecommendationsPage = () => {
                                 <select
                                     value={filters.impact}
                                     onChange={(e) => setFilters({ impact: e.target.value })}
-                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                                 >
                                     <option value="all">All Impact</option>
                                     <option value="high">High Impact</option>
@@ -736,21 +736,21 @@ const FeatureRecommendationsPage = () => {
                             </div>
 
                             {/* View Mode Toggle */}
-                            <div className="flex border border-gray-300 rounded-md">
+                            <div className="flex border border-border rounded-md overflow-hidden">
                                 <button
                                     onClick={() => setViewMode('cards')}
-                                    className={`px-3 py-2 text-sm font-medium rounded-l-md ${viewMode === 'cards'
-                                            ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                    className={`px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'cards'
+                                        ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                        : 'bg-card text-card-foreground hover:bg-accent'
                                         }`}
                                 >
                                     Cards
                                 </button>
                                 <button
                                     onClick={() => setViewMode('table')}
-                                    className={`px-3 py-2 text-sm font-medium rounded-r-md border-l ${viewMode === 'table'
-                                            ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                    className={`px-3 py-2 text-sm font-medium border-l border-border transition-colors ${viewMode === 'table'
+                                        ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                        : 'bg-card text-card-foreground hover:bg-accent'
                                         }`}
                                 >
                                     Table
@@ -761,7 +761,7 @@ const FeatureRecommendationsPage = () => {
                 </div>
 
                 {/* Content */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="bg-card rounded-lg shadow-theme-sm border border-border">
                     {viewMode === 'cards' ? (
                         <div className="p-6">
                             <RecommendationCards
@@ -798,7 +798,7 @@ const FeatureRecommendationsPage = () => {
                             safeFormatDate={safeFormatDate}
                         />
                     )}
-                    
+
                     {/* Pagination */}
                     <Pagination
                         currentPage={currentPage}

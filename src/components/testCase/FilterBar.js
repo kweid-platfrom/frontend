@@ -18,16 +18,16 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
         const environments = [...new Set(testCases.map(tc => tc.environment).filter(Boolean))];
         const allTags = [...new Set(testCases.flatMap(tc => tc.tags || []))];
 
-        return { 
-            statuses, 
-            priorities, 
+        return {
+            statuses,
+            priorities,
             severities,
             executionStatuses,
-            assignees, 
+            assignees,
             components,
             testTypes,
             environments,
-            allTags 
+            allTags
         };
     }, [testCases]);
 
@@ -43,7 +43,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
         const newTags = currentTags.includes(tag)
             ? currentTags.filter(t => t !== tag)
             : [...currentTags, tag];
-        
+
         handleFilterChange('tags', newTags);
     };
 
@@ -65,18 +65,18 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
     };
 
     const hasActiveFilters = () => {
-        return filters.status !== 'all' || 
-               filters.priority !== 'all' || 
-               filters.severity !== 'all' ||
-               filters.executionStatus !== 'all' ||
-               filters.assignee !== 'all' || 
-               filters.component !== 'all' ||
-               filters.testType !== 'all' ||
-               filters.environment !== 'all' ||
-               filters.automationStatus !== 'all' ||
-               (filters.tags && filters.tags.length > 0) || 
-               filters.search !== '' ||
-               filters.lastUpdated !== 'all';
+        return filters.status !== 'all' ||
+            filters.priority !== 'all' ||
+            filters.severity !== 'all' ||
+            filters.executionStatus !== 'all' ||
+            filters.assignee !== 'all' ||
+            filters.component !== 'all' ||
+            filters.testType !== 'all' ||
+            filters.environment !== 'all' ||
+            filters.automationStatus !== 'all' ||
+            (filters.tags && filters.tags.length > 0) ||
+            filters.search !== '' ||
+            filters.lastUpdated !== 'all';
     };
 
     const getActiveFiltersCount = () => {
@@ -97,7 +97,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
     };
 
     return (
-        <div className="bg-background rounded-lg shadow-theme-md p-4 mb-4">
+        <div className="bg-card rounded-lg shadow-theme-md p-4 mb-4 border border-border">
             {/* Search and Quick Filters Row */}
             <div className="flex items-center gap-4 mb-4 flex-wrap">
                 {/* Search Bar */}
@@ -108,11 +108,10 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                             placeholder="Search test cases..."
                             value={filters.search}
                             onChange={(e) => handleFilterChange('search', e.target.value)}
-                            className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary h-10 appearance-none ${
-                                filters.search 
-                                    ? 'bg-teal-50 border-teal-500' 
-                                    : 'border-border'
-                            }`}
+                            className={`w-full pl-10 pr-4 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring h-10 appearance-none ${filters.search
+                                    ? 'bg-teal-50 border-teal-500'
+                                    : 'border-input'
+                                }`}
                         />
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -124,15 +123,14 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
 
                 {/* Quick Filters */}
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-foreground whitespace-nowrap">Status:</label>
+                    <label className="text-sm font-medium text-card-foreground whitespace-nowrap">Status:</label>
                     <select
                         value={filters.status}
                         onChange={(e) => handleFilterChange('status', e.target.value)}
-                        className={`pl-3 pr-8 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 min-w-32 bg-white appearance-none cursor-pointer ${
-                            filters.status !== 'all' 
-                                ? 'bg-teal-50 border-teal-500' 
-                                : 'border-border'
-                        }`}
+                        className={`pl-3 pr-8 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 min-w-32 appearance-none cursor-pointer ${filters.status !== 'all'
+                                ? 'bg-teal-50 border-teal-500'
+                                : 'border-input'
+                            }`}
                         style={{
                             backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                             backgroundPosition: 'right 0.5rem center',
@@ -150,15 +148,14 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-foreground whitespace-nowrap">Priority:</label>
+                    <label className="text-sm font-medium text-card-foreground whitespace-nowrap">Priority:</label>
                     <select
                         value={filters.priority}
                         onChange={(e) => handleFilterChange('priority', e.target.value)}
-                        className={`pl-3 pr-8 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 min-w-32 bg-white appearance-none cursor-pointer ${
-                            filters.priority !== 'all' 
-                                ? 'bg-teal-50 border-teal-500' 
-                                : 'border-border'
-                        }`}
+                        className={`pl-3 pr-8 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 min-w-32 appearance-none cursor-pointer ${filters.priority !== 'all'
+                                ? 'bg-teal-50 border-teal-500'
+                                : 'border-input'
+                            }`}
                         style={{
                             backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                             backgroundPosition: 'right 0.5rem center',
@@ -176,15 +173,14 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-foreground whitespace-nowrap">Execution:</label>
+                    <label className="text-sm font-medium text-card-foreground whitespace-nowrap">Execution:</label>
                     <select
                         value={filters.executionStatus || 'all'}
                         onChange={(e) => handleFilterChange('executionStatus', e.target.value)}
-                        className={`pl-3 pr-8 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 min-w-36 bg-white appearance-none cursor-pointer ${
-                            filters.executionStatus !== 'all' 
-                                ? 'bg-teal-50 border-teal-500' 
-                                : 'border-border'
-                        }`}
+                        className={`pl-3 pr-8 py-2 bg-background text-foreground border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 min-w-36 appearance-none cursor-pointer ${filters.executionStatus !== 'all'
+                                ? 'bg-teal-50 border-teal-500'
+                                : 'border-input'
+                            }`}
                         style={{
                             backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                             backgroundPosition: 'right 0.5rem center',
@@ -210,45 +206,43 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                     {hasActiveFilters() && (
                         <button
                             onClick={clearFilters}
-                            className="px-3 py-2 text-sm text-destructive hover:text-destructive-foreground font-medium h-10"
+                            className="px-3 py-2 text-sm text-destructive hover:text-destructive font-medium h-10 transition-colors"
                         >
                             Clear Filters ({getActiveFiltersCount()})
                         </button>
                     )}
-                    
+
                     {/* View Mode Buttons */}
                     <div className="flex">
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`px-4 py-3 text-sm transition-colors duration-200 ${
-                                viewMode === 'list'
+                            className={`px-4 py-3 text-sm transition-colors duration-200 ${viewMode === 'list'
                                     ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'bg-background text-foreground border-border hover:bg-secondary'
-                            } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary`}
+                                    : 'bg-card text-card-foreground border-border hover:bg-accent'
+                                } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-ring`}
                             title="List View"
                         >
                             <List className="h-4 w-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('table')}
-                            className={`px-4 py-3 text-sm transition-colors duration-200 ${
-                                viewMode === 'table'
+                            className={`px-4 py-3 text-sm transition-colors duration-200 ${viewMode === 'table'
                                     ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'bg-background text-foreground border-border hover:bg-secondary'
-                            } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary`}
+                                    : 'bg-card text-card-foreground border-border hover:bg-accent'
+                                } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-ring`}
                             title="Table View"
                         >
                             <Table className="h-4 w-4" />
                         </button>
                     </div>
-                    
+
                     {/* Expand/Collapse Toggle */}
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
-                        className="p-2 hover:bg-secondary rounded h-10 flex items-center justify-center"
+                        className="p-2 hover:bg-accent rounded h-10 flex items-center justify-center transition-colors"
                         title={isExpanded ? 'Hide additional filters' : 'Show additional filters'}
                     >
-                        {isExpanded ? <ChevronUp className="h-4 w-4 text-foreground" /> : <ChevronDown className="h-4 w-4 text-foreground" />}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-card-foreground" /> : <ChevronDown className="h-4 w-4 text-card-foreground" />}
                     </button>
                 </div>
             </div>
@@ -260,13 +254,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                         {/* Additional Filter Row 1 */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Severity:
                                 </label>
                                 <select
                                     value={filters.severity || 'all'}
                                     onChange={(e) => handleFilterChange('severity', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -288,13 +282,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Assignee:
                                 </label>
                                 <select
                                     value={filters.assignee || 'all'}
                                     onChange={(e) => handleFilterChange('assignee', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -313,13 +307,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Component:
                                 </label>
                                 <select
                                     value={filters.component || 'all'}
                                     onChange={(e) => handleFilterChange('component', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -337,13 +331,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Test Type:
                                 </label>
                                 <select
                                     value={filters.testType || 'all'}
                                     onChange={(e) => handleFilterChange('testType', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -370,13 +364,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                         {/* Additional Filter Row 2 */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Environment:
                                 </label>
                                 <select
                                     value={filters.environment || 'all'}
                                     onChange={(e) => handleFilterChange('environment', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -398,13 +392,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Automation Status:
                                 </label>
                                 <select
                                     value={filters.automationStatus || 'all'}
                                     onChange={(e) => handleFilterChange('automationStatus', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -420,13 +414,13 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
+                                <label className="block text-sm font-medium text-card-foreground mb-1">
                                     Last Updated:
                                 </label>
                                 <select
                                     value={filters.lastUpdated || 'all'}
                                     onChange={(e) => handleFilterChange('lastUpdated', e.target.value)}
-                                    className="w-full pl-3 pr-8 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-white appearance-none cursor-pointer"
+                                    className="w-full pl-3 pr-8 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm h-10 appearance-none cursor-pointer"
                                     style={{
                                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                                         backgroundPosition: 'right 0.5rem center',
@@ -445,7 +439,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
 
                         {/* Tags Filter */}
                         <div>
-                            <label className="block text-sm font-medium text-foreground mb-2">
+                            <label className="block text-sm font-medium text-card-foreground mb-2">
                                 Filter by Tags:
                             </label>
                             <div className="flex flex-wrap gap-2">
@@ -453,11 +447,10 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                                     <button
                                         key={tag}
                                         onClick={() => handleTagToggle(tag)}
-                                        className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                                            filters.tags && filters.tags.includes(tag)
+                                        className={`px-3 py-1 text-sm rounded-full border transition-colors ${filters.tags && filters.tags.includes(tag)
                                                 ? 'bg-teal-100 text-teal-800 border-teal-300'
-                                                : 'bg-secondary text-foreground border-border hover:bg-secondary/80'
-                                        }`}
+                                                : 'bg-secondary text-secondary-foreground border-border hover:bg-accent'
+                                            }`}
                                     >
                                         {tag}
                                     </button>
@@ -475,26 +468,26 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
             {hasActiveFilters() && (
                 <div className="mt-4 pt-4 border-t border-border">
                     <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-foreground">Active filters:</span>
-                        
+                        <span className="text-sm font-medium text-card-foreground">Active filters:</span>
+
                         {filters.status !== 'all' && (
-                            <span className="inline-flex items-center px-2 py-1 bg-success text-success-foreground text-xs rounded-full">
+                            <span className="inline-flex items-center px-2 py-1 bg-success text-white text-xs rounded-full">
                                 Status: {filters.status}
                                 <button
                                     onClick={() => handleFilterChange('status', 'all')}
-                                    className="ml-1 text-success hover:text-success-foreground"
+                                    className="ml-1 text-white hover:text-gray-200"
                                 >
                                     ×
                                 </button>
                             </span>
                         )}
-                        
+
                         {filters.priority !== 'all' && (
-                            <span className="inline-flex items-center px-2 py-1 bg-warning text-warning-foreground text-xs rounded-full">
+                            <span className="inline-flex items-center px-2 py-1 bg-warning text-white text-xs rounded-full">
                                 Priority: {filters.priority}
                                 <button
                                     onClick={() => handleFilterChange('priority', 'all')}
-                                    className="ml-1 text-warning hover:text-warning-foreground"
+                                    className="ml-1 text-white hover:text-gray-200"
                                 >
                                     ×
                                 </button>
@@ -524,7 +517,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                                 </button>
                             </span>
                         )}
-                        
+
                         {filters.assignee !== 'all' && (
                             <span className="inline-flex items-center px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full">
                                 Assignee: {filters.assignee || 'Unassigned'}
@@ -596,7 +589,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                                 </button>
                             </span>
                         )}
-                        
+
                         {filters.tags && filters.tags.map(tag => (
                             <span key={tag} className="inline-flex items-center px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full">
                                 Tag: {tag}
@@ -608,7 +601,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                                 </button>
                             </span>
                         ))}
-                        
+
                         {filters.search && (
                             <span className="inline-flex items-center px-2 py-1 bg-secondary text-foreground text-xs rounded-full">
                                 Search: {filters.search}

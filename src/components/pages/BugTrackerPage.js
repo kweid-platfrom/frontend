@@ -405,7 +405,6 @@ const BugTrackerPage = () => {
             }
             // Severity action with select dropdown
             else if (actionId === 'severity' && selectedOption) {
-                // Use the selectedOption.id directly - it should already be in correct format
                 updates.severity = selectedOption.id;
             }
             // Priority actions
@@ -417,7 +416,6 @@ const BugTrackerPage = () => {
             if (actionId === 'add-to-sprint' && selectedOption) {
                 const sprintId = selectedOption.id;
 
-                // Update each bug to include the sprintId
                 for (const bugId of selectedIds) {
                     await bugsHook.updateBug(bugId, {
                         sprintId: sprintId,
@@ -430,7 +428,7 @@ const BugTrackerPage = () => {
                     title: 'Success',
                     message: `Added ${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} to ${selectedOption.label}`,
                 });
-                return; // Exit early
+                return;
             }
 
             // Group actions
@@ -450,7 +448,6 @@ const BugTrackerPage = () => {
                 });
             }
 
-            // Note: Notification is handled by bugsHook.updateBug or other listeners
         } catch (error) {
             handleError(error, 'bulk action');
         }
@@ -600,17 +597,17 @@ const BugTrackerPage = () => {
             />
 
             <div className={`
-                absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-xl p-4 space-y-3
+                absolute bottom-0 left-0 right-0 bg-card rounded-t-lg shadow-theme-xl p-4 space-y-3
                 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'}
             `}>
-                <div className="flex items-center justify-between pb-3 border-b">
-                    <h3 className="text-lg font-semibold text-gray-900">Actions</h3>
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                    <h3 className="text-lg font-semibold text-foreground">Actions</h3>
                     <button
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="p-2 hover:bg-gray-100 rounded-full"
+                        className="p-2 hover:bg-accent rounded-full"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5 text-foreground" />
                     </button>
                 </div>
 
@@ -622,7 +619,7 @@ const BugTrackerPage = () => {
                                     handleOpenTraceability();
                                     setIsMobileMenuOpen(false);
                                 }}
-                                className="w-full flex items-center px-4 py-3 text-left text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="w-full flex items-center px-4 py-3 text-left text-foreground bg-muted hover:bg-accent rounded-lg transition-colors"
                             >
                                 <span className="mr-3">🔗</span>
                                 Traceability
@@ -632,7 +629,7 @@ const BugTrackerPage = () => {
                                     setIsImportModalOpen(true);
                                     setIsMobileMenuOpen(false);
                                 }}
-                                className="w-full flex items-center px-4 py-3 text-left text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="w-full flex items-center px-4 py-3 text-left text-foreground bg-muted hover:bg-accent rounded-lg transition-colors"
                             >
                                 <span className="mr-3">📥</span>
                                 Import
@@ -661,13 +658,13 @@ const BugTrackerPage = () => {
     // Show locked state
     if (bugsHook.bugsLocked && pageMode === 'bugs') {
         return (
-            <div className="min-h-screen bg-gray-50">
+            <div className="min-h-screen bg-background">
                 <div className="max-w-7xl mx-auto py-4 px-4 sm:py-6 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between mb-6">
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bugs Tracker</h1>
+                        <h1 className="text-xl sm:text-2xl font-bold text-foreground">Bugs Tracker</h1>
                     </div>
-                    <div className="bg-white shadow rounded-lg p-6">
-                        <p className="text-gray-600">Bugs are locked. Upgrade to access.</p>
+                    <div className="bg-card shadow-theme rounded-lg p-6 border border-border">
+                        <p className="text-muted-foreground">Bugs are locked. Upgrade to access.</p>
                     </div>
                 </div>
             </div>
@@ -677,16 +674,16 @@ const BugTrackerPage = () => {
     // Show Recommendations page
     if (pageMode === 'recommendations') {
         return (
-            <div className="min-h-screen bg-gray-50">
-                <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+            <div className="min-h-screen bg-background">
+                <div className="bg-card border-b border-border sticky top-0 z-40">
                     <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
                         <div className="flex items-center justify-between">
                             <div className="hidden sm:flex items-center space-x-1">
                                 <button
                                     onClick={() => handlePageModeChange('bugs')}
                                     className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'bugs'
-                                        ? 'bg-teal-100 text-teal-700'
-                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                                        : 'text-foreground hover:text-foreground hover:bg-accent'
                                         }`}
                                 >
                                     <BugAntIcon className="w-4 h-4 mr-2" />
@@ -695,8 +692,8 @@ const BugTrackerPage = () => {
                                 <button
                                     onClick={() => handlePageModeChange('recommendations')}
                                     className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'recommendations'
-                                        ? 'bg-teal-100 text-teal-700'
-                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                                        : 'text-foreground hover:text-foreground hover:bg-accent'
                                         }`}
                                 >
                                     <Lightbulb className="w-4 h-4 mr-2" />
@@ -708,7 +705,7 @@ const BugTrackerPage = () => {
                                 <select
                                     value={pageMode}
                                     onChange={(e) => handlePageModeChange(e.target.value)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                    className="px-3 py-2 border border-border rounded-lg text-sm font-medium bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                                 >
                                     <option value="bugs">Bug Reports</option>
                                     <option value="recommendations">Suggestions</option>
@@ -725,9 +722,9 @@ const BugTrackerPage = () => {
 
     // Main Bugs page
     return (
-        <div className="min-h-screen">
+        <div className="min-h-screen bg-background">
             {/* Responsive Page Mode Toggle */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+            <div className="bg-card border-b border-border sticky top-0 z-40">
                 <div className="max-w-full mx-auto px-3 sm:px-6 py-3">
                     <div className="flex items-center justify-between">
                         {/* Desktop Navigation */}
@@ -735,8 +732,8 @@ const BugTrackerPage = () => {
                             <button
                                 onClick={() => handlePageModeChange('bugs')}
                                 className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'bugs'
-                                    ? 'bg-teal-100 text-teal-700'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                    ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                                    : 'text-foreground hover:text-foreground hover:bg-accent'
                                     }`}
                             >
                                 <BugAntIcon className="w-4 h-4 mr-2" />
@@ -746,8 +743,8 @@ const BugTrackerPage = () => {
                             <button
                                 onClick={() => handlePageModeChange('recommendations')}
                                 className={`flex items-center px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-all ${pageMode === 'recommendations'
-                                    ? 'bg-teal-100 text-teal-700'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                    ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+                                    : 'text-foreground hover:text-foreground hover:bg-accent'
                                     }`}
                             >
                                 <Lightbulb className="w-4 h-4 mr-2" />
@@ -761,7 +758,7 @@ const BugTrackerPage = () => {
                             <select
                                 value={pageMode}
                                 onChange={(e) => handlePageModeChange(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="px-3 py-2 border border-border rounded-lg text-sm font-medium bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                             >
                                 <option value="bugs">Bug Reports</option>
                                 <option value="recommendations">Features</option>
@@ -771,12 +768,12 @@ const BugTrackerPage = () => {
                         {/* Desktop Bug View Type Toggle */}
                         <div className="hidden lg:flex items-center space-x-3">
                             <div className="flex items-center space-x-2">
-                                <span className="text-sm text-gray-600">View:</span>
+                                <span className="text-sm text-muted-foreground">View:</span>
                                 <button
                                     onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
                                     className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all border ${bugViewType === 'minimal'
-                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
+                                        : 'bg-muted text-foreground border-border hover:bg-accent'
                                         }`}
                                 >
                                     {bugViewType === 'minimal' ? (
@@ -799,8 +796,8 @@ const BugTrackerPage = () => {
                             <button
                                 onClick={() => handleBugViewTypeChange(bugViewType === 'full' ? 'minimal' : 'full')}
                                 className={`p-2 rounded-lg transition-all ${bugViewType === 'minimal'
-                                    ? 'bg-blue-50 text-primary'
-                                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                    ? 'bg-blue-50 text-primary dark:bg-blue-900/30'
+                                    : 'bg-muted text-foreground hover:bg-accent'
                                     }`}
                                 title={`Switch to ${bugViewType === 'full' ? 'minimal' : 'full'} view`}
                             >
@@ -821,7 +818,7 @@ const BugTrackerPage = () => {
                     {/* Title Row */}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center flex-wrap">
-                            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
+                            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">
                                 <span className="hidden sm:inline">Bug Tracker</span>
                                 <span className="sm:hidden">Bugs</span>
                                 {bugViewType === 'minimal' && (
@@ -829,11 +826,11 @@ const BugTrackerPage = () => {
                                 )}
                             </h1>
                             <div className="flex items-center space-x-2 ml-2">
-                                <span className="px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                                <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground">
                                     {filteredBugs.length} {filteredBugs.length === 1 ? 'bug' : 'bugs'}
                                 </span>
                                 {bugViewType === 'minimal' && (
-                                    <span className="hidden sm:inline-flex px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
+                                    <span className="hidden sm:inline-flex px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full text-xs font-medium">
                                         Developer Focus Mode
                                     </span>
                                 )}
@@ -846,13 +843,13 @@ const BugTrackerPage = () => {
                                 <>
                                     <button
                                         onClick={handleOpenTraceability}
-                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                                        className="inline-flex items-center px-3 py-2 border border-border shadow-theme-sm text-sm leading-4 font-medium rounded text-foreground bg-card hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary whitespace-nowrap"
                                     >
                                         Traceability
                                     </button>
                                     <button
                                         onClick={() => setIsImportModalOpen(true)}
-                                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 whitespace-nowrap"
+                                        className="inline-flex items-center px-3 py-2 border border-border shadow-theme-sm text-sm leading-4 font-medium rounded text-foreground bg-card hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary whitespace-nowrap"
                                     >
                                         Import
                                     </button>
@@ -885,10 +882,10 @@ const BugTrackerPage = () => {
                             {bugViewType === 'full' && (
                                 <button
                                     onClick={() => setIsMobileMenuOpen(true)}
-                                    className="p-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                    className="p-2 border border-border rounded-lg bg-card hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
                                     title="More actions"
                                 >
-                                    <Menu className="w-4 h-4" />
+                                    <Menu className="w-4 h-4 text-foreground" />
                                 </button>
                             )}
                         </div>

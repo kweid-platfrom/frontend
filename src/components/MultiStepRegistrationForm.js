@@ -440,7 +440,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         }`}
                     >
                         <div className="flex items-start gap-3 sm:gap-4">
-                            <div className="p-2 sm:p-3 rounded-lg bg-muted flex-shrink-0">
+                            <div className="p-2 sm:p-3 rounded bg-muted flex-shrink-0">
                                 <type.icon className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -484,7 +484,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.email || emailError ? 'border-error' : 'border-input'} rounded-lg bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 text-sm sm:text-base`}
+                        className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.email || emailError ? 'border-error' : 'border-input'} rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 text-sm sm:text-base`}
                         placeholder={formData.accountType === 'organization' ? "name@yourcompany.com" : "name@example.com"}
                         required
                     />
@@ -510,7 +510,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="displayName"
                         value={formData.displayName}
                         onChange={(e) => handleInputChange('displayName', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.displayName ? 'border-error' : 'border-input'} rounded-lg bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 text-sm sm:text-base`}
+                        className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.displayName ? 'border-error' : 'border-input'} rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 text-sm sm:text-base`}
                         placeholder="Enter your full name"
                         required
                     />
@@ -539,7 +539,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         id="organizationName"
                         value={formData.organizationName}
                         onChange={(e) => handleInputChange('organizationName', e.target.value)}
-                        className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.organizationName ? 'border-error' : 'border-input'} rounded-lg bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 text-sm sm:text-base`}
+                        className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.organizationName ? 'border-error' : 'border-input'} rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 text-sm sm:text-base`}
                         placeholder="Enter your organization name"
                         required
                     />
@@ -556,7 +556,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         <button
                             type="button"
                             onClick={() => setIsIndustryDropdownOpen(!isIndustryDropdownOpen)}
-                            className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.organizationIndustry ? 'border-error' : 'border-input'} rounded-lg text-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 bg-background text-left flex items-center justify-between text-sm sm:text-base`}
+                            className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 border ${errors.organizationIndustry ? 'border-error' : 'border-input'} rounded text-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 bg-background text-left flex items-center justify-between text-sm sm:text-base`}
                         >
                             <span className={formData.organizationIndustry ? 'text-foreground' : 'text-muted-foreground'}>
                                 {industries.find(ind => ind.value === formData.organizationIndustry)?.label || 'Select your industry'}
@@ -565,7 +565,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         </button>
 
                         {isIndustryDropdownOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-theme-lg z-10 max-h-48 sm:max-h-60 overflow-y-auto">
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded shadow-theme-lg z-10 max-h-48 sm:max-h-60 overflow-y-auto">
                                 {industries.map((industry) => (
                                     <button
                                         key={industry.value}
@@ -597,7 +597,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         <button
                             type="button"
                             onClick={() => setIsSizeDropdownOpen(!isSizeDropdownOpen)}
-                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-input rounded-lg text-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 bg-background text-left flex items-center justify-between text-sm sm:text-base"
+                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-input rounded text-foreground transition-all duration-200 focus:border-primary focus:outline-none focus:ring focus:ring-ring/10 bg-background text-left flex items-center justify-between text-sm sm:text-base"
                         >
                             <span>
                                 {organizationSizes.find(size => size.value === formData.organizationSize)?.label}
@@ -606,7 +606,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         </button>
 
                         {isSizeDropdownOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-theme-lg z-10">
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded shadow-theme-lg z-10">
                                 {organizationSizes.map((size) => (
                                     <button
                                         key={size.value}
@@ -648,7 +648,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                             id="password"
                             value={formData.password}
                             onChange={(e) => handleInputChange('password', e.target.value)}
-                            className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 sm:pr-12 border ${errors.password ? 'border-red-500' : 'border-slate-200'} rounded-lg text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base`}
+                            className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 sm:pr-12 border ${errors.password ? 'border-red-500' : 'border-slate-200'} rounded text-slate-900 placeholder-slate-400 transition-all duration-200 focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-500/10 text-sm sm:text-base`}
                             placeholder="At least 8 characters"
                             required
                             minLength={8}
@@ -691,7 +691,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                 )}
 
                 {errors.submit && (
-                    <div className="p-3 sm:p-4 border border-red-200 rounded-lg bg-red-50">
+                    <div className="p-3 sm:p-4 border border-red-200 rounded bg-red-50">
                         <p className="text-xs sm:text-sm text-red-700">{errors.submit}</p>
                     </div>
                 )}
@@ -740,7 +740,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                         type="button"
                         onClick={prevStep}
                         disabled={loading || googleLoading || stepLoading}
-                        className="absolute left-0 top-0 p-2 sm:p-2.5 bg-white border border-slate-200 rounded-lg shadow-md hover:shadow-lg hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="absolute left-0 top-0 p-2 sm:p-2.5 bg-white border border-slate-200 rounded shadow-md hover:shadow-lg hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
@@ -761,7 +761,7 @@ const MultiStepRegistrationForm = ({ onSuccess, onSwitchToLogin }) => {
                             transition-all duration-300 ease-in-out
                             ${stepLoading 
                                 ? 'w-12 h-12 rounded-full bg-[#00897B] shadow-md flex items-center justify-center' 
-                                : 'w-full bg-[#00897B] hover:bg-[#00796B] text-white font-medium rounded-lg px-4 sm:px-6 py-2.5 sm:py-3 shadow-md hover:-translate-y-0.5 text-sm sm:text-base'
+                                : 'w-full bg-[#00897B] hover:bg-[#00796B] text-white font-medium rounded px-4 sm:px-6 py-2.5 sm:py-3 shadow-md hover:-translate-y-0.5 text-sm sm:text-base'
                             }
                             disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
                         `}
