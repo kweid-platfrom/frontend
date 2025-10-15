@@ -225,35 +225,35 @@ const BugTable = ({
 
     const getStatusBadge = useCallback((status) => {
         const statusConfig = {
-            open: 'bg-red-100 text-red-800 border-red-200',
-            'in-progress': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            resolved: 'bg-green-100 text-green-800 border-green-200',
-            closed: 'bg-gray-100 text-gray-800 border-gray-200',
-            duplicate: 'bg-purple-100 text-purple-800 border-purple-200',
-            'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200',
+            open: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+            'in-progress': 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800',
+            resolved: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800',
+            closed: 'bg-muted text-muted-foreground border-border',
+            duplicate: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
+            'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
         };
-        return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return statusConfig[status?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getSeverityBadge = useCallback((severity) => {
         const severityConfig = {
-            critical: 'bg-red-100 text-red-800 border-red-200',
-            high: 'bg-orange-100 text-orange-800 border-orange-200',
-            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            low: 'bg-blue-100 text-blue-800 border-blue-200',
-            trivial: 'bg-gray-100 text-gray-800 border-gray-200',
+            critical: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+            high: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
+            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800',
+            low: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
+            trivial: 'bg-muted text-muted-foreground border-border',
         };
-        return severityConfig[severity?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return severityConfig[severity?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getPriorityBadge = useCallback((priority) => {
         const priorityConfig = {
-            urgent: 'bg-red-100 text-red-800 border-red-200',
-            high: 'bg-orange-100 text-orange-800 border-orange-200',
-            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            low: 'bg-blue-100 text-blue-800 border-blue-200',
+            urgent: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+            high: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
+            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800',
+            low: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
         };
-        return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return priorityConfig[priority?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getDerivedPriority = useCallback((severity) => {
@@ -273,20 +273,20 @@ const BugTable = ({
             high: 'bg-orange-500',
             medium: 'bg-yellow-500',
             low: 'bg-blue-500',
-            trivial: 'bg-gray-400',
+            trivial: 'bg-muted-foreground',
         };
-        const color = severityColors[severity?.toLowerCase()] || 'bg-gray-400';
+        const color = severityColors[severity?.toLowerCase()] || 'bg-muted-foreground';
         return <div className={`w-3 h-3 rounded-full flex-shrink-0 ${color}`} />;
     }, []);
 
     const getSortIcon = useCallback((columnKey) => {
         if (sortConfig.key !== columnKey) {
-            return <ChevronUp className="w-3 h-3 text-gray-400" />;
+            return <ChevronUp className="w-3 h-3 text-muted-foreground" />;
         }
         return sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-3 h-3 text-gray-600" />
+            <ChevronUp className="w-3 h-3 text-foreground" />
         ) : (
-            <ChevronDown className="w-3 h-3 text-gray-600" />
+            <ChevronDown className="w-3 h-3 text-foreground" />
         );
     }, [sortConfig]);
 
@@ -405,17 +405,17 @@ const BugTable = ({
 
     if (loading) {
         return (
-            <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+            <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
                 <div className="px-6 py-12 text-center">
-                    <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-teal-600"></div>
-                    <p className="mt-2 text-sm text-gray-500">Loading bugs...</p>
+                    <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-primary"></div>
+                    <p className="mt-2 text-sm text-muted-foreground">Loading bugs...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+        <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
             <EnhancedBulkActionsBar 
                 selectedItems={selectedBugs}
                 onClearSelection={() => onSelectBugs([])}
@@ -427,29 +427,29 @@ const BugTable = ({
             
             <div className="relative overflow-x-auto">
                 {/* Desktop Table */}
-                <table className="min-w-full divide-y divide-gray-200 hidden md:table">
-                    <thead className="bg-gray-50 sticky top-0 z-20">
+                <table className="min-w-full divide-y divide-border hidden md:table">
+                    <thead className="bg-muted sticky top-0 z-20">
                         <tr>
-                            <th className="px-6 py-3 text-left border-r border-gray-200 w-12 sticky left-0 bg-gray-50 z-30 whitespace-nowrap">
+                            <th className="px-6 py-3 text-left border-r border-border w-12 sticky left-0 bg-muted z-30 whitespace-nowrap">
                                 <div className="flex items-center">
                                     {isAllSelected ? (
                                         <CheckSquare
-                                            className="w-4 h-4 text-teal-600 cursor-pointer"
+                                            className="w-4 h-4 text-primary cursor-pointer"
                                             onClick={() => handleSelectAll(false)}
                                         />
                                     ) : (
                                         <Square
-                                            className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                            className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary"
                                             onClick={() => handleSelectAll(true)}
                                         />
                                     )}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 w-96 sticky left-12 bg-gray-50 z-30 whitespace-nowrap">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-r border-border w-96 sticky left-12 bg-muted z-30 whitespace-nowrap">
                                 Title
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('id')}
                             >
                                 <div className="flex items-center gap-1">
@@ -458,7 +458,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -467,7 +467,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('severity')}
                             >
                                 <div className="flex items-center gap-1">
@@ -476,7 +476,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('priority')}
                             >
                                 <div className="flex items-center gap-1">
@@ -485,7 +485,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('assignee')}
                             >
                                 <div className="flex items-center gap-1">
@@ -494,7 +494,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('created_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -503,7 +503,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('due_date')}
                             >
                                 <div className="flex items-center gap-1">
@@ -512,7 +512,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('reporter')}
                             >
                                 <div className="flex items-center gap-1">
@@ -521,7 +521,7 @@ const BugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-r border-gray-200 w-32 whitespace-nowrap"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent border-r border-border w-32 whitespace-nowrap"
                                 onClick={() => handleSort('evidence')}
                             >
                                 <div className="flex items-center gap-1">
@@ -529,19 +529,19 @@ const BugTable = ({
                                     {getSortIcon('evidence')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48 whitespace-nowrap">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-48 whitespace-nowrap">
                                 Test Cases
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-card divide-y divide-border">
                         {paginatedBugs.length === 0 ? (
                             <tr>
-                                <td colSpan="12" className="px-6 py-12 text-center text-sm text-gray-500">
+                                <td colSpan="12" className="px-6 py-12 text-center text-sm text-muted-foreground">
                                     <div className="flex flex-col items-center">
-                                        <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                                        <Bug className="w-12 h-12 text-muted-foreground/50 mb-4" />
                                         <p>No bugs found</p>
-                                        <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                                        <p className="text-xs text-muted-foreground/70 mt-1">Create your first bug report to get started</p>
                                     </div>
                                 </td>
                             </tr>
@@ -551,53 +551,53 @@ const BugTable = ({
                                 const isSelected = selectedBugs.includes(bug.id);
 
                                 return (
-                                    <tr key={bug.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-teal-50' : ''}`}>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-12 sticky left-0 bg-white z-30">
+                                    <tr key={bug.id} className={`hover:bg-accent ${isSelected ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
+                                        <td className="px-6 py-4 border-r border-border w-12 sticky left-0 bg-card z-30">
                                             <div className="flex items-center">
                                                 {isSelected ? (
                                                     <CheckSquare
-                                                        className="w-4 h-4 text-teal-600 cursor-pointer"
+                                                        className="w-4 h-4 text-primary cursor-pointer"
                                                         onClick={() => handleSelectItem(bug.id, false)}
                                                     />
                                                 ) : (
                                                     <Square
-                                                        className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                        className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary"
                                                         onClick={() => handleSelectItem(bug.id, true)}
                                                     />
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-96 sticky left-12 bg-white z-30">
+                                        <td className="px-6 py-4 border-r border-border w-96 sticky left-12 bg-card z-30">
                                             <div className="flex items-center gap-2">
                                                 <div 
-                                                    className="flex-1 text-sm font-medium text-gray-900 truncate max-w-[320px] relative"
+                                                    className="flex-1 text-sm font-medium text-foreground truncate max-w-[320px] relative"
                                                     onMouseEnter={() => setHoveredTitle(bug.id)}
                                                     onMouseLeave={() => setHoveredTitle(null)}
                                                 >
                                                     {bug.title || 'Untitled Bug'}
                                                     {hoveredTitle === bug.id && bug.title && bug.title.length > 40 && (
-                                                        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded shadow-lg max-w-xs z-50 whitespace-normal">
+                                                        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded shadow-theme-lg max-w-xs z-50 whitespace-normal border border-border">
                                                             {bug.title}
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="flex-shrink-0 border-l border-gray-200 pl-2">
+                                                <div className="flex-shrink-0 border-l border-border pl-2">
                                                     <button
                                                         onClick={() => onView(bug)}
-                                                        className="ml-1 p-2 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                        className="ml-1 p-2 rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
                                                         title="View bug details"
                                                     >
-                                                        <MessageSquare className="w-4 h-4" />
+                                                        <MessageSquare className="w-4 h-4 text-foreground" />
                                                     </button>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-400 truncate">
+                                        <td className="px-6 py-4 border-r border-border w-32">
+                                            <div className="text-xs text-muted-foreground truncate">
                                                 #{bug.id?.slice(-8) || 'Unknown'}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                        <td className="px-6 py-4 border-r border-border w-32">
                                             <InlineEditCell
                                                 value={bug.status}
                                                 options={statusOptions}
@@ -606,7 +606,7 @@ const BugTable = ({
                                                 noSearch
                                             />
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                        <td className="px-6 py-4 border-r border-border w-32">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-3 flex justify-center">
                                                     {getSeverityIndicator(bug.severity)}
@@ -623,41 +623,41 @@ const BugTable = ({
                                                 />
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                        <td className="px-6 py-4 border-r border-border w-32">
                                             <span className={`inline-flex items-center w-16 px-2.5 py-1.5 rounded text-xs font-medium border ${getPriorityBadge(bug.priority)}`}>
                                                 {bug.priority || 'Medium'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
+                                        <td className="px-6 py-4 border-r border-border w-32">
                                             <InlineEditCell
                                                 value={bug.assignee}
                                                 options={assigneeOptions}
                                                 onChange={(value) => handleUpdateBug(bug.id, { assignee: value })}
-                                                className="text-xs text-gray-600"
+                                                className="text-xs text-foreground"
                                                 noSearch
                                             />
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-500 truncate">
+                                        <td className="px-6 py-4 border-r border-border w-32">
+                                            <div className="text-xs text-muted-foreground truncate">
                                                 {bug.created_at && isValidDate(new Date(bug.created_at))
                                                     ? format(new Date(bug.created_at), 'MMM d, yyyy')
                                                     : 'Unknown'}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-500 truncate">
+                                        <td className="px-6 py-4 border-r border-border w-32">
+                                            <div className="text-xs text-muted-foreground truncate">
                                                 {bug.due_date && isValidDate(new Date(bug.due_date))
                                                     ? format(new Date(bug.due_date), 'MMM d, yyyy')
                                                     : 'Not set'}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-600 truncate max-w-[120px]">
+                                        <td className="px-6 py-4 border-r border-border w-32">
+                                            <div className="text-xs text-foreground truncate max-w-[120px]">
                                                 {formatReporter(bug)}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-gray-200 w-32">
-                                            <div className="text-xs text-gray-600 truncate max-w-[120px]" title={formatEvidence(bug.evidence)}>
+                                        <td className="px-6 py-4 border-r border-border w-32">
+                                            <div className="text-xs text-foreground truncate max-w-[120px]" title={formatEvidence(bug.evidence)}>
                                                 {formatEvidence(bug.evidence)}
                                             </div>
                                         </td>
@@ -682,32 +682,32 @@ const BugTable = ({
                 {/* Mobile Table - Only Checkbox, Title, and Chat Icon */}
                 <div className="md:hidden">
                     {paginatedBugs.length === 0 ? (
-                        <div className="px-6 py-12 text-center text-sm text-gray-500">
+                        <div className="px-6 py-12 text-center text-sm text-muted-foreground">
                             <div className="flex flex-col items-center">
-                                <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                                <Bug className="w-12 h-12 text-muted-foreground/50 mb-4" />
                                 <p>No bugs found</p>
-                                <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                                <p className="text-xs text-muted-foreground/70 mt-1">Create your first bug report to get started</p>
                             </div>
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-200">
+                        <div className="divide-y divide-border">
                             {paginatedBugs.map((bug) => {
                                 const isSelected = selectedBugs.includes(bug.id);
                                 return (
                                     <div 
                                         key={bug.id} 
-                                        className={`flex items-center gap-3 px-4 py-3 ${isSelected ? 'bg-teal-50' : 'bg-white'} hover:bg-gray-50`}
+                                        className={`flex items-center gap-3 px-4 py-3 ${isSelected ? 'bg-teal-50 dark:bg-teal-900/20' : 'bg-card'} hover:bg-accent`}
                                     >
                                         {/* Checkbox */}
                                         <div className="flex-shrink-0">
                                             {isSelected ? (
                                                 <CheckSquare
-                                                    className="w-5 h-5 text-teal-600 cursor-pointer"
+                                                    className="w-5 h-5 text-primary cursor-pointer"
                                                     onClick={() => handleSelectItem(bug.id, false)}
                                                 />
                                             ) : (
                                                 <Square
-                                                    className="w-5 h-5 text-gray-400 cursor-pointer hover:text-teal-600"
+                                                    className="w-5 h-5 text-muted-foreground cursor-pointer hover:text-primary"
                                                     onClick={() => handleSelectItem(bug.id, true)}
                                                 />
                                             )}
@@ -715,14 +715,14 @@ const BugTable = ({
 
                                         {/* Title */}
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium text-gray-900 truncate">
+                                            <div className="text-sm font-medium text-foreground truncate">
                                                 {bug.title || 'Untitled Bug'}
                                             </div>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusBadge(bug.status)}`}>
                                                     {bug.status || 'open'}
                                                 </span>
-                                                <span className="text-xs text-gray-400">
+                                                <span className="text-xs text-muted-foreground">
                                                     #{bug.id?.slice(-6) || 'Unknown'}
                                                 </span>
                                             </div>
@@ -732,10 +732,10 @@ const BugTable = ({
                                         <div className="flex-shrink-0">
                                             <button
                                                 onClick={() => onView(bug)}
-                                                className="p-2 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                className="p-2 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
                                                 title="View bug details"
                                             >
-                                                <MessageSquare className="w-5 h-5 text-gray-600" />
+                                                <MessageSquare className="w-5 h-5 text-foreground" />
                                             </button>
                                         </div>
                                     </div>

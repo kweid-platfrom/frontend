@@ -98,9 +98,9 @@ const BugReportForm = ({
     ];
 
     return (
-        <div className="flex flex-col h-full bg-gray-50">
+        <div className="flex flex-col h-full bg-background">
             {/* Tab Navigation */}
-            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 sm:px-8 shadow-sm">
+            <div className="flex-shrink-0 bg-card border-b border-border px-6 sm:px-8 shadow-theme-sm">
                 <nav className="-mb-px flex space-x-8">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
@@ -110,8 +110,8 @@ const BugReportForm = ({
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`group py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-200 ${
                                     activeTab === tab.id
-                                        ? 'border-teal-500 text-teal-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        ? 'border-primary text-primary'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
                                 }`}
                                 disabled={isSubmitting || submitButtonState === 'loading'}
                             >
@@ -134,13 +134,13 @@ const BugReportForm = ({
                             <div className="max-w-6xl mx-auto p-6 sm:p-8">
                                 <form onSubmit={handleSubmit} className="space-y-8">
                                     {/* Header Section */}
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                        <h2 className="text-lg font-semibold text-gray-900 mb-6">Bug Details</h2>
+                                    <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
+                                        <h2 className="text-lg font-semibold text-foreground mb-6">Bug Details</h2>
                                         
                                         {/* Title - Full Width */}
                                         <div className="mb-6">
-                                            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-3">
-                                                Bug Title <span className="text-red-500">*</span>
+                                            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-3">
+                                                Bug Title <span className="text-destructive">*</span>
                                             </label>
                                             <input
                                                 type="text"
@@ -148,7 +148,7 @@ const BugReportForm = ({
                                                 value={formData.title}
                                                 onChange={(e) => updateFormData('title', e.target.value)}
                                                 placeholder="Brief description of the bug"
-                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm"
+                                                className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                 disabled={isSubmitting || submitButtonState === 'loading'}
                                                 required
                                             />
@@ -156,8 +156,8 @@ const BugReportForm = ({
 
                                         {/* Description - Full Width */}
                                         <div>
-                                            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-3">
-                                                Description <span className="text-red-500">*</span>
+                                            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-3">
+                                                Description <span className="text-destructive">*</span>
                                             </label>
                                             <textarea
                                                 id="description"
@@ -165,7 +165,7 @@ const BugReportForm = ({
                                                 onChange={(e) => updateFormData('description', e.target.value)}
                                                 placeholder="Detailed description of the bug"
                                                 rows={4}
-                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical transition-all duration-200 text-sm"
+                                                className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical transition-all duration-200 text-sm bg-background text-foreground"
                                                 disabled={isSubmitting || submitButtonState === 'loading'}
                                                 required
                                             />
@@ -173,13 +173,13 @@ const BugReportForm = ({
                                     </div>
 
                                     {/* Behavior Section */}
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-6">Behavior Description</h3>
+                                    <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
+                                        <h3 className="text-lg font-semibold text-foreground mb-6">Behavior Description</h3>
                                         
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                             <div>
-                                                <label htmlFor="actualBehavior" className="block text-sm font-medium text-gray-700 mb-3">
-                                                    Actual Behavior <span className="text-red-500">*</span>
+                                                <label htmlFor="actualBehavior" className="block text-sm font-medium text-foreground mb-3">
+                                                    Actual Behavior <span className="text-destructive">*</span>
                                                 </label>
                                                 <textarea
                                                     id="actualBehavior"
@@ -187,14 +187,14 @@ const BugReportForm = ({
                                                     onChange={(e) => updateFormData('actualBehavior', e.target.value)}
                                                     placeholder="What actually happens"
                                                     rows={4}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical transition-all duration-200 text-sm"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                     required
                                                 />
                                             </div>
 
                                             <div>
-                                                <label htmlFor="expectedBehavior" className="block text-sm font-medium text-gray-700 mb-3">
+                                                <label htmlFor="expectedBehavior" className="block text-sm font-medium text-foreground mb-3">
                                                     Expected Behavior
                                                 </label>
                                                 <textarea
@@ -203,7 +203,7 @@ const BugReportForm = ({
                                                     onChange={(e) => updateFormData('expectedBehavior', e.target.value)}
                                                     placeholder="What should happen instead"
                                                     rows={4}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical transition-all duration-200 text-sm"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                 />
                                             </div>
@@ -211,8 +211,8 @@ const BugReportForm = ({
                                     </div>
 
                                     {/* Steps Section */}
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-6">Steps to Reproduce</h3>
+                                    <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
+                                        <h3 className="text-lg font-semibold text-foreground mb-6">Steps to Reproduce</h3>
                                         
                                         <div>
                                             <textarea
@@ -221,26 +221,26 @@ const BugReportForm = ({
                                                 onChange={(e) => updateFormData('stepsToReproduce', e.target.value)}
                                                 placeholder="1. Navigate to...&#10;2. Click on...&#10;3. Observe..."
                                                 rows={4}
-                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical transition-all duration-200 text-sm"
+                                                className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical transition-all duration-200 text-sm bg-background text-foreground"
                                                 disabled={isSubmitting || submitButtonState === 'loading'}
                                             />
                                         </div>
                                     </div>
 
                                     {/* Classification Section */}
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-6">Classification</h3>
+                                    <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
+                                        <h3 className="text-lg font-semibold text-foreground mb-6">Classification</h3>
                                         
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                             <div>
-                                                <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-3">
-                                                    Severity <span className="text-red-500">*</span>
+                                                <label htmlFor="severity" className="block text-sm font-medium text-foreground mb-3">
+                                                    Severity <span className="text-destructive">*</span>
                                                 </label>
                                                 <select
                                                     id="severity"
                                                     value={formData.severity}
                                                     onChange={(e) => updateFormData('severity', e.target.value)}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm bg-white"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                     required
                                                 >
@@ -253,14 +253,14 @@ const BugReportForm = ({
                                             </div>
 
                                             <div>
-                                                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-3">
-                                                    Category <span className="text-red-500">*</span>
+                                                <label htmlFor="category" className="block text-sm font-medium text-foreground mb-3">
+                                                    Category <span className="text-destructive">*</span>
                                                 </label>
                                                 <select
                                                     id="category"
                                                     value={formData.category}
                                                     onChange={(e) => updateFormData('category', e.target.value)}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm bg-white"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                     required
                                                 >
@@ -275,14 +275,14 @@ const BugReportForm = ({
                                             </div>
 
                                             <div>
-                                                <label htmlFor="feature" className="block text-sm font-medium text-gray-700 mb-3">
-                                                    Feature/Module <span className="text-red-500">*</span>
+                                                <label htmlFor="feature" className="block text-sm font-medium text-foreground mb-3">
+                                                    Feature/Module <span className="text-destructive">*</span>
                                                 </label>
                                                 <select
                                                     id="feature"
                                                     value={formData.feature || ''}
                                                     onChange={(e) => updateFormData('feature', e.target.value)}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm bg-white"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                     required
                                                 >
@@ -296,14 +296,14 @@ const BugReportForm = ({
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
                                             <div>
-                                                <label htmlFor="environment" className="block text-sm font-medium text-gray-700 mb-3">
+                                                <label htmlFor="environment" className="block text-sm font-medium text-foreground mb-3">
                                                     Environment
                                                 </label>
                                                 <select
                                                     id="environment"
                                                     value={formData.environment}
                                                     onChange={(e) => updateFormData('environment', e.target.value)}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm bg-white"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                 >
                                                     <option value="Production">Production</option>
@@ -314,14 +314,14 @@ const BugReportForm = ({
                                             </div>
 
                                             <div>
-                                                <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-3">
+                                                <label htmlFor="frequency" className="block text-sm font-medium text-foreground mb-3">
                                                     Frequency
                                                 </label>
                                                 <select
                                                     id="frequency"
                                                     value={formData.frequency}
                                                     onChange={(e) => updateFormData('frequency', e.target.value)}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm bg-white"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                 >
                                                     <option value="Once">Once</option>
@@ -334,12 +334,12 @@ const BugReportForm = ({
                                     </div>
 
                                     {/* Additional Information Section */}
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-6">Additional Information</h3>
+                                    <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
+                                        <h3 className="text-lg font-semibold text-foreground mb-6">Additional Information</h3>
                                         
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                             <div>
-                                                <label htmlFor="workaround" className="block text-sm font-medium text-gray-700 mb-3">
+                                                <label htmlFor="workaround" className="block text-sm font-medium text-foreground mb-3">
                                                     Workaround (Optional)
                                                 </label>
                                                 <textarea
@@ -348,7 +348,7 @@ const BugReportForm = ({
                                                     onChange={(e) => updateFormData('workaround', e.target.value)}
                                                     placeholder="Any temporary solutions or workarounds"
                                                     rows={4}
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical transition-all duration-200 text-sm"
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical transition-all duration-200 text-sm bg-background text-foreground"
                                                     disabled={isSubmitting || submitButtonState === 'loading'}
                                                 />
                                             </div>
@@ -356,14 +356,14 @@ const BugReportForm = ({
                                             <div className="space-y-6">
                                                 {teamMembers.length > 0 && (
                                                     <div>
-                                                        <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-700 mb-3">
+                                                        <label htmlFor="assignedTo" className="block text-sm font-medium text-foreground mb-3">
                                                             Assign To
                                                         </label>
                                                         <select
                                                             id="assignedTo"
                                                             value={formData.assignedTo || ''}
                                                             onChange={(e) => updateFormData('assignedTo', e.target.value)}
-                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-sm bg-white"
+                                                            className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
                                                             disabled={isSubmitting || submitButtonState === 'loading'}
                                                         >
                                                             <option value="">Unassigned</option>
@@ -377,7 +377,7 @@ const BugReportForm = ({
                                                 )}
 
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-4">
+                                                    <label className="block text-sm font-medium text-foreground mb-4">
                                                         Log Information
                                                     </label>
                                                     <div className="space-y-4">
@@ -387,10 +387,10 @@ const BugReportForm = ({
                                                                 id="hasConsoleLogs"
                                                                 checked={formData.hasConsoleLogs}
                                                                 onChange={(e) => updateFormData('hasConsoleLogs', e.target.checked)}
-                                                                className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded transition-colors"
+                                                                className="h-4 w-4 text-primary focus:ring-primary border-border rounded transition-colors accent-primary"
                                                                 disabled={isSubmitting || submitButtonState === 'loading'}
                                                             />
-                                                            <label htmlFor="hasConsoleLogs" className="ml-3 block text-sm text-gray-700">
+                                                            <label htmlFor="hasConsoleLogs" className="ml-3 block text-sm text-foreground">
                                                                 Console errors are available
                                                             </label>
                                                         </div>
@@ -401,10 +401,10 @@ const BugReportForm = ({
                                                                 id="hasNetworkLogs"
                                                                 checked={formData.hasNetworkLogs}
                                                                 onChange={(e) => updateFormData('hasNetworkLogs', e.target.checked)}
-                                                                className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded transition-colors"
+                                                                className="h-4 w-4 text-primary focus:ring-primary border-border rounded transition-colors accent-primary"
                                                                 disabled={isSubmitting || submitButtonState === 'loading'}
                                                             />
-                                                            <label htmlFor="hasNetworkLogs" className="ml-3 block text-sm text-gray-700">
+                                                            <label htmlFor="hasNetworkLogs" className="ml-3 block text-sm text-foreground">
                                                                 Network logs are available
                                                             </label>
                                                         </div>
@@ -415,7 +415,7 @@ const BugReportForm = ({
                                     </div>
 
                                     {/* Attachments Section */}
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                    <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
                                         <BugReportAttachments
                                             attachments={attachments}
                                             setAttachments={setAttachments}
@@ -427,7 +427,7 @@ const BugReportForm = ({
                         </div>
 
                         {/* Fixed Bottom Section - Submit Only */}
-                        <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 sm:px-8 py-4 shadow-lg">
+                        <div className="flex-shrink-0 bg-card border-t border-border px-6 sm:px-8 py-4 shadow-theme-lg">
                             <div className="max-w-6xl mx-auto">
                                 <div className="flex justify-end space-x-4">
                                     <Button

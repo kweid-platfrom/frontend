@@ -127,18 +127,18 @@ export default function ChatDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="h-screen w-full bg-white border-l border-gray-200 shadow-lg flex flex-col">
+    <div className="h-screen w-full bg-card border-l border-border shadow-theme-lg flex flex-col">
       {/* Fixed Header */}
-      <div className="flex-shrink-0 text-gray-800 p-3 bg-white border-b border-gray-200">
+      <div className="flex-shrink-0 text-foreground p-3 bg-card border-b border-border">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-base">Team Chat</h3>
           <div className="flex items-center gap-1">
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <button className="p-2 hover:bg-secondary rounded-full transition-colors">
               <Search className="w-4 h-4" />
             </button>
             <button 
               onClick={onClose} 
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-2 hover:bg-secondary rounded-full transition-colors"
               title="Close chat panel"
             >
               <X className="w-4 h-4" />
@@ -152,8 +152,8 @@ export default function ChatDrawer({
             onClick={() => setActiveTab('chat')}
             className={`pb-1 px-1 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'chat'
-                ? 'border-teal-600 text-teal-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Chat {comments.length > 0 && `(${comments.length})`}
@@ -162,8 +162,8 @@ export default function ChatDrawer({
             onClick={() => setActiveTab('details')}
             className={`pb-1 px-1 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'details'
-                ? 'border-teal-600 text-teal-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Details
@@ -174,18 +174,18 @@ export default function ChatDrawer({
       {activeTab === 'chat' ? (
         <>
           {/* Scrollable Messages Area */}
-          <div className="flex-1 overflow-y-auto p-3 bg-white">
+          <div className="flex-1 overflow-y-auto p-3 bg-card">
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : comments.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mb-3">
-                  <Send className="w-8 h-8 text-teal-600" />
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-3">
+                  <Send className="w-8 h-8 text-primary" />
                 </div>
-                <h4 className="font-medium text-gray-900 mb-1 text-sm">Start Collaborating!</h4>
-                <p className="text-xs text-gray-600">
+                <h4 className="font-medium text-foreground mb-1 text-sm">Start Collaborating!</h4>
+                <p className="text-xs text-muted-foreground">
                   Send messages and discuss changes with your team in real-time.
                 </p>
               </div>
@@ -212,7 +212,7 @@ export default function ChatDrawer({
                               height={28}
                             />
                           ) : (
-                            <div className="w-7 h-7 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                            <div className="w-7 h-7 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white text-xs font-bold">
                               {comment.userName.charAt(0).toUpperCase()}
                             </div>
                           )
@@ -222,17 +222,17 @@ export default function ChatDrawer({
                       {/* Message Bubble */}
                       <div className={`max-w-[80%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col`}>
                         {showAvatar && !isOwn && (
-                          <span className="text-xs text-gray-600 mb-0.5 px-2">{comment.userName}</span>
+                          <span className="text-xs text-muted-foreground mb-0.5 px-2">{comment.userName}</span>
                         )}
                         <div
                           className={`rounded-2xl px-3 py-2 group relative ${
                             isOwn
-                              ? 'bg-teal-600 text-white rounded-br-sm'
-                              : 'bg-orange-100 text-gray-900 rounded-bl-sm'
+                              ? 'bg-primary text-primary-foreground rounded-br-sm'
+                              : 'bg-secondary text-foreground rounded-bl-sm'
                           }`}
                         >
                           <p className="text-xs break-words leading-relaxed whitespace-pre-wrap">{comment.text}</p>
-                          <div className={`flex items-center gap-1 mt-0.5 justify-between ${isOwn ? 'text-teal-100' : 'text-orange-700'}`}>
+                          <div className={`flex items-center gap-1 mt-0.5 justify-between ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                             <span className="text-[10px]">
                               {comment.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
@@ -256,11 +256,11 @@ export default function ChatDrawer({
           </div>
 
           {/* Fixed Input Area at Bottom */}
-          <div className="flex-shrink-0 p-3 bg-white border-t border-gray-200">
+          <div className="flex-shrink-0 p-3 bg-card border-t border-border">
             <div className="flex items-end gap-2">
               {/* Attachments */}
               <button 
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-full transition-colors flex-shrink-0"
                 title="Attach file (coming soon)"
               >
                 <Paperclip className="w-4 h-4" />
@@ -281,11 +281,11 @@ export default function ChatDrawer({
                   placeholder="Type a message..."
                   rows={1}
                   disabled={!documentId || isSending}
-                  className="w-full px-3 py-2 pr-9 text-xs border border-gray-300 rounded-full focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 pr-9 text-xs border border-border rounded-full focus:ring-2 focus:ring-primary focus:border-transparent resize-none disabled:bg-secondary disabled:cursor-not-allowed bg-background text-foreground"
                   style={{ minHeight: '36px', maxHeight: '100px' }}
                 />
                 <button 
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   title="Emoji (coming soon)"
                 >
                   <Smile className="w-4 h-4" />
@@ -296,7 +296,7 @@ export default function ChatDrawer({
               <button
                 onClick={handleSendMessage}
                 disabled={!newMessage.trim() || !documentId || isSending}
-                className="p-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                className="p-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/80 disabled:bg-muted disabled:cursor-not-allowed transition-colors flex-shrink-0"
                 title={!documentId ? 'Save document first to enable chat' : 'Send message'}
               >
                 {isSending ? (
@@ -307,7 +307,7 @@ export default function ChatDrawer({
               </button>
             </div>
             {!documentId && (
-              <p className="text-xs text-orange-600 mt-1 px-2">
+              <p className="text-xs text-destructive mt-1 px-2">
                 Save the document to enable chat
               </p>
             )}
@@ -318,7 +318,7 @@ export default function ChatDrawer({
         <div className="flex-1 overflow-y-auto p-3 space-y-4">
           {/* Tags Section */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2 text-sm">
+            <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2 text-sm">
               <Tag className="w-4 h-4" />
               Tags
             </h4>
@@ -329,11 +329,11 @@ export default function ChatDrawer({
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
                 placeholder="Add tag..."
-                className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="flex-1 px-2 py-1.5 text-xs border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-foreground"
               />
               <button
                 onClick={handleAddTag}
-                className="px-3 py-1.5 text-xs bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/80 transition-colors"
               >
                 Add
               </button>
@@ -343,13 +343,13 @@ export default function ChatDrawer({
                 {tags.map((tag, index) => (
                   <span
                     key={index}
-                    className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs flex items-center gap-1 hover:bg-orange-200 transition-colors"
+                    className="px-2 py-1 bg-secondary text-secondary-foreground rounded-full text-xs flex items-center gap-1 hover:bg-secondary/80 transition-colors"
                   >
                     <Tag className="w-3 h-3" />
                     {tag}
                     <button
                       onClick={() => onRemoveTag(tag)}
-                      className="hover:text-orange-900"
+                      className="hover:text-destructive"
                     >
                       ×
                     </button>
@@ -357,40 +357,40 @@ export default function ChatDrawer({
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-500 italic">No tags yet</p>
+              <p className="text-xs text-muted-foreground italic">No tags yet</p>
             )}
           </div>
 
           {/* Document Info */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Document Info</h4>
+            <h4 className="font-semibold text-foreground mb-2 text-sm">Document Info</h4>
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-gray-600">Document ID:</span>
-                <span className="text-gray-900 font-mono text-[10px]">
+                <span className="text-muted-foreground">Document ID:</span>
+                <span className="text-foreground font-mono text-[10px]">
                   {documentId ? documentId.substring(0, 8) + '...' : 'Not saved'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Comments:</span>
-                <span className="text-gray-900">{comments.length}</span>
+                <span className="text-muted-foreground">Comments:</span>
+                <span className="text-foreground">{comments.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Created:</span>
-                <span className="text-gray-900">{new Date().toLocaleDateString()}</span>
+                <span className="text-muted-foreground">Created:</span>
+                <span className="text-foreground">{new Date().toLocaleDateString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Last Modified:</span>
-                <span className="text-gray-900">{new Date().toLocaleTimeString()}</span>
+                <span className="text-muted-foreground">Last Modified:</span>
+                <span className="text-foreground">{new Date().toLocaleTimeString()}</span>
               </div>
             </div>
           </div>
 
           {/* Collaborators */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Collaborators</h4>
+            <h4 className="font-semibold text-foreground mb-2 text-sm">Collaborators</h4>
             <div className="space-y-2">
-              <div className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-2 p-2 hover:bg-secondary rounded-lg">
                 {currentUser.avatar ? (
                   <Image
                     src={currentUser.avatar} 
@@ -400,13 +400,13 @@ export default function ChatDrawer({
                     height={32}
                   />
                 ) : (
-                  <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-teal-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center text-white font-bold text-xs">
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-900">{currentUser.name}</p>
-                  <p className="text-[10px] text-gray-500">Owner</p>
+                  <p className="text-xs font-medium text-foreground">{currentUser.name}</p>
+                  <p className="text-[10px] text-muted-foreground">Owner</p>
                 </div>
                 <div className="w-2 h-2 bg-green-500 rounded-full" title="Online"></div>
               </div>
@@ -415,18 +415,18 @@ export default function ChatDrawer({
 
           {/* Recent Activity */}
           <div>
-            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Recent Activity</h4>
+            <h4 className="font-semibold text-foreground mb-2 text-sm">Recent Activity</h4>
             <div className="space-y-2">
               {comments.slice(-3).reverse().map((comment) => (
                 <div key={comment.id} className="flex gap-2 text-xs">
-                  <div className="w-7 h-7 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <User className="w-3 h-3 text-teal-600" />
+                  <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                    <User className="w-3 h-3 text-primary" />
                   </div>
                   <div>
-                    <p className="text-gray-900">
+                    <p className="text-foreground">
                       <span className="font-medium">{comment.userName}</span> commented
                     </p>
-                    <p className="text-[10px] text-gray-500">
+                    <p className="text-[10px] text-muted-foreground">
                       {comment.timestamp?.toLocaleString()}
                     </p>
                   </div>
@@ -434,12 +434,12 @@ export default function ChatDrawer({
               ))}
               {comments.length === 0 && (
                 <div className="flex gap-2 text-xs">
-                  <div className="w-7 h-7 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <User className="w-3 h-3 text-teal-600" />
+                  <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                    <User className="w-3 h-3 text-primary" />
                   </div>
                   <div>
-                    <p className="text-gray-900">Document created</p>
-                    <p className="text-[10px] text-gray-500">Just now</p>
+                    <p className="text-foreground">Document created</p>
+                    <p className="text-[10px] text-muted-foreground">Just now</p>
                   </div>
                 </div>
               )}
@@ -449,4 +449,4 @@ export default function ChatDrawer({
       )}
     </div>
   );
-}   
+}

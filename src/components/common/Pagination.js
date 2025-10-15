@@ -42,24 +42,24 @@ const Pagination = ({
     if (totalPages <= 1) return null;
 
     return (
-        <div className="bg-white px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-b-lg">
+        <div className="bg-card px-6 py-4 border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-b-lg">
             {/* Left side - Results info and items per page */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-muted-foreground">
                     <span className="font-medium">{startIndex + 1}</span> to{' '}
                     <span className="font-medium">{Math.min(endIndex, totalItems)}</span> of{' '}
                     <span className="font-medium">{totalItems}</span> results
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <label htmlFor="itemsPerPage" className="text-sm text-gray-600 whitespace-nowrap">
+                    <label htmlFor="itemsPerPage" className="text-sm text-muted-foreground whitespace-nowrap">
                         Rows per page:
                     </label>
                     <select
                         id="itemsPerPage"
                         value={itemsPerPage}
                         onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-                        className="border border-gray-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white appearance-none cursor-pointer"
+                        className="border border-input rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring bg-background appearance-none cursor-pointer text-foreground"
                         style={{
                             backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
                             backgroundPosition: 'right 0.5rem center',
@@ -83,8 +83,8 @@ const Pagination = ({
                     onClick={() => onPageChange(1)}
                     disabled={currentPage === 1}
                     className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
-                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                        ? 'border-border text-muted-foreground cursor-not-allowed'
+                        : 'border-input text-foreground hover:bg-secondary hover:border-ring'
                         }`}
                     title="First page"
                 >
@@ -96,8 +96,8 @@ const Pagination = ({
                     onClick={() => onPageChange(currentPage - 1)}
                     disabled={currentPage === 1}
                     className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === 1
-                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                        ? 'border-border text-muted-foreground cursor-not-allowed'
+                        : 'border-input text-foreground hover:bg-secondary hover:border-ring'
                         }`}
                     title="Previous page"
                 >
@@ -111,12 +111,12 @@ const Pagination = ({
                         <>
                             <button
                                 onClick={() => onPageChange(1)}
-                                className="w-9 h-9 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
+                                className="w-9 h-9 flex items-center justify-center rounded border border-input text-foreground hover:bg-secondary hover:border-ring hover:text-foreground text-sm font-medium transition-all duration-200"
                             >
                                 1
                             </button>
                             {currentPage > 4 && (
-                                <span className="px-2 text-gray-500 text-sm">...</span>
+                                <span className="px-2 text-muted-foreground text-sm">...</span>
                             )}
                         </>
                     )}
@@ -127,8 +127,8 @@ const Pagination = ({
                             key={pageNumber}
                             onClick={() => onPageChange(pageNumber)}
                             className={`w-9 h-9 flex items-center justify-center rounded border text-sm font-medium transition-all duration-200 ${currentPage === pageNumber
-                                ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900'
+                                ? 'bg-primary border-primary text-primary-foreground shadow-sm'
+                                : 'border-input text-foreground hover:bg-secondary hover:border-ring'
                                 }`}
                         >
                             {pageNumber}
@@ -139,11 +139,11 @@ const Pagination = ({
                     {totalPages > 5 && currentPage < totalPages - 2 && (
                         <>
                             {currentPage < totalPages - 3 && (
-                                <span className="px-2 text-gray-500 text-sm">...</span>
+                                <span className="px-2 text-muted-foreground text-sm">...</span>
                             )}
                             <button
                                 onClick={() => onPageChange(totalPages)}
-                                className="w-9 h-9 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 text-sm font-medium transition-all duration-200"
+                                className="w-9 h-9 flex items-center justify-center rounded border border-input text-foreground hover:bg-secondary hover:border-ring hover:text-foreground text-sm font-medium transition-all duration-200"
                             >
                                 {totalPages}
                             </button>
@@ -156,8 +156,8 @@ const Pagination = ({
                     onClick={() => onPageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
                     className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
-                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                        ? 'border-border text-muted-foreground cursor-not-allowed'
+                        : 'border-input text-foreground hover:bg-secondary hover:border-ring'
                         }`}
                     title="Next page"
                 >
@@ -169,8 +169,8 @@ const Pagination = ({
                     onClick={() => onPageChange(totalPages)}
                     disabled={currentPage === totalPages}
                     className={`w-9 h-9 flex items-center justify-center rounded border transition-colors ${currentPage === totalPages
-                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+                        ? 'border-border text-muted-foreground cursor-not-allowed'
+                        : 'border-input text-foreground hover:bg-secondary hover:border-ring'
                         }`}
                     title="Last page"
                 >

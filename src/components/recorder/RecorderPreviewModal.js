@@ -25,10 +25,9 @@ const RecorderPreviewModal = ({
   const [comments, setComments] = useState(initialComments);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
-  const [] = useState(false);
+  const [hasTrimChanges, setHasTrimChanges] = useState(false);
   const [trimmedBlob] = useState(null);
   const [currentPreviewUrl] = useState(previewUrl);
-  const [setHasTrimChanges] = useState(false);
   const [recordingTitle, setRecordingTitle] = useState('');
 
   renderCountRef.current += 1;
@@ -185,18 +184,18 @@ const RecorderPreviewModal = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 md:p-6 lg:p-8">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full h-full md:w-[90vw] md:h-[90vh] lg:w-[85vw] lg:h-[85vh] xl:w-[80vw] xl:h-[80vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 md:p-6 lg:p-8">
+      <div className="bg-card rounded-2xl shadow-2xl w-full h-full md:w-[90vw] md:h-[90vh] lg:w-[85vw] lg:h-[85vh] xl:w-[80vw] xl:h-[80vh] flex flex-col overflow-hidden border border-border">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-900">
+        <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-border flex-shrink-0 bg-card">
           <div className="flex-1 min-w-0 mr-4">
-            <h2 className="text-base md:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white truncate">
+            <h2 className="text-base md:text-lg lg:text-xl font-semibold text-foreground truncate">
               Recording Preview
             </h2>
-            <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
               {!recordingTitle.trim() && (
-                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                <span className="text-amber-600 font-medium">
                   ⚠️ Please enter a title before saving
                 </span>
               )}
@@ -209,7 +208,7 @@ const RecorderPreviewModal = ({
             {onClose && (
               <button
                 onClick={handleClose}
-                className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-secondary transition-colors"
                 title="Close preview"
               >
                 <X className="w-4 h-4 md:w-5 md:h-5" />
@@ -222,7 +221,7 @@ const RecorderPreviewModal = ({
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
 
           {/* Left Panel - Title, Logs & Comments */}
-          <div className="w-full lg:w-2/5 xl:w-1/3 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="w-full lg:w-2/5 xl:w-1/3 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-border overflow-hidden bg-card">
             <RecorderLeftPanel
               consoleLogs={stableConsoleLogs}
               networkLogs={stableNetworkLogs}
@@ -239,11 +238,11 @@ const RecorderPreviewModal = ({
           </div>
 
           {/* Right Panel - Video, Timeline & Actions */}
-          <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-gray-950">
+          <div className="flex-1 flex flex-col min-w-0 bg-muted">
 
             {/* Video Player Container */}
             <div className="flex-1 p-3 md:p-4 lg:p-6 flex items-center justify-center min-h-0">
-              <div className="w-full h-full max-w-full max-h-full bg-black relative rounded-xl overflow-hidden shadow-2xl">
+              <div className="w-full h-full max-w-full max-h-full bg-black relative rounded-xl overflow-hidden shadow-xl border border-border">
                 {currentPreviewUrl ? (
                   <>
                     {isYouTubeVideo && youtubeVideoId ? (
@@ -269,8 +268,8 @@ const RecorderPreviewModal = ({
                             onClick={handlePlayClick}
                             className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black/20 backdrop-blur-sm"
                           >
-                            <div className="bg-white/90 dark:bg-gray-800/90 rounded-full p-4 md:p-6 shadow-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                              <svg className="w-8 h-8 md:w-12 md:h-12 text-gray-800 dark:text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <div className="bg-card/90 rounded-full p-4 md:p-6 shadow-lg hover:bg-card transition-colors">
+                              <svg className="w-8 h-8 md:w-12 md:h-12 text-foreground" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M8 5v14l11-7z" />
                               </svg>
                             </div>
@@ -280,11 +279,11 @@ const RecorderPreviewModal = ({
                     )}
                   </>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600">
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
                     <div className="text-center p-6">
                       <div className="text-5xl md:text-6xl lg:text-7xl mb-4">🎥</div>
-                      <div className="text-base md:text-lg font-medium">No recording available</div>
-                      <div className="text-xs md:text-sm text-gray-500 dark:text-gray-500 mt-2">
+                      <div className="text-base md:text-lg font-medium text-foreground">No recording available</div>
+                      <div className="text-xs md:text-sm text-muted-foreground mt-2">
                         The recording preview could not be loaded
                       </div>
                     </div>
@@ -295,7 +294,7 @@ const RecorderPreviewModal = ({
 
             {/* Timeline Container */}
             <div className="flex-shrink-0 p-3 md:p-4 lg:p-6 pt-0 lg:pt-0">
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="bg-card rounded-xl shadow-lg border border-border overflow-hidden">
                 <RecorderTimeline
                   duration={duration}
                   detectedIssues={stableDetectedIssues}
@@ -318,6 +317,7 @@ const RecorderPreviewModal = ({
                 onClose={handleClose}
                 recordingData={recordingData}
                 hasTitle={!!recordingTitle.trim()}
+                hasTrimChanges={hasTrimChanges}
               />
             </div>
           </div>
