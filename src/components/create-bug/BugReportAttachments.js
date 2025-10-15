@@ -7,8 +7,6 @@ import {
     FileText,
     Image as ImageIcon,
     Video,
-    CheckCircle,
-    X,
     Link2
 } from "lucide-react";
 import BugRecordingLinker from './BugRecordingLinker';

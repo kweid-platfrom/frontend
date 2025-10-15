@@ -82,9 +82,9 @@ const RecorderPreviewModal = ({
   const detectedIssuesKey = useMemo(() => JSON.stringify(detectedIssues), [detectedIssues]);
 
   // Then use the keys as dependencies for stable references
-  const stableConsoleLogs = useMemo(() => consoleLogs, [consoleLogsKey]);
-  const stableNetworkLogs = useMemo(() => networkLogs, [networkLogsKey]);
-  const stableDetectedIssues = useMemo(() => detectedIssues, [detectedIssuesKey]);
+  const stableConsoleLogs = useMemo(() => consoleLogs, [consoleLogsKey, consoleLogs]);
+  const stableNetworkLogs = useMemo(() => networkLogs, [networkLogsKey, networkLogs]);
+  const stableDetectedIssues = useMemo(() => detectedIssues, [detectedIssuesKey, detectedIssues]);
 
   const isYouTubeVideo = useMemo(() => {
     if (!currentPreviewUrl) return false;
