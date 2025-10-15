@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { SparklesIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import BugReportAttachments from './BugReportAttachments';
 import AIPromptBugReport from '../AIPromptBugReport';
+import { Button } from '@/components/ui/button';
 
 const BugReportForm = ({
     formData,
@@ -95,58 +96,6 @@ const BugReportForm = ({
             description: 'Generate bug report from description or console errors'
         }
     ];
-
-    const SubmitButton = ({ onClick, disabled, children, className, type = "button" }) => {
-        const baseSize = 'w-36 h-11'; // Base button size
-        const loadingSize = 'w-11 h-11'; // Circular size when loading
-        
-        return (
-            <button
-                type={type}
-                onClick={onClick}
-                disabled={disabled || submitButtonState === 'loading'}
-                className={`
-                    relative
-                    ${submitButtonState === 'loading' ? loadingSize : baseSize}
-                    ${submitButtonState === 'loading' ? 'rounded-full' : 'rounded-lg'}
-                    text-sm font-semibold
-                    transition-all duration-300 ease-in-out
-                    focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2
-                    shadow-sm
-                    ${className}
-                    ${disabled && submitButtonState !== 'loading' 
-                        ? 'bg-gray-400 cursor-not-allowed text-white' 
-                        : submitButtonState === 'success'
-                            ? 'bg-green-600 text-white'
-                            : submitButtonState === 'loading'
-                                ? 'bg-teal-600 text-white'
-                                : 'bg-teal-600 hover:bg-teal-700 text-white'
-                    }
-                `}
-                style={{
-                    minWidth: submitButtonState === 'loading' ? '2.75rem' : '9rem',
-                }}
-            >
-                {submitButtonState === 'loading' ? (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="relative w-5 h-5">
-                            {/* Snake-like loading animation */}
-                            <div className="absolute inset-0 border-2 border-transparent border-t-white rounded-full animate-spin"></div>
-                            <div className="absolute inset-1 border-2 border-transparent border-t-white/70 rounded-full animate-spin animation-delay-150"></div>
-                        </div>
-                    </div>
-                ) : submitButtonState === 'success' ? (
-                    <div className="flex items-center justify-center">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                    </div>
-                ) : (
-                    <span className="block w-full text-center">{children}</span>
-                )}
-            </button>
-        );
-    };
 
     return (
         <div className="flex flex-col h-full bg-gray-50">
@@ -481,21 +430,26 @@ const BugReportForm = ({
                         <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 sm:px-8 py-4 shadow-lg">
                             <div className="max-w-6xl mx-auto">
                                 <div className="flex justify-end space-x-4">
-                                    <button
+                                    <Button
                                         type="button"
+                                        variant="outline"
                                         onClick={onClose}
-                                        className="px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-all duration-200 shadow-sm"
                                         disabled={isSubmitting || submitButtonState === 'loading'}
                                     >
                                         Cancel
-                                    </button>
-                                    <SubmitButton
+                                    </Button>
+                                    <Button
                                         type="submit"
+                                        variant="default"
                                         onClick={handleSubmit}
                                         disabled={isSubmitting}
+                                        loading={submitButtonState === 'loading'}
+                                        morphLoading={true}
+                                        fullWidth={false}
+                                        className="min-w-[9rem]"
                                     >
                                         Submit Report
-                                    </SubmitButton>
+                                    </Button>
                                 </div>
                             </div>
                         </div>
@@ -519,13 +473,6 @@ const BugReportForm = ({
                     </div>
                 )}
             </div>
-
-            {/* Add custom CSS for animation delay */}
-            <style jsx>{`
-                .animation-delay-150 {
-                    animation-delay: 150ms;
-                }
-            `}</style>
         </div>
     );
 };

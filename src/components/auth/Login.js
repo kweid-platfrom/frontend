@@ -9,7 +9,7 @@ import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendEm
 import { auth } from "../../config/firebase";
 import BackgroundDecorations from "@/components/BackgroundDecorations";
 import Image from "next/image";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import "../../app/globals.css";
 
 const Login = () => {
@@ -223,125 +223,146 @@ const Login = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-background via-card to-teal-50 relative overflow-hidden">
-            <BackgroundDecorations />
-            <div className="flex items-center justify-center min-h-screen px-3 sm:px-4 lg:px-6 relative z-10 py-6 sm:py-8">
-                <div className="w-full max-w-[320px] xs:max-w-[360px] sm:max-w-md">
-                    <div className="bg-card rounded-xl shadow-theme-xl border border-border p-4 xs:p-5 sm:p-6 md:p-8 relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-teal-500/10 rounded-2xl blur-xl -z-10"></div>
-                        <div className="text-center mb-4 sm:mb-6">
-                            <div className="text-center">
-                                <div className="inline-block">
-                                    <div className="flex items-center justify-center">
-                                        <div className="w-16 h-16 xs:w-20 xs:h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex items-center justify-center">
-                                            <Image
-                                                src="/logo.svg"
-                                                alt="Assura Logo"
-                                                width={50}
-                                                height={50}
-                                                className="w-full h-full object-contain"
-                                                priority
-                                            />
+        <>
+            <Toaster position="top-center" richColors closeButton expand={false} />
+            <div className="min-h-screen bg-gradient-to-br from-background via-card to-teal-50 relative overflow-hidden">
+                <BackgroundDecorations />
+                <div className="flex items-center justify-center min-h-screen px-3 sm:px-4 lg:px-6 relative z-10 py-6 sm:py-8">
+                    <div className="w-full max-w-[320px] xs:max-w-[360px] sm:max-w-md">
+                        <div className="bg-card rounded-xl shadow-theme-xl border border-border p-4 xs:p-5 sm:p-6 md:p-8 relative">
+                            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-teal-500/10 rounded-2xl blur-xl -z-10"></div>
+                            <div className="text-center mb-4 sm:mb-6">
+                                <div className="text-center">
+                                    <div className="inline-block">
+                                        <div className="flex items-center justify-center">
+                                            <div className="w-16 h-16 xs:w-20 xs:h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex items-center justify-center">
+                                                <Image
+                                                    src="/logo.svg"
+                                                    alt="Assura Logo"
+                                                    width={50}
+                                                    height={50}
+                                                    className="w-full h-full object-contain"
+                                                    priority
+                                                />
+                                            </div>
                                         </div>
+                                        <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6">Welcome Back, Your testing hub awaits</p>
                                     </div>
-                                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6">Welcome Back, Your testing hub awaits</p>
                                 </div>
                             </div>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-xs sm:text-sm font-medium text-card-foreground block">Email address</label>
-                                <input
-                                    className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${errors.email
-                                        ? "border-destructive focus:border-destructive focus:ring-destructive/20"
-                                        : "border-input focus:border-primary focus:ring-ring/20"
-                                        } focus:outline-none focus:ring-2`}
-                                    type="email"
-                                    placeholder="name@company.com"
-                                    value={email}
-                                    onChange={(e) => {
-                                        setEmail(e.target.value);
-                                        if (errors.email) setErrors({ ...errors, email: "" });
-                                    }}
-                                    autoComplete="email"
-                                />
-                                {errors.email && (
-                                    <p className="text-destructive text-xs font-medium mt-1">{errors.email}</p>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-xs sm:text-sm font-medium text-card-foreground block">Password</label>
-                                <div className="relative">
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs sm:text-sm font-medium text-card-foreground block">Email address</label>
                                     <input
-                                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${errors.password
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${errors.email
                                             ? "border-destructive focus:border-destructive focus:ring-destructive/20"
                                             : "border-input focus:border-primary focus:ring-ring/20"
                                             } focus:outline-none focus:ring-2`}
-                                        type={showPassword ? "text" : "password"}
-                                        placeholder="Enter your password"
-                                        value={password}
+                                        type="email"
+                                        placeholder="name@company.com"
+                                        value={email}
                                         onChange={(e) => {
-                                            setPassword(e.target.value);
-                                            if (errors.password) setErrors({ ...errors, password: "" });
+                                            setEmail(e.target.value);
+                                            if (errors.email) setErrors({ ...errors, email: "" });
                                         }}
-                                        autoComplete="current-password"
+                                        autoComplete="email"
                                     />
+                                    {errors.email && (
+                                        <p className="text-destructive text-xs font-medium mt-1">{errors.email}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs sm:text-sm font-medium text-card-foreground block">Password</label>
+                                    <div className="relative">
+                                        <input
+                                            className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 pr-10 sm:pr-12 border rounded bg-background text-foreground placeholder-muted-foreground transition-all duration-200 text-sm sm:text-base ${errors.password
+                                                ? "border-destructive focus:border-destructive focus:ring-destructive/20"
+                                                : "border-input focus:border-primary focus:ring-ring/20"
+                                                } focus:outline-none focus:ring-2`}
+                                            type={showPassword ? "text" : "password"}
+                                            placeholder="Enter your password"
+                                            value={password}
+                                            onChange={(e) => {
+                                                setPassword(e.target.value);
+                                                if (errors.password) setErrors({ ...errors, password: "" });
+                                            }}
+                                            autoComplete="current-password"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                        >
+                                            {showPassword ? <EyeOff size={16} className="sm:w-5 sm:h-5" /> : <Eye size={16} className="sm:w-5 sm:h-5" />}
+                                        </button>
+                                    </div>
+                                    {errors.password && (
+                                        <p className="text-destructive text-xs font-medium mt-1">{errors.password}</p>
+                                    )}
+                                </div>
+                                <div className="flex justify-end">
                                     <button
                                         type="button"
-                                        className="absolute inset-y-0 right-3 sm:right-4 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                                        onClick={() => setShowPassword(!showPassword)}
+                                        onClick={handleForgotPassword}
+                                        className="text-primary text-xs sm:text-sm font-medium hover:text-primary/80 hover:underline transition-colors"
                                     >
-                                        {showPassword ? <EyeOff size={16} className="sm:w-5 sm:h-5" /> : <Eye size={16} className="sm:w-5 sm:h-5" />}
+                                        Forgot password?
                                     </button>
                                 </div>
-                                {errors.password && (
-                                    <p className="text-destructive text-xs font-medium mt-1">{errors.password}</p>
-                                )}
                             </div>
-                            <div className="flex justify-end">
-                                <button
-                                    type="button"
-                                    onClick={handleForgotPassword}
-                                    className="text-primary text-xs sm:text-sm font-medium hover:text-primary/80 hover:underline transition-colors"
-                                >
-                                    Forgot password?
-                                </button>
+                            {showVerificationHelper && <VerificationHelper />}
+                            <div className="mt-6 sm:mt-8">
+                                <div className="relative flex justify-center">
+                                    <button
+                                        type="button"
+                                        onClick={loadingEmailLogin ? undefined : handleLogin}
+                                        disabled={loadingEmailLogin}
+                                        className={`
+                                            transition-all duration-300 ease-in-out
+                                            ${loadingEmailLogin 
+                                                ? 'w-12 h-12 rounded-full bg-primary shadow-md flex items-center justify-center' 
+                                                : 'w-full bg-primary hover:bg-primary/90 text-white font-medium rounded px-4 sm:px-6 py-2.5 sm:py-3 shadow-md hover:-translate-y-0.5 text-sm sm:text-base'
+                                            }
+                                            disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+                                        `}
+                                    >
+                                        {loadingEmailLogin ? (
+                                            <div className="w-5 h-5 sm:w-6 sm:h-6 relative">
+                                                <div className="absolute inset-0 rounded-full border-2 border-white/20"></div>
+                                                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white animate-spin"></div>
+                                            </div>
+                                        ) : (
+                                            'Sign In'
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex items-center my-4 sm:my-6">
+                                <div className="flex-grow border-t border-border"></div>
+                                <span className="px-3 sm:px-4 text-xs sm:text-sm text-muted-foreground font-medium bg-card">or continue with</span>
+                                <div className="flex-grow border-t border-border"></div>
                             </div>
                             <button
-                                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium sm:font-semibold rounded px-4 sm:px-6 py-2.5 sm:py-3 transition-all duration-200 flex justify-center items-center gap-2 shadow-theme-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
-                                onClick={handleLogin}
-                                disabled={loadingEmailLogin}
+                                type="button"
+                                onClick={handleGoogleLogin}
+                                className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium sm:font-semibold border-2 border-border rounded px-3 sm:px-6 py-2.5 sm:py-3 transition-all duration-200 flex justify-center items-center gap-2 sm:gap-3 shadow-theme-sm hover:shadow-theme disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                                disabled={loadingGoogleLogin}
                             >
-                                Sign In
-                                {loadingEmailLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
+                                <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                                <span className="truncate">Google</span>
+                                {loadingGoogleLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
                             </button>
+                            <p className="text-center text-muted-foreground mt-4 sm:mt-6 text-xs sm:text-sm">
+                                Don&apos;t have an account?{" "}
+                                <Link href="/register" className="text-primary font-medium sm:font-semibold hover:text-primary/80 hover:underline transition-colors">
+                                    Sign Up
+                                </Link>
+                            </p>
                         </div>
-                        {showVerificationHelper && <VerificationHelper />}
-                        <div className="flex items-center my-4 sm:my-6">
-                            <div className="flex-grow border-t border-border"></div>
-                            <span className="px-3 sm:px-4 text-xs sm:text-sm text-muted-foreground font-medium bg-card">or continue with</span>
-                            <div className="flex-grow border-t border-border"></div>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleGoogleLogin}
-                            className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium sm:font-semibold border-2 border-border rounded px-3 sm:px-6 py-2.5 sm:py-3 transition-all duration-200 flex justify-center items-center gap-2 sm:gap-3 shadow-theme-sm hover:shadow-theme disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                            disabled={loadingGoogleLogin}
-                        >
-                            <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                            <span className="truncate">Google</span>
-                            {loadingGoogleLogin && <Loader2 className="animate-spin h-4 w-4 sm:h-5 sm:w-5 ml-2" />}
-                        </button>
-                        <p className="text-center text-muted-foreground mt-4 sm:mt-6 text-xs sm:text-sm">
-                            Don&apos;t have an account?{" "}
-                            <Link href="/register" className="text-primary font-medium sm:font-semibold hover:text-primary/80 hover:underline transition-colors">
-                                Sign Up
-                            </Link>
-                        </p>
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 

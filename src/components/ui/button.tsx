@@ -4,17 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive relative overflow-hidden",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium transition-all duration-300 ease-in-out disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive relative overflow-hidden",
   {
     variants: {
       variant: {
         // Primary - main action buttons
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/95",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/95 hover:-translate-y-0.5",
         
         // Destructive - dangerous actions
-        destructive: "bg-destructive text-white shadow-sm hover:bg-destructive/90 active:bg-destructive/95 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+        destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/95 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 hover:-translate-y-0.5",
         
-        // Secondary - less prominent actions (like your header buttons)
+        // Secondary - less prominent actions
         secondary: "bg-secondary text-secondary-foreground border border-border shadow-sm hover:bg-secondary/80 active:bg-secondary/90",
         
         // Outline - subtle emphasis
@@ -32,14 +32,14 @@ const buttonVariants = cva(
         headerGhost: "text-muted-foreground hover:text-foreground hover:bg-secondary/80 active:bg-secondary/90",
         headerOutline: "border border-border text-secondary-foreground hover:bg-secondary/50 active:bg-secondary/70",
         
-        // Success variant
-        success: "bg-green-600 text-white shadow-sm hover:bg-green-700 active:bg-green-800 dark:bg-green-700 dark:hover:bg-green-600",
+        // Success variant - uses your success color
+        success: "bg-success text-white shadow-sm hover:opacity-90 active:opacity-95 hover:-translate-y-0.5",
         
-        // Warning variant
-        warning: "bg-yellow-600 text-white shadow-sm hover:bg-yellow-700 active:bg-yellow-800 dark:bg-yellow-600 dark:hover:bg-yellow-500",
+        // Warning variant - uses your warning color
+        warning: "bg-warning text-white shadow-sm hover:opacity-90 active:opacity-95 hover:-translate-y-0.5",
         
-        // Info variant
-        info: "bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500"
+        // Info variant - uses your info color
+        info: "bg-info text-white shadow-sm hover:opacity-90 active:opacity-95 hover:-translate-y-0.5"
       },
       size: {
         xs: "h-7 rounded px-2 text-xs gap-1 has-[>svg]:px-1.5",
@@ -59,13 +59,18 @@ const buttonVariants = cva(
       fullWidth: {
         true: "w-full",
         false: ""
+      },
+      morphLoading: {
+        true: "",
+        false: ""
       }
     },
     defaultVariants: {
       variant: "default",
       size: "default",
       loading: false,
-      fullWidth: false
+      fullWidth: false,
+      morphLoading: false
     },
   }
 )
@@ -79,6 +84,7 @@ interface ButtonProps
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode
   tooltip?: string
+  morphLoading?: boolean
 }
 
 const LoadingSpinner = ({ size = "sm" }: { size?: "xs" | "sm" | "md" | "lg" }) => {
@@ -113,6 +119,15 @@ const LoadingSpinner = ({ size = "sm" }: { size?: "xs" | "sm" | "md" | "lg" }) =
   )
 }
 
+const MorphingLoadingSpinner = () => {
+  return (
+    <div className="w-5 h-5 sm:w-6 sm:h-6 relative">
+      <div className="absolute inset-0 rounded-full border-2 border-white/20"></div>
+      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white animate-spin"></div>
+    </div>
+  )
+}
+
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ 
     className, 
@@ -126,22 +141,33 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     children,
     disabled,
     tooltip,
+    morphLoading = false,
+    fullWidth,
     ...props 
   }, ref) => {
     const Comp = asChild ? Slot : "button"
     const isDisabled = disabled || loading
 
+    // Morphing animation classes
+    const morphClasses = morphLoading && loading 
+      ? "!w-12 !h-12 !rounded-full !px-0 shadow-md" 
+      : ""
+
     const buttonContent = (
       <>
-        {loading ? (
+        {loading && morphLoading ? (
+          <MorphingLoadingSpinner />
+        ) : loading ? (
           <LoadingSpinner size={size === "xs" ? "xs" : size === "sm" ? "sm" : size === "lg" || size === "xl" ? "lg" : "sm"} />
         ) : leftIcon ? (
           leftIcon
         ) : null}
         
-        <span className={cn(loading && "opacity-70")}>
-          {loading && loadingText ? loadingText : children}
-        </span>
+        {(!loading || !morphLoading) && (
+          <span className={cn(loading && "opacity-70")}>
+            {loading && loadingText ? loadingText : children}
+          </span>
+        )}
         
         {!loading && rightIcon && rightIcon}
       </>
@@ -151,7 +177,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Comp
         ref={ref}
         data-slot="button"
-        className={cn(buttonVariants({ variant, size, loading, fullWidth: props.fullWidth, className }))}
+        className={cn(
+          buttonVariants({ variant, size, loading, fullWidth, morphLoading, className }),
+          morphClasses,
+          morphLoading && loading && "disabled:transform-none"
+        )}
         disabled={isDisabled}
         {...props}
       >
