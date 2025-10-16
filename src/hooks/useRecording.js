@@ -131,7 +131,7 @@ export const useRecordings = () => {
         const duration = timerRef.current ? 
           Math.floor((Date.now() - timerRef.startTime) / 1000) : 0;
 
-        console.log(' Creating preview with:', {
+        console.log('📹 Creating preview with:', {
           blobSize: blob.size,
           duration,
           consoleLogsCount: consoleLogsRef.current.length,
@@ -282,13 +282,15 @@ export const useRecordings = () => {
 
   // Clear preview
   const clearPreview = useCallback(() => {
-    if (previewData?.previewUrl) {
-      URL.revokeObjectURL(previewData.previewUrl);
-    }
-    setPreviewData(null);
+    setPreviewData((currentPreviewData) => {
+      if (currentPreviewData?.previewUrl) {
+        URL.revokeObjectURL(currentPreviewData.previewUrl);
+      }
+      return null;
+    });
     setHasPreview(false);
     console.log('🗑️ Preview cleared');
-  }, [previewData]);
+  }, []);
 
   // Cleanup - NO DEPENDENCIES to prevent infinite loops
   const cleanup = useCallback(() => {
@@ -310,11 +312,13 @@ export const useRecordings = () => {
       clearInterval(timerRef.current);
     }
 
-    // Clear preview URL if it exists
-    const currentPreviewUrl = previewData?.previewUrl;
-    if (currentPreviewUrl) {
-      URL.revokeObjectURL(currentPreviewUrl);
-    }
+    // Clear preview URL if it exists - use callback to get latest state
+    setPreviewData((currentPreviewData) => {
+      if (currentPreviewData?.previewUrl) {
+        URL.revokeObjectURL(currentPreviewData.previewUrl);
+      }
+      return null;
+    });
 
     // Reset refs
     mediaRecorderRef.current = null;
@@ -332,10 +336,9 @@ export const useRecordings = () => {
       status: 'idle'
     });
     setHasPreview(false);
-    setPreviewData(null);
 
     console.log('✅ Cleanup complete');
-  }, []); // Empty dependencies - cleanup should only access refs
+  }, []); // Empty dependencies - cleanup should only access refs and use state callbacks
 
   // Create recording (save to Firestore)
   const createRecording = useCallback(async (recordingData) => {

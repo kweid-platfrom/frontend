@@ -1,3 +1,4 @@
+// components/QAIDMetricsOverview.jsx - COMPLETE FIXED VERSION
 import React from 'react';
 import {
     TestTube,
@@ -108,6 +109,14 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
         testCaseUpdateFrequency: metrics.testCaseUpdateFrequency || 0
     };
 
+    const execution = {
+        executionCount: metrics.executionCount || 0,
+        passCount: metrics.passCount || 0,
+        failCount: metrics.failCount || 0,
+        passRate: metrics.passRate || 0,
+        avgExecutionTime: metrics.avgExecutionTime || 0
+    };
+
     const coverage = {
         functionalCoverage: metrics.functionalCoverage || 0,
         edgeCaseCoverage: metrics.edgeCaseCoverage || 0,
@@ -116,14 +125,16 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
 
     const ai = {
         aiGenerationSuccessRate: metrics.aiGenerationSuccessRate || 0,
-        avgTestCasesPerAIGeneration: metrics.avgTestCasesPerAIGeneration || 0,
-        totalAIGenerations: Math.round((testCases.aiGeneratedTestCases || 0) / Math.max(metrics.avgTestCasesPerAIGeneration || 1, 1)),
+        avgTestCasesPerAIGeneration: metrics.avgTestCasesPerAIGeneration || 5,
+        totalAIGenerations: testCases.aiGeneratedTestCases > 0 
+            ? Math.max(1, Math.round(testCases.aiGeneratedTestCases / (metrics.avgTestCasesPerAIGeneration || 5)))
+            : 0,
         aiCostPerTestCase: 0.05
     };
 
     const automation = {
-        automationRatio: testCases.totalTestCases > 0 ? 
-            Math.round((testCases.automatedTestCases / testCases.totalTestCases) * 100) : 0,
+        automationRatio: metrics.automationRate || (testCases.totalTestCases > 0 ? 
+            Math.round((testCases.automatedTestCases / testCases.totalTestCases) * 100) : 0),
         cypressScriptsGenerated: Math.round((testCases.automatedTestCases || 0) * 0.8)
     };
 
@@ -140,14 +151,14 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
         (coverage.functionalCoverage * 0.3)
     );
 
-    const evidenceQuality = Math.round(
+    const evidenceQuality = testCases.totalTestCases > 0 ? Math.round(
         ((testCases.testCasesWithRecordings + testCases.testCasesWithTags) / 
-         Math.max(testCases.totalTestCases * 2, 1)) * 100
-    );
+         (testCases.totalTestCases * 2)) * 100
+    ) : 0;
 
     const aiProductivity = Math.round(
         (ai.aiGenerationSuccessRate * 0.6) + 
-        ((testCases.aiGeneratedTestCases / Math.max(testCases.totalTestCases, 1)) * 100 * 0.4)
+        ((testCases.totalTestCases > 0 ? (testCases.aiGeneratedTestCases / testCases.totalTestCases) * 100 : 0) * 0.4)
     );
 
     const getTrend = (metricName) => {
@@ -171,6 +182,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
 
     return (
         <div className="space-y-8">
+            {/* QAID Core Performance */}
             <div className="bg-background/50 rounded-xl p-6 border border-border">
                 <h2 className="text-lg font-semibold text-foreground mb-6 flex items-center">
                     <Gauge className="w-5 h-5 mr-2 text-primary" />
@@ -207,6 +219,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 </div>
             </div>
 
+            {/* Test Cases Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard
                     title="Total Test Cases"
@@ -215,7 +228,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     changeType={getTrendType(getTrend('totalTestCases'))}
                     icon={TestTube}
                     color="teal"
-                    subtitle={`${testCases.aiGeneratedTestCases || 0} AI-generated`}
+                    subtitle={testCases.aiGeneratedTestCases > 0 
+                        ? `${testCases.aiGeneratedTestCases} AI-generated`
+                        : 'No AI-generated tests yet'}
                 />
                 <MetricCard
                     title="Manual Test Cases"
@@ -224,7 +239,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     changeType={getTrendType(getTrend('manualTestCases'))}
                     icon={Clock}
                     color="orange"
-                    subtitle={`${testCases.totalTestCases > 0 ? Math.round((testCases.manualTestCases / testCases.totalTestCases) * 100) : 0}% of total`}
+                    subtitle={testCases.totalTestCases > 0 
+                        ? `${Math.round((testCases.manualTestCases / testCases.totalTestCases) * 100)}% of total`
+                        : '0% of total'}
                 />
                 <MetricCard
                     title="Automated Tests"
@@ -242,10 +259,13 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     changeType={getTrendType(getTrend('aiGeneratedTestCases'))}
                     icon={Bot}
                     color="purple"
-                    subtitle={`${ai.aiGenerationSuccessRate}% success rate`}
+                    subtitle={ai.aiGenerationSuccessRate > 0 
+                        ? `${ai.aiGenerationSuccessRate}% success rate`
+                        : 'No AI generations yet'}
                 />
             </div>
 
+            {/* Test Case Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard
                     title="Tests with Recordings"
@@ -263,7 +283,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     changeType={getTrendType(getTrend('testCasesWithTags'))}
                     icon={Tags}
                     color="indigo"
-                    subtitle={`${testCases.totalTestCases > 0 ? Math.round((testCases.testCasesWithTags / testCases.totalTestCases) * 100) : 0}% properly tagged`}
+                    subtitle={testCases.totalTestCases > 0 
+                        ? `${Math.round((testCases.testCasesWithTags / testCases.totalTestCases) * 100)}% properly tagged`
+                        : '0% properly tagged'}
                 />
                 <MetricCard
                     title="Linked to Bugs"
@@ -285,6 +307,57 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 />
             </div>
 
+            {/* Test Execution Summary */}
+            <div className="bg-card rounded-lg shadow-theme border border-border p-6">
+                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2 text-green-500" />
+                    Test Execution Summary
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="text-center p-4 bg-[rgb(var(--color-teal-50))] rounded-lg border border-[rgb(var(--color-teal-300)/0.2)]">
+                        <div className="text-2xl font-bold text-teal-800 mb-1">
+                            {execution.executionCount}
+                        </div>
+                        <div className="text-sm text-foreground">Total Executions</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                            Test runs completed
+                        </div>
+                    </div>
+                    <div className="text-center p-4 bg-[rgb(var(--color-success)/0.1)] rounded-lg border border-[rgb(var(--color-success)/0.2)]">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-success))] mb-1">
+                            {execution.passRate}%
+                        </div>
+                        <div className="text-sm text-foreground">Pass Rate</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                            {execution.executionCount > 0 
+                                ? `${execution.passCount} passed`
+                                : 'No executions yet'}
+                        </div>
+                    </div>
+                    <div className="text-center p-4 bg-[rgb(var(--color-error)/0.1)] rounded-lg border border-[rgb(var(--color-error)/0.2)]">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-error))] mb-1">
+                            {execution.failCount}
+                        </div>
+                        <div className="text-sm text-foreground">Failed Tests</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                            {execution.executionCount > 0 
+                                ? `${Math.round((execution.failCount / execution.executionCount) * 100)}% fail rate`
+                                : 'No failures'}
+                        </div>
+                    </div>
+                    <div className="text-center p-4 bg-[rgb(var(--color-warning)/0.1)] rounded-lg border border-[rgb(var(--color-warning)/0.2)]">
+                        <div className="text-2xl font-bold text-[rgb(var(--color-warning))] mb-1">
+                            {execution.avgExecutionTime}s
+                        </div>
+                        <div className="text-sm text-foreground">Avg Exec Time</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                            Per test execution
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Coverage Analysis */}
             <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
                     <CheckCircle className="w-5 h-5 mr-2 text-green-500" />
@@ -321,6 +394,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 </div>
             </div>
 
+            {/* AI Generation Insights */}
             <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
                     <Brain className="w-5 h-5 mr-2 text-purple-500" />
@@ -333,7 +407,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         </div>
                         <div className="text-sm text-foreground">Total AI Generations</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            Successful generation attempts
+                            {ai.totalAIGenerations > 0 
+                                ? 'Successful generation attempts'
+                                : 'No AI generations yet'}
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-success)/0.1)] rounded-lg border border-[rgb(var(--color-success)/0.2)]">
@@ -342,7 +418,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         </div>
                         <div className="text-sm text-foreground">Success Rate</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            AI generation efficiency
+                            {ai.aiGenerationSuccessRate > 0 
+                                ? 'AI generation efficiency'
+                                : 'No data available'}
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-teal-50))] rounded-lg border border-[rgb(var(--color-teal-300)/0.2)]">
@@ -366,6 +444,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 </div>
             </div>
 
+            {/* Test Case Health Summary */}
             <div className="bg-background/50 rounded-lg border border-border p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
                     <Shield className="w-5 h-5 mr-2 text-green-500" />
@@ -392,7 +471,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-purple-500">
-                            {testCases.totalTestCases > 0 ? Math.round((testCases.aiGeneratedTestCases / testCases.totalTestCases) * 100) : 0}%
+                            {testCases.totalTestCases > 0 
+                                ? Math.round((testCases.aiGeneratedTestCases / testCases.totalTestCases) * 100) 
+                                : 0}%
                         </div>
                         <div className="text-sm text-foreground">AI Contribution</div>
                         <div className="text-xs text-muted-foreground mt-1">
@@ -411,24 +492,31 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 </div>
             </div>
 
-            {(testCases.outdatedTestCases > 0 || automation.automationRatio < 30 || ai.aiGenerationSuccessRate < 70) && (
+            {/* Recommendations */}
+            {(testCases.outdatedTestCases > 0 || automation.automationRatio < 30 || ai.aiGenerationSuccessRate < 70 || execution.executionCount === 0) && (
                 <div className="bg-card border border-orange-300 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-orange-800 mb-2 flex items-center">
                         <Activity className="w-4 h-4 mr-1 text-orange-500" />
-                        Maintenance Recommendations
+                        Recommendations
                     </h4>
                     <div className="space-y-1 text-sm text-orange-700">
+                        {execution.executionCount === 0 && (
+                            <div>• No test executions yet - start running your test cases to gather metrics</div>
+                        )}
                         {testCases.outdatedTestCases > 0 && (
                             <div>• {testCases.outdatedTestCases} test cases need updates - consider reviewing and refreshing</div>
                         )}
-                        {automation.automationRatio < 30 && (
+                        {automation.automationRatio < 30 && testCases.totalTestCases > 0 && (
                             <div>• Automation coverage is below 30% - consider converting manual tests to automated</div>
                         )}
-                        {ai.aiGenerationSuccessRate < 70 && (
+                        {ai.aiGenerationSuccessRate < 70 && ai.totalAIGenerations > 0 && (
                             <div>• AI generation success rate is below 70% - review prompts and generation parameters</div>
                         )}
-                        {qualityScore < 60 && (
+                        {qualityScore < 60 && testCases.totalTestCases > 0 && (
                             <div>• Quality score is below 60% - add more tags and recordings to improve test case documentation</div>
+                        )}
+                        {testCases.totalTestCases === 0 && (
+                            <div>• No test cases found - create your first test case to start tracking metrics</div>
                         )}
                     </div>
                 </div>
