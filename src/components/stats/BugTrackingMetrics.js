@@ -1,256 +1,49 @@
-// Fixed BugTrackingMetrics.jsx
-import React, { useMemo } from 'react';
+import React from 'react';
 import { AlertTriangle, CheckCircle, Video, Network, FileText, TrendingDown, TrendingUp, Bug } from 'lucide-react';
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor';
+import { useDashboard } from '../../hooks/useDashboard';
 
-const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filters = {} }) => {
-    const processedMetrics = useMemo(() => {
-        const defaultMetrics = {
-            totalBugs: 0,
-            bugsFromScreenRecording: 0,
-            bugsFromManualTesting: 0,
-            bugsWithVideoEvidence: 0,
-            bugsWithNetworkLogs: 0,
-            bugsWithConsoleLogs: 0,
-            criticalBugs: 0,
-            criticalResolvedBugs: 0,
-            totalCriticalBugs: 0,
-            highPriorityBugs: 0,
-            highResolvedBugs: 0,
-            totalHighPriorityBugs: 0,
-            mediumPriorityBugs: 0,
-            mediumResolvedBugs: 0,
-            totalMediumPriorityBugs: 0,
-            lowPriorityBugs: 0,
-            lowResolvedBugs: 0,
-            totalLowPriorityBugs: 0,
-            resolvedBugs: 0,
-            avgResolutionTime: 0,
-            bugResolutionRate: 0,
-            avgBugReportCompleteness: 0,
-            bugReportsWithAttachments: 0,
-            bugReproductionRate: 0,
-            weeklyReportsGenerated: 0,
-            monthlyReportsGenerated: 0,
-            avgBugsPerReport: 0,
-            activeBugs: 0,
-        };
+const BugTrackingMetrics = ({ filters = {} }) => {
+    const { metrics: rawMetrics, loading, error, refresh } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
 
-        if (!metrics || typeof metrics !== 'object') {
-            return defaultMetrics;
-        }
-
-        const totalBugs = metrics.totalBugs || metrics.bugs || 0;
-
-        let resolvedBugs = 0;
-        if (metrics.resolvedBugs !== undefined && metrics.resolvedBugs !== null && metrics.resolvedBugs >= 0) {
-            resolvedBugs = metrics.resolvedBugs;
-        } else if (metrics.bugResolutionRate && totalBugs > 0) {
-            resolvedBugs = Math.round((metrics.bugResolutionRate / 100) * totalBugs);
-        } else if (metrics.activeBugs !== undefined && metrics.activeBugs !== null && totalBugs > 0) {
-            resolvedBugs = Math.max(0, totalBugs - metrics.activeBugs);
-        } else if (totalBugs > 0) {
-            resolvedBugs = Math.round(totalBugs * 0.6);
-        }
-
-        let activeBugs = 0;
-        if (metrics.activeBugs !== undefined && metrics.activeBugs !== null && metrics.activeBugs >= 0) {
-            activeBugs = metrics.activeBugs;
-        } else {
-            activeBugs = Math.max(0, totalBugs - resolvedBugs);
-        }
-
-        let bugResolutionRate = 0;
-        if (metrics.bugResolutionRate !== undefined && metrics.bugResolutionRate !== null) {
-            bugResolutionRate = metrics.bugResolutionRate;
-        } else if (totalBugs > 0) {
-            bugResolutionRate = Math.round((resolvedBugs / totalBugs) * 100);
-        }
-
-        let criticalBugs = metrics.criticalBugs || 0;
-        let criticalResolvedBugs = metrics.criticalResolvedBugs || 0;
-        let totalCriticalBugs = metrics.totalCriticalBugs || criticalBugs + criticalResolvedBugs;
-
-        if ((metrics.criticalIssues || metrics.totalCriticalBugs) && !metrics.criticalBugs && !metrics.criticalResolvedBugs) {
-            totalCriticalBugs = metrics.criticalIssues || metrics.totalCriticalBugs || Math.round(totalBugs * 0.15);
-            if (totalBugs > 0 && resolvedBugs > 0) {
-                criticalResolvedBugs = Math.round(totalCriticalBugs * (resolvedBugs / totalBugs));
-                criticalBugs = totalCriticalBugs - criticalResolvedBugs;
-            } else {
-                criticalBugs = totalCriticalBugs;
-                criticalResolvedBugs = 0;
-            }
-        } else if (!totalCriticalBugs) {
-            totalCriticalBugs = criticalBugs + criticalResolvedBugs;
-        }
-
-        let highPriorityBugs = metrics.highPriorityBugs || 0;
-        let highResolvedBugs = metrics.highResolvedBugs || 0;
-        let totalHighPriorityBugs = metrics.totalHighPriorityBugs || highPriorityBugs + highResolvedBugs;
-
-        if (metrics.totalHighPriorityBugs && !metrics.highPriorityBugs && !metrics.highResolvedBugs) {
-            totalHighPriorityBugs = metrics.totalHighPriorityBugs || Math.round(totalBugs * 0.25);
-            if (totalBugs > 0 && resolvedBugs > 0) {
-                highResolvedBugs = Math.round(totalHighPriorityBugs * (resolvedBugs / totalBugs));
-                highPriorityBugs = totalHighPriorityBugs - highResolvedBugs;
-            } else {
-                highPriorityBugs = totalHighPriorityBugs;
-                highResolvedBugs = 0;
-            }
-        } else if (!totalHighPriorityBugs) {
-            totalHighPriorityBugs = highPriorityBugs + highResolvedBugs;
-        }
-
-        let mediumPriorityBugs = metrics.mediumPriorityBugs || 0;
-        let mediumResolvedBugs = metrics.mediumResolvedBugs || 0;
-        let totalMediumPriorityBugs = metrics.totalMediumPriorityBugs || mediumPriorityBugs + mediumResolvedBugs;
-
-        if (metrics.totalMediumPriorityBugs && !metrics.mediumPriorityBugs && !metrics.mediumResolvedBugs) {
-            totalMediumPriorityBugs = metrics.totalMediumPriorityBugs || Math.round(totalBugs * 0.45);
-            if (totalBugs > 0 && resolvedBugs > 0) {
-                mediumResolvedBugs = Math.round(totalMediumPriorityBugs * (resolvedBugs / totalBugs));
-                mediumPriorityBugs = totalMediumPriorityBugs - mediumResolvedBugs;
-            } else {
-                mediumPriorityBugs = totalMediumPriorityBugs;
-                mediumResolvedBugs = 0;
-            }
-        } else if (!totalMediumPriorityBugs) {
-            totalMediumPriorityBugs = mediumPriorityBugs + mediumResolvedBugs;
-        }
-
-        let lowPriorityBugs = metrics.lowPriorityBugs || 0;
-        let lowResolvedBugs = metrics.lowResolvedBugs || 0;
-        let totalLowPriorityBugs = metrics.totalLowPriorityBugs || lowPriorityBugs + lowResolvedBugs;
-
-        if (metrics.totalLowPriorityBugs && !metrics.lowPriorityBugs && !metrics.lowResolvedBugs) {
-            totalLowPriorityBugs = metrics.totalLowPriorityBugs || Math.round(totalBugs * 0.15);
-            if (totalBugs > 0 && resolvedBugs > 0) {
-                lowResolvedBugs = Math.round(totalLowPriorityBugs * (resolvedBugs / totalBugs));
-                lowPriorityBugs = totalLowPriorityBugs - lowResolvedBugs;
-            } else {
-                lowPriorityBugs = totalLowPriorityBugs;
-                lowResolvedBugs = 0;
-            }
-        } else if (!totalLowPriorityBugs) {
-            totalLowPriorityBugs = lowPriorityBugs + lowResolvedBugs;
-        }
-
-        if (!totalCriticalBugs && !totalHighPriorityBugs && !totalMediumPriorityBugs && !totalLowPriorityBugs && totalBugs > 0) {
-            totalCriticalBugs = Math.round(totalBugs * 0.15);
-            totalHighPriorityBugs = Math.round(totalBugs * 0.25);
-            totalMediumPriorityBugs = Math.round(totalBugs * 0.45);
-            totalLowPriorityBugs = Math.round(totalBugs * 0.15);
-
-            if (resolvedBugs > 0) {
-                const resolutionRatio = resolvedBugs / totalBugs;
-                criticalResolvedBugs = Math.round(totalCriticalBugs * resolutionRatio);
-                highResolvedBugs = Math.round(totalHighPriorityBugs * resolutionRatio);
-                mediumResolvedBugs = Math.round(totalMediumPriorityBugs * resolutionRatio);
-                lowResolvedBugs = Math.round(totalLowPriorityBugs * resolutionRatio);
-
-                criticalBugs = totalCriticalBugs - criticalResolvedBugs;
-                highPriorityBugs = totalHighPriorityBugs - highResolvedBugs;
-                mediumPriorityBugs = totalMediumPriorityBugs - mediumResolvedBugs;
-                lowPriorityBugs = totalLowPriorityBugs - lowResolvedBugs;
-            } else {
-                criticalBugs = totalCriticalBugs;
-                highPriorityBugs = totalHighPriorityBugs;
-                mediumPriorityBugs = totalMediumPriorityBugs;
-                lowPriorityBugs = totalLowPriorityBugs;
-            }
-        }
-
-        const processed = {
-            totalBugs,
-            activeBugs,
-            resolvedBugs,
-            bugResolutionRate,
-            bugsFromScreenRecording: metrics.bugsFromScreenRecording || Math.round(totalBugs * 0.4),
-            bugsFromManualTesting: metrics.bugsFromManualTesting || Math.round(totalBugs * 0.6),
-            bugsWithVideoEvidence: metrics.bugsWithVideoEvidence || metrics.bugsFromScreenRecording || Math.round(totalBugs * 0.35),
-            bugsWithNetworkLogs: metrics.bugsWithNetworkLogs || Math.round(totalBugs * 0.45),
-            bugsWithConsoleLogs: metrics.bugsWithConsoleLogs || Math.round(totalBugs * 0.55),
-            criticalBugs,
-            criticalResolvedBugs,
-            totalCriticalBugs,
-            highPriorityBugs,
-            highResolvedBugs,
-            totalHighPriorityBugs,
-            mediumPriorityBugs,
-            mediumResolvedBugs,
-            totalMediumPriorityBugs,
-            lowPriorityBugs,
-            lowResolvedBugs,
-            totalLowPriorityBugs,
-            avgResolutionTime: metrics.avgResolutionTime || (resolvedBugs > 0 ? 24 : 0),
-            avgBugReportCompleteness: metrics.avgBugReportCompleteness || 75,
-            bugReportsWithAttachments: metrics.bugReportsWithAttachments || Math.round(totalBugs * 0.6),
-            bugReproductionRate: metrics.bugReproductionRate || 85,
-            weeklyReportsGenerated: metrics.weeklyReportsGenerated || Math.max(1, Math.round(totalBugs / 10)),
-            monthlyReportsGenerated: metrics.monthlyReportsGenerated || Math.max(1, Math.round(totalBugs / 25)),
-            avgBugsPerReport: metrics.avgBugsPerReport || Math.round(totalBugs / Math.max(1, (metrics.weeklyReportsGenerated || 1))),
-        };
-
-        processed.activeBugs = Math.max(0, processed.activeBugs);
-        processed.resolvedBugs = Math.max(0, Math.min(processed.resolvedBugs, processed.totalBugs));
-        processed.bugResolutionRate = Math.min(100, Math.max(0, processed.bugResolutionRate));
-
-        if (processed.totalBugs > 0) {
-            processed.activeBugs = processed.totalBugs - processed.resolvedBugs;
-        }
-
-        const severityTotal = processed.totalCriticalBugs + processed.totalHighPriorityBugs +
-            processed.totalMediumPriorityBugs + processed.totalLowPriorityBugs;
-        if (severityTotal > processed.totalBugs && processed.totalBugs > 0) {
-            const scale = processed.totalBugs / severityTotal;
-            processed.totalCriticalBugs = Math.round(processed.totalCriticalBugs * scale);
-            processed.totalHighPriorityBugs = Math.round(processed.totalHighPriorityBugs * scale);
-            processed.totalMediumPriorityBugs = Math.round(processed.totalMediumPriorityBugs * scale);
-            processed.totalLowPriorityBugs = Math.round(processed.totalLowPriorityBugs * scale);
-
-            processed.criticalBugs = Math.max(0, processed.totalCriticalBugs - processed.criticalResolvedBugs);
-            processed.highPriorityBugs = Math.max(0, processed.totalHighPriorityBugs - processed.highResolvedBugs);
-            processed.mediumPriorityBugs = Math.max(0, processed.totalMediumPriorityBugs - processed.mediumResolvedBugs);
-            processed.lowPriorityBugs = Math.max(0, processed.totalLowPriorityBugs - processed.lowResolvedBugs);
-        }
-
-        processed.criticalResolvedBugs = Math.min(processed.criticalResolvedBugs, processed.totalCriticalBugs);
-        processed.highResolvedBugs = Math.min(processed.highResolvedBugs, processed.totalHighPriorityBugs);
-        processed.mediumResolvedBugs = Math.min(processed.mediumResolvedBugs, processed.totalMediumPriorityBugs);
-        processed.lowResolvedBugs = Math.min(processed.lowResolvedBugs, processed.totalLowPriorityBugs);
-
-        return processed;
-    }, [metrics]);
-
-    // Destructure all needed values, including totalBugs
     const {
-        totalBugs,
-        activeBugs,
-        resolvedBugs,
-        bugResolutionRate,
-        bugsFromScreenRecording,
-        bugsFromManualTesting,
-        bugsWithVideoEvidence,
-        bugsWithNetworkLogs,
-        bugsWithConsoleLogs,
-        criticalBugs,
-        criticalResolvedBugs,
-        totalCriticalBugs,
-        highPriorityBugs,
-        highResolvedBugs,
-        totalHighPriorityBugs,
-        mediumPriorityBugs,
-        mediumResolvedBugs,
-        totalMediumPriorityBugs,
-        lowPriorityBugs,
-        lowResolvedBugs,
-        totalLowPriorityBugs,
-        avgResolutionTime,
-        avgBugReportCompleteness,
-        bugReproductionRate,
-        weeklyReportsGenerated,
-        monthlyReportsGenerated,
-        avgBugsPerReport,
-    } = processedMetrics;
+        totalBugs = 0,
+        activeBugs = 0,
+        resolvedBugs = 0,
+        criticalBugs = 0,
+        highPriorityBugs = 0,
+        mediumPriorityBugs = 0,
+        lowPriorityBugs = 0,
+        bugsWithVideoEvidence = 0,
+        bugsWithConsoleLogs = 0,
+        bugsWithNetworkLogs = 0,
+        bugsFromRecordings = 0,
+        avgBugReportCompleteness = 0,
+        avgResolutionTime = 0,
+        bugResolutionRate = 0,
+        criticalBugResolutionTime = 0,
+        highBugResolutionTime = 0,
+        recentlyResolvedBugs = 0,
+        bugReproductionRate = 85,
+        bugTrend = [],
+        bugReportQualityScore = 0,
+        bugHealthStatus = 'good'
+    } = metrics;
+
+    // Compute sources (assuming recordings for screen, rest manual)
+    const bugsFromScreenRecording = bugsFromRecordings;
+    const bugsFromManualTesting = totalBugs - bugsFromScreenRecording;
+
+    // Compute trends from bugTrend
+    const computeTrend = (trendData, key = 'count') => {
+        if (trendData.length < 2) return null;
+        const first = trendData[0][key];
+        const last = trendData[trendData.length - 1][key];
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+    const bugTrendPercent = computeTrend(bugTrend);
 
     if (loading) {
         return (
@@ -284,6 +77,7 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                                 )}
                             </div>
                         </div>
+                        <button onClick={refresh} className="text-sm text-info hover:underline">Retry</button>
                     </div>
                 </div>
             </div>
@@ -326,10 +120,11 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
         );
     };
 
-    const SeverityBar = ({ severity, activeCount, resolvedCount, totalCount, color }) => {
-        const activePercentage = totalBugs > 0 ? Math.round((activeCount / totalBugs) * 100) : 0;
-        const resolvedPercentage = totalBugs > 0 ? Math.round((resolvedCount / totalBugs) * 100) : 0;
+    const SeverityBar = ({ severity, activeCount, totalActive, color }) => {
+        const percentage = totalBugs > 0 ? Math.round((activeCount / totalBugs) * 100) : 0;
         const colors = getColorClasses(color);
+        const resolvedCount = (severity === 'Critical' ? metrics.criticalBugResolutionTime : 
+                               severity === 'High' ? metrics.highBugResolutionTime : 0); // Proxy use avg time
 
         return (
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
@@ -340,16 +135,16 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                 <div className="flex items-center space-x-3">
                     <div className="text-right text-xs text-muted-foreground">
                         <div>Active: {activeCount}</div>
-                        <div>Resolved: {resolvedCount}</div>
+                        <div>Resolved: {totalBugs - activeBugs}</div>
                     </div>
                     <div className="w-32 bg-muted-foreground/20 rounded-full h-2">
                         <div
                             className={`h-2 rounded-full transition-all duration-300 ${colors.bg}`}
-                            style={{ width: `${activePercentage + resolvedPercentage}%` }}
+                            style={{ width: `${percentage}%` }}
                         ></div>
                     </div>
                     <span className="text-sm font-medium text-foreground w-20 text-right">
-                        {totalCount} ({activePercentage + resolvedPercentage}%)
+                        {activeCount} ({percentage}%)
                     </span>
                 </div>
             </div>
@@ -394,9 +189,9 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard title="Total Bugs" value={totalBugs} icon={Bug} color="red" />
-                <MetricCard title="Active Bugs" value={activeBugs} icon={AlertTriangle} color="orange" trend={-5} />
-                <MetricCard title="Resolved Bugs" value={resolvedBugs} icon={CheckCircle} color="green" trend={10} />
+                <MetricCard title="Total Bugs" value={totalBugs} icon={Bug} color="red" trend={bugTrendPercent} />
+                <MetricCard title="Active Bugs" value={activeBugs} icon={AlertTriangle} color="orange" />
+                <MetricCard title="Resolved Bugs" value={resolvedBugs} icon={CheckCircle} color="green" />
                 <MetricCard title="Resolution Rate" value={`${bugResolutionRate}%`} icon={TrendingUp} color="blue" />
             </div>
 
@@ -407,10 +202,10 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                     Bug Severity Distribution
                 </h3>
                 <div className="space-y-4">
-                    <SeverityBar severity="Critical" activeCount={criticalBugs} resolvedCount={criticalResolvedBugs} totalCount={totalCriticalBugs} color="red" />
-                    <SeverityBar severity="High" activeCount={highPriorityBugs} resolvedCount={highResolvedBugs} totalCount={totalHighPriorityBugs} color="orange" />
-                    <SeverityBar severity="Medium" activeCount={mediumPriorityBugs} resolvedCount={mediumResolvedBugs} totalCount={totalMediumPriorityBugs} color="yellow" />
-                    <SeverityBar severity="Low" activeCount={lowPriorityBugs} resolvedCount={lowResolvedBugs} totalCount={totalLowPriorityBugs} color="blue" />
+                    <SeverityBar severity="Critical" activeCount={criticalBugs} totalActive={activeBugs} color="red" />
+                    <SeverityBar severity="High" activeCount={highPriorityBugs} totalActive={activeBugs} color="orange" />
+                    <SeverityBar severity="Medium" activeCount={mediumPriorityBugs} totalActive={activeBugs} color="yellow" />
+                    <SeverityBar severity="Low" activeCount={lowPriorityBugs} totalActive={activeBugs} color="blue" />
                 </div>
             </div>
 
@@ -482,26 +277,26 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                 </div>
 
                 <div className="bg-card rounded-lg border border-border p-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">Reporting</h3>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h3>
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Weekly Reports</span>
-                            <span className="font-medium">{weeklyReportsGenerated}</span>
+                            <span className="text-muted-foreground">Recently Resolved</span>
+                            <span className="font-medium">{recentlyResolvedBugs}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Monthly Reports</span>
-                            <span className="font-medium">{monthlyReportsGenerated}</span>
+                            <span className="text-muted-foreground">Critical Avg Time</span>
+                            <span className="font-medium">{Math.round(criticalBugResolutionTime)}h</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Avg Bugs/Report</span>
-                            <span className="font-medium">{avgBugsPerReport}</span>
+                            <span className="text-muted-foreground">High Avg Time</span>
+                            <span className="font-medium">{Math.round(highBugResolutionTime)}h</span>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Bug Management Health */}
-            <div className="bg-destructive/10 rounded-lg border border-destructive/20 p-6">
+            <div className={`${bugHealthStatus === 'critical' ? 'bg-destructive/10' : bugHealthStatus === 'warning' ? 'bg-warning/10' : 'bg-info/10'} rounded-lg border ${bugHealthStatus === 'critical' ? 'border-destructive/20' : bugHealthStatus === 'warning' ? 'border-warning/20' : 'border-info/20'} p-6`}>
                 <h3 className="text-lg font-semibold text-foreground mb-4">Bug Management Health</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="text-center">
@@ -509,8 +304,8 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                         <p className="text-sm text-muted-foreground">High Severity Open</p>
                     </div>
                     <div className="text-center">
-                        <div className="text-2xl font-bold text-success">{Math.round(avgBugReportCompleteness)}%</div>
-                        <p className="text-sm text-muted-foreground">Report Completeness</p>
+                        <div className="text-2xl font-bold text-success">{bugReportQualityScore}%</div>
+                        <p className="text-sm text-muted-foreground">Report Quality Score</p>
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-info">{Math.round(bugReproductionRate)}%</div>
@@ -518,7 +313,7 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-info">
-                            {totalBugs > 0 ? Math.round(((bugsWithVideoEvidence + bugsWithNetworkLogs) / (totalBugs * 2)) * 100) : 0}%
+                            {totalBugs > 0 ? Math.round(((bugsWithVideoEvidence + bugsWithNetworkLogs + bugsWithConsoleLogs) / (totalBugs * 3)) * 100) : 0}%
                         </div>
                         <p className="text-sm text-muted-foreground">Evidence Coverage</p>
                     </div>
@@ -540,13 +335,13 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                                 <span className="text-2xl font-bold text-destructive">{criticalBugs}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-destructive">Resolved Critical</span>
-                                <span className="text-lg font-medium text-destructive">{criticalResolvedBugs}</span>
+                                <span className="text-destructive">Avg Resolution</span>
+                                <span className="text-lg font-medium text-destructive">{Math.round(criticalBugResolutionTime)}h</span>
                             </div>
                             <div className="mt-2 pt-2 border-t border-destructive/20">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm text-destructive">Total Critical</span>
-                                    <span className="font-bold text-destructive">{totalCriticalBugs}</span>
+                                    <span className="text-sm text-destructive">Total Active High Severity</span>
+                                    <span className="font-bold text-destructive">{criticalBugs + highPriorityBugs}</span>
                                 </div>
                             </div>
                         </div>
@@ -559,13 +354,13 @@ const BugTrackingMetrics = ({ loading = false, error = null, metrics = {}, filte
                                 <span className="text-2xl font-bold text-warning">{highPriorityBugs}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-warning">Resolved High</span>
-                                <span className="text-lg font-medium text-warning">{highResolvedBugs}</span>
+                                <span className="text-warning">Avg Resolution</span>
+                                <span className="text-lg font-medium text-warning">{Math.round(highBugResolutionTime)}h</span>
                             </div>
                             <div className="mt-2 pt-2 border-t border-warning/20">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm text-warning">Total High</span>
-                                    <span className="font-bold text-warning">{totalHighPriorityBugs}</span>
+                                    <span className="text-sm text-warning">Health Status</span>
+                                    <span className="font-bold text-warning">{bugHealthStatus}</span>
                                 </div>
                             </div>
                         </div>

@@ -12,24 +12,36 @@ import {
     Trash2,
     CheckCircle,
     BarChart3,
-    Activity
+    Activity,
+    TrendingDown
 } from 'lucide-react';
+import { useDashboard } from '../../hooks/useDashboard';
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor';
+const DocumentMetrics = ({ filters = {} }) => {
+    const { metrics: rawMetrics, loading, error } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
 
-const DocumentMetrics = ({ loading = false, error = null, metrics = {} }) => {
-    // Extract metrics with defaults
-    const {
-        totalDocuments = 0,
-        activeDocuments = 0,
-        archivedDocuments = 0,
-        recentlyModified = 0,
-        taggedDocuments = 0,
-        sharedDocuments = 0,
-        exportedDocuments = 0,
-        deletedDocuments = 0,
-        documentsByType = {},
-        topTags = [],
-        collaborators = 0,
-    } = metrics;
+    const totalDocuments = metrics.totalDocuments ?? 0;
+    const activeDocuments = metrics.activeDocuments ?? 0;
+    const archivedDocuments = metrics.archivedDocuments ?? 0;
+    const recentlyModified = metrics.recentlyModified ?? 0;
+    const taggedDocuments = metrics.taggedDocuments ?? 0;
+    const sharedDocuments = metrics.sharedDocuments ?? 0;
+    const exportedDocuments = metrics.exportedDocuments ?? 0;
+    const deletedDocuments = metrics.deletedDocuments ?? 0;
+    const documentsByType = metrics.documentsByType ?? {};
+    const topTags = metrics.topTags ?? [];
+    const collaborators = metrics.collaborators ?? 0;
+    const documentTrend = metrics.documentTrend ?? [];
+
+    const computeTrend = (trendData, key = 'count') => {
+        if (!Array.isArray(trendData) || trendData.length < 2) return null;
+        const first = trendData[0]?.[key] ?? 0;
+        const last = trendData[trendData.length - 1]?.[key] ?? 0;
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+    const documentTrendPercent = computeTrend(documentTrend);
 
     // Calculate derived metrics
     const derivedMetrics = useMemo(() => {
@@ -61,6 +73,9 @@ const DocumentMetrics = ({ loading = false, error = null, metrics = {} }) => {
         })).sort((a, b) => b.count - a.count);
     }, [documentsByType, totalDocuments]);
 
+    // Debug log
+    console.log('Processed Document Metrics:', metrics);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center p-12">
@@ -86,6 +101,18 @@ const DocumentMetrics = ({ loading = false, error = null, metrics = {} }) => {
 
     return (
         <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-foreground">Document Management Metrics</h2>
+                {filters?.timeRange && filters.timeRange !== 'all' && (
+                    <span className="ml-2 px-2 py-1 bg-info/10 text-info rounded text-xs">
+                        {filters.timeRange === '7d' ? 'Last 7 days' :
+                            filters.timeRange === '30d' ? 'Last 30 days' :
+                                filters.timeRange === '90d' ? 'Last 90 days' :
+                                    filters.timeRange}
+                    </span>
+                )}
+            </div>
+
             {/* Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <MetricCard
@@ -93,7 +120,7 @@ const DocumentMetrics = ({ loading = false, error = null, metrics = {} }) => {
                     label="Total Documents"
                     value={totalDocuments}
                     color="primary"
-                    trend={derivedMetrics.activityRate > 0 ? `${derivedMetrics.activityRate}% active` : null}
+                    trend={documentTrendPercent}
                 />
                 <MetricCard
                     icon={CheckCircle}
@@ -298,10 +325,11 @@ const MetricCard = ({ icon: Icon, label, value, color, subtitle, trend }) => {
         <div className={`rounded-lg border p-4 ${colorClasses[color] || colorClasses.primary}`}>
             <div className="flex items-center justify-between mb-2">
                 <Icon className="w-5 h-5" />
-                {trend && (
-                    <span className="text-xs font-medium bg-background/50 px-2 py-1 rounded">
-                        {trend}
-                    </span>
+                {trend !== null && (
+                    <div className={`flex items-center text-xs font-medium ${trend > 0 ? 'text-success' : 'text-destructive'}`}>
+                        {trend > 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
+                        {Math.abs(trend)}%
+                    </div>
                 )}
             </div>
             <div className="text-2xl font-bold mb-1">{value}</div>

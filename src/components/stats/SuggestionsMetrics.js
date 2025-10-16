@@ -1,4 +1,3 @@
-// stats/FeatureMetrics.jsx
 import React, { useMemo } from 'react';
 import { 
     Lightbulb, 
@@ -13,74 +12,60 @@ import {
     XCircle,
     Zap
 } from 'lucide-react';
+import { useDashboard } from '../../hooks/useDashboard'; // Adjust path as needed
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor'; // Adjust path as needed
 
-const SuggestionsMetrics = ({ loading = false, error = null, metrics = {}, filters = {} }) => {
+const SuggestionsMetrics = ({ filters = {} }) => {
+    const { metrics: rawMetrics, loading, error } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
+
     const processedMetrics = useMemo(() => {
-        const defaultMetrics = {
-            totalSuggestions: 0,
-            submittedToday: 0,
-            submittedThisWeek: 0,
-            submittedThisMonth: 0,
-            approvedSuggestions: 0,
-            rejectedSuggestions: 0,
-            underReview: 0,
-            inDevelopment: 0,
-            avgVotesPerSuggestion: 0,
-            totalVotes: 0,
-            upvotes: 0,
-            downvotes: 0,
-            mostVotedSuggestion: 'None',
-            suggestionsByCategory: {},
-            suggestionsByPriority: {},
-            topSubmitters: {},
-            archivedSuggestions: 0,
-        };
+        const totalSuggestions = metrics.totalSuggestions ?? 0;
+        const approvedSuggestions = metrics.approvedSuggestions ?? 0;
+        const rejectedSuggestions = metrics.rejectedSuggestions ?? 0;
+        const underReview = metrics.underReview ?? 0;
+        const avgVotesPerSuggestion = metrics.avgVotesPerSuggestion ?? 0;
 
-        if (!metrics || typeof metrics !== 'object') {
-            return defaultMetrics;
-        }
+        const suggestionsByCategory = metrics.suggestionsByCategory ?? {};
+        const mostVotedSuggestion = metrics.mostVotedSuggestion ?? 'None';
 
-        const totalSuggestions = metrics.totalSuggestions || 0;
-        const approvedSuggestions = metrics.approvedSuggestions || Math.round(totalSuggestions * 0.2);
-        const rejectedSuggestions = metrics.rejectedSuggestions || Math.round(totalSuggestions * 0.1);
-        const underReview = metrics.underReview || Math.round(totalSuggestions * 0.3);
-        const avgVotesPerSuggestion = metrics.avgVotesPerSuggestion || 5;
-
-        // Fallback for category distribution
-        const suggestionsByCategory = metrics.suggestionsByCategory || {};
-        const categories = ['ui-ux', 'performance', 'security', 'integration', 'analytics', 'accessibility', 'automation', 'other'];
-        categories.forEach(cat => {
-            if (!suggestionsByCategory[cat]) {
-                suggestionsByCategory[cat] = Math.round(Math.random() * 15);
-            }
-        });
-
-        const mostVotedSuggestion = metrics.mostVotedSuggestion || 'UI Improvement';
-
-        const totalVotes = metrics.totalVotes || Math.round(totalSuggestions * avgVotesPerSuggestion);
-        const upvotes = metrics.upvotes || Math.round(totalVotes * 0.7);
-        const downvotes = metrics.downvotes || Math.round(totalVotes * 0.3);
+        const totalVotes = metrics.totalVotes ?? 0;
+        const upvotes = metrics.upvotes ?? 0;
+        const downvotes = metrics.downvotes ?? 0;
 
         return {
             totalSuggestions,
-            submittedToday: metrics.submittedToday || Math.round(Math.random() * 5),
-            submittedThisWeek: metrics.submittedThisWeek || Math.round(Math.random() * 25),
-            submittedThisMonth: metrics.submittedThisMonth || Math.round(Math.random() * 100),
+            submittedToday: metrics.submittedToday ?? 0,
+            submittedThisWeek: metrics.submittedThisWeek ?? 0,
+            submittedThisMonth: metrics.submittedThisMonth ?? 0,
             approvedSuggestions,
             rejectedSuggestions,
             underReview,
-            inDevelopment: metrics.inDevelopment || Math.round(totalSuggestions * 0.15),
+            inDevelopment: metrics.inDevelopment ?? 0,
             avgVotesPerSuggestion,
             totalVotes,
             upvotes,
             downvotes,
             mostVotedSuggestion,
             suggestionsByCategory,
-            suggestionsByPriority: metrics.suggestionsByPriority || { 'critical': 10, 'high': 20, 'medium': 30, 'low': 15 },
-            topSubmitters: metrics.topSubmitters || { 'John Doe': 8, 'Jane Smith': 6, 'Bob Johnson': 4 },
-            archivedSuggestions: metrics.archivedSuggestions || Math.round(Math.random() * 10),
+            suggestionsByPriority: metrics.suggestionsByPriority ?? {},
+            topSubmitters: metrics.topSubmitters ?? {},
+            archivedSuggestions: metrics.archivedSuggestions ?? 0,
+            suggestionsTrend: metrics.suggestionsTrend ?? []
         };
     }, [metrics]);
+
+    const computeTrend = (trendData, key = 'count') => {
+        if (!Array.isArray(trendData) || trendData.length < 2) return null;
+        const first = trendData[0]?.[key] ?? 0;
+        const last = trendData[trendData.length - 1]?.[key] ?? 0;
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+    const suggestionsTrendPercent = computeTrend(processedMetrics.suggestionsTrend);
+
+    // Debug
+    console.log('Processed Suggestions Metrics:', processedMetrics);
 
     if (loading) {
         return (
@@ -160,7 +145,7 @@ const SuggestionsMetrics = ({ loading = false, error = null, metrics = {}, filte
                     </div>
                     <div className="w-32 bg-muted-foreground/20 rounded-full h-2">
                         <div
-                            className={`h-2 rounded-full transition-all duration-300 ${colors.bg.replace('/10', '')}`}
+                            className={`h-2 rounded-full transition-all duration-300 ${colors.bg}`}
                             style={{ width: `${percentage}%` }}
                         ></div>
                     </div>
@@ -199,17 +184,17 @@ const SuggestionsMetrics = ({ loading = false, error = null, metrics = {}, filte
                     Total: {totalSuggestions.toLocaleString()} suggestions
                     {filters?.timeRange && filters.timeRange !== 'all' && (
                         <span className="ml-2 px-2 py-1 bg-info/10 text-info rounded text-xs">
-                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : filters.timeRange === '90d' ? 'Last 90 days' : filters.timeRange}
                         </span>
                     )}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard title="Total Suggestions" value={totalSuggestions} icon={Lightbulb} color="teal" />
-                <MetricCard title="Submitted Today" value={submittedToday} icon={Clock} color="green" trend={12} />
+                <MetricCard title="Total Suggestions" value={totalSuggestions} icon={Lightbulb} color="teal" trend={suggestionsTrendPercent} />
+                <MetricCard title="Submitted Today" value={submittedToday} icon={Clock} color="green" />
                 <MetricCard title="This Week" value={submittedThisWeek} icon={Clock} color="orange" />
-                <MetricCard title="This Month" value={submittedThisMonth} icon={Clock} color="purple" trend={8} />
+                <MetricCard title="This Month" value={submittedThisMonth} icon={Clock} color="purple" />
                 <MetricCard title="Approved" value={approvedSuggestions} icon={CheckCircle} color="green" />
                 <MetricCard title="Rejected" value={rejectedSuggestions} icon={XCircle} color="red" />
                 <MetricCard title="Under Review" value={underReview} icon={Zap} color="blue" />

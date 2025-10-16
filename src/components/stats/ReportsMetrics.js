@@ -1,4 +1,3 @@
-// stats/ReportsMetrics.jsx
 import React, { useMemo } from 'react';
 import { 
     FileText, 
@@ -12,68 +11,58 @@ import {
     CheckCircle,
     Eye,
 } from 'lucide-react';
+import { useDashboard } from '../../hooks/useDashboard'; // Adjust path as needed
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor'; // Adjust path as needed
 
 const reportTypes = ['Test Summary', 'Bug Report', 'Performance', 'Security Audit', 'Sprint Review'];
 
-const ReportsMetrics = ({ loading = false, error = null, metrics = {}, filters = {} }) => {
+const ReportsMetrics = ({ filters = {} }) => {
+    const { metrics: rawMetrics, loading, error } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
+
     const processedMetrics = useMemo(() => {
-        const defaultMetrics = {
-            totalReports: 0,
-            generatedToday: 0,
-            generatedThisWeek: 0,
-            generatedThisMonth: 0,
-            reviewedReports: 0,
-            publishedReports: 0,
-            avgGenerationTime: 0,
-            mostCommonType: 'None',
-            storageUsedMB: 0,
-            reportsByAuthor: {},
-            reportsByType: {},
-            scheduledReports: 0,
-            viewedReports: 0,
-            deletedReports: 0,
-        };
+        const totalReports = metrics.totalReports ?? 0;
+        const reviewedReports = metrics.reviewedReports ?? 0;
+        const publishedReports = metrics.publishedReports ?? 0;
+        const avgGenerationTime = metrics.avgGenerationTime ?? 0;
 
-        if (!metrics || typeof metrics !== 'object') {
-            return defaultMetrics;
-        }
-
-        const totalReports = metrics.totalReports || 0;
-        const reviewedReports = metrics.reviewedReports || Math.round(totalReports * 0.6);
-        const publishedReports = metrics.publishedReports || Math.round(totalReports * 0.4);
-        const avgGenerationTime = metrics.avgGenerationTime || 5; // minutes
-
-        // Fallback for type distribution
-        const reportsByType = metrics.reportsByType || {};
-        reportTypes.forEach(type => {
-            if (!reportsByType[type]) {
-                reportsByType[type] = Math.round(Math.random() * 20);
-            }
-        });
-
+        const reportsByType = metrics.reportsByType ?? {};
         const mostCommonType = Object.entries(reportsByType).reduce((max, [type, count]) => 
-            count > (reportsByType[max] || 0) ? type : max, reportTypes[0]
+            count > (reportsByType[max] || 0) ? type : max, reportTypes[0] || 'None'
         );
 
-        const storageUsedMB = metrics.storageUsedMB || Math.round(totalReports * 0.5);
+        const storageUsedMB = metrics.storageUsedMB ?? 0;
 
         return {
             totalReports,
-            generatedToday: metrics.generatedToday || Math.round(Math.random() * 10),
-            generatedThisWeek: metrics.generatedThisWeek || Math.round(Math.random() * 50),
-            generatedThisMonth: metrics.generatedThisMonth || Math.round(Math.random() * 200),
+            generatedToday: metrics.generatedToday ?? 0,
+            generatedThisWeek: metrics.generatedThisWeek ?? 0,
+            generatedThisMonth: metrics.generatedThisMonth ?? 0,
             reviewedReports,
             publishedReports,
             avgGenerationTime,
             mostCommonType,
             storageUsedMB,
             reportsByType,
-            reportsByAuthor: metrics.reportsByAuthor || { 'John Doe': 15, 'Jane Smith': 10 },
-            scheduledReports: metrics.scheduledReports || Math.round(Math.random() * 5),
-            viewedReports: metrics.viewedReports || Math.round(totalReports * 0.8),
-            deletedReports: metrics.deletedReports || Math.round(Math.random() * 3),
+            reportsByAuthor: metrics.reportsByAuthor ?? {},
+            scheduledReports: metrics.scheduledReports ?? 0,
+            viewedReports: metrics.viewedReports ?? 0,
+            deletedReports: metrics.deletedReports ?? 0,
+            reportsTrend: metrics.reportsTrend ?? []
         };
     }, [metrics]);
+
+    const computeTrend = (trendData, key = 'count') => {
+        if (!Array.isArray(trendData) || trendData.length < 2) return null;
+        const first = trendData[0]?.[key] ?? 0;
+        const last = trendData[trendData.length - 1]?.[key] ?? 0;
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+    const reportsTrendPercent = computeTrend(processedMetrics.reportsTrend);
+
+    // Debug
+    console.log('Processed Reports Metrics:', processedMetrics);
 
     if (loading) {
         return (
@@ -187,17 +176,17 @@ const ReportsMetrics = ({ loading = false, error = null, metrics = {}, filters =
                     Total: {totalReports.toLocaleString()} reports generated
                     {filters?.timeRange && filters.timeRange !== 'all' && (
                         <span className="ml-2 px-2 py-1 bg-info/10 text-info rounded text-xs">
-                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : filters.timeRange === '90d' ? 'Last 90 days' : filters.timeRange}
                         </span>
                     )}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard title="Total Reports" value={totalReports} icon={FileText} color="blue" />
-                <MetricCard title="Generated Today" value={generatedToday} icon={Clock} color="green" trend={8} />
+                <MetricCard title="Total Reports" value={totalReports} icon={FileText} color="blue" trend={reportsTrendPercent} />
+                <MetricCard title="Generated Today" value={generatedToday} icon={Clock} color="green" />
                 <MetricCard title="This Week" value={generatedThisWeek} icon={Calendar} color="orange" />
-                <MetricCard title="This Month" value={generatedThisMonth} icon={Calendar} color="purple" trend={15} />
+                <MetricCard title="This Month" value={generatedThisMonth} icon={Calendar} color="purple" />
                 <MetricCard title="Reviewed" value={reviewedReports} icon={CheckCircle} color="green" />
                 <MetricCard title="Published" value={publishedReports} icon={Eye} color="blue" />
                 <MetricCard title="Scheduled" value={scheduledReports} icon={Calendar} color="purple" />
@@ -278,7 +267,7 @@ const ReportsMetrics = ({ loading = false, error = null, metrics = {}, filters =
 
             {/* Authors and Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-card rounded-lg Fitzgerald border border-border p-6">
+                <div className="bg-card rounded-lg border border-border p-6">
                     <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
                         <Users className="w-5 h-5 mr-2 text-info" />
                         Top Authors

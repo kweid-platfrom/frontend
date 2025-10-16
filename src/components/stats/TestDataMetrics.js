@@ -1,4 +1,3 @@
-// stats/TestDataMetrics.jsx
 import React, { useMemo } from 'react';
 import { 
     Database, 
@@ -22,6 +21,8 @@ import {
     Palette,
     Hash
 } from 'lucide-react';
+import { useDashboard } from '../../hooks/useDashboard'; // Adjust path as needed
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor'; // Adjust path as needed
 
 const ICON_MAP = { 
     User, Mail, Phone, MapPin, CreditCard, Database, Calendar, Lock, Globe, Palette, FileText, Hash 
@@ -43,41 +44,17 @@ const predefinedTypes = [
     { id: 'ssn', icon: 'Hash' },
 ];
 
-const TestDataMetrics = ({ loading = false, error = null, metrics = {}, filters = {} }) => {
+const TestDataMetrics = ({ filters = {} }) => {
+    const { metrics: rawMetrics, loading, error } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
+
     const processedMetrics = useMemo(() => {
-        const defaultMetrics = {
-            totalTypes: 0,
-            totalItems: 0,
-            customTypes: 0,
-            generatedToday: 0,
-            generatedThisWeek: 0,
-            generatedThisMonth: 0,
-            aiGenerations: 0,
-            randomGenerations: 0,
-            exportedFiles: 0,
-            avgItemsPerType: 0,
-            mostGeneratedType: 'None',
-            storageUsedKB: 0,
-            typeUsage: {},
-        };
-
-        if (!metrics || typeof metrics !== 'object') {
-            return defaultMetrics;
-        }
-
-        const totalTypes = predefinedTypes.length + (metrics.customTypes || 0);
-        const totalItems = metrics.totalItems || 0;
-        const customTypes = metrics.customTypes || 0;
+        const totalTypes = metrics.totalTypes ?? predefinedTypes.length + (metrics.customTypes ?? 0);
+        const totalItems = metrics.totalItems ?? 0;
+        const customTypes = metrics.customTypes ?? 0;
         const avgItemsPerType = totalTypes > 0 ? Math.round(totalItems / totalTypes) : 0;
 
-        // Simulate/fallback type usage if not provided
-        const typeUsage = metrics.typeUsage || {};
-        predefinedTypes.forEach(type => {
-            if (!typeUsage[type.id]) {
-                typeUsage[type.id] = Math.round(Math.random() * 100);
-            }
-        });
-
+        const typeUsage = metrics.typeUsage ?? {};
         const mostGeneratedType = Object.entries(typeUsage).reduce((max, [id, count]) => 
             count > (typeUsage[max] || 0) ? id : max, 'names'
         );
@@ -86,18 +63,31 @@ const TestDataMetrics = ({ loading = false, error = null, metrics = {}, filters 
             totalTypes,
             totalItems,
             customTypes,
-            generatedToday: metrics.generatedToday || Math.round(Math.random() * 50),
-            generatedThisWeek: metrics.generatedThisWeek || Math.round(Math.random() * 300),
-            generatedThisMonth: metrics.generatedThisMonth || Math.round(Math.random() * 1000),
-            aiGenerations: metrics.aiGenerations || Math.round(totalItems * 0.3),
-            randomGenerations: metrics.randomGenerations || Math.round(totalItems * 0.7),
-            exportedFiles: metrics.exportedFiles || Math.round(Math.random() * 20),
+            generatedToday: metrics.generatedToday ?? 0,
+            generatedThisWeek: metrics.generatedThisWeek ?? 0,
+            generatedThisMonth: metrics.generatedThisMonth ?? 0,
+            aiGenerations: metrics.aiGenerations ?? 0,
+            randomGenerations: metrics.randomGenerations ?? 0,
+            exportedFiles: metrics.exportedFiles ?? 0,
             avgItemsPerType,
             mostGeneratedType,
-            storageUsedKB: metrics.storageUsedKB || Math.round(totalItems * 0.5),
+            storageUsedKB: metrics.storageUsedKB ?? 0,
             typeUsage,
+            testDataTrend: metrics.testDataTrend ?? []
         };
     }, [metrics]);
+
+    const computeTrend = (trendData, key = 'count') => {
+        if (!Array.isArray(trendData) || trendData.length < 2) return null;
+        const first = trendData[0]?.[key] ?? 0;
+        const last = trendData[trendData.length - 1]?.[key] ?? 0;
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+    const testDataTrendPercent = computeTrend(processedMetrics.testDataTrend);
+
+    // Debug
+    console.log('Processed Test Data Metrics:', processedMetrics);
 
     if (loading) {
         return (
@@ -207,7 +197,7 @@ const TestDataMetrics = ({ loading = false, error = null, metrics = {}, filters 
                     Total: {totalItems.toLocaleString()} items across {totalTypes} types
                     {filters?.timeRange && filters.timeRange !== 'all' && (
                         <span className="ml-2 px-2 py-1 bg-info/10 text-info rounded text-xs">
-                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : filters.timeRange === '90d' ? 'Last 90 days' : filters.timeRange}
                         </span>
                     )}
                 </div>
@@ -215,10 +205,10 @@ const TestDataMetrics = ({ loading = false, error = null, metrics = {}, filters 
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard title="Total Types" value={totalTypes} icon={Database} color="blue" />
-                <MetricCard title="Total Items" value={totalItems} icon={FileText} color="green" trend={12} />
+                <MetricCard title="Total Items" value={totalItems} icon={FileText} color="green" trend={testDataTrendPercent} />
                 <MetricCard title="Custom Types" value={customTypes} icon={Plus} color="purple" />
                 <MetricCard title="Avg Items/Type" value={avgItemsPerType} icon={TrendingUp} color="orange" />
-                <MetricCard title="Generated Today" value={generatedToday} icon={Clock} color="blue" trend={5} />
+                <MetricCard title="Generated Today" value={generatedToday} icon={Clock} color="blue" />
                 <MetricCard title="This Week" value={generatedThisWeek} icon={Calendar} color="green" />
                 <MetricCard title="This Month" value={generatedThisMonth} icon={Calendar} color="purple" />
                 <MetricCard title="Storage Used" value={`${storageUsedKB} KB`} icon={Database} color="orange" />

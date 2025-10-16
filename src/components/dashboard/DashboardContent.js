@@ -113,7 +113,6 @@ export const DashboardContent = ({
                     />
                 );
 
-
             case 'bugs':
                 return (
                     <BugTrackingMetrics

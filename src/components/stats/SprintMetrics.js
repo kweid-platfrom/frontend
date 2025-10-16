@@ -1,4 +1,3 @@
-// stats/SprintMetrics.jsx
 import React, { useMemo } from 'react';
 import { 
     Calendar, 
@@ -12,9 +11,13 @@ import {
     BarChart3,
     Zap
 } from 'lucide-react';
+import { useDashboard } from '../../hooks/useDashboard'; // Adjust path as needed
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor'; // Adjust path as needed
 import { useApp } from '../../context/AppProvider';
 
-const SprintMetrics = ({ loading = false, error = null, metrics = {}, filters = {} }) => {
+const SprintMetrics = ({ filters = {} }) => {
+    const { metrics: rawMetrics, loading, error } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
     const { state } = useApp();
     const { sprints = [] } = state.sprints || {};
     const { activeSuite } = state.suites || {};
@@ -39,33 +42,27 @@ const SprintMetrics = ({ loading = false, error = null, metrics = {}, filters = 
             sprintGoalAchievementRate: 0,
             overdueSprints: 0,
             onTimeCompletionRate: 0,
+            sprintTrend: []
         };
 
-        if (!metrics || typeof metrics !== 'object') {
-            return defaultMetrics;
-        }
+        const totalSprints = metrics.totalSprints ?? sprints.length ?? 0;
 
-        const totalSprints = sprints.length || metrics.totalSprints || 0;
+        let activeSprints = metrics.activeSprints ?? sprints.filter(s => s.status === 'active').length;
+        let completedSprints = metrics.completedSprints ?? sprints.filter(s => s.status === 'completed').length;
+        let onHoldSprints = metrics.onHoldSprints ?? sprints.filter(s => s.status === 'on-hold').length;
+        let planningSprints = metrics.planningSprints ?? sprints.filter(s => s.status === 'planning').length;
 
-        let activeSprints = metrics.activeSprints || sprints.filter(s => s.status === 'active').length;
-        let completedSprints = metrics.completedSprints || sprints.filter(s => s.status === 'completed').length;
-        let onHoldSprints = metrics.onHoldSprints || sprints.filter(s => s.status === 'on-hold').length;
-        let planningSprints = metrics.planningSprints || sprints.filter(s => s.status === 'planning').length;
+        let totalStoryPoints = metrics.totalStoryPoints ?? 0;
+        let completedStoryPoints = metrics.completedStoryPoints ?? 0;
 
-        let totalStoryPoints = metrics.totalStoryPoints || 0;
-        let completedStoryPoints = metrics.completedStoryPoints || 0;
-
-        // Aggregate from sprints if not provided
         if (totalSprints > 0 && sprints.length > 0) {
             totalStoryPoints = sprints.reduce((sum, s) => sum + (s.progress?.totalTasks || 0), 0);
             completedStoryPoints = sprints.reduce((sum, s) => sum + (s.progress?.completedTasks || 0), 0);
-            activeSprints = sprints.filter(s => s.status === 'active').length;
-            // ... other aggregations
         }
 
         const avgCompletionRate = totalStoryPoints > 0 ? Math.round((completedStoryPoints / totalStoryPoints) * 100) : 0;
-        const avgVelocity = metrics.avgVelocity || (totalSprints > 0 ? Math.round(completedStoryPoints / totalSprints) : 0);
-        const onTimeCompletionRate = metrics.onTimeCompletionRate || Math.round((completedSprints / totalSprints) * 100) || 0;
+        const avgVelocity = metrics.avgVelocity ?? (totalSprints > 0 ? Math.round(completedStoryPoints / totalSprints) : 0);
+        const onTimeCompletionRate = metrics.onTimeCompletionRate ?? (totalSprints > 0 ? Math.round((completedSprints / totalSprints) * 100) : 0);
 
         return {
             totalSprints,
@@ -73,21 +70,34 @@ const SprintMetrics = ({ loading = false, error = null, metrics = {}, filters = 
             completedSprints,
             onHoldSprints,
             planningSprints,
-            avgSprintDuration: metrics.avgSprintDuration || 14,
+            avgSprintDuration: metrics.avgSprintDuration ?? 14,
             avgVelocity,
             avgCompletionRate,
             totalStoryPoints,
             completedStoryPoints,
-            bugsInSprints: metrics.bugsInSprints || Math.round(totalStoryPoints * 0.1),
-            testsExecutedInSprints: metrics.testsExecutedInSprints || totalStoryPoints * 2,
-            automationRateInSprints: metrics.automationRateInSprints || 65,
-            teamMembersInvolved: metrics.teamMembersInvolved || 8,
-            avgBugResolutionInSprints: metrics.avgBugResolutionInSprints || 24,
-            sprintGoalAchievementRate: metrics.sprintGoalAchievementRate || 85,
-            overdueSprints: metrics.overdueSprints || Math.round(totalSprints * 0.15),
+            bugsInSprints: metrics.bugsInSprints ?? 0,
+            testsExecutedInSprints: metrics.testsExecutedInSprints ?? 0,
+            automationRateInSprints: metrics.automationRateInSprints ?? 0,
+            teamMembersInvolved: metrics.teamMembersInvolved ?? 0,
+            avgBugResolutionInSprints: metrics.avgBugResolutionInSprints ?? 0,
+            sprintGoalAchievementRate: metrics.sprintGoalAchievementRate ?? 0,
+            overdueSprints: metrics.overdueSprints ?? 0,
             onTimeCompletionRate,
+            sprintTrend: metrics.sprintTrend ?? []
         };
     }, [metrics, sprints]);
+
+    const computeTrend = (trendData, key = 'count') => {
+        if (!Array.isArray(trendData) || trendData.length < 2) return null;
+        const first = trendData[0]?.[key] ?? 0;
+        const last = trendData[trendData.length - 1]?.[key] ?? 0;
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+    const sprintTrendPercent = computeTrend(processedMetrics.sprintTrend);
+
+    // Debug
+    console.log('Processed Sprint Metrics:', processedMetrics);
 
     if (loading) {
         return (
@@ -165,19 +175,19 @@ const SprintMetrics = ({ loading = false, error = null, metrics = {}, filters = 
                     Total: {totalSprints} sprints for {activeSuite?.name || 'suite'}
                     {filters?.timeRange && filters.timeRange !== 'all' && (
                         <span className="ml-2 px-2 py-1 bg-info/10 text-info rounded text-xs">
-                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : 'Last 90 days'}
+                            {filters.timeRange === '7d' ? 'Last 7 days' : filters.timeRange === '30d' ? 'Last 30 days' : filters.timeRange === '90d' ? 'Last 90 days' : filters.timeRange}
                         </span>
                     )}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard title="Total Sprints" value={totalSprints} icon={Calendar} color="blue" />
-                <MetricCard title="Active Sprints" value={activeSprints} icon={Zap} color="green" trend={5} />
+                <MetricCard title="Total Sprints" value={totalSprints} icon={Calendar} color="blue" trend={sprintTrendPercent} />
+                <MetricCard title="Active Sprints" value={activeSprints} icon={Zap} color="green" />
                 <MetricCard title="Completed Sprints" value={completedSprints} icon={CheckCircle} color="green" />
-                <MetricCard title="Avg Velocity" value={avgVelocity} subtitle="points/sprint" icon={TrendingUp} color="purple" trend={10} />
+                <MetricCard title="Avg Velocity" value={avgVelocity} subtitle="points/sprint" icon={TrendingUp} color="purple" />
                 <MetricCard title="Completion Rate" value={`${avgCompletionRate}%`} icon={BarChart3} color="blue" />
-                <MetricCard title="On-Time Rate" value={`${onTimeCompletionRate}%`} icon={Clock} color="orange" trend={-3} />
+                <MetricCard title="On-Time Rate" value={`${onTimeCompletionRate}%`} icon={Clock} color="orange" />
                 <MetricCard title="Overdue Sprints" value={overdueSprints} icon={AlertCircle} color="red" />
                 <MetricCard title="Goal Achievement" value={`${sprintGoalAchievementRate}%`} icon={Target} color="green" />
             </div>
@@ -208,14 +218,14 @@ const SprintMetrics = ({ loading = false, error = null, metrics = {}, filters = 
                             <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                             <span className="font-medium">On Hold</span>
                         </div>
-                        <span className="font-medium text-foreground">{onHoldSprints}</span>
+                        <span className="font-medium text-foreground">{onHoldSprints} ({totalSprints > 0 ? Math.round((onHoldSprints / totalSprints) * 100) : 0}%)</span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
                         <div className="flex items-center space-x-3">
                             <div className="w-3 h-3 rounded-full bg-gray-500"></div>
                             <span className="font-medium">Planning</span>
                         </div>
-                        <span className="font-medium text-foreground">{planningSprints}</span>
+                        <span className="font-medium text-foreground">{planningSprints} ({totalSprints > 0 ? Math.round((planningSprints / totalSprints) * 100) : 0}%)</span>
                     </div>
                 </div>
             </div>
