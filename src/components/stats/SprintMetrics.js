@@ -23,27 +23,6 @@ const SprintMetrics = ({ filters = {} }) => {
     const { activeSuite } = state.suites || {};
 
     const processedMetrics = useMemo(() => {
-        const defaultMetrics = {
-            totalSprints: 0,
-            activeSprints: 0,
-            completedSprints: 0,
-            onHoldSprints: 0,
-            planningSprints: 0,
-            avgSprintDuration: 0,
-            avgVelocity: 0,
-            avgCompletionRate: 0,
-            totalStoryPoints: 0,
-            completedStoryPoints: 0,
-            bugsInSprints: 0,
-            testsExecutedInSprints: 0,
-            automationRateInSprints: 0,
-            teamMembersInvolved: 0,
-            avgBugResolutionInSprints: 0,
-            sprintGoalAchievementRate: 0,
-            overdueSprints: 0,
-            onTimeCompletionRate: 0,
-            sprintTrend: []
-        };
 
         const totalSprints = metrics.totalSprints ?? sprints.length ?? 0;
 

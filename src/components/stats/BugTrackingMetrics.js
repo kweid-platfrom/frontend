@@ -120,11 +120,9 @@ const BugTrackingMetrics = ({ filters = {} }) => {
         );
     };
 
-    const SeverityBar = ({ severity, activeCount, totalActive, color }) => {
+    const SeverityBar = ({ severity, activeCount, color }) => {
         const percentage = totalBugs > 0 ? Math.round((activeCount / totalBugs) * 100) : 0;
         const colors = getColorClasses(color);
-        const resolvedCount = (severity === 'Critical' ? metrics.criticalBugResolutionTime : 
-                               severity === 'High' ? metrics.highBugResolutionTime : 0); // Proxy use avg time
 
         return (
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted">

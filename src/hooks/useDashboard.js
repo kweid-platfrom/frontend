@@ -386,7 +386,6 @@ export const useDashboard = () => {
                                             allTestCases.push(...testCases);
                                             
                                             testCases.forEach((tc) => {
-                                                const createdDate = extractDate(tc.created_at);
                                                 const updatedDate = extractDate(tc.updated_at);
                                                 
                                                 totalTestCases++;
@@ -521,7 +520,6 @@ export const useDashboard = () => {
                                                 const status = bug.status?.toLowerCase() || 'open';
                                                 const priority = bug.priority?.toLowerCase() || 'medium';
                                                 const severity = bug.severity?.toLowerCase() || 'medium';
-                                                const createdDate = extractDate(bug.created_at);
                                                 
                                                 // Evidence tracking
                                                 if (bug.linkedRecordings && bug.linkedRecordings.length > 0) {

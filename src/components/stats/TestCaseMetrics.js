@@ -7,7 +7,7 @@ const TestCaseMetrics = ({
     lastUpdated = null,
     isRealtime = false
 }) => {
-    const { metrics: rawMetrics, loading, error, refresh, dataStatus } = useDashboard();
+    const { metrics: rawMetrics, loading, error, refresh } = useDashboard();
     const metrics = useMetricsProcessor(rawMetrics);
 
     const getColorClasses = (color) => {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useMetricsProcessor } from '../../hooks/useMetricsProcessor';
+
 const DocumentMetrics = ({ filters = {} }) => {
     const { metrics: rawMetrics, loading, error } = useDashboard();
     const metrics = useMetricsProcessor(rawMetrics);
@@ -29,7 +30,6 @@ const DocumentMetrics = ({ filters = {} }) => {
     const sharedDocuments = metrics.sharedDocuments ?? 0;
     const exportedDocuments = metrics.exportedDocuments ?? 0;
     const deletedDocuments = metrics.deletedDocuments ?? 0;
-    const documentsByType = metrics.documentsByType ?? {};
     const topTags = metrics.topTags ?? [];
     const collaborators = metrics.collaborators ?? 0;
     const documentTrend = metrics.documentTrend ?? [];
@@ -64,14 +64,15 @@ const DocumentMetrics = ({ filters = {} }) => {
         };
     }, [totalDocuments, archivedDocuments, taggedDocuments, recentlyModified]);
 
-    // Get document type stats
+    // Get document type stats - Move documentsByType inside useMemo
     const typeStats = useMemo(() => {
+        const documentsByType = metrics.documentsByType ?? {};
         return Object.entries(documentsByType).map(([type, count]) => ({
             type: type.charAt(0).toUpperCase() + type.slice(1).replace('-', ' '),
             count,
             percentage: totalDocuments > 0 ? ((count / totalDocuments) * 100).toFixed(1) : 0
         })).sort((a, b) => b.count - a.count);
-    }, [documentsByType, totalDocuments]);
+    }, [metrics.documentsByType, totalDocuments]);
 
     // Debug log
     console.log('Processed Document Metrics:', metrics);

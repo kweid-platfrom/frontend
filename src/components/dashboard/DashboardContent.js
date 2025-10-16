@@ -20,9 +20,9 @@ export const DashboardContent = ({
     enhancedMetrics,
     loading,
     error,
+    dataStatus,
     filters,
     activeSuite,
-    onRefresh,
     aiService,
     aiInitialized,
     aiAvailable,
@@ -47,7 +47,7 @@ export const DashboardContent = ({
                 return (
                     <>
                         <QAIDMetricsOverview metrics={enhancedMetrics} loading={loading} />
-                        <QAIDCharts metrics={enhancedMetrics} loading={loading} />
+                        <QAIDCharts metrics={enhancedMetrics} dataStatus={dataStatus} />
                         <TeamProductivity metrics={enhancedMetrics} loading={loading} />
                     </>
                 );
@@ -231,19 +231,8 @@ export const DashboardContent = ({
         <div className="space-y-6">
             {renderTabContent()}
             <QuickActions
-                metrics={{
-                    qa: {
-                        testCases: enhancedMetrics.totalTestCases,
-                        passRate: enhancedMetrics.passRate,
-                        automationRate: enhancedMetrics.automationRate,
-                    },
-                    bugs: enhancedMetrics,
-                }}
+                metrics={enhancedMetrics}  // Pass full metrics directly, not nested
                 loading={loading}
-                onRefresh={onRefresh}
-                aiAvailable={aiAvailable}
-                aiGenerating={aiGenerating}
-                generateTestCasesWithAI={generateTestCasesWithAI}
             />
         </div>
     );
