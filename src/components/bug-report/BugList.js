@@ -217,35 +217,35 @@ const BugList = ({
 
     const getStatusBadge = useCallback((status) => {
         const statusConfig = {
-            open: 'bg-red-100 text-red-800 border-red-200',
-            'in-progress': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            resolved: 'bg-green-100 text-green-800 border-green-200',
-            closed: 'bg-gray-100 text-gray-800 border-gray-200',
-            duplicate: 'bg-purple-100 text-purple-800 border-purple-200',
-            'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200',
+            open: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+            'in-progress': 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800',
+            resolved: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800',
+            closed: 'bg-muted text-muted-foreground border-border',
+            duplicate: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
+            'won\'t-fix': 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
         };
-        return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return statusConfig[status?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getSeverityBadge = useCallback((severity) => {
         const severityConfig = {
-            critical: 'bg-red-100 text-red-800 border-red-200',
-            high: 'bg-orange-100 text-orange-800 border-orange-200',
-            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            low: 'bg-blue-100 text-blue-800 border-blue-200',
-            trivial: 'bg-gray-100 text-gray-800 border-gray-200',
+            critical: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+            high: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
+            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800',
+            low: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
+            trivial: 'bg-muted text-muted-foreground border-border',
         };
-        return severityConfig[severity?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return severityConfig[severity?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getPriorityBadge = useCallback((priority) => {
         const priorityConfig = {
-            urgent: 'bg-red-100 text-red-800 border-red-200',
-            high: 'bg-orange-100 text-orange-800 border-orange-200',
-            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-            low: 'bg-blue-100 text-blue-800 border-blue-200',
+            urgent: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+            high: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
+            medium: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800',
+            low: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
         };
-        return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+        return priorityConfig[priority?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
     }, []);
 
     const getDerivedPriority = useCallback((severity) => {
@@ -265,20 +265,20 @@ const BugList = ({
             high: 'bg-orange-500',
             medium: 'bg-yellow-500',
             low: 'bg-blue-500',
-            trivial: 'bg-gray-400',
+            trivial: 'bg-muted-foreground',
         };
-        const color = severityColors[severity?.toLowerCase()] || 'bg-gray-400';
+        const color = severityColors[severity?.toLowerCase()] || 'bg-muted-foreground';
         return <div className={`w-3 h-3 rounded-full flex-shrink-0 ${color}`} />;
     }, []);
 
     const getSortIcon = useCallback((columnKey) => {
         if (sortConfig.key !== columnKey) {
-            return <ChevronUp className="w-4 h-4 text-gray-400" />;
+            return <ChevronUp className="w-4 h-4 text-muted-foreground" />;
         }
         return sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-4 h-4 text-gray-600" />
+            <ChevronUp className="w-4 h-4 text-foreground" />
         ) : (
-            <ChevronDown className="w-4 h-4 text-gray-600" />
+            <ChevronDown className="w-4 h-4 text-foreground" />
         );
     }, [sortConfig]);
 
@@ -431,17 +431,17 @@ const BugList = ({
 
     if (loading) {
         return (
-            <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+            <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
                 <div className="px-6 py-12 text-center">
-                    <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-teal-600"></div>
-                    <p className="mt-2 text-sm text-gray-500">Loading bugs...</p>
+                    <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-primary"></div>
+                    <p className="mt-2 text-sm text-muted-foreground">Loading bugs...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="relative bg-white shadow-sm rounded-lg border border-gray-200">
+        <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
 
             {/* Enhanced Bulk Actions Bar */}
             <EnhancedBulkActionsBar 
@@ -454,39 +454,39 @@ const BugList = ({
             />
             
             {/* Header Controls */}
-            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div className="px-6 py-4 border-b border-border bg-muted">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     {/* Left side - Select all and count */}
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
                             {isAllSelected ? (
                                 <CheckSquare
-                                    className="w-4 h-4 text-teal-600 cursor-pointer"
+                                    className="w-4 h-4 text-primary cursor-pointer"
                                     onClick={() => handleSelectAll(false)}
                                 />
                             ) : (
                                 <Square
-                                    className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600"
+                                    className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary"
                                     onClick={() => handleSelectAll(true)}
                                 />
                             )}
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm text-foreground">
                                 {selectedBugs.length > 0 ? `${selectedBugs.length} selected` : 'Select all'}
                             </span>
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-muted-foreground">
                             {totalItems} {totalItems === 1 ? 'bug' : 'bugs'}
                         </div>
                     </div>
 
                     {/* Right side - Sort controls */}
                     <div className="flex items-center gap-3">
-                        <label className="text-sm text-gray-600 whitespace-nowrap">Sort by:</label>
+                        <label className="text-sm text-foreground whitespace-nowrap">Sort by:</label>
                         <div className="flex items-center gap-2">
                             <select
                                 value={sortConfig.key}
                                 onChange={(e) => handleSort(e.target.value)}
-                                className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white"
+                                className="border border-border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 {sortOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -496,7 +496,7 @@ const BugList = ({
                             </select>
                             <button
                                 onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
-                                className="p-1.5 rounded hover:bg-gray-100 border border-gray-300"
+                                className="p-1.5 rounded hover:bg-accent border border-border"
                                 title={`Sort ${sortConfig.direction === 'asc' ? 'descending' : 'ascending'}`}
                             >
                                 {getSortIcon(sortConfig.key)}
@@ -507,13 +507,13 @@ const BugList = ({
             </div>
 
             {/* Bug List */}
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-border">
                 {paginatedBugs.length === 0 ? (
-                    <div className="px-6 py-12 text-center text-sm text-gray-500">
+                    <div className="px-6 py-12 text-center text-sm text-muted-foreground">
                         <div className="flex flex-col items-center">
-                            <Bug className="w-12 h-12 text-gray-300 mb-4" />
+                            <Bug className="w-12 h-12 text-muted-foreground/50 mb-4" />
                             <p>No bugs found</p>
-                            <p className="text-xs text-gray-400 mt-1">Create your first bug report to get started</p>
+                            <p className="text-xs text-muted-foreground/70 mt-1">Create your first bug report to get started</p>
                         </div>
                     </div>
                 ) : (
@@ -522,19 +522,19 @@ const BugList = ({
                         const isSelected = selectedBugs.includes(bug.id);
 
                         return (
-                            <div key={bug.id} className={`p-6 hover:bg-gray-50 transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
+                            <div key={bug.id} className={`p-6 hover:bg-accent transition-colors ${isSelected ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
                                 {/* Main content */}
                                 <div className="flex items-start gap-4">
                                     {/* Checkbox and severity indicator */}
                                     <div className="flex items-center gap-3 pt-1">
                                         {isSelected ? (
                                             <CheckSquare
-                                                className="w-4 h-4 text-teal-600 cursor-pointer flex-shrink-0"
+                                                className="w-4 h-4 text-primary cursor-pointer flex-shrink-0"
                                                 onClick={() => handleSelectItem(bug.id, false)}
                                             />
                                         ) : (
                                             <Square
-                                                className="w-4 h-4 text-gray-400 cursor-pointer hover:text-teal-600 flex-shrink-0"
+                                                className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary flex-shrink-0"
                                                 onClick={() => handleSelectItem(bug.id, true)}
                                             />
                                         )}
@@ -546,19 +546,19 @@ const BugList = ({
                                         {/* Header - Title and ID */}
                                         <div className="flex items-start justify-between gap-4 mb-3">
                                             <div className="flex-1 min-w-0">
-                                                <h3 className="text-lg font-medium text-gray-900 mb-1 line-clamp-2">
+                                                <h3 className="text-lg font-medium text-foreground mb-1 line-clamp-2">
                                                     {bug.title || 'Untitled Bug'}
                                                 </h3>
-                                                <div className="text-sm text-gray-500">
+                                                <div className="text-sm text-muted-foreground">
                                                     #{bug.id?.slice(-8) || 'Unknown'}
                                                 </div>
                                             </div>
                                             <button
                                                 onClick={() => onView(bug)}
-                                                className="p-2 rounded-lg hover:bg-gray-100 border border-gray-200 flex-shrink-0 transition-colors"
+                                                className="p-2 rounded-lg hover:bg-accent border border-border flex-shrink-0 transition-colors"
                                                 title="View bug details"
                                             >
-                                                <MessageSquare className="w-4 h-4" />
+                                                <MessageSquare className="w-4 h-4 text-foreground" />
                                             </button>
                                         </div>
 
@@ -590,8 +590,7 @@ const BugList = ({
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
                                             {/* Assignee */}
                                             <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
-
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                     <User className="w-3 h-3" />
                                                     <span>Assigned To</span>
                                                 </div>
@@ -599,14 +598,14 @@ const BugList = ({
                                                     value={bug.assignee}
                                                     options={assigneeOptions}
                                                     onChange={(value) => handleUpdateBug(bug.id, { assignee: value })}
-                                                    className="text-sm text-gray-700"
+                                                    className="text-sm text-foreground"
                                                     noSearch
                                                 />
                                             </div>
 
                                             {/* Environment */}
                                             <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                     <Settings className="w-3 h-3" />
                                                     <span>Environment</span>
                                                 </div>
@@ -614,14 +613,14 @@ const BugList = ({
                                                     value={bug.environment}
                                                     options={environmentOptions}
                                                     onChange={(value) => handleUpdateBug(bug.id, { environment: value })}
-                                                    className="text-sm text-gray-700"
+                                                    className="text-sm text-foreground"
                                                     noSearch
                                                 />
                                             </div>
 
                                             {/* Frequency */}
                                             <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                     <AlertCircle className="w-3 h-3" />
                                                     <span>Frequency</span>
                                                 </div>
@@ -629,29 +628,29 @@ const BugList = ({
                                                     value={bug.frequency}
                                                     options={frequencyOptions}
                                                     onChange={(value) => handleUpdateBug(bug.id, { frequency: value })}
-                                                    className="text-sm text-gray-700"
+                                                    className="text-sm text-foreground"
                                                     noSearch
                                                 />
                                             </div>
 
                                             {/* Reporter */}
                                             <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                     <User className="w-3 h-3" />
                                                     <span>Reporter</span>
                                                 </div>
-                                                <div className="text-sm text-gray-700">
+                                                <div className="text-sm text-foreground">
                                                     {formatReporter(bug)}
                                                 </div>
                                             </div>
 
                                             {/* Created Date */}
                                             <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                     <Calendar className="w-3 h-3" />
                                                     <span>Created</span>
                                                 </div>
-                                                <div className="text-sm text-gray-700">
+                                                <div className="text-sm text-foreground">
                                                     {bug.due_date && isValidDate(new Date(bug.due_date))
                                                         ? format(new Date(bug.due_date), 'MMM d, yyyy')
                                                         : 'Not set'}
@@ -660,11 +659,11 @@ const BugList = ({
 
                                             {/* Last Updated */}
                                             <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                     <Clock className="w-3 h-3" />
                                                     <span>Updated</span>
                                                 </div>
-                                                <div className="text-sm text-gray-700">
+                                                <div className="text-sm text-foreground">
                                                     {bug.updated_at && isValidDate(new Date(bug.updated_at))
                                                         ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
                                                         : 'Unknown'}
@@ -675,11 +674,11 @@ const BugList = ({
                                         {/* Evidence */}
                                         {bug.evidence && (
                                             <div className="mb-4">
-                                                <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                                                     <ExternalLink className="w-3 h-3" />
                                                     <span>Evidence</span>
                                                 </div>
-                                                <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
+                                                <div className="text-sm text-foreground bg-muted p-2 rounded border border-border">
                                                     {formatEvidence(bug.evidence)}
                                                 </div>
                                             </div>
@@ -687,7 +686,7 @@ const BugList = ({
 
                                         {/* Test Cases */}
                                         <div className="space-y-1">
-                                            <div className="text-xs text-gray-500">Linked Test Cases</div>
+                                            <div className="text-xs text-muted-foreground">Linked Test Cases</div>
                                             <div className="max-w-md">
                                                 <MultiSelectDropdown
                                                     options={testCaseOptions}

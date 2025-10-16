@@ -40,7 +40,7 @@ const EditableField = ({ field, value, type = 'text', options = [], className = 
                     <select
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        className="flex-1 px-2 py-1 text-sm border border-input rounded focus:outline-none focus:ring-1 focus:ring-primary bg-background text-foreground"
+                        className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                         autoFocus
                     >
                         {options.map(option => (
@@ -54,7 +54,7 @@ const EditableField = ({ field, value, type = 'text', options = [], className = 
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onKeyDown={handleKeyPress}
-                        className="flex-1 px-2 py-1 text-sm border border-input rounded focus:outline-none focus:ring-1 focus:ring-primary resize-none bg-background text-foreground"
+                        className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring resize-none"
                         rows={3}
                         placeholder={placeholder}
                         autoFocus
@@ -65,21 +65,21 @@ const EditableField = ({ field, value, type = 'text', options = [], className = 
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onKeyDown={handleKeyPress}
-                        className="flex-1 px-2 py-1 text-sm border border-input rounded focus:outline-none focus:ring-1 focus:ring-primary bg-background text-foreground"
+                        className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring placeholder-muted-foreground"
                         placeholder={placeholder}
                         autoFocus
                     />
                 )}
                 <button
                     onClick={handleSave}
-                    className="p-1 text-success hover:text-success/80"
+                    className="p-1.5 rounded hover:bg-secondary text-success hover:text-success/80 transition-colors"
                     title="Save"
                 >
                     <Check className="h-4 w-4" />
                 </button>
                 <button
                     onClick={handleCancel}
-                    className="p-1 text-destructive hover:text-destructive/80"
+                    className="p-1.5 rounded hover:bg-secondary text-destructive hover:text-destructive/80 transition-colors"
                     title="Cancel"
                 >
                     <X className="h-4 w-4" />
@@ -95,14 +95,14 @@ const EditableField = ({ field, value, type = 'text', options = [], className = 
             onMouseLeave={() => setShowEditIcon(false)}
         >
             <div className="flex items-center space-x-2">
-                <span className="flex-1 text-foreground">{value || placeholder}</span>
+                <span className={`flex-1 ${value ? 'text-foreground' : 'text-muted-foreground italic'}`}>{value || placeholder || 'Not set'}</span>
                 {showEditIcon && (
                     <button
                         onClick={() => setIsEditing(true)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
                         title="Edit"
                     >
-                        <Edit3 className="h-3 w-3" />
+                        <Edit3 className="h-4 w-4" />
                     </button>
                 )}
             </div>

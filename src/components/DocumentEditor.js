@@ -135,16 +135,16 @@ export default function DocumentEditor({
         ol: 'list-decimal list-inside my-3 ml-4',
         listitem: 'ml-6 my-1'
       },
-      quote: 'border-l-4 border-blue-500 pl-4 italic my-4 text-gray-700',
-      link: 'text-blue-600 underline hover:text-blue-800 cursor-pointer',
+      quote: 'border-l-4 border-primary pl-4 italic my-4 text-muted-foreground',
+      link: 'text-primary underline hover:text-primary/80 cursor-pointer',
       text: {
         bold: 'font-bold',
         italic: 'italic',
         underline: 'underline',
         strikethrough: 'line-through',
-        code: 'bg-gray-100 px-2 py-1 rounded font-mono text-sm text-red-600'
+        code: 'bg-secondary px-2 py-1 rounded font-mono text-sm text-destructive'
       },
-      code: 'bg-gray-900 text-gray-100 font-mono text-sm p-4 rounded-lg my-4 overflow-x-auto',
+      code: 'bg-muted text-muted-foreground font-mono text-sm p-4 rounded-lg my-4 overflow-x-auto',
       paragraph: 'my-2'
     },
     onError: (error) => console.error('Lexical Error:', error)
@@ -290,7 +290,7 @@ export default function DocumentEditor({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 relative">
+    <div className="h-full flex flex-col bg-background relative">
       <LexicalComposer initialConfig={initialConfig}>
         {/* Top Header */}
         <EditorTopHeader
@@ -319,7 +319,7 @@ export default function DocumentEditor({
               }`}
           >
             <div className="max-w-5xl mx-auto py-8 px-6">
-              <div className="bg-white rounded-lg shadow-sm min-h-[900px] p-16 relative">
+              <div className="bg-card rounded-lg shadow-theme-sm min-h-[900px] p-16 relative">
                 <RichTextPlugin
                   contentEditable={
                     <ContentEditable
@@ -332,7 +332,7 @@ export default function DocumentEditor({
                     />
                   }
                   placeholder={
-                    <div className="absolute top-16 left-16 text-gray-400 pointer-events-none text-base">
+                    <div className="absolute top-16 left-16 text-muted-foreground pointer-events-none text-base">
                       Start writing...
                     </div>
                   }
@@ -354,7 +354,7 @@ export default function DocumentEditor({
 
           {/* Chat Drawer Area */}
           {chatOpen && (
-            <div className="w-[25%] min-w-[320px] border-l border-gray-200 bg-white overflow-hidden animate-slide-in">
+            <div className="w-[25%] min-w-[320px] border-l border-border bg-card overflow-hidden animate-slide-in">
               <ChatDrawer
                 isOpen={chatOpen}
                 onClose={() => setChatOpen(false)}
@@ -389,7 +389,7 @@ export default function DocumentEditor({
         <div className="fixed bottom-6 right-6 z-40">
           <button
             onClick={onCancel}
-            className="px-6 py-3 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 shadow-lg transition-colors"
+            className="px-6 py-3 bg-card text-foreground border border-border rounded-lg hover:bg-secondary shadow-theme-lg transition-colors"
           >
             Close Editor
           </button>

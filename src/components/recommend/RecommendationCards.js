@@ -23,9 +23,9 @@ const getStatusBadge = (status) => {
         'rejected': 'bg-red-100 text-red-800 border-red-200',
         'in-development': 'bg-blue-100 text-blue-800 border-blue-200',
         'completed': 'bg-purple-100 text-purple-800 border-purple-200',
-        'on-hold': 'bg-gray-100 text-gray-800 border-gray-200',
+        'on-hold': 'bg-muted text-muted-foreground border-border',
     };
-    return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return statusConfig[status?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
 };
 
 const getPriorityBadge = (priority) => {
@@ -35,16 +35,16 @@ const getPriorityBadge = (priority) => {
         'medium': 'bg-yellow-100 text-yellow-800 border-yellow-200',
         'low': 'bg-blue-100 text-blue-800 border-blue-200',
     };
-    return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return priorityConfig[priority?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
 };
 
 const getImpactIndicator = (impact) => {
     const impactColors = {
         'high': 'text-green-500',
         'medium': 'text-yellow-500',
-        'low': 'text-gray-400',
+        'low': 'text-muted-foreground',
     };
-    return impactColors[impact?.toLowerCase()] || 'text-gray-400';
+    return impactColors[impact?.toLowerCase()] || 'text-muted-foreground';
 };
 
 const getEffortIndicator = (effort) => {
@@ -53,7 +53,7 @@ const getEffortIndicator = (effort) => {
         'medium': { dots: 2, color: 'text-yellow-500' },
         'large': { dots: 3, color: 'text-red-500' },
     };
-    const config = effortConfig[effort?.toLowerCase()] || { dots: 1, color: 'text-gray-400' };
+    const config = effortConfig[effort?.toLowerCase()] || { dots: 1, color: 'text-muted-foreground' };
     
     return (
         <div className={`flex gap-1 ${config.color}`}>
@@ -61,7 +61,7 @@ const getEffortIndicator = (effort) => {
                 <div
                     key={i}
                     className={`w-2 h-2 rounded-full ${
-                        i < config.dots ? 'bg-current' : 'bg-gray-200'
+                        i < config.dots ? 'bg-current' : 'bg-muted'
                     }`}
                 />
             ))}
@@ -127,10 +127,10 @@ const RecommendationCard = ({
     };
 
     return (
-        <div className={`bg-white rounded-lg shadow-sm border transition-all ${
+        <div className={`bg-card rounded-lg shadow-theme-sm border transition-all ${
             isSelected 
                 ? 'border-teal-500 ring-2 ring-teal-200' 
-                : 'border-gray-200 hover:shadow-md'
+                : 'border-border hover:shadow-theme-md'
         }`}>
             <div className="p-6">
                 {/* Header with Selection Checkbox */}
@@ -142,12 +142,12 @@ const RecommendationCard = ({
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={handleSelectChange}
-                                className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
                             />
                         </div>
                         
                         <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                            <h3 className="text-lg font-semibold text-card-foreground mb-2 line-clamp-2">
                                 {recommendation.title}
                             </h3>
                             <div className="flex items-center gap-2 mb-3">
@@ -162,7 +162,7 @@ const RecommendationCard = ({
                                     </button>
                                     
                                     {showStatusDropdown && (
-                                        <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                                        <div className="absolute top-full left-0 mt-1 w-40 bg-popover border border-border rounded-md shadow-theme-lg z-10">
                                             {statusOptions.map((option) => (
                                                 <button
                                                     key={option.value}
@@ -170,7 +170,7 @@ const RecommendationCard = ({
                                                         onStatusUpdate(recommendation.id, option.value);
                                                         setShowStatusDropdown(false);
                                                     }}
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-md last:rounded-b-md"
+                                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent first:rounded-t-md last:rounded-b-md"
                                                 >
                                                     {option.label}
                                                 </button>
@@ -189,19 +189,19 @@ const RecommendationCard = ({
                     <div className="relative">
                         <button
                             onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                            className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+                            className="p-2 text-muted-foreground hover:text-card-foreground rounded-full hover:bg-accent"
                         >
                             <MoreHorizontal className="w-4 h-4" />
                         </button>
                         
                         {showActionsDropdown && (
-                            <div className="absolute top-full right-0 mt-1 w-36 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                            <div className="absolute top-full right-0 mt-1 w-36 bg-popover border border-border rounded-md shadow-theme-lg z-10">
                                 <button
                                     onClick={() => {
                                         onEdit(recommendation);
                                         setShowActionsDropdown(false);
                                     }}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2"
                                 >
                                     <Edit className="w-3 h-3" />
                                     Edit
@@ -209,7 +209,7 @@ const RecommendationCard = ({
                                 <button
                                     onClick={handleArchive}
                                     disabled={actionLoading === onArchive}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 disabled:opacity-50"
                                 >
                                     <Archive className="w-3 h-3" />
                                     {actionLoading === onArchive ? 'Archiving...' : 'Archive'}
@@ -228,12 +228,12 @@ const RecommendationCard = ({
                 </div>
 
                 {/* Description */}
-                <p className="text-gray-600 text-sm mb-4 line-clamp-3">
+                <p className="text-muted-foreground text-sm mb-4 line-clamp-3">
                     {recommendation.description}
                 </p>
 
                 {/* Metrics */}
-                <div className="flex items-center justify-between mb-4 text-xs text-gray-500">
+                <div className="flex items-center justify-between mb-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1">
                             <TrendingUp className="w-3 h-3" />
@@ -256,14 +256,14 @@ const RecommendationCard = ({
                         {recommendation.tags.slice(0, 3).map((tag, index) => (
                             <span 
                                 key={index}
-                                className="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-800"
+                                className="inline-flex items-center px-2 py-1 rounded text-xs bg-muted text-muted-foreground"
                             >
                                 <Tag className="w-3 h-3 mr-1" />
                                 {tag}
                             </span>
                         ))}
                         {recommendation.tags.length > 3 && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-muted-foreground">
                                 +{recommendation.tags.length - 3} more
                             </span>
                         )}
@@ -271,7 +271,7 @@ const RecommendationCard = ({
                 )}
 
                 {/* Footer */}
-                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between pt-4 border-t border-border">
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <button
@@ -280,13 +280,13 @@ const RecommendationCard = ({
                                 className={`p-1.5 rounded-full transition-colors disabled:opacity-50 ${
                                     hasUserVoted === 'up' 
                                         ? 'bg-green-100 text-green-600' 
-                                        : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                        : 'text-muted-foreground hover:text-green-600 hover:bg-green-50'
                                 }`}
                             >
                                 <ThumbsUp className="w-4 h-4" />
                             </button>
                             <span className={`text-sm font-medium ${
-                                netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : 'text-gray-600'
+                                netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : 'text-muted-foreground'
                             }`}>
                                 {netVotes}
                             </span>
@@ -296,20 +296,20 @@ const RecommendationCard = ({
                                 className={`p-1.5 rounded-full transition-colors disabled:opacity-50 ${
                                     hasUserVoted === 'down' 
                                         ? 'bg-red-100 text-red-600' 
-                                        : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                                        : 'text-muted-foreground hover:text-red-600 hover:bg-red-50'
                                 }`}
                             >
                                 <ThumbsDown className="w-4 h-4" />
                             </button>
                         </div>
                         {recommendation.comments && (
-                            <div className="flex items-center gap-1 text-gray-500">
+                            <div className="flex items-center gap-1 text-muted-foreground">
                                 <MessageSquare className="w-4 h-4" />
                                 <span className="text-sm">{recommendation.comments.length}</span>
                             </div>
                         )}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-muted-foreground">
                         {safeFormatDate(recommendation.created_at)}
                     </div>
                 </div>
@@ -335,7 +335,7 @@ const BulkSelectionHeader = ({
     };
 
     return (
-        <div className="flex items-center gap-3 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="flex items-center gap-3 mb-6 p-4 bg-muted rounded-lg border border-border">
             <div className="flex items-center">
                 <input
                     type="checkbox"
@@ -344,10 +344,10 @@ const BulkSelectionHeader = ({
                         if (input) input.indeterminate = someSelected;
                     }}
                     onChange={handleSelectAllChange}
-                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                    className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
                 />
             </div>
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-muted-foreground">
                 {selectedRecommendations.length === 0 
                     ? `Select suggestions (${recommendations.length} total)`
                     : `${selectedRecommendations.length} of ${recommendations.length} selected`
@@ -373,13 +373,13 @@ const RecommendationCards = ({
 }) => {
     if (recommendations.length === 0) {
         return (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-                <Lightbulb className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No recommendations found</h3>
-                <p className="text-gray-600 mb-6">Create your first feature recommendation to get started.</p>
+            <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12 text-center">
+                <Lightbulb className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-card-foreground mb-2">No recommendations found</h3>
+                <p className="text-muted-foreground mb-6">Create your first feature recommendation to get started.</p>
                 <button
                     onClick={() => onEdit(null)}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-theme-sm text-sm font-medium rounded-md text-primary-foreground bg-primary hover:bg-teal-500 transition-colors"
                 >
                     <Plus className="w-4 h-4 mr-2" />
                     Create Recommendation

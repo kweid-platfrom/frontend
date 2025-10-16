@@ -143,16 +143,16 @@ export default function ImportModal({ onClose, onImportComplete }) {
 
     return (
         <div 
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/30"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-background/80"
             onClick={handleBackdropClick}
         >
-            <div className="relative bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="relative bg-card rounded-lg shadow-theme-xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-border">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b">
-                    <h2 className="text-xl font-semibold">Import Test Cases</h2>
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <h2 className="text-xl font-semibold text-foreground">Import Test Cases</h2>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        className="text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <X size={24} />
                     </button>
@@ -165,25 +165,25 @@ export default function ImportModal({ onClose, onImportComplete }) {
                             <div
                                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                                     dragActive 
-                                        ? 'border-teal-500 bg-teal-50' 
-                                        : 'border-gray-300 hover:border-gray-400'
+                                        ? 'border-primary bg-primary/10' 
+                                        : 'border-border hover:border-primary/50'
                                 }`}
                                 onDragEnter={handleDrag}
                                 onDragLeave={handleDrag}
                                 onDragOver={handleDrag}
                                 onDrop={handleDrop}
                             >
-                                <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                                <p className="text-lg mb-2">
+                                <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                                <p className="text-lg mb-2 text-foreground">
                                     Drag and drop your file here, or{' '}
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="text-teal-600 hover:text-teal-700 underline"
+                                        className="text-primary hover:text-primary/80 underline"
                                     >
                                         browse
                                     </button>
                                 </p>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-muted-foreground">
                                     Supports CSV, Excel (.xlsx, .xls), and JSON files
                                 </p>
                                 <input
@@ -197,15 +197,15 @@ export default function ImportModal({ onClose, onImportComplete }) {
 
                             {/* Format Examples */}
                             <div className="mt-6">
-                                <h3 className="text-lg font-medium mb-3">Expected Format</h3>
-                                <div className="bg-gray-50 rounded-lg p-4">
-                                    <p className="text-sm text-gray-600 mb-2">
+                                <h3 className="text-lg font-medium mb-3 text-foreground">Expected Format</h3>
+                                <div className="bg-muted rounded-lg p-4">
+                                    <p className="text-sm text-muted-foreground mb-2">
                                         Your file should contain the following columns:
                                     </p>
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div>
-                                            <strong>Required:</strong>
-                                            <ul className="list-disc list-inside ml-2 text-gray-600">
+                                            <strong className="text-foreground">Required:</strong>
+                                            <ul className="list-disc list-inside ml-2 text-muted-foreground">
                                                 <li>title</li>
                                                 <li>description</li>
                                                 <li>steps</li>
@@ -213,8 +213,8 @@ export default function ImportModal({ onClose, onImportComplete }) {
                                             </ul>
                                         </div>
                                         <div>
-                                            <strong>Optional:</strong>
-                                            <ul className="list-disc list-inside ml-2 text-gray-600">
+                                            <strong className="text-foreground">Optional:</strong>
+                                            <ul className="list-disc list-inside ml-2 text-muted-foreground">
                                                 <li>priority (High, Medium, Low)</li>
                                                 <li>status (Active, Draft, Archived)</li>
                                                 <li>assignee</li>
@@ -231,17 +231,17 @@ export default function ImportModal({ onClose, onImportComplete }) {
                     {file && !importResults && (
                         <>
                             {/* File Info */}
-                            <div className="flex items-center gap-3 mb-6 p-4 bg-blue-50 rounded-lg">
-                                <FileText className="h-8 w-8 text-blue-600" />
+                            <div className="flex items-center gap-3 mb-6 p-4 bg-info/10 rounded-lg border border-info/20">
+                                <FileText className="h-8 w-8 text-info" />
                                 <div>
-                                    <p className="font-medium">{file.name}</p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="font-medium text-foreground">{file.name}</p>
+                                    <p className="text-sm text-muted-foreground">
                                         {(file.size / 1024).toFixed(1)} KB
                                     </p>
                                 </div>
                                 <button
                                     onClick={resetModal}
-                                    className="ml-auto text-gray-500 hover:text-gray-700"
+                                    className="ml-auto text-muted-foreground hover:text-foreground"
                                 >
                                     <X size={20} />
                                 </button>
@@ -250,23 +250,23 @@ export default function ImportModal({ onClose, onImportComplete }) {
                             {/* Preview */}
                             {previewData.length > 0 && (
                                 <div className="mb-6">
-                                    <h3 className="text-lg font-medium mb-3">Preview (First 5 rows)</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full border border-gray-200 rounded-lg">
-                                            <thead className="bg-gray-50">
+                                    <h3 className="text-lg font-medium mb-3 text-foreground">Preview (First 5 rows)</h3>
+                                    <div className="overflow-x-auto border border-border rounded-lg">
+                                        <table className="min-w-full">
+                                            <thead className="bg-muted">
                                                 <tr>
                                                     {Object.keys(previewData[0]).map(key => (
-                                                        <th key={key} className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">
+                                                        <th key={key} className="px-4 py-2 text-left text-sm font-medium text-muted-foreground border-b border-border">
                                                             {key}
                                                         </th>
                                                     ))}
                                                 </tr>
                                             </thead>
-                                            <tbody>
+                                            <tbody className="bg-card">
                                                 {previewData.map((row, index) => (
-                                                    <tr key={index} className="border-b">
+                                                    <tr key={index} className="border-b border-border">
                                                         {Object.values(row).map((value, cellIndex) => (
-                                                            <td key={cellIndex} className="px-4 py-2 text-sm text-gray-600">
+                                                            <td key={cellIndex} className="px-4 py-2 text-sm text-muted-foreground">
                                                                 {String(value).substring(0, 50)}
                                                                 {String(value).length > 50 ? '...' : ''}
                                                             </td>
@@ -281,14 +281,14 @@ export default function ImportModal({ onClose, onImportComplete }) {
 
                             {/* Column Mapping */}
                             <div className="mb-6">
-                                <h3 className="text-lg font-medium mb-3">Column Mapping</h3>
+                                <h3 className="text-lg font-medium mb-3 text-foreground">Column Mapping</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     {Object.entries(mappingConfig).map(([field, mapping]) => (
                                         <div key={field}>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            <label className="block text-sm font-medium text-foreground mb-1">
                                                 {field.charAt(0).toUpperCase() + field.slice(1)}
                                                 {['title', 'description', 'steps', 'expectedResult'].includes(field) && (
-                                                    <span className="text-red-500 ml-1">*</span>
+                                                    <span className="text-destructive ml-1">*</span>
                                                 )}
                                             </label>
                                             <select
@@ -297,7 +297,7 @@ export default function ImportModal({ onClose, onImportComplete }) {
                                                     ...prev,
                                                     [field]: e.target.value
                                                 }))}
-                                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                                                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground focus:ring-2 focus:ring-ring"
                                             >
                                                 <option value="">-- Skip --</option>
                                                 {previewData.length > 0 && Object.keys(previewData[0]).map(column => (
@@ -317,32 +317,32 @@ export default function ImportModal({ onClose, onImportComplete }) {
                         <div className="space-y-6">
                             {/* Import Results */}
                             <div className="text-center">
-                                <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
-                                <h3 className="text-xl font-semibold mb-2">Import Complete</h3>
+                                <CheckCircle className="mx-auto h-16 w-16 text-success mb-4" />
+                                <h3 className="text-xl font-semibold mb-2 text-foreground">Import Complete</h3>
                                 <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
                                     <div className="text-center">
-                                        <div className="text-2xl font-bold text-blue-600">{importResults.total}</div>
-                                        <div className="text-sm text-gray-600">Total</div>
+                                        <div className="text-2xl font-bold text-info">{importResults.total}</div>
+                                        <div className="text-sm text-muted-foreground">Total</div>
                                     </div>
                                     <div className="text-center">
-                                        <div className="text-2xl font-bold text-green-600">{importResults.successful}</div>
-                                        <div className="text-sm text-gray-600">Successful</div>
+                                        <div className="text-2xl font-bold text-success">{importResults.successful}</div>
+                                        <div className="text-sm text-muted-foreground">Successful</div>
                                     </div>
                                     <div className="text-center">
-                                        <div className="text-2xl font-bold text-red-600">{importResults.failed}</div>
-                                        <div className="text-sm text-gray-600">Failed</div>
+                                        <div className="text-2xl font-bold text-destructive">{importResults.failed}</div>
+                                        <div className="text-sm text-muted-foreground">Failed</div>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Errors */}
                             {importResults.errors.length > 0 && (
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
                                     <div className="flex items-center gap-2 mb-3">
-                                        <AlertCircle className="h-5 w-5 text-red-600" />
-                                        <h4 className="font-medium text-red-800">Import Errors</h4>
+                                        <AlertCircle className="h-5 w-5 text-destructive" />
+                                        <h4 className="font-medium text-destructive">Import Errors</h4>
                                     </div>
-                                    <ul className="text-sm text-red-700 space-y-1">
+                                    <ul className="text-sm text-destructive space-y-1">
                                         {importResults.errors.map((error, index) => (
                                             <li key={index}>• {error}</li>
                                         ))}
@@ -354,10 +354,10 @@ export default function ImportModal({ onClose, onImportComplete }) {
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+                <div className="flex justify-end gap-3 p-6 border-t border-border bg-muted">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        className="px-4 py-2 text-foreground bg-background border border-border rounded-lg hover:bg-secondary transition-colors"
                         disabled={importing}
                     >
                         {importResults ? 'Close' : 'Cancel'}
@@ -366,7 +366,7 @@ export default function ImportModal({ onClose, onImportComplete }) {
                         <button
                             onClick={handleImport}
                             disabled={importing}
-                            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
                         >
                             {importing ? 'Importing...' : 'Import Test Cases'}
                         </button>

@@ -1,14 +1,15 @@
 import React from 'react';
 import { CheckCircle, Clock, Zap, Bot, Tags, TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
+import { useMetricsProcessor } from '../../hooks/useMetricsProcessor';
+import { useDashboard } from '../../hooks/useDashboard'; 
 
 const TestCaseMetrics = ({
-    metrics = {},
-    loading = false,
-    error = null,
     lastUpdated = null,
-    refresh = () => {},
     isRealtime = false
 }) => {
+    const { metrics: rawMetrics, loading, error, refresh } = useDashboard();
+    const metrics = useMetricsProcessor(rawMetrics);
+
     const getColorClasses = (color) => {
         const colorMap = {
             success: {
@@ -36,10 +37,9 @@ const TestCaseMetrics = ({
                 border: 'border-[rgb(var(--color-error)/0.2)]'
             }
         };
-        return colorMap[color] || colorMap.info; // Default to info if color is not found
+        return colorMap[color] || colorMap.info;
     };
 
-    // Handle loading state
     if (loading) {
         return (
             <div className="space-y-6">
@@ -68,7 +68,6 @@ const TestCaseMetrics = ({
         );
     }
 
-    // Handle error state
     if (error) {
         return (
             <div className="space-y-6">
@@ -97,7 +96,6 @@ const TestCaseMetrics = ({
         );
     }
 
-    // Extract metrics with fallback values
     const {
         totalTestCases = 0,
         manualTestCases = 0,
@@ -110,12 +108,28 @@ const TestCaseMetrics = ({
         edgeCaseCoverage = 0,
         negativeCaseCoverage = 0,
         aiGenerationSuccessRate = 0,
-        avgTestCasesPerAIGeneration = 0,
         outdatedTestCases = 0,
         recentlyUpdatedTestCases = 0,
-        testCaseUpdateFrequency = 0,
-        trends = {}
+        automationRate = 0,
+        aiContributionRate = 0,
+        avgCoverage = 0,
+        testCaseQualityScore = 0,
+        testCaseTrend = []
     } = metrics;
+
+    // Compute trends from testCaseTrend (simple % change from first to last)
+    const computeTrend = (trendData, key = 'count') => {
+        if (trendData.length < 2) return null;
+        const first = trendData[0][key];
+        const last = trendData[trendData.length - 1][key];
+        if (first === 0) return null;
+        return Math.round(((last - first) / first) * 100);
+    };
+
+    const trends = {
+        totalTestCases: computeTrend(testCaseTrend),
+        // Add more if needed, but for simplicity using overall
+    };
 
     const MetricCard = ({ title, value, subtitle, icon: Icon, color = "info", trend = null }) => {
         const colors = getColorClasses(color);
@@ -125,8 +139,8 @@ const TestCaseMetrics = ({
                     <div className={`p-3 rounded-lg ${colors.bg}`}>
                         <Icon className={`w-6 h-6 ${colors.text}`} />
                     </div>
-                    {trend && (
-                        <div className={`flex items-center text-sm ${trend > 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-error))]'}`}>
+                    {trend !== null && (
+                        <div className={`flex items-center text-sm ${trend > 0 ? 'text-[rgb(var(--color-success))]' : trend < 0 ? 'text-[rgb(var(--color-error))]' : 'text-muted-foreground'}`}>
                             <TrendingUp className={`w-4 h-4 mr-1 ${trend < 0 ? 'rotate-180' : ''}`} />
                             {Math.abs(trend)}%
                         </div>
@@ -201,26 +215,23 @@ const TestCaseMetrics = ({
                 <MetricCard
                     title="Manual Tests"
                     value={manualTestCases}
-                    subtitle={`${totalTestCases > 0 ? Math.round((manualTestCases / totalTestCases) * 100) : 0}% of total`}
+                    subtitle={`${totalTestCases > 0 ? (100 - automationRate) : 0}% of total`}
                     icon={Clock}
                     color="warning"
-                    trend={trends.manualTestCases}
                 />
                 <MetricCard
                     title="Automated Tests"
                     value={automatedTestCases}
-                    subtitle={`${totalTestCases > 0 ? Math.round((automatedTestCases / totalTestCases) * 100) : 0}% automated`}
+                    subtitle={`${automationRate}% automated`}
                     icon={Zap}
                     color="success"
-                    trend={trends.automatedTestCases}
                 />
                 <MetricCard
                     title="AI Generated"
                     value={aiGeneratedTestCases}
-                    subtitle={`${avgTestCasesPerAIGeneration} avg per generation`}
+                    subtitle={`${aiContributionRate}% of total`}
                     icon={Bot}
                     color="info"
-                    trend={trends.aiGeneratedTestCases}
                 />
             </div>
 
@@ -307,11 +318,11 @@ const TestCaseMetrics = ({
                             <span className="font-medium text-[rgb(var(--color-success))]">{aiGenerationSuccessRate}%</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Avg per Generation</span>
-                            <span className="font-medium text-foreground">{avgTestCasesPerAIGeneration}</span>
+                            <span className="text-muted-foreground">Contribution Rate</span>
+                            <span className="font-medium text-foreground">{aiContributionRate}%</span>
                         </div>
                         <div className="text-xs text-muted-foreground pt-2">
-                            AI generates {avgTestCasesPerAIGeneration} test cases per successful attempt
+                            AI contributes {aiGeneratedTestCases} test cases ({aiContributionRate}% of total)
                         </div>
                     </div>
                 </div>
@@ -328,8 +339,8 @@ const TestCaseMetrics = ({
                             <span className="font-medium text-[rgb(var(--color-success))]">{recentlyUpdatedTestCases}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Updates/Week</span>
-                            <span className="font-medium text-foreground">{testCaseUpdateFrequency}</span>
+                            <span className="text-muted-foreground">Update Frequency</span>
+                            <span className="font-medium text-foreground">{recentlyUpdatedTestCases}/week</span>
                         </div>
                     </div>
                 </div>
@@ -340,25 +351,25 @@ const TestCaseMetrics = ({
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="text-center">
                         <div className="text-2xl font-bold text-[rgb(var(--color-info))]">
-                            {totalTestCases > 0 ? Math.round(((testCasesWithTags + testCasesWithRecordings) / (totalTestCases * 2)) * 100) : 0}%
+                            {testCaseQualityScore}%
                         </div>
                         <div className="text-sm text-muted-foreground">Quality Score</div>
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-[rgb(var(--color-success))]">
-                            {totalTestCases > 0 ? Math.round((automatedTestCases / totalTestCases) * 100) : 0}%
+                            {automationRate}%
                         </div>
                         <div className="text-sm text-muted-foreground">Automation Rate</div>
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-[rgb(var(--color-info))]">
-                            {totalTestCases > 0 ? Math.round((aiGeneratedTestCases / totalTestCases) * 100) : 0}%
+                            {aiContributionRate}%
                         </div>
                         <div className="text-sm text-muted-foreground">AI Contribution</div>
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-[rgb(var(--color-warning))]">
-                            {totalTestCases > 0 ? Math.round(((functionalCoverage + edgeCaseCoverage + negativeCaseCoverage) / 3)) : 0}%
+                            {avgCoverage}%
                         </div>
                         <div className="text-sm text-muted-foreground">Avg Coverage</div>
                     </div>

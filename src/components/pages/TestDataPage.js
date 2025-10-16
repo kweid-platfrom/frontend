@@ -17,18 +17,18 @@ import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 const ICON_MAP = { User, Mail, Phone, MapPin, CreditCard, Database, Calendar, Lock, Globe, Palette, FileText, Hash };
 
 const COLOR_MAP = {
-  blue: 'bg-blue-100 text-blue-600',
-  purple: 'bg-purple-100 text-purple-600',
-  green: 'bg-green-100 text-green-600',
-  red: 'bg-red-100 text-red-600',
-  yellow: 'bg-yellow-100 text-yellow-600',
-  indigo: 'bg-indigo-100 text-indigo-600',
-  pink: 'bg-pink-100 text-pink-600',
-  gray: 'bg-gray-100 text-gray-600',
-  cyan: 'bg-cyan-100 text-cyan-600',
-  orange: 'bg-orange-100 text-orange-600',
-  teal: 'bg-teal-100 text-teal-600',
-  violet: 'bg-violet-100 text-violet-600',
+  blue: 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',
+  purple: 'bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400',
+  green: 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400',
+  red: 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400',
+  yellow: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400',
+  indigo: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400',
+  pink: 'bg-pink-100 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400',
+  gray: 'bg-gray-100 text-gray-600 dark:bg-gray-900/20 dark:text-gray-400',
+  cyan: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400',
+  orange: 'bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400',
+  teal: 'bg-teal-100 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400',
+  violet: 'bg-violet-100 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400',
 };
 
 const predefinedTypes = [
@@ -254,17 +254,17 @@ const TestData = () => {
     const iconColorClass = COLOR_MAP[type?.color] || COLOR_MAP.blue;
 
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-background">
         <div className="mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="bg-white shadow-sm rounded-lg overflow-hidden transition-all duration-300">
-            <div className="border-b border-gray-200 px-6 py-5">
+          <div className="bg-card shadow-sm rounded-lg overflow-hidden transition-all duration-300 border border-border">
+            <div className="border-b border-border px-6 py-5">
               {/* HEADER ROW */}
               <div className="flex items-center justify-between">
                 {/* Left side: back, icon, title + count */}
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => { setSelectedType(null); setSelectedItemIds([]); setItemsPage(1); }}
-                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     Back
@@ -275,8 +275,8 @@ const TestData = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-gray-900">{type?.name}</h2>
-                    <span className="px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                    <h2 className="text-xl font-bold text-foreground">{type?.name}</h2>
+                    <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground">
                       {currentItems.length} {currentItems.length === 1 ? 'item' : 'items'}
                     </span>
                   </div>
@@ -287,7 +287,7 @@ const TestData = () => {
                   {currentItems.length > 0 && (
                     <button
                       onClick={() => exportData(selectedType)}
-                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors"
                     >
                       <Download className="w-4 h-4" />
                       Export
@@ -297,7 +297,7 @@ const TestData = () => {
                   <button
                     onClick={handleRandomGenerate}
                     disabled={generateLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {generateLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                     Random Generate
@@ -305,7 +305,7 @@ const TestData = () => {
 
                   <Dialog open={isAIOpen} onOpenChange={setIsAIOpen}>
                     <DialogTrigger asChild>
-                      <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded hover:bg-orange-600 transition-colors">
+                      <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-orange-500 rounded hover:bg-orange-600 transition-colors">
                         <Sparkles className="w-4 h-4" />
                         AI Generate
                       </button>
@@ -338,13 +338,13 @@ const TestData = () => {
             <div className="px-6 py-4">
               {currentItems.length === 0 ? (
                 <div className="text-center py-16">
-                  <Database className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">No test data yet. Use the generate buttons above!</p>
+                  <Database className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">No test data yet. Use the generate buttons above!</p>
                 </div>
               ) : (
                 <div className="space-y-0">
                   {/* Select All Row */}
-                  <div className="flex items-center gap-4 border-b  py-2 rounded">
+                  <div className="flex items-center gap-4 border-b border-border py-2 rounded">
                     <input
                       type="checkbox"
                       checked={selectedItemIds.length === currentItems.length}
@@ -355,9 +355,9 @@ const TestData = () => {
                           setSelectedItemIds([]);
                         }
                       }}
-                      className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
                     />
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-muted-foreground">
                       {selectedItemIds.length === currentItems.length
                         ? "All selected"
                         : selectedItemIds.length > 0
@@ -370,21 +370,21 @@ const TestData = () => {
                   {paginatedItems.map((item, index) => (
                     <div
                       key={item.id}
-                      className={`flex items-center gap-4 py-3 hover:bg-gray-50 transition-colors ${index !== paginatedItems.length - 1 ? 'border-b border-gray-100' : ''
+                      className={`flex items-center gap-4 py-3 hover:bg-muted transition-colors ${index !== paginatedItems.length - 1 ? 'border-b border-border' : ''
                         }`}
                     >
                       <input
                         type="checkbox"
                         checked={selectedItemIds.includes(item.id)}
                         onChange={() => toggleItemSelection(item.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
                       />
-                      <div className="flex-1 font-mono text-sm text-gray-700 truncate">
+                      <div className="flex-1 font-mono text-sm text-foreground truncate">
                         {item.value || '<empty>'}
                       </div>
                       <button
                         onClick={() => copyToClipboard(item.value, item.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors min-w-[75px]"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground bg-card border border-border rounded hover:bg-muted transition-colors min-w-[75px]"
                       >
                         {copiedId === item.id ? (
                           <>
@@ -429,18 +429,18 @@ const TestData = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="mx-auto py-4 px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center flex-wrap">
-                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
+                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">
                   <span className="hidden sm:inline">Test Data Library</span>
                   <span className="sm:hidden">Test Data</span>
                 </h1>
                 <div className="flex items-center space-x-2 ml-2">
-                  <span className="px-2 py-1 bg-gray-200 rounded-full text-xs font-normal">
+                  <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground">
                     {filteredTypes.length} {filteredTypes.length === 1 ? 'type' : 'types'}
                   </span>
                 </div>
@@ -448,7 +448,7 @@ const TestData = () => {
             </div>
             <Dialog open={isTypeOpen} onOpenChange={setIsTypeOpen}>
               <DialogTrigger asChild>
-                <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded- hover:bg-teal-700 transition-colors">
+                <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded hover:bg-primary/90 transition-colors">
                   <Plus className="w-4 h-4" />
                   Add Type
                 </button>
@@ -484,7 +484,7 @@ const TestData = () => {
                         id="icon"
                         value={typeForm.icon}
                         onChange={(e) => setTypeForm({ ...typeForm, icon: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
                       >
                         {Object.keys(ICON_MAP).map(icon => (
                           <option key={icon} value={icon}>{icon}</option>
@@ -497,7 +497,7 @@ const TestData = () => {
                         id="color"
                         value={typeForm.color}
                         onChange={(e) => setTypeForm({ ...typeForm, color: e.target.value })}
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full border border-input rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
                       >
                         {Object.keys(COLOR_MAP).map(color => (
                           <option key={color} value={color}>{color}</option>
@@ -514,21 +514,21 @@ const TestData = () => {
           </div>
         </div>
 
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+        <div className="bg-card shadow-sm rounded-lg overflow-hidden border border-border">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
                 checked={selectedTypeIds.length === paginatedTypes.length && paginatedTypes.length > 0}
                 onChange={handleSelectAllTypes}
-                className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
               />
-              <span className="text-sm text-gray-600">Select All</span>
+              <span className="text-sm text-muted-foreground">Select All</span>
             </div>
 
             <div className="flex items-center gap-3 flex-1 justify-end">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search types..."
                   value={search}
@@ -537,16 +537,16 @@ const TestData = () => {
                 />
               </div>
 
-              <div className="flex gap-1 border border-gray-300 rounded-lg p-1">
+              <div className="flex gap-1 border border-border rounded-lg p-1 bg-card">
                 <button
                   onClick={() => setView('grid')}
-                  className={`p-1.5 rounded transition-colors ${view === 'grid' ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`p-1.5 rounded transition-colors ${view === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
                 >
                   <Grid className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setView('list')}
-                  className={`p-1.5 rounded transition-colors ${view === 'list' ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`p-1.5 rounded transition-colors ${view === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
                 >
                   <List className="w-4 h-4" />
                 </button>
@@ -567,13 +567,13 @@ const TestData = () => {
                     <div
                       key={type.id}
                       onDoubleClick={() => setSelectedType(type.id)}
-                      className={`group relative bg-white border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-teal-500 border-teal-500' : 'border-gray-200 hover:border-gray-300'}`}
+                      className={`group relative bg-card border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-muted'}`}
                     >
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => { e.stopPropagation(); toggleTypeSelection(type.id); }}
-                        className="absolute top-3 left-3 w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-3 left-3 w-4 h-4 rounded border-input text-primary focus:ring-primary opacity-0 group-hover:opacity-100 transition-opacity"
                       />
 
                       <div className="flex flex-col items-center text-center space-y-3">
@@ -581,9 +581,9 @@ const TestData = () => {
                           <TypeIcon className="w-6 h-6" />
                         </div>
                         <div className="w-full">
-                          <h3 className="font-medium text-gray-900 text-sm truncate">{type.name}</h3>
-                          <p className="text-xs text-gray-500 mt-1 line-clamp-2 h-8">{type.description}</p>
-                          <p className="text-xs text-gray-400 mt-2">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
+                          <h3 className="font-medium text-foreground text-sm truncate">{type.name}</h3>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2 h-8">{type.description}</p>
+                          <p className="text-xs text-muted-foreground mt-2">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
                         </div>
                       </div>
                     </div>
@@ -591,8 +591,8 @@ const TestData = () => {
                 })}
                 {paginatedTypes.length === 0 && (
                   <div className="col-span-full text-center py-16">
-                    <Database className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No types found.</p>
+                    <Database className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No types found.</p>
                   </div>
                 )}
               </div>
@@ -608,22 +608,22 @@ const TestData = () => {
                     <div
                       key={type.id}
                       onDoubleClick={() => setSelectedType(type.id)}
-                      className={`group flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${isSelected ? 'ring-2 ring-teal-500 border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                      className={`group flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${isSelected ? 'ring-2 ring-primary border-primary bg-primary/5' : 'border-border hover:border-muted bg-card'}`}
                     >
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => { e.stopPropagation(); toggleTypeSelection(type.id); }}
-                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
                       />
                       <div className={`w-10 h-10 rounded-lg ${iconColorClass} flex items-center justify-center flex-shrink-0`}>
                         <TypeIcon className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 text-sm">{type.name}</h3>
-                        <p className="text-xs text-gray-500 truncate">{type.description}</p>
+                        <h3 className="font-medium text-foreground text-sm">{type.name}</h3>
+                        <p className="text-xs text-muted-foreground truncate">{type.description}</p>
                       </div>
-                      <div className="text-xs text-gray-400 flex-shrink-0">
+                      <div className="text-xs text-muted-foreground flex-shrink-0">
                         {itemCount} item{itemCount !== 1 ? 's' : ''}
                       </div>
                     </div>
@@ -631,8 +631,8 @@ const TestData = () => {
                 })}
                 {paginatedTypes.length === 0 && (
                   <div className="text-center py-16">
-                    <Database className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No types found.</p>
+                    <Database className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No types found.</p>
                   </div>
                 )}
               </div>

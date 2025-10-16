@@ -20,9 +20,9 @@ const getStatusBadge = (status) => {
         'rejected': 'bg-red-100 text-red-800 border-red-200',
         'in-development': 'bg-blue-100 text-blue-800 border-blue-200',
         'completed': 'bg-purple-100 text-purple-800 border-purple-200',
-        'on-hold': 'bg-gray-100 text-gray-800 border-gray-200',
+        'on-hold': 'bg-muted text-muted-foreground border-border',
     };
-    return statusConfig[status?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return statusConfig[status?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
 };
 
 const getPriorityBadge = (priority) => {
@@ -32,16 +32,16 @@ const getPriorityBadge = (priority) => {
         'medium': 'bg-yellow-100 text-yellow-800 border-yellow-200',
         'low': 'bg-blue-100 text-blue-800 border-blue-200',
     };
-    return priorityConfig[priority?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return priorityConfig[priority?.toLowerCase()] || 'bg-muted text-muted-foreground border-border';
 };
 
 const getImpactIndicator = (impact) => {
     const impactColors = {
         'high': 'text-green-500',
         'medium': 'text-yellow-500',
-        'low': 'text-gray-400',
+        'low': 'text-muted-foreground',
     };
-    return impactColors[impact?.toLowerCase()] || 'text-gray-400';
+    return impactColors[impact?.toLowerCase()] || 'text-muted-foreground';
 };
 
 const getEffortIndicator = (effort) => {
@@ -50,7 +50,7 @@ const getEffortIndicator = (effort) => {
         'medium': { dots: 2, color: 'text-yellow-500' },
         'large': { dots: 3, color: 'text-red-500' },
     };
-    const config = effortConfig[effort?.toLowerCase()] || { dots: 1, color: 'text-gray-400' };
+    const config = effortConfig[effort?.toLowerCase()] || { dots: 1, color: 'text-muted-foreground' };
     
     return (
         <div className={`flex gap-1 ${config.color}`}>
@@ -58,7 +58,7 @@ const getEffortIndicator = (effort) => {
                 <div
                     key={i}
                     className={`w-2 h-2 rounded-full ${
-                        i < config.dots ? 'bg-current' : 'bg-gray-200'
+                        i < config.dots ? 'bg-current' : 'bg-muted'
                     }`}
                 />
             ))}
@@ -116,7 +116,7 @@ const RecommendationTableRow = ({
         <tr className={`transition-colors ${
             isSelected 
                 ? 'bg-teal-50 border-teal-200' 
-                : 'hover:bg-gray-50'
+                : 'hover:bg-accent'
         }`}>
             {/* Selection Checkbox Column */}
             <td className="px-6 py-4">
@@ -124,15 +124,15 @@ const RecommendationTableRow = ({
                     type="checkbox"
                     checked={isSelected}
                     onChange={handleSelectChange}
-                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                    className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
                 />
             </td>
             <td className="px-6 py-4">
                 <div className="max-w-xs">
-                    <div className="text-sm font-medium text-gray-900 truncate">
+                    <div className="text-sm font-medium text-card-foreground truncate">
                         {recommendation.title}
                     </div>
-                    <div className="text-sm text-gray-500 truncate">
+                    <div className="text-sm text-muted-foreground truncate">
                         {recommendation.description}
                     </div>
                 </div>
@@ -155,13 +155,13 @@ const RecommendationTableRow = ({
                         className={`p-1 rounded-full transition-colors disabled:opacity-50 ${
                             hasUserVoted === 'up' 
                                 ? 'bg-green-100 text-green-600' 
-                                : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                : 'text-muted-foreground hover:text-green-600 hover:bg-green-50'
                         }`}
                     >
                         <ThumbsUp className="w-3 h-3" />
                     </button>
                     <span className={`text-sm font-medium min-w-[24px] text-center ${
-                        netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : 'text-gray-600'
+                        netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : 'text-muted-foreground'
                     }`}>
                         {netVotes > 0 ? '+' : ''}{netVotes}
                     </span>
@@ -171,7 +171,7 @@ const RecommendationTableRow = ({
                         className={`p-1 rounded-full transition-colors disabled:opacity-50 ${
                             hasUserVoted === 'down' 
                                 ? 'bg-red-100 text-red-600' 
-                                : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                                : 'text-muted-foreground hover:text-red-600 hover:bg-red-50'
                         }`}
                     >
                         <ThumbsDown className="w-3 h-3" />
@@ -192,14 +192,14 @@ const RecommendationTableRow = ({
                     </div>
                 </div>
             </td>
-            <td className="px-6 py-4 text-sm text-gray-500">
+            <td className="px-6 py-4 text-sm text-muted-foreground">
                 {safeFormatDate(recommendation.created_at, 'short')}
             </td>
             <td className="px-6 py-4">
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => onEdit(recommendation)}
-                        className="text-teal-600 hover:text-teal-900 text-sm font-medium"
+                        className="text-teal-600 hover:text-teal-800 text-sm font-medium transition-colors"
                     >
                         Edit
                     </button>
@@ -208,17 +208,17 @@ const RecommendationTableRow = ({
                     <div className="relative">
                         <button
                             onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                            className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+                            className="p-1 text-muted-foreground hover:text-card-foreground rounded-full hover:bg-accent"
                         >
                             <MoreHorizontal className="w-4 h-4" />
                         </button>
                         
                         {showActionsDropdown && (
-                            <div className="absolute top-full right-0 mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                            <div className="absolute top-full right-0 mt-1 w-32 bg-popover border border-border rounded-md shadow-theme-lg z-10">
                                 <button
                                     onClick={handleArchive}
                                     disabled={actionLoading === onArchive}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 disabled:opacity-50"
                                 >
                                     <Archive className="w-3 h-3" />
                                     {actionLoading === onArchive ? 'Archiving...' : 'Archive'}
@@ -257,12 +257,12 @@ const RecommendationTable = ({
 }) => {
     const getSortIcon = (columnKey) => {
         if (sortConfig.key !== columnKey) {
-            return <ChevronUp className="w-3 h-3 text-gray-400" />;
+            return <ChevronUp className="w-3 h-3 text-muted-foreground" />;
         }
         return sortConfig.direction === 'asc' ? (
-            <ChevronUp className="w-3 h-3 text-gray-600" />
+            <ChevronUp className="w-3 h-3 text-card-foreground" />
         ) : (
-            <ChevronDown className="w-3 h-3 text-gray-600" />
+            <ChevronDown className="w-3 h-3 text-card-foreground" />
         );
     };
 
@@ -277,19 +277,19 @@ const RecommendationTable = ({
 
     if (recommendations.length === 0) {
         return (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-                <Lightbulb className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No recommendations found</h3>
-                <p className="text-gray-600">Try adjusting your filters or create a new recommendation.</p>
+            <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12 text-center">
+                <Lightbulb className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-card-foreground mb-2">No recommendations found</h3>
+                <p className="text-muted-foreground">Try adjusting your filters or create a new recommendation.</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-card rounded-lg shadow-theme-sm border border-border overflow-hidden">
             <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted">
                         <tr>
                             {/* Select All Checkbox */}
                             <th className="px-6 py-3 text-left">
@@ -300,11 +300,11 @@ const RecommendationTable = ({
                                         if (input) input.indeterminate = someSelected;
                                     }}
                                     onChange={handleSelectAllChange}
-                                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                    className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
                                 />
                             </th>
                             <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
                                 onClick={() => onSort('title')}
                             >
                                 <div className="flex items-center gap-1">
@@ -313,7 +313,7 @@ const RecommendationTable = ({
                                 </div>
                             </th>
                             <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
                                 onClick={() => onSort('status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -322,7 +322,7 @@ const RecommendationTable = ({
                                 </div>
                             </th>
                             <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
                                 onClick={() => onSort('priority')}
                             >
                                 <div className="flex items-center gap-1">
@@ -331,7 +331,7 @@ const RecommendationTable = ({
                                 </div>
                             </th>
                             <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
                                 onClick={() => onSort('votes')}
                             >
                                 <div className="flex items-center gap-1">
@@ -339,11 +339,11 @@ const RecommendationTable = ({
                                     {getSortIcon('votes')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                 Impact/Effort
                             </th>
                             <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
                                 onClick={() => onSort('created_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -351,12 +351,12 @@ const RecommendationTable = ({
                                     {getSortIcon('created_at')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                 Actions
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-card divide-y divide-border">
                         {recommendations.map((rec) => (
                             <RecommendationTableRow
                                 key={rec.id}

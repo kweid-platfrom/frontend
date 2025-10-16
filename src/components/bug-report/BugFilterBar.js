@@ -38,7 +38,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
         onFiltersChange({
             status: 'all',
             severity: 'all',
-            priority: 'all', // Added back to ensure compatibility with parent component
+            priority: 'all',
             assignee: 'all',
             reporter: 'all',
             tags: [],
@@ -86,26 +86,26 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
 
             {/* Filter Panel */}
             <div className={`
-                absolute bottom-0 left-0 right-0 bg-white rounded-t-lg shadow-xl max-h-[85vh] overflow-y-auto
+                absolute bottom-0 left-0 right-0 bg-card rounded-t-lg shadow-theme-xl max-h-[85vh] overflow-y-auto
                 transform transition-transform duration-300 ease-in-out
                 ${showMobileFilters ? 'translate-y-0' : 'translate-y-full'}
             `}>
                 {/* Header */}
-                <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center">
                         <Filter className="w-5 h-5 mr-2" />
                         Filters
                         {hasActiveFilters() && (
-                            <span className="ml-2 px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full">
+                            <span className="ml-2 px-2 py-1 bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300 text-xs rounded-full">
                                 {getActiveFiltersCount()}
                             </span>
                         )}
                     </h3>
                     <button
                         onClick={() => setShowMobileFilters(false)}
-                        className="p-2 hover:bg-gray-100 rounded-full"
+                        className="p-2 hover:bg-accent rounded-full"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5 text-foreground" />
                     </button>
                 </div>
 
@@ -113,7 +113,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                 <div className="p-4 space-y-6">
                     {/* Search */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                             Search
                         </label>
                         <div className="relative">
@@ -122,20 +122,20 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 placeholder="Search bugs..."
                                 value={filters.search}
                                 onChange={(e) => handleFilterChange('search', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full pl-10 pr-4 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             />
-                            <Search className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+                            <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                         </div>
                     </div>
 
                     {/* Quick Filters Grid */}
                     <div className="grid grid-cols-1 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Status</label>
                             <select
                                 value={filters.status}
                                 onChange={(e) => handleFilterChange('status', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 <option value="all">All Statuses</option>
                                 {filterOptions.statuses.map(status => (
@@ -147,11 +147,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Severity</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Severity</label>
                             <select
                                 value={filters.severity}
                                 onChange={(e) => handleFilterChange('severity', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 <option value="all">All Severities</option>
                                 {filterOptions.severities.map(severity => (
@@ -163,11 +163,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Assignee</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Assignee</label>
                             <select
                                 value={filters.assignee}
                                 onChange={(e) => handleFilterChange('assignee', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 <option value="all">All Assignees</option>
                                 <option value="">Unassigned</option>
@@ -180,11 +180,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Reporter</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Reporter</label>
                             <select
                                 value={filters.reporter || 'all'}
                                 onChange={(e) => handleFilterChange('reporter', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 <option value="all">All Reporters</option>
                                 <option value="">Unreported</option>
@@ -197,11 +197,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Last Updated</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Last Updated</label>
                             <select
                                 value={filters.lastUpdated || 'all'}
                                 onChange={(e) => handleFilterChange('lastUpdated', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 <option value="all">All Time</option>
                                 <option value="today">Today</option>
@@ -212,11 +212,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Bug Type</label>
+                            <label className="block text-sm font-medium text-foreground mb-2">Bug Type</label>
                             <select
                                 value={filters.bugType || 'all'}
                                 onChange={(e) => handleFilterChange('bugType', e.target.value)}
-                                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="w-full px-3 py-3 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 <option value="all">All Types</option>
                                 <option value="functional">Functional</option>
@@ -231,9 +231,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
 
                     {/* Tags */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                        <label className="block text-sm font-medium text-foreground mb-3">
                             Tags {filters.tags && filters.tags.length > 0 && (
-                                <span className="text-xs text-teal-600">({filters.tags.length} selected)</span>
+                                <span className="text-xs text-primary">({filters.tags.length} selected)</span>
                             )}
                         </label>
                         <div className="flex flex-wrap gap-2">
@@ -242,35 +242,35 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     key={tag}
                                     onClick={() => handleTagToggle(tag)}
                                     className={`px-3 py-2 text-sm rounded-lg border transition-colors ${filters.tags && filters.tags.includes(tag)
-                                            ? 'bg-teal-100 text-teal-800 border-teal-300'
-                                            : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                                            ? 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800'
+                                            : 'bg-muted text-foreground border-border hover:bg-accent'
                                         }`}
                                 >
                                     {tag}
                                 </button>
                             ))}
                             {filterOptions.allTags.length === 0 && (
-                                <p className="text-sm text-gray-500 py-2">No tags available</p>
+                                <p className="text-sm text-muted-foreground py-2">No tags available</p>
                             )}
                         </div>
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border">
                         {hasActiveFilters() && (
                             <button
                                 onClick={() => {
                                     clearFilters();
                                     setShowMobileFilters(false);
                                 }}
-                                className="flex-1 px-4 py-3 text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg font-medium transition-colors"
+                                className="flex-1 px-4 py-3 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg font-medium transition-colors"
                             >
                                 Clear All Filters ({getActiveFiltersCount()})
                             </button>
                         )}
                         <button
                             onClick={() => setShowMobileFilters(false)}
-                            className="flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                            className="flex-1 px-4 py-3 bg-primary hover:bg-teal-500 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Apply Filters
                         </button>
@@ -282,7 +282,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
 
     return (
         <>
-            <div className="bg-white rounded-lg shadow p-3 sm:p-4 mb-4">
+            <div className="bg-card rounded-lg shadow-theme p-3 sm:p-4 mb-4 border border-border">
                 {/* Mobile Layout */}
                 <div className="block lg:hidden">
                     <div className="flex items-center gap-3 mb-3">
@@ -294,26 +294,26 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     placeholder="Search bugs..."
                                     value={filters.search}
                                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm ${filters.search
-                                            ? 'bg-teal-50 border-teal-500'
-                                            : 'border-gray-300'
+                                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-background text-foreground ${filters.search
+                                            ? 'bg-teal-50 border-teal-500 dark:bg-teal-900/20 dark:border-teal-500'
+                                            : 'border-border'
                                         }`}
                                 />
-                                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             </div>
                         </div>
 
                         {/* Mobile Filter Button */}
                         <button
                             onClick={() => setShowMobileFilters(true)}
-                            className={`relative px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors ${hasActiveFilters()
-                                    ? 'bg-teal-50 text-teal-700 border-teal-500'
-                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            className={`relative px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors ${hasActiveFilters()
+                                    ? 'bg-teal-50 text-teal-700 border-teal-500 dark:bg-teal-900/20 dark:text-teal-300 dark:border-teal-500'
+                                    : 'bg-card text-foreground border-border hover:bg-accent'
                                 }`}
                         >
                             <Filter className="w-4 h-4" />
                             {hasActiveFilters() && (
-                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-teal-500 text-white text-xs rounded-full flex items-center justify-center">
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
                                     {getActiveFiltersCount()}
                                 </span>
                             )}
@@ -326,9 +326,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             <button
                                 onClick={() => setViewMode('list')}
                                 className={`px-3 py-2 text-sm transition-colors duration-200 ${viewMode === 'list'
-                                        ? 'bg-teal-600 text-white border-teal-600'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    } border rounded-l-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-card text-foreground border-border hover:bg-accent'
+                                    } border rounded-l-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary`}
                                 title="List View"
                             >
                                 <List className="h-4 w-4 mr-1" />
@@ -337,9 +337,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             <button
                                 onClick={() => setViewMode('table')}
                                 className={`px-3 py-2 text-sm transition-colors duration-200 ${viewMode === 'table'
-                                        ? 'bg-teal-600 text-white border-teal-600'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    } border border-l-0 rounded-r-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-card text-foreground border-border hover:bg-accent'
+                                    } border border-l-0 rounded-r-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary`}
                                 title="Table View"
                             >
                                 <Table className="h-4 w-4 mr-1" />
@@ -350,7 +350,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         {hasActiveFilters() && (
                             <button
                                 onClick={clearFilters}
-                                className="px-3 py-2 text-sm text-red-600 hover:text-red-800 font-medium"
+                                className="px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
                             >
                                 Clear ({getActiveFiltersCount()})
                             </button>
@@ -370,13 +370,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     placeholder="Search bugs..."
                                     value={filters.search}
                                     onChange={(e) => handleFilterChange('search', e.target.value)}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 h-10 ${filters.search
-                                            ? 'bg-teal-50 border-teal-500'
-                                            : 'border-gray-300'
+                                    className={`w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary h-10 bg-background text-foreground ${filters.search
+                                            ? 'bg-teal-50 border-teal-500 dark:bg-teal-900/20 dark:border-teal-500'
+                                            : 'border-border'
                                         }`}
                                 />
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Search className="h-5 w-5 text-gray-400" />
+                                    <Search className="h-5 w-5 text-muted-foreground" />
                                 </div>
                             </div>
                         </div>
@@ -384,13 +384,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         {/* Quick Filters - Responsive Grid on Smaller Desktop */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center lg:gap-2 lg:flex-1 lg:justify-start mt-4 md:mt-0">
                             <div className="flex items-center gap-2">
-                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
+                                <label className="text-sm font-medium text-foreground whitespace-nowrap">Status:</label>
                                 <select
                                     value={filters.status}
                                     onChange={(e) => handleFilterChange('status', e.target.value)}
-                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 flex-1 min-w-0 lg:min-w-32 ${filters.status !== 'all'
-                                            ? 'bg-teal-50 border-teal-500'
-                                            : 'border-gray-300'
+                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 flex-1 min-w-0 lg:min-w-32 bg-background text-foreground ${filters.status !== 'all'
+                                            ? 'bg-teal-50 border-teal-500 dark:bg-teal-900/20 dark:border-teal-500'
+                                            : 'border-border'
                                         }`}
                                 >
                                     <option value="all">All</option>
@@ -403,13 +403,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Severity:</label>
+                                <label className="text-sm font-medium text-foreground whitespace-nowrap">Severity:</label>
                                 <select
                                     value={filters.severity}
                                     onChange={(e) => handleFilterChange('severity', e.target.value)}
-                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 flex-1 min-w-0 lg:min-w-32 ${filters.severity !== 'all'
-                                            ? 'bg-teal-50 border-teal-500'
-                                            : 'border-gray-300'
+                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 flex-1 min-w-0 lg:min-w-32 bg-background text-foreground ${filters.severity !== 'all'
+                                            ? 'bg-teal-50 border-teal-500 dark:bg-teal-900/20 dark:border-teal-500'
+                                            : 'border-border'
                                         }`}
                                 >
                                     <option value="all">All</option>
@@ -422,13 +422,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Assignee:</label>
+                                <label className="text-sm font-medium text-foreground whitespace-nowrap">Assignee:</label>
                                 <select
                                     value={filters.assignee}
                                     onChange={(e) => handleFilterChange('assignee', e.target.value)}
-                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10 flex-1 min-w-0 lg:min-w-40 ${filters.assignee !== 'all'
-                                            ? 'bg-teal-50 border-teal-500'
-                                            : 'border-gray-300'
+                                    className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 flex-1 min-w-0 lg:min-w-40 bg-background text-foreground ${filters.assignee !== 'all'
+                                            ? 'bg-teal-50 border-teal-500 dark:bg-teal-900/20 dark:border-teal-500'
+                                            : 'border-border'
                                         }`}
                                 >
                                     <option value="all">All</option>
@@ -447,7 +447,7 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             {hasActiveFilters() && (
                                 <button
                                     onClick={clearFilters}
-                                    className="px-3 py-2 text-sm text-red-600 hover:text-red-800 font-medium h-10 whitespace-nowrap"
+                                    className="px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium h-10 whitespace-nowrap"
                                 >
                                     Clear Filters ({getActiveFiltersCount()})
                                 </button>
@@ -458,9 +458,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 <button
                                     onClick={() => setViewMode('list')}
                                     className={`px-4 py-3 text-sm transition-colors duration-200 ${viewMode === 'list'
-                                            ? 'bg-teal-600 text-white border-teal-600'
-                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                        } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                            ? 'bg-primary text-primary-foreground border-primary'
+                                            : 'bg-card text-foreground border-border hover:bg-accent'
+                                        } border rounded-l-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary`}
                                     title="List View"
                                 >
                                     <List className="h-4 w-4" />
@@ -468,9 +468,9 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 <button
                                     onClick={() => setViewMode('table')}
                                     className={`px-4 py-3 text-sm transition-colors duration-200 ${viewMode === 'table'
-                                            ? 'bg-teal-600 text-white border-teal-600'
-                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                        } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                                            ? 'bg-primary text-primary-foreground border-primary'
+                                            : 'bg-card text-foreground border-border hover:bg-accent'
+                                        } border border-l-0 rounded-r-md h-10 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary`}
                                     title="Table View"
                                 >
                                     <Table className="h-4 w-4" />
@@ -480,21 +480,21 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             {/* Expand/Collapse Toggle */}
                             <button
                                 onClick={() => setIsExpanded(!isExpanded)}
-                                className="p-2 hover:bg-gray-200 rounded h-10 flex items-center justify-center"
+                                className="p-2 hover:bg-accent rounded h-10 flex items-center justify-center"
                                 title={isExpanded ? 'Hide additional filters' : 'Show additional filters'}
                             >
-                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                {isExpanded ? <ChevronUp className="h-4 w-4 text-foreground" /> : <ChevronDown className="h-4 w-4 text-foreground" />}
                             </button>
                         </div>
                     </div>
 
                     {/* Expanded Filters */}
                     {isExpanded && (
-                        <div className="border-t pt-4">
+                        <div className="border-t border-border pt-4">
                             <div className="space-y-4">
                                 {/* Tags Filter */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Filter by Tags:
                                     </label>
                                     <div className="flex flex-wrap gap-2">
@@ -503,15 +503,15 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                                 key={tag}
                                                 onClick={() => handleTagToggle(tag)}
                                                 className={`px-3 py-1 text-sm rounded-full border transition-colors ${filters.tags && filters.tags.includes(tag)
-                                                        ? 'bg-teal-100 text-teal-800 border-teal-300'
-                                                        : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                                                        ? 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800'
+                                                        : 'bg-muted text-foreground border-border hover:bg-accent'
                                                     }`}
                                             >
                                                 {tag}
                                             </button>
                                         ))}
                                         {filterOptions.allTags.length === 0 && (
-                                            <p className="text-sm text-gray-500">No tags available</p>
+                                            <p className="text-sm text-muted-foreground">No tags available</p>
                                         )}
                                     </div>
                                 </div>
@@ -519,13 +519,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 {/* Advanced Search Options - Responsive Grid */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground mb-1">
                                             Reporter:
                                         </label>
                                         <select
                                             value={filters.reporter || 'all'}
                                             onChange={(e) => handleFilterChange('reporter', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10"
+                                            className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-background text-foreground"
                                         >
                                             <option value="all">All</option>
                                             <option value="">Unreported</option>
@@ -538,13 +538,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground mb-1">
                                             Bug Type:
                                         </label>
                                         <select
                                             value={filters.bugType || 'all'}
                                             onChange={(e) => handleFilterChange('bugType', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10"
+                                            className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-background text-foreground"
                                         >
                                             <option value="all">All</option>
                                             <option value="functional">Functional</option>
@@ -557,13 +557,13 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground mb-1">
                                             Last Updated:
                                         </label>
                                         <select
                                             value={filters.lastUpdated || 'all'}
                                             onChange={(e) => handleFilterChange('lastUpdated', e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm h-10"
+                                            className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm h-10 bg-background text-foreground"
                                         >
                                             <option value="all">All Time</option>
                                             <option value="today">Today</option>
@@ -579,16 +579,16 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
 
                     {/* Active Filters Summary */}
                     {hasActiveFilters() && (
-                        <div className="mt-4 pt-4 border-t">
+                        <div className="mt-4 pt-4 border-t border-border">
                             <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-medium text-gray-700">Active filters:</span>
+                                <span className="text-sm font-medium text-foreground">Active filters:</span>
 
                                 {filters.status !== 'all' && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-xs rounded-full">
                                         Status: {filters.status}
                                         <button
                                             onClick={() => handleFilterChange('status', 'all')}
-                                            className="ml-1 text-blue-600 hover:text-blue-800"
+                                            className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
                                         >
                                             ×
                                         </button>
@@ -596,11 +596,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {filters.severity !== 'all' && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 text-xs rounded-full">
                                         Severity: {filters.severity}
                                         <button
                                             onClick={() => handleFilterChange('severity', 'all')}
-                                            className="ml-1 text-red-600 hover:text-red-800"
+                                            className="ml-1 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
                                         >
                                             ×
                                         </button>
@@ -608,11 +608,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {filters.assignee !== 'all' && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs rounded-full">
                                         Assignee: {filters.assignee || 'Unassigned'}
                                         <button
                                             onClick={() => handleFilterChange('assignee', 'all')}
-                                            className="ml-1 text-green-600 hover:text-green-800"
+                                            className="ml-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
                                         >
                                             ×
                                         </button>
@@ -620,11 +620,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {filters.reporter !== 'all' && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 text-xs rounded-full">
                                         Reporter: {filters.reporter || 'Unreported'}
                                         <button
                                             onClick={() => handleFilterChange('reporter', 'all')}
-                                            className="ml-1 text-indigo-600 hover:text-indigo-800"
+                                            className="ml-1 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200"
                                         >
                                             ×
                                         </button>
@@ -632,11 +632,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {(filters.lastUpdated && filters.lastUpdated !== 'all') && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 text-xs rounded-full">
                                         Last Updated: {filters.lastUpdated}
                                         <button
                                             onClick={() => handleFilterChange('lastUpdated', 'all')}
-                                            className="ml-1 text-orange-600 hover:text-orange-800"
+                                            className="ml-1 text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-200"
                                         >
                                             ×
                                         </button>
@@ -644,11 +644,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {(filters.bugType && filters.bugType !== 'all') && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-pink-100 text-pink-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300 text-xs rounded-full">
                                         Bug Type: {filters.bugType}
                                         <button
                                             onClick={() => handleFilterChange('bugType', 'all')}
-                                            className="ml-1 text-pink-600 hover:text-pink-800"
+                                            className="ml-1 text-pink-600 dark:text-pink-400 hover:text-pink-800 dark:hover:text-pink-200"
                                         >
                                             ×
                                         </button>
@@ -656,11 +656,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {filters.tags && filters.tags.map(tag => (
-                                    <span key={tag} className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                                    <span key={tag} className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs rounded-full">
                                         Tag: {tag}
                                         <button
                                             onClick={() => handleTagToggle(tag)}
-                                            className="ml-1 text-purple-600 hover:text-purple-800"
+                                            className="ml-1 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200"
                                         >
                                             ×
                                         </button>
@@ -668,11 +668,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 ))}
 
                                 {filters.search && (
-                                    <span className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
+                                    <span className="inline-flex items-center px-2 py-1 bg-muted text-foreground text-xs rounded-full border border-border">
                                         Search: {filters.search}
                                         <button
                                             onClick={() => handleFilterChange('search', '')}
-                                            className="ml-1 text-gray-600 hover:text-gray-800"
+                                            className="ml-1 text-muted-foreground hover:text-foreground"
                                         >
                                             ×
                                         </button>

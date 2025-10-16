@@ -277,14 +277,14 @@ export default function CompleteToolbar() {
   };
 
   return (
-    <div className="border-b border-gray-200 bg-white sticky top-0 z-20 shadow-sm">
+    <div className="border-b border-border bg-card sticky top-0 z-20 shadow-theme-sm">
       {/* Row 1: History, Font, Size, Block Type */}
-      <div className="px-4 py-2 flex items-center gap-2 border-b border-gray-100 flex-wrap">
+      <div className="px-4 py-2 flex items-center gap-2 border-b border-border flex-wrap">
         {/* Undo/Redo */}
         <button
           onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}
           disabled={!canUndo}
-          className="p-2 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-2 hover:bg-secondary rounded disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
           title="Undo (Ctrl+Z)"
         >
           <Undo className="w-4 h-4" />
@@ -292,13 +292,13 @@ export default function CompleteToolbar() {
         <button
           onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)}
           disabled={!canRedo}
-          className="p-2 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-2 hover:bg-secondary rounded disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
           title="Redo (Ctrl+Y)"
         >
           <Redo className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <div className="w-px h-6 bg-border mx-1" />
 
         {/* Font Family */}
         <select
@@ -307,7 +307,7 @@ export default function CompleteToolbar() {
             setFontFamily(e.target.value);
             applyStyleText({ 'font-family': e.target.value });
           }}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 min-w-[140px]"
+          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[140px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         >
           {FONT_FAMILY_OPTIONS.map(([option, value]) => (
             <option key={option} value={value}>
@@ -323,7 +323,7 @@ export default function CompleteToolbar() {
             setFontSize(e.target.value);
             applyStyleText({ 'font-size': e.target.value });
           }}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 min-w-[80px]"
+          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[80px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         >
           {FONT_SIZE_OPTIONS.map(([option, value]) => (
             <option key={option} value={value}>
@@ -332,7 +332,7 @@ export default function CompleteToolbar() {
           ))}
         </select>
 
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <div className="w-px h-6 bg-border mx-1" />
 
         {/* Block Type */}
         <select
@@ -344,7 +344,7 @@ export default function CompleteToolbar() {
             else if (e.target.value === 'h3') formatHeading('h3');
             else if (e.target.value === 'quote') formatQuote();
           }}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 min-w-[120px]"
+          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[120px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         >
           <option value="paragraph">Normal</option>
           <option value="h1">Heading 1</option>
@@ -353,12 +353,12 @@ export default function CompleteToolbar() {
           <option value="quote">Quote</option>
         </select>
 
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <div className="w-px h-6 bg-border mx-1" />
 
         {/* Clear & Export */}
         <button
           onClick={clearEditor}
-          className="p-2 hover:bg-red-50 rounded text-red-600"
+          className="p-2 hover:bg-secondary rounded text-destructive"
           title="Clear All Content"
         >
           <Trash2 className="w-4 h-4" />
@@ -366,21 +366,21 @@ export default function CompleteToolbar() {
         
         <div className="relative group">
           <button
-            className="p-2 hover:bg-gray-100 rounded"
+            className="p-2 hover:bg-secondary rounded text-foreground"
             title="Export Document"
           >
             <FileDown className="w-4 h-4" />
           </button>
-          <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-30 min-w-[120px]">
+          <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-card border border-border rounded shadow-theme-lg py-1 z-30 min-w-[120px]">
             <button
               onClick={() => exportDocument('txt')}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+              className="w-full px-4 py-2 text-left text-sm hover:bg-secondary text-foreground"
             >
               Export as TXT
             </button>
             <button
               onClick={() => exportDocument('html')}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+              className="w-full px-4 py-2 text-left text-sm hover:bg-secondary text-foreground"
             >
               Export as HTML
             </button>
@@ -393,55 +393,55 @@ export default function CompleteToolbar() {
         {/* Text Formatting */}
         <button
           onClick={() => formatText('bold')}
-          className={`p-2 rounded ${isBold ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isBold ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Bold (Ctrl+B)"
         >
           <Bold className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('italic')}
-          className={`p-2 rounded ${isItalic ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isItalic ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Italic (Ctrl+I)"
         >
           <Italic className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('underline')}
-          className={`p-2 rounded ${isUnderline ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isUnderline ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Underline (Ctrl+U)"
         >
           <Underline className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('strikethrough')}
-          className={`p-2 rounded ${isStrikethrough ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isStrikethrough ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Strikethrough"
         >
           <Strikethrough className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('code')}
-          className={`p-2 rounded ${isCode ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isCode ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Inline Code"
         >
           <Code className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('superscript')}
-          className={`p-2 rounded ${isSuperscript ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isSuperscript ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Superscript"
         >
           <Superscript className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('subscript')}
-          className={`p-2 rounded ${isSubscript ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
+          className={`p-2 rounded ${isSubscript ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
           title="Subscript"
         >
           <Subscript className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-gray-300 mx-2" />
+        <div className="w-px h-6 bg-border mx-2" />
 
         {/* Text Color */}
         <div className="relative">
@@ -450,14 +450,14 @@ export default function CompleteToolbar() {
               setShowTextColor(!showTextColor);
               setShowBgColor(false);
             }}
-            className="p-2 hover:bg-gray-100 rounded flex items-center gap-1"
+            className="p-2 hover:bg-secondary rounded flex items-center gap-1 text-foreground"
             title="Text Color"
           >
             <Type className="w-4 h-4" />
             <ChevronDown className="w-3 h-3" />
           </button>
           {showTextColor && (
-            <div className="absolute top-full left-0 mt-1 p-2 bg-white border border-gray-200 rounded-lg shadow-lg z-30">
+            <div className="absolute top-full left-0 mt-1 p-2 bg-card border border-border rounded-lg shadow-theme-lg z-30">
               <div className="grid grid-cols-5 gap-1 w-40">
                 {TEXT_COLORS.map((color) => (
                   <button
@@ -466,7 +466,7 @@ export default function CompleteToolbar() {
                       applyStyleText({ color });
                       setShowTextColor(false);
                     }}
-                    className="w-7 h-7 rounded border border-gray-300 hover:scale-110 transition-transform"
+                    className="w-7 h-7 rounded border border-border hover:scale-110 transition-transform"
                     style={{ backgroundColor: color }}
                     title={color}
                   />
@@ -483,14 +483,14 @@ export default function CompleteToolbar() {
               setShowBgColor(!showBgColor);
               setShowTextColor(false);
             }}
-            className="p-2 hover:bg-gray-100 rounded flex items-center gap-1"
+            className="p-2 hover:bg-secondary rounded flex items-center gap-1 text-foreground"
             title="Background Color"
           >
             <Palette className="w-4 h-4" />
             <ChevronDown className="w-3 h-3" />
           </button>
           {showBgColor && (
-            <div className="absolute top-full left-0 mt-1 p-2 bg-white border border-gray-200 rounded-lg shadow-lg z-30">
+            <div className="absolute top-full left-0 mt-1 p-2 bg-card border border-border rounded-lg shadow-theme-lg z-30">
               <div className="grid grid-cols-5 gap-1 w-40">
                 {BACKGROUND_COLORS.map((color) => (
                   <button
@@ -499,7 +499,7 @@ export default function CompleteToolbar() {
                       applyStyleText({ 'background-color': color });
                       setShowBgColor(false);
                     }}
-                    className="w-7 h-7 rounded border border-gray-300 hover:scale-110 transition-transform"
+                    className="w-7 h-7 rounded border border-border hover:scale-110 transition-transform"
                     style={{ backgroundColor: color }}
                     title={color}
                   />
@@ -511,93 +511,93 @@ export default function CompleteToolbar() {
 
         <button
           onClick={clearFormatting}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Clear Formatting"
         >
           <RemoveFormatting className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-gray-300 mx-2" />
+        <div className="w-px h-6 bg-border mx-2" />
 
         {/* Alignment */}
         <button
           onClick={() => formatAlignment('left')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Align Left"
         >
           <AlignLeft className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatAlignment('center')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Align Center"
         >
           <AlignCenter className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatAlignment('right')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Align Right"
         >
           <AlignRight className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatAlignment('justify')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Justify"
         >
           <AlignJustify className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-gray-300 mx-2" />
+        <div className="w-px h-6 bg-border mx-2" />
 
         {/* Lists */}
         <button
           onClick={() => insertList('bullet')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Bullet List"
         >
           <List className="w-4 h-4" />
         </button>
         <button
           onClick={() => insertList('number')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Numbered List"
         >
           <ListOrdered className="w-4 h-4" />
         </button>
         <button
           onClick={() => insertList('check')}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Check List"
         >
           <CheckSquare className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-gray-300 mx-2" />
+        <div className="w-px h-6 bg-border mx-2" />
 
         {/* Quote & Code Block */}
         <button
           onClick={formatQuote}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Quote Block"
         >
           <Quote className="w-4 h-4" />
         </button>
         <button
           onClick={formatCodeBlock}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Code Block"
         >
           <FileCode className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-gray-300 mx-2" />
+        <div className="w-px h-6 bg-border mx-2" />
 
         {/* Horizontal Rule */}
         <button
           onClick={insertHorizontalRule}
-          className="p-2 hover:bg-gray-100 rounded"
+          className="p-2 hover:bg-secondary rounded text-foreground"
           title="Horizontal Line"
         >
           <Minus className="w-4 h-4" />
@@ -607,24 +607,24 @@ export default function CompleteToolbar() {
         <div className="relative">
           <button
             onClick={() => setShowLinkInput(!showLinkInput)}
-            className="p-2 hover:bg-gray-100 rounded"
+            className="p-2 hover:bg-secondary rounded text-foreground"
             title="Insert Link"
           >
             <Link2 className="w-4 h-4" />
           </button>
           {showLinkInput && (
-            <div className="absolute top-full left-0 mt-1 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-30 w-64">
+            <div className="absolute top-full left-0 mt-1 p-3 bg-card border border-border rounded-lg shadow-theme-lg z-30 w-64">
               <input
                 type="url"
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="Enter URL..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded mb-2"
+                className="w-full px-3 py-2 text-sm border border-border rounded mb-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <div className="flex gap-2">
                 <button
                   onClick={insertLink}
-                  className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/80"
                 >
                   Insert
                 </button>
@@ -633,7 +633,7 @@ export default function CompleteToolbar() {
                     setShowLinkInput(false);
                     setLinkUrl('');
                   }}
-                  className="flex-1 px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+                  className="flex-1 px-3 py-1.5 bg-secondary text-secondary-foreground text-sm rounded hover:bg-secondary/80"
                 >
                   Cancel
                 </button>

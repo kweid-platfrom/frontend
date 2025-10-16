@@ -380,16 +380,16 @@ const BugImportModal = ({ isOpen, onClose }) => {
     const modalContent = (
         <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4">
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity" onClick={handleClose} />
+                <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleClose} />
                 
-                <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl">
+                <div className="relative w-full max-w-4xl bg-card rounded-lg shadow-theme-xl">
                     <div className="p-6">
                         <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center">
-                                <Upload className="w-6 h-6 text-teal-600 mr-2" />
-                                <h3 className="text-lg font-medium text-gray-900">Import Bug Reports</h3>
+                                <Upload className="w-6 h-6 text-primary mr-2" />
+                                <h3 className="text-lg font-medium text-foreground">Import Bug Reports</h3>
                             </div>
-                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
+                            <button onClick={handleClose} className="text-muted-foreground hover:text-foreground">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
@@ -400,7 +400,7 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                     <div className="space-y-6">
                                         <div
                                             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                                                dragActive ? 'border-teal-400 bg-teal-50' : 'border-gray-300'
+                                                dragActive ? 'border-primary bg-primary/10' : 'border-border'
                                             }`}
                                             onDragEnter={handleDrag}
                                             onDragLeave={handleDrag}
@@ -414,38 +414,38 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                                 onChange={handleFileSelect}
                                                 className="hidden"
                                             />
-                                            <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-lg font-medium text-gray-900 mb-2">
+                                            <FileSpreadsheet className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                                            <p className="text-lg font-medium text-foreground mb-2">
                                                 Drop your file here or click to browse
                                             </p>
-                                            <p className="text-sm text-gray-500 mb-4">
+                                            <p className="text-sm text-muted-foreground mb-4">
                                                 Supports Excel (.xlsx, .xls) and CSV files
                                             </p>
                                             <button
                                                 onClick={() => fileInputRef.current?.click()}
-                                                className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition-colors"
+                                                className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/80 transition-colors"
                                             >
                                                 Choose File
                                             </button>
                                             {parsing && (
                                                 <div className="mt-4 flex items-center justify-center">
                                                     <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                                                    <span className="text-sm text-gray-600">Parsing file...</span>
+                                                    <span className="text-sm text-muted-foreground">Parsing file...</span>
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div className="bg-blue-50 rounded-lg p-4">
+                                        <div className="bg-info/10 rounded-lg p-4 border border-info/20">
                                             <div className="flex items-start">
-                                                <FileText className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
+                                                <FileText className="w-5 h-5 text-info mr-3 mt-0.5" />
                                                 <div className="flex-1">
-                                                    <h4 className="text-sm font-medium text-blue-900">Need a template?</h4>
-                                                    <p className="text-sm text-blue-700 mt-1">
+                                                    <h4 className="text-sm font-medium text-info">Need a template?</h4>
+                                                    <p className="text-sm text-info mt-1">
                                                         Download our Excel template with sample data. Only Bug Title is required.
                                                     </p>
                                                     <button
                                                         onClick={downloadTemplate}
-                                                        className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium inline-flex items-center"
+                                                        className="mt-2 text-sm text-info hover:text-info/80 font-medium inline-flex items-center"
                                                     >
                                                         <Download className="w-4 h-4 mr-1" />
                                                         Download Template
@@ -456,12 +456,12 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                     </div>
                                 ) : (
                                     <div className="space-y-6">
-                                        <div className="bg-green-50 rounded-lg p-4">
+                                        <div className="bg-success/10 rounded-lg p-4 border border-success/20">
                                             <div className="flex items-center">
-                                                <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
+                                                <CheckCircle className="w-5 h-5 text-success mr-3" />
                                                 <div>
-                                                    <h4 className="text-sm font-medium text-green-900">File parsed successfully</h4>
-                                                    <p className="text-sm text-green-700">
+                                                    <h4 className="text-sm font-medium text-success">File parsed successfully</h4>
+                                                    <p className="text-sm text-success">
                                                         Found {previewData.totalRows} bug reports in {file.name}
                                                     </p>
                                                 </div>
@@ -469,17 +469,17 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                         </div>
 
                                         <div>
-                                            <h4 className="text-lg font-medium text-gray-900 mb-2">Map Columns</h4>
-                                            <p className="text-sm text-gray-600 mb-4">
-                                                Only <span className="font-medium text-red-600">Bug Title</span> is required.
+                                            <h4 className="text-lg font-medium text-foreground mb-2">Map Columns</h4>
+                                            <p className="text-sm text-muted-foreground mb-4">
+                                                Only <span className="font-medium text-destructive">Bug Title</span> is required.
                                             </p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
                                                 {Object.entries(importableFields).map(([field, label]) => {
                                                     const isRequired = field === 'title';
                                                     return (
                                                         <div key={field}>
-                                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                                {label} {isRequired && <span className="text-red-600">*</span>}
+                                                            <label className="block text-xs font-medium text-foreground mb-1">
+                                                                {label} {isRequired && <span className="text-destructive">*</span>}
                                                             </label>
                                                             <select
                                                                 value={mappings[field] !== undefined ? mappings[field] : ''}
@@ -487,12 +487,12 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                                                     ...prev,
                                                                     [field]: e.target.value === '' ? undefined : parseInt(e.target.value)
                                                                 }))}
-                                                                className={`w-full text-sm border rounded px-2 py-1 ${
+                                                                className={`w-full text-sm border rounded px-2 py-1 bg-background text-foreground ${
                                                                     mappings[field] !== undefined 
-                                                                        ? 'border-green-300 bg-green-50' 
+                                                                        ? 'border-success/50 bg-success/10' 
                                                                         : isRequired 
-                                                                            ? 'border-red-300 bg-red-50' 
-                                                                            : 'border-gray-300'
+                                                                            ? 'border-destructive/50 bg-destructive/10' 
+                                                                            : 'border-border'
                                                                 }`}
                                                             >
                                                                 <option value="">
@@ -511,23 +511,23 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                         </div>
 
                                         <div>
-                                            <h4 className="text-lg font-medium text-gray-900 mb-4">Preview (First 5 rows)</h4>
-                                            <div className="overflow-x-auto border rounded-lg max-h-64 overflow-y-auto">
-                                                <table className="min-w-full divide-y divide-gray-200">
-                                                    <thead className="bg-gray-50 sticky top-0">
+                                            <h4 className="text-lg font-medium text-foreground mb-4">Preview (First 5 rows)</h4>
+                                            <div className="overflow-x-auto border border-border rounded-lg max-h-64 overflow-y-auto">
+                                                <table className="min-w-full divide-y divide-border">
+                                                    <thead className="bg-secondary sticky top-0">
                                                         <tr>
                                                             {previewData.headers.map((header, index) => (
-                                                                <th key={index} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                <th key={index} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                                                     {header}
                                                                 </th>
                                                             ))}
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                    <tbody className="bg-card divide-y divide-border">
                                                         {previewData.rows.map((row, rowIndex) => (
                                                             <tr key={rowIndex}>
                                                                 {previewData.headers.map((_, cellIndex) => (
-                                                                    <td key={cellIndex} className="px-3 py-2 text-xs text-gray-900">
+                                                                    <td key={cellIndex} className="px-3 py-2 text-xs text-foreground">
                                                                         {row[cellIndex] || ''}
                                                                     </td>
                                                                 ))}
@@ -541,7 +541,7 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                         <div className="flex justify-between">
                                             <button
                                                 onClick={() => setPreviewData(null)}
-                                                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                                className="px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-secondary"
                                             >
                                                 Choose Different File
                                             </button>
@@ -549,14 +549,14 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                                 <button
                                                     onClick={handleClose}
                                                     disabled={importing}
-                                                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="px-4 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     Cancel
                                                 </button>
                                                 <button
                                                     onClick={handleImport}
                                                     disabled={importing || mappings.title === undefined}
-                                                    className="px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center"
+                                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/80 disabled:bg-muted disabled:cursor-not-allowed inline-flex items-center"
                                                 >
                                                     {importing && <RefreshCw className="w-4 h-4 animate-spin mr-2" />}
                                                     {importing ? 'Importing...' : `Import ${previewData.totalRows} Bug Reports`}
@@ -570,20 +570,20 @@ const BugImportModal = ({ isOpen, onClose }) => {
                             <div className="space-y-6">
                                 <div className="text-center py-4">
                                     {importResults.success === importResults.total ? (
-                                        <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                                        <CheckCircle className="w-16 h-16 text-success mx-auto mb-4" />
                                     ) : importResults.success > 0 ? (
-                                        <AlertCircle className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
+                                        <AlertCircle className="w-16 h-16 text-warning mx-auto mb-4" />
                                     ) : (
-                                        <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+                                        <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
                                     )}
                                     
-                                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Import Complete</h3>
-                                    <div className="text-lg text-gray-700">
+                                    <h3 className="text-xl font-semibold text-foreground mb-2">Import Complete</h3>
+                                    <div className="text-lg text-foreground">
                                         <p className="mb-1">
-                                            Successfully imported <span className="font-bold text-green-600">{importResults.success}</span> of <span className="font-bold">{importResults.total}</span> bug reports
+                                            Successfully imported <span className="font-bold text-success">{importResults.success}</span> of <span className="font-bold">{importResults.total}</span> bug reports
                                         </p>
                                         {importResults.errors.length > 0 && (
-                                            <p className="text-red-600">
+                                            <p className="text-destructive">
                                                 {importResults.errors.length} {importResults.errors.length === 1 ? 'error' : 'errors'} occurred
                                             </p>
                                         )}
@@ -591,16 +591,16 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                 </div>
 
                                 {importResults.errors.length > 0 && (
-                                    <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                                    <div className="bg-destructive/10 rounded-lg p-4 border border-destructive/20">
                                         <div className="flex items-start">
-                                            <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+                                            <AlertCircle className="w-5 h-5 text-destructive mr-3 mt-0.5 flex-shrink-0" />
                                             <div className="flex-1">
-                                                <h4 className="text-sm font-semibold text-red-900 mb-2">
+                                                <h4 className="text-sm font-semibold text-destructive mb-2">
                                                     Import Errors
                                                 </h4>
-                                                <div className="mt-2 text-sm text-red-800 max-h-60 overflow-y-auto space-y-1">
+                                                <div className="mt-2 text-sm text-destructive max-h-60 overflow-y-auto space-y-1">
                                                     {importResults.errors.map((error, index) => (
-                                                        <div key={index} className="py-1 border-b border-red-200 last:border-0">
+                                                        <div key={index} className="py-1 border-b border-destructive/20 last:border-0">
                                                             {error}
                                                         </div>
                                                     ))}
@@ -610,10 +610,10 @@ const BugImportModal = ({ isOpen, onClose }) => {
                                     </div>
                                 )}
 
-                                <div className="flex justify-end pt-4 border-t">
+                                <div className="flex justify-end pt-4 border-t border-border">
                                     <button
                                         onClick={handleClose}
-                                        className="px-6 py-2.5 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors"
+                                        className="px-6 py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/80 transition-colors"
                                     >
                                         Done
                                     </button>
