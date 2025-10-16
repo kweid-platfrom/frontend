@@ -8,14 +8,20 @@ import AutomationMetrics from '../stats/AutomationMetrics';
 import TeamProductivity from '../stats/TeamProductivity';
 import QAIDCharts from '../stats/QAIDCharts';
 import QuickActions from '../stats/QuickActions';
+import TestDataMetrics from '../stats/TestDataMetrics';
+import SprintMetrics from '../stats/SprintMetrics';
+import DocumentMetrics from '../stats/DocumentMetrics';
+import ReportsMetrics from '../stats/ReportsMetrics';
+import SuggestionsMetrics from '../stats/SuggestionsMetrics';
 
-export const DashboardContent = ({ 
-    activeTab, 
-    enhancedMetrics, 
-    loading, 
-    error, 
-    filters, 
-    activeSuite, 
+
+export const DashboardContent = ({
+    activeTab,
+    enhancedMetrics,
+    loading,
+    error,
+    filters,
+    activeSuite,
     onRefresh,
     aiService,
     aiInitialized,
@@ -48,27 +54,65 @@ export const DashboardContent = ({
 
             case 'testing':
                 return (
-                    <>
-                        <TestCaseMetrics
-                            suiteId={activeSuite?.id}
-                            sprintId={null}
-                            options={{
-                                autoRefresh: true,
-                                refreshInterval: 30000,
-                                enableRealtime: true,
-                                includeExecutions: true
-                            }}
-                        />
-                        <RecordingMetrics
-                            metrics={{
-                                totalRecordings: enhancedMetrics.testCasesWithRecordings || enhancedMetrics.recordings || 0,
-                                successfulRecordings: Math.round((enhancedMetrics.testCasesWithRecordings || enhancedMetrics.recordings || 0) * 0.9),
-                                bugsFromRecordings: enhancedMetrics.bugsFromScreenRecording || 0,
-                            }}
-                            loading={loading}
-                        />
-                    </>
+                    <TestCaseMetrics
+                        suiteId={activeSuite?.id}
+                        sprintId={null}
+                        options={{
+                            autoRefresh: true,
+                            refreshInterval: 30000,
+                            enableRealtime: true,
+                            includeExecutions: true
+                        }}
+                    />
                 );
+            case 'recordings':
+                return (
+                    <RecordingMetrics
+                        metrics={{
+                            totalRecordings: enhancedMetrics.testCasesWithRecordings || enhancedMetrics.recordings || 0,
+                            successfulRecordings: Math.round((enhancedMetrics.testCasesWithRecordings || enhancedMetrics.recordings || 0) * 0.9),
+                            bugsFromRecordings: enhancedMetrics.bugsFromScreenRecording || 0,
+                        }}
+                        loading={loading}
+                    />
+                );
+            case 'testdata':
+                return (
+                    <TestDataMetrics
+                        metrics={enhancedMetrics.testData || enhancedMetrics}
+                        loading={loading}
+                        error={error}
+                        filters={filters}
+                    />
+                );
+            case 'documents':
+                return (
+                    <DocumentMetrics
+                        metrics={enhancedMetrics.documents || enhancedMetrics}
+                        loading={loading}
+                        error={error}
+                        filters={filters}
+                    />
+                );
+            case 'reports':
+                return (
+                    <ReportsMetrics
+                        metrics={enhancedMetrics.reports || enhancedMetrics}
+                        loading={loading}
+                        error={error}
+                        filters={filters}
+                    />
+                );
+            case 'recommendations':
+                return (
+                    <SuggestionsMetrics
+                        metrics={enhancedMetrics.suggestions || enhancedMetrics}
+                        loading={loading}
+                        error={error}
+                        filters={filters}
+                    />
+                );
+
 
             case 'bugs':
                 return (
@@ -77,6 +121,15 @@ export const DashboardContent = ({
                         loading={loading}
                         error={error}
                         metrics={enhancedMetrics}
+                    />
+                );
+            case 'sprint':
+                return (
+                    <SprintMetrics
+                        metrics={enhancedMetrics.sprints || enhancedMetrics}
+                        loading={loading}
+                        error={error}
+                        filters={filters}
                     />
                 );
 
@@ -96,7 +149,7 @@ export const DashboardContent = ({
                                     </h3>
                                     <div className="mt-2 text-sm text-muted-foreground">
                                         <p>
-                                            The AI service is not properly configured or initialized. 
+                                            The AI service is not properly configured or initialized.
                                             {aiError && (
                                                 <span className="block mt-1 font-medium text-orange-700">
                                                     Error: {aiError}
