@@ -143,16 +143,19 @@ const InlineEditCell = React.memo(({
 
     if (disabled) {
         return (
-            <span className={`px-3 py-2 text-xs rounded ${className}`}>
+            <span className={`px-3 py-2 text-xs rounded text-muted-foreground ${className}`}>
                 {displayValue}
             </span>
         );
     }
 
-    const buttonClassName = `px-2.5 py-1.5 text-xs rounded border border-transparent hover:border-gray-300 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 flex items-center justify-between min-w-0 w-24 ${className} ${
+    const isPlaceholder = displayValue === placeholder;
+    const textClass = isPlaceholder ? 'text-muted-foreground' : 'text-foreground';
+
+    const buttonClassName = `px-2.5 py-1.5 text-xs rounded border border-transparent hover:border-border focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring flex items-center justify-between min-w-0 w-24 ${className} ${textClass} ${
         isUpdating ? 'opacity-50 cursor-wait' : ''
     } ${
-        hasError ? 'border-red-300 bg-red-50' : ''
+        hasError ? 'border-destructive bg-destructive/5' : ''
     }`;
 
     return (
@@ -167,21 +170,21 @@ const InlineEditCell = React.memo(({
                 <span className="truncate">{displayValue}</span>
                 <div className="flex items-center ml-1 flex-shrink-0">
                     {isUpdating && (
-                        <div className="w-3 h-3 border border-gray-300 border-t-teal-600 rounded animate-spin mr-1"></div>
+                        <div className="w-3 h-3 border border-muted border-t-primary rounded-full animate-spin mr-1"></div>
                     )}
                     <ChevronDown className="w-3 h-3" />
                 </div>
             </button>
             {isOpen && !isUpdating && (
-                <div className="absolute z-50 mt-1 w-full min-w-[120px] bg-white border border-gray-200 rounded shadow-lg">
+                <div className="absolute z-50 mt-1 w-full min-w-[120px] bg-card border-border rounded shadow-theme-lg">
                     {!noSearch && options.length > 5 && (
-                        <div className="p-2 border-b border-gray-200">
+                        <div className="p-2 border-b border-border">
                             <input
                                 type="text"
                                 placeholder="Search..."
                                 value={searchTerm}
                                 onChange={handleSearchChange}
-                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                className="w-full px-3 py-2 text-xs bg-input text-foreground border-border rounded focus:outline-none focus:ring-1 focus:ring-ring"
                                 onClick={(e) => e.stopPropagation()}
                             />
                         </div>
@@ -197,15 +200,15 @@ const InlineEditCell = React.memo(({
                                         e.stopPropagation();
                                         handleSelect(option.value);
                                     }}
-                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 focus:bg-gray-100 focus:outline-none ${
-                                        optimisticValue === option.value ? 'bg-teal-50 text-teal-700' : ''
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-accent focus:bg-accent focus:outline-none text-foreground ${
+                                        optimisticValue === option.value ? 'bg-primary/10 text-primary' : ''
                                     }`}
                                 >
                                     {option.label}
                                 </button>
                             ))
                         ) : (
-                            <div className="px-3 py-2 text-xs text-gray-500">No options found</div>
+                            <div className="px-3 py-2 text-xs text-muted-foreground">No options found</div>
                         )}
                     </div>
                 </div>
