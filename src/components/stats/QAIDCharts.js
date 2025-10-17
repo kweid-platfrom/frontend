@@ -1,11 +1,21 @@
 'use client';
 import React, { useState, useMemo, memo } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
-import { Line, Bar, Pie, Doughnut } from 'react-chartjs-2';
-import { TrendingUp, TrendingDown, Activity, Bug, TestTube, Brain, Zap, Video, FileText, Calendar, Database, FileBarChart } from 'lucide-react';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
+
+// Import chart components
+import TrendsChart from './charts/TrendsChart';
+import BugsChart from './charts/BugsChart';
+import TestsChart from './charts/TestsChart';
+import PerformanceChart from './charts/PerformanceChart';
+import ExecutionChart from './charts/ExecutionChart';
+import RecordingsChart from './charts/RecordingsChart';
+import DocumentsChart from './charts/DocumentsChart';
+import SprintChart from './charts/SprintChart';
+import TestDataChart from './charts/TestDataChart';
+import ReportsChart from './charts/ReportsChart';
 
 const QAIDCharts = ({ metrics, dataStatus }) => {
     const [activeChart, setActiveChart] = useState('trends');
@@ -187,7 +197,7 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
 
         const generateRecordingTrends = () => {
             const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-            const coveragePercent = normalizedMetrics.totalTestCases > 0 
+            const coveragePercent = normalizedMetrics.totalTestCases > 0
                 ? Math.min(100, Math.floor((normalizedMetrics.recordings / normalizedMetrics.totalTestCases) * 100))
                 : 0;
             return weeks.map((week, index) => ({
@@ -235,6 +245,202 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
             }));
         };
 
+        // Memoized chart datasets
+        const weeklyTrendsChartData = {
+            labels: generateWeeklyTrends().map(d => d.week),
+            datasets: [
+                {
+                    label: 'Test Cases Created',
+                    data: generateWeeklyTrends().map(d => d.testCasesCreated),
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#3B82F6',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#3B82F6',
+                    pointHoverBorderWidth: 3
+                },
+                {
+                    label: 'Bugs Reported',
+                    data: generateWeeklyTrends().map(d => d.bugsReported),
+                    borderColor: '#EF4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#EF4444',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#EF4444',
+                    pointHoverBorderWidth: 3
+                },
+                {
+                    label: 'Bugs Resolved',
+                    data: generateWeeklyTrends().map(d => d.bugsResolved),
+                    borderColor: '#10B981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#10B981',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#10B981',
+                    pointHoverBorderWidth: 3
+                }
+            ]
+        };
+
+        const testTypeChartData = {
+            labels: generateWeeklyTrends().map(d => d.week),
+            datasets: [
+                {
+                    label: 'Automated Tests',
+                    data: generateWeeklyTrends().map(d => d.automatedTests),
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#3B82F6',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                },
+                {
+                    label: 'Manual Tests',
+                    data: generateWeeklyTrends().map(d => d.manualTests),
+                    borderColor: '#8B5CF6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#8B5CF6',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }
+            ]
+        };
+
+        const bugResolutionChartData = {
+            labels: generateDailyResolution().map(d => d.day),
+            datasets: [
+                {
+                    label: 'Bugs Reported',
+                    data: generateDailyResolution().map(d => d.reported),
+                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                    borderColor: '#EF4444',
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    hoverBackgroundColor: '#EF4444'
+                },
+                {
+                    label: 'Bugs Resolved',
+                    data: generateDailyResolution().map(d => d.resolved),
+                    backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                    borderColor: '#10B981',
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    hoverBackgroundColor: '#10B981'
+                }
+            ]
+        };
+
+        const bugPriorityChartData = {
+            labels: generateBugPriority().map(d => d.name),
+            datasets: [{
+                data: generateBugPriority().map(d => d.value),
+                backgroundColor: [
+                    'rgba(239, 68, 68, 0.8)',
+                    'rgba(249, 115, 22, 0.8)',
+                    'rgba(245, 158, 11, 0.8)',
+                    'rgba(16, 185, 129, 0.8)',
+                    'rgba(107, 114, 128, 0.8)'
+                ],
+                borderColor: [
+                    '#EF4444',
+                    '#F97316',
+                    '#F59E0B',
+                    '#10B981',
+                    '#6B7280'
+                ],
+                borderWidth: 2,
+                hoverOffset: 15,
+                offset: 5
+            }]
+        };
+
+        const testDistributionChartData = {
+            labels: generateTestCaseDistribution().map(d => d.name),
+            datasets: [{
+                data: generateTestCaseDistribution().map(d => d.value),
+                backgroundColor: [
+                    'rgba(148, 163, 184, 0.8)',
+                    'rgba(59, 130, 246, 0.8)',
+                    'rgba(139, 92, 246, 0.8)',
+                    'rgba(229, 231, 235, 0.8)'
+                ],
+                borderColor: [
+                    '#94A3B8',
+                    '#3B82F6',
+                    '#8B5CF6',
+                    '#E5E7EB'
+                ],
+                borderWidth: 2,
+                hoverOffset: 15,
+                offset: 5
+            }]
+        };
+
+        const performanceChartData = {
+            labels: generatePerformanceData().map(d => d.month),
+            datasets: [
+                {
+                    label: 'Pass Rate %',
+                    data: generatePerformanceData().map(d => d.passRate),
+                    borderColor: '#10B981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: '#10B981',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                },
+                {
+                    label: 'Automation Rate %',
+                    data: generatePerformanceData().map(d => d.automationRate),
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: '#3B82F6',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }
+            ]
+        };
+
         return {
             weeklyTrends: generateWeeklyTrends(),
             dailyResolution: generateDailyResolution(),
@@ -246,7 +452,13 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
             sprintTrends: generateSprintTrends(),
             testDataTrends: generateTestDataTrends(),
             reportTrends: generateReportTrends(),
-            executionData: generateExecutionData()
+            executionData: generateExecutionData(),
+            weeklyTrendsChartData,
+            testTypeChartData,
+            bugResolutionChartData,
+            bugPriorityChartData,
+            testDistributionChartData,
+            performanceChartData
         };
     }, [normalizedMetrics]);
 
@@ -284,7 +496,7 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
                 labels: {
                     usePointStyle: true,
                     padding: 20,
-                    font: { 
+                    font: {
                         size: 12,
                         weight: '500'
                     },
@@ -295,11 +507,11 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
                 enabled: true,
                 backgroundColor: 'rgba(15, 23, 42, 0.95)',
                 padding: 16,
-                titleFont: { 
+                titleFont: {
                     size: 14,
                     weight: '600'
                 },
-                bodyFont: { 
+                bodyFont: {
                     size: 13,
                     weight: '400'
                 },
@@ -309,7 +521,7 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
                 displayColors: true,
                 boxPadding: 6,
                 callbacks: {
-                    label: function(context) {
+                    label: function (context) {
                         let label = context.dataset.label || '';
                         if (label) {
                             label += ': ';
@@ -349,202 +561,6 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
         }
     }), []);
 
-    // Memoize individual chart data and options
-    const weeklyTrendsChartData = useMemo(() => ({
-        labels: chartData.weeklyTrends.map(d => d.week),
-        datasets: [
-            {
-                label: 'Test Cases Created',
-                data: chartData.weeklyTrends.map(d => d.testCasesCreated),
-                borderColor: '#3B82F6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                fill: true,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                pointBackgroundColor: '#3B82F6',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: '#3B82F6',
-                pointHoverBorderWidth: 3
-            },
-            {
-                label: 'Bugs Reported',
-                data: chartData.weeklyTrends.map(d => d.bugsReported),
-                borderColor: '#EF4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                fill: true,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                pointBackgroundColor: '#EF4444',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: '#EF4444',
-                pointHoverBorderWidth: 3
-            },
-            {
-                label: 'Bugs Resolved',
-                data: chartData.weeklyTrends.map(d => d.bugsResolved),
-                borderColor: '#10B981',
-                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                fill: true,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                pointBackgroundColor: '#10B981',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: '#10B981',
-                pointHoverBorderWidth: 3
-            }
-        ]
-    }), [chartData.weeklyTrends]);
-
-    const testTypeChartData = useMemo(() => ({
-        labels: chartData.weeklyTrends.map(d => d.week),
-        datasets: [
-            {
-                label: 'Automated Tests',
-                data: chartData.weeklyTrends.map(d => d.automatedTests),
-                borderColor: '#3B82F6',
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                pointBackgroundColor: '#3B82F6',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2
-            },
-            {
-                label: 'Manual Tests',
-                data: chartData.weeklyTrends.map(d => d.manualTests),
-                borderColor: '#8B5CF6',
-                backgroundColor: 'rgba(139, 92, 246, 0.2)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                pointBackgroundColor: '#8B5CF6',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2
-            }
-        ]
-    }), [chartData.weeklyTrends]);
-
-    const bugResolutionChartData = useMemo(() => ({
-        labels: chartData.dailyResolution.map(d => d.day),
-        datasets: [
-            {
-                label: 'Bugs Reported',
-                data: chartData.dailyResolution.map(d => d.reported),
-                backgroundColor: 'rgba(239, 68, 68, 0.8)',
-                borderColor: '#EF4444',
-                borderWidth: 2,
-                borderRadius: 8,
-                hoverBackgroundColor: '#EF4444'
-            },
-            {
-                label: 'Bugs Resolved',
-                data: chartData.dailyResolution.map(d => d.resolved),
-                backgroundColor: 'rgba(16, 185, 129, 0.8)',
-                borderColor: '#10B981',
-                borderWidth: 2,
-                borderRadius: 8,
-                hoverBackgroundColor: '#10B981'
-            }
-        ]
-    }), [chartData.dailyResolution]);
-
-    const bugPriorityChartData = useMemo(() => ({
-        labels: chartData.bugPriority.map(d => d.name),
-        datasets: [{
-            data: chartData.bugPriority.map(d => d.value),
-            backgroundColor: [
-                'rgba(239, 68, 68, 0.8)',
-                'rgba(249, 115, 22, 0.8)',
-                'rgba(245, 158, 11, 0.8)',
-                'rgba(16, 185, 129, 0.8)',
-                'rgba(107, 114, 128, 0.8)'
-            ],
-            borderColor: [
-                '#EF4444',
-                '#F97316',
-                '#F59E0B',
-                '#10B981',
-                '#6B7280'
-            ],
-            borderWidth: 2,
-            hoverOffset: 15,
-            offset: 5
-        }]
-    }), [chartData.bugPriority]);
-
-    const testDistributionChartData = useMemo(() => ({
-        labels: chartData.testCaseDistribution.map(d => d.name),
-        datasets: [{
-            data: chartData.testCaseDistribution.map(d => d.value),
-            backgroundColor: [
-                'rgba(148, 163, 184, 0.8)',
-                'rgba(59, 130, 246, 0.8)',
-                'rgba(139, 92, 246, 0.8)',
-                'rgba(229, 231, 235, 0.8)'
-            ],
-            borderColor: [
-                '#94A3B8',
-                '#3B82F6',
-                '#8B5CF6',
-                '#E5E7EB'
-            ],
-            borderWidth: 2,
-            hoverOffset: 15,
-            offset: 5
-        }]
-    }), [chartData.testCaseDistribution]);
-
-    const performanceChartData = useMemo(() => ({
-        labels: chartData.performanceData.map(d => d.month),
-        datasets: [
-            {
-                label: 'Pass Rate %',
-                data: chartData.performanceData.map(d => d.passRate),
-                borderColor: '#10B981',
-                backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 6,
-                pointHoverRadius: 8,
-                pointBackgroundColor: '#10B981',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2
-            },
-            {
-                label: 'Automation Rate %',
-                data: chartData.performanceData.map(d => d.automationRate),
-                borderColor: '#3B82F6',
-                backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 6,
-                pointHoverRadius: 8,
-                pointBackgroundColor: '#3B82F6',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2
-            }
-        ]
-    }), [chartData.performanceData]);
-
     // Doughnut specific options
     const doughnutOptions = useMemo(() => ({
         ...defaultOptions,
@@ -561,11 +577,11 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
     // Handle loading or error states
     if (dataStatus?.testCases === 'pending' || dataStatus?.bugs === 'pending') {
         return (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <div className="flex items-center justify-center h-64">
                     <div className="text-center">
-                        <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-pulse" />
-                        <p className="text-gray-500">Loading metrics...</p>
+                        <div className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                        <p className="text-muted-foreground">Loading metrics...</p>
                     </div>
                 </div>
             </div>
@@ -574,11 +590,11 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
 
     if (dataStatus?.testCases === 'error' || dataStatus?.bugs === 'error') {
         return (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <div className="flex items-center justify-center h-64">
                     <div className="text-center">
-                        <Bug className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">Failed to load metrics</p>
+                        <div className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">Failed to load metrics</p>
                     </div>
                 </div>
             </div>
@@ -587,11 +603,11 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
 
     if (!normalizedMetrics.totalTestCases && !normalizedMetrics.activeBugs && !normalizedMetrics.recentActivity.length) {
         return (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <div className="flex items-center justify-center h-64">
                     <div className="text-center">
-                        <TestTube className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">No data available</p>
+                        <div className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No data available</p>
                     </div>
                 </div>
             </div>
@@ -599,426 +615,108 @@ const QAIDCharts = ({ metrics, dataStatus }) => {
     }
 
     const chartTabs = [
-        { id: 'trends', label: 'Trends', icon: Activity },
-        { id: 'bugs', label: 'Bug Analysis', icon: Bug },
-        { id: 'tests', label: 'Test Distribution', icon: TestTube },
-        { id: 'performance', label: 'Performance', icon: Brain },
-        { id: 'execution', label: 'Execution Status', icon: Zap },
-        { id: 'recordings', label: 'Recordings', icon: Video },
-        { id: 'documents', label: 'Documents', icon: FileText },
-        { id: 'sprint', label: 'Sprint', icon: Calendar },
-        { id: 'testdata', label: 'Test Data', icon: Database },
-        { id: 'reports', label: 'Reports', icon: FileBarChart }
+        { id: 'trends', label: 'Trends' },
+        { id: 'bugs', label: 'Bug Analysis' },
+        { id: 'tests', label: 'Test Distribution' },
+        { id: 'performance', label: 'Performance' },
+        { id: 'execution', label: 'Execution Status' },
+        { id: 'recordings', label: 'Recordings' },
+        { id: 'documents', label: 'Documents' },
+        { id: 'sprint', label: 'Sprint' },
+        { id: 'testdata', label: 'Test Data' },
+        { id: 'reports', label: 'Reports' }
     ];
-
-    const ChartCard = ({ title, children, icon: Icon, trend, subtitle }) => (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-2">
-                    <Icon className="w-5 h-5 text-blue-600" />
-                    <div>
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">{title}</h3>
-                        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
-                    </div>
-                </div>
-                {trend !== undefined && (
-                    <div className={`flex items-center space-x-1 text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {trend > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                        <span>{Math.abs(trend)}%</span>
-                    </div>
-                )}
-            </div>
-            {children}
-        </div>
-    );
 
     return (
         <div className="space-y-6">
-            {/* Chart Navigation */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-1">
+            {/* Chart Navigation - Improved Responsiveness */}
+            <div className="bg-card rounded-lg shadow-theme-sm border border-border p-1">
                 <div className="flex space-x-1 overflow-x-auto">
                     {chartTabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveChart(tab.id)}
-                            className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
-                                activeChart === tab.id
-                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600'
-                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
-                            }`}
+                            className={`flex items-center px-2 sm:px-3 lg:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium rounded transition-colors whitespace-nowrap flex-shrink-0 ${activeChart === tab.id
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                                }`}
+                            aria-current={activeChart === tab.id ? 'page' : undefined}
                         >
-                            <tab.icon className="w-4 h-4" />
                             <span>{tab.label}</span>
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Chart Content - Keep all charts mounted but hidden */}
-            <div className={activeChart === 'trends' ? '' : 'hidden'}>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <ChartCard 
-                        title="Weekly Activity Trends" 
-                        icon={Activity} 
-                        trend={trends.passRateTrend}
-                        subtitle="Test cases and bug activity over time"
-                    >
-                        <div style={{ height: '320px' }}>
-                            {chartData.weeklyTrends.length > 0 ? (
-                                <Line
-                                    data={weeklyTrendsChartData}
-                                    options={defaultOptions}
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-gray-500">No activity data</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </ChartCard>
-
-                    <ChartCard 
-                        title="Test Type Distribution" 
-                        icon={TestTube} 
-                        trend={trends.automationTrend}
-                        subtitle="Manual vs Automated test coverage"
-                    >
-                        <div style={{ height: '320px' }}>
-                            {chartData.weeklyTrends.length > 0 ? (
-                                <Line
-                                    data={testTypeChartData}
-                                    options={defaultOptions}
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <TestTube className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-gray-500">No test case data</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </ChartCard>
-                </div>
-            </div>
-
-            <div className={activeChart === 'bugs' ? '' : 'hidden'}>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <ChartCard 
-                        title="Daily Bug Resolution" 
-                        icon={Bug} 
-                        trend={trends.resolutionTrend}
-                        subtitle="Bug reporting and resolution patterns"
-                    >
-                        <div style={{ height: '320px' }}>
-                            {chartData.dailyResolution.length > 0 ? (
-                                <Bar
-                                    data={bugResolutionChartData}
-                                    options={defaultOptions}
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <Bug className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-gray-500">No bug data</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </ChartCard>
-
-                    <ChartCard 
-                        title="Bug Priority Distribution" 
-                        icon={Bug}
-                        subtitle="Current bug priority breakdown"
-                    >
-                        <div style={{ height: '320px' }}>
-                            {chartData.bugPriority.length > 0 ? (
-                                <Doughnut
-                                    data={bugPriorityChartData}
-                                    options={doughnutOptions}
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <Bug className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-gray-500">No bugs reported</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </ChartCard>
-                </div>
-            </div>
-
-            <div className={activeChart === 'tests' ? '' : 'hidden'}>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <ChartCard 
-                        title="Test Case Distribution" 
-                        icon={TestTube}
-                        trend={trends.aiTrend}
-                        subtitle="Test case types and automation coverage"
-                    >
-                        <div style={{ height: '320px' }}>
-                            {chartData.testCaseDistribution.length > 0 ? (
-                                <Pie
-                                    data={testDistributionChartData}
-                                    options={doughnutOptions}
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <TestTube className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-gray-500">No test cases available</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </ChartCard>
-
-                    <ChartCard 
-                        title="Test Case Metrics" 
-                        icon={TestTube}
-                        subtitle="Detailed breakdown of test cases"
-                    >
-                        <div className="space-y-6 pt-4">
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-3 h-3 rounded-full bg-gray-600"></div>
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manual Tests</span>
-                                    </div>
-                                    <span className="text-lg font-bold text-gray-900 dark:text-white">{normalizedMetrics.manualTestCases}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                                    <div
-                                        className="bg-gradient-to-r from-gray-500 to-gray-600 h-3 rounded-full transition-all duration-1000 ease-out"
-                                        style={{ width: `${Math.max(0, 100 - normalizedMetrics.automationRate)}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-3 h-3 rounded-full bg-blue-600"></div>
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Automated Tests</span>
-                                    </div>
-                                    <span className="text-lg font-bold text-gray-900 dark:text-white">{normalizedMetrics.automatedTestCases}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                                    <div
-                                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-1000 ease-out"
-                                        style={{ width: `${normalizedMetrics.automationRate}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-3 h-3 rounded-full bg-purple-600"></div>
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">AI Generated</span>
-                                    </div>
-                                    <span className="text-lg font-bold text-gray-900 dark:text-white">{normalizedMetrics.aiGeneratedTestCases}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                                    <div
-                                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-1000 ease-out"
-                                        style={{ width: `${normalizedMetrics.aiContributionRate}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-
-                            <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Total Test Cases</span>
-                                    <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{normalizedMetrics.totalTestCases}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </ChartCard>
-                </div>
-            </div>
-
-            <div className={activeChart === 'performance' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Performance Metrics Over Time" 
-                    icon={Brain}
-                    trend={trends.passRateTrend}
-                    subtitle="Pass rates and automation progress"
-                >
-                    <div style={{ height: '400px' }}>
-                        {chartData.performanceData.length > 0 ? (
-                            <Line
-                                data={performanceChartData}
-                                options={defaultOptions}
-                            />
-                        ) : (
-                            <div className="flex items-center justify-center h-full">
-                                <div className="text-center">
-                                    <Brain className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                    <p className="text-gray-500">No performance data</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </ChartCard>
-            </div>
-
-            <div className={activeChart === 'execution' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Test Execution Status" 
-                    icon={Zap}
-                    subtitle="Current test execution breakdown"
-                >
-                    <div style={{ height: '300px' }}>
-                        <div className="grid grid-cols-3 gap-4 h-full items-center">
-                            <div className="text-center p-6 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{normalizedMetrics.passCount}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Passed</div>
-                            </div>
-                            <div className="text-center p-6 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                                <div className="text-3xl font-bold text-red-600 dark:text-red-400">{normalizedMetrics.failCount}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Failed</div>
-                            </div>
-                            <div className="text-center p-6 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                <div className="text-3xl font-bold text-gray-600 dark:text-gray-400">{normalizedMetrics.totalTestCases - normalizedMetrics.executionCount}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Pending</div>
-                            </div>
-                        </div>
-                    </div>
-                </ChartCard>
-            </div>
-
-            <div className={activeChart === 'recordings' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Recording Trends" 
-                    icon={Video}
-                    subtitle="Test recording activity"
-                >
-                    <div style={{ height: '300px' }}>
-                        <div className="flex items-center justify-center h-full">
-                            <div className="text-center">
-                                <Video className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                                <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">{normalizedMetrics.recordings}</div>
-                                <p className="text-gray-500">Total Recordings</p>
-                            </div>
-                        </div>
-                    </div>
-                </ChartCard>
-            </div>
-
-            <div className={activeChart === 'documents' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Documentation Trends" 
-                    icon={FileText}
-                    subtitle="Documentation activity over time"
-                >
-                    <div style={{ height: '300px' }}>
-                        <div className="grid grid-cols-2 gap-4 h-full items-center">
-                            <div className="text-center p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{normalizedMetrics.totalDocuments}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Total Documents</div>
-                            </div>
-                            <div className="text-center p-6 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{normalizedMetrics.activeDocuments}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Active Documents</div>
-                            </div>
-                        </div>
-                    </div>
-                </ChartCard>
-            </div>
-
-            <div className={activeChart === 'sprint' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Sprint Progress" 
-                    icon={Calendar}
-                    subtitle="Current sprint metrics"
-                >
-                    <div style={{ height: '300px' }}>
-                        <div className="space-y-6 h-full flex flex-col justify-center">
-                            <div className="text-center">
-                                <div className="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-2">{normalizedMetrics.sprintProgress}%</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400">Sprint Progress</div>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                                <div
-                                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full transition-all duration-1000"
-                                    style={{ width: `${normalizedMetrics.sprintProgress}%` }}
-                                ></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{normalizedMetrics.activeSprints}</div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Active</div>
-                                </div>
-                                <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{normalizedMetrics.completedSprints}</div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Completed</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </ChartCard>
-            </div>
-
-            <div className={activeChart === 'testdata' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Test Data Coverage" 
-                    icon={Database}
-                    subtitle="Test data usage and coverage"
-                >
-                    <div style={{ height: '300px' }}>
-                        <div className="space-y-6 h-full flex flex-col justify-center">
-                            <div className="text-center">
-                                <div className="text-5xl font-bold text-purple-600 dark:text-purple-400 mb-2">{normalizedMetrics.testDataCoverage}%</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400">Test Data Coverage</div>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                                <div
-                                    className="bg-gradient-to-r from-purple-500 to-purple-600 h-4 rounded-full transition-all duration-1000"
-                                    style={{ width: `${normalizedMetrics.testDataCoverage}%` }}
-                                ></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{normalizedMetrics.totalTestData}</div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Total Data Sets</div>
-                                </div>
-                                <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{normalizedMetrics.activeTestData}</div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Active Data Sets</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </ChartCard>
-            </div>
-
-            <div className={activeChart === 'reports' ? '' : 'hidden'}>
-                <ChartCard 
-                    title="Report Trends" 
-                    icon={FileBarChart}
-                    subtitle="Reporting activity and metrics"
-                >
-                    <div style={{ height: '300px' }}>
-                        <div className="grid grid-cols-2 gap-4 h-full items-center">
-                            <div className="text-center p-6 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                                <div className="text-3xl font-bold text-red-600 dark:text-red-400">{normalizedMetrics.activeBugs}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Active Issues</div>
-                            </div>
-                            <div className="text-center p-6 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{normalizedMetrics.resolvedBugs}</div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">Resolved Issues</div>
-                            </div>
-                        </div>
-                    </div>
-                </ChartCard>
-            </div>
+            {/* Chart Content */}
+            {activeChart === 'trends' && (
+                <TrendsChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                    trends={trends}
+                    normalizedMetrics={normalizedMetrics}
+                />
+            )}
+            {activeChart === 'bugs' && (
+                <BugsChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                    doughnutOptions={doughnutOptions}
+                    trends={trends}
+                />
+            )}
+            {activeChart === 'tests' && (
+                <TestsChart
+                    chartData={chartData}
+                    doughnutOptions={doughnutOptions}
+                    defaultOptions={defaultOptions}
+                    trends={trends}
+                    normalizedMetrics={normalizedMetrics}
+                />
+            )}
+            {activeChart === 'performance' && (
+                <PerformanceChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                    trends={trends}
+                />
+            )}
+            {activeChart === 'execution' && (
+                <ExecutionChart
+                    normalizedMetrics={normalizedMetrics}
+                    doughnutOptions={doughnutOptions}
+                />
+            )}
+            {activeChart === 'recordings' && (
+                <RecordingsChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                />
+            )}
+            {activeChart === 'documents' && (
+                <DocumentsChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                />
+            )}
+            {activeChart === 'sprint' && (
+                <SprintChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                />
+            )}
+            {activeChart === 'testdata' && (
+                <TestDataChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                />
+            )}
+            {activeChart === 'reports' && (
+                <ReportsChart
+                    chartData={chartData}
+                    defaultOptions={defaultOptions}
+                />
+            )}
         </div>
     );
 };
