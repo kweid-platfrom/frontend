@@ -7,6 +7,10 @@ import {
     Lightbulb,
     Plus,
     Search,
+    SlidersHorizontal,
+    LayoutGrid,
+    List,
+    X
 } from 'lucide-react';
 
 import RecommendationCards from '../recommend/RecommendationCards';
@@ -25,7 +29,6 @@ const safeFormatDate = (dateValue, formatType = 'relative') => {
     if (dateValue && typeof dateValue === 'object' && dateValue.toDate) {
         date = dateValue.toDate();
     } else if (dateValue && typeof dateValue === 'object' && dateValue.seconds) {
-        // Handle Firestore timestamp format {seconds, nanoseconds}
         date = new Date(dateValue.seconds * 1000);
     } else if (typeof dateValue === 'string' || typeof dateValue === 'number') {
         date = new Date(dateValue);
@@ -62,6 +65,7 @@ const FeatureRecommendationsPage = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [bulkLoadingActions, setBulkLoadingActions] = useState([]);
+    const [showFilters, setShowFilters] = useState(false);
 
     // Safely destructure recommendations state with fallbacks
     const recommendationsState = state.recommendations || {};
@@ -154,7 +158,6 @@ const FeatureRecommendationsPage = () => {
                 if (['created_at', 'updated_at'].includes(sortConfig.key)) {
                     let aDate, bDate;
 
-                    // Handle various date formats
                     if (aValue && typeof aValue === 'object' && aValue.toDate) {
                         aDate = aValue.toDate();
                     } else if (aValue && typeof aValue === 'object' && aValue.seconds) {
@@ -196,6 +199,17 @@ const FeatureRecommendationsPage = () => {
         return filtered;
     }, [recommendations, filters, sortConfig, recommendationsAvailable]);
 
+    // Count active filters
+    const activeFiltersCount = useMemo(() => {
+        let count = 0;
+        if (filters.status !== 'all') count++;
+        if (filters.priority !== 'all') count++;
+        if (filters.category !== 'all') count++;
+        if (filters.impact !== 'all') count++;
+        if (filters.effort !== 'all') count++;
+        return count;
+    }, [filters]);
+
     // Paginated recommendations
     const paginatedRecommendations = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -231,6 +245,18 @@ const FeatureRecommendationsPage = () => {
         setSelectedRecommendations([]);
     }, []);
 
+    // Clear all filters
+    const handleClearFilters = useCallback(() => {
+        setFilters({
+            search: filters.search,
+            status: 'all',
+            priority: 'all',
+            category: 'all',
+            impact: 'all',
+            effort: 'all'
+        });
+    }, [setFilters, filters.search]);
+
     // Bulk action handler
     const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig, selectedOption) => {
         if (!currentUser?.uid) {
@@ -265,7 +291,6 @@ const FeatureRecommendationsPage = () => {
                             break;
                         case 'assign':
                             if (selectedOption) {
-                                // Update recommendation with assigned user
                                 const recommendation = recommendations.find(r => r.id === recId);
                                 if (recommendation) {
                                     result = await updateRecommendation({
@@ -351,16 +376,16 @@ const FeatureRecommendationsPage = () => {
     // Pagination handlers
     const handlePageChange = useCallback((page) => {
         setCurrentPage(page);
-        setSelectedRecommendations([]); // Clear selection when changing pages
+        setSelectedRecommendations([]);
     }, []);
 
     const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
         setItemsPerPage(newItemsPerPage);
-        setCurrentPage(1); // Reset to first page
-        setSelectedRecommendations([]); // Clear selection
+        setCurrentPage(1);
+        setSelectedRecommendations([]);
     }, []);
 
-    // Standard handlers (same as before)
+    // Standard handlers
     const handleCreateRecommendation = useCallback(() => {
         if (!recommendationsAvailable) {
             actions.ui.showNotification({
@@ -609,17 +634,16 @@ const FeatureRecommendationsPage = () => {
     if (!recommendationsAvailable) {
         return (
             <div className="min-h-screen bg-background">
-                <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
-                    <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12 text-center">
-                        <Lightbulb className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-card-foreground mb-2">
+                <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+                    <div className="bg-card rounded-xl shadow-sm border border-border p-12 text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                            <Lightbulb className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-card-foreground mb-2">
                             Recommendations Feature Unavailable
                         </h3>
-                        <p className="text-muted-foreground mb-6">
+                        <p className="text-muted-foreground max-w-md mx-auto">
                             The suggestions feature is currently not available. This might be due to missing configuration or permissions.
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                            Please check your setup or contact support if you believe this is an error.
                         </p>
                     </div>
                 </div>
@@ -629,139 +653,192 @@ const FeatureRecommendationsPage = () => {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-full mx-auto py-6 sm:px-6 lg:px-4">
+            <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                    <div className="flex items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-teal-100 rounded-lg">
-                                <Lightbulb className="w-6 h-6 text-teal-600" />
+                <div className="mb-6 sm:mb-8">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 shadow-lg shadow-teal-500/20">
+                                <Lightbulb className="w-6 h-6 text-white" />
                             </div>
                             <div>
-                                <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-                                    Feature Suggestions
-                                </h1>
-                                <p className="text-sm text-muted-foreground">
-                                    Manage feature requests and improvement suggestions
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+                                        Feature Suggestions
+                                    </h1>
+                                    <span className="px-3 py-1 bg-muted rounded-full text-sm font-medium text-muted-foreground">
+                                        {filteredRecommendations.length}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-0.5">
+                                    Manage and track feature requests
                                 </p>
                             </div>
                         </div>
-                        <span className="ml-4 px-3 py-1 bg-muted rounded-full text-sm font-normal text-muted-foreground">
-                            {filteredRecommendations.length} suggestions
-                        </span>
-                    </div>
-                    <div className="flex items-center space-x-3">
                         <button
                             onClick={handleCreateRecommendation}
-                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-theme-sm text-sm font-medium rounded-md text-primary-foreground bg-primary hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring transition-colors"
+                            className="inline-flex items-center justify-center px-4 py-2.5 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white text-sm font-medium rounded-lg shadow-lg shadow-teal-500/30 hover:shadow-xl hover:shadow-teal-500/40 transition-all duration-200"
                         >
                             <Plus className="w-4 h-4 mr-2" />
-                            New
+                            New Suggestion
                         </button>
                     </div>
                 </div>
 
-                {/* Filters and Search */}
-                <div className="bg-card rounded-lg shadow-theme-sm border border-border mb-6">
-                    <div className="px-6 py-4">
-                        <div className="flex flex-col lg:flex-row gap-4">
+                {/* Search and Controls Bar */}
+                <div className="mb-6">
+                    <div className="bg-card rounded-xl shadow-sm border border-border p-4">
+                        <div className="flex flex-col lg:flex-row gap-3">
                             {/* Search */}
                             <div className="flex-1">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                                     <input
                                         type="text"
-                                        placeholder="Search Suggestions..."
+                                        placeholder="Search suggestions..."
                                         value={filters.search}
                                         onChange={(e) => setFilters({ search: e.target.value })}
-                                        className="pl-10 pr-4 py-2 w-full bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                                        className="w-full pl-10 pr-4 py-2.5 bg-background text-foreground placeholder:text-muted-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                                     />
                                 </div>
                             </div>
 
-                            {/* Filter Dropdowns */}
-                            <div className="flex flex-wrap gap-3">
-                                <select
-                                    value={filters.status}
-                                    onChange={(e) => setFilters({ status: e.target.value })}
-                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                                >
-                                    <option value="all">All Status</option>
-                                    <option value="under-review">Under Review</option>
-                                    <option value="approved">Approved</option>
-                                    <option value="rejected">Rejected</option>
-                                    <option value="in-development">In Development</option>
-                                    <option value="completed">Completed</option>
-                                    <option value="on-hold">On Hold</option>
-                                </select>
-
-                                <select
-                                    value={filters.priority}
-                                    onChange={(e) => setFilters({ priority: e.target.value })}
-                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                                >
-                                    <option value="all">All Priority</option>
-                                    <option value="critical">Critical</option>
-                                    <option value="high">High</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="low">Low</option>
-                                </select>
-
-                                <select
-                                    value={filters.category}
-                                    onChange={(e) => setFilters({ category: e.target.value })}
-                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                                >
-                                    <option value="all">All Categories</option>
-                                    <option value="ui-ux">UI/UX</option>
-                                    <option value="performance">Performance</option>
-                                    <option value="security">Security</option>
-                                    <option value="integration">Integration</option>
-                                    <option value="analytics">Analytics</option>
-                                    <option value="accessibility">Accessibility</option>
-                                    <option value="automation">Automation</option>
-                                    <option value="other">Other</option>
-                                </select>
-
-                                <select
-                                    value={filters.impact}
-                                    onChange={(e) => setFilters({ impact: e.target.value })}
-                                    className="px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                                >
-                                    <option value="all">All Impact</option>
-                                    <option value="high">High Impact</option>
-                                    <option value="medium">Medium Impact</option>
-                                    <option value="low">Low Impact</option>
-                                </select>
-                            </div>
-
-                            {/* View Mode Toggle */}
-                            <div className="flex border border-border rounded-md overflow-hidden">
+                            {/* Controls */}
+                            <div className="flex items-center justify-between lg:justify-start gap-2">
+                                {/* Filter Toggle Button */}
                                 <button
-                                    onClick={() => setViewMode('cards')}
-                                    className={`px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'cards'
-                                        ? 'bg-teal-50 text-teal-800 border-teal-300'
-                                        : 'bg-card text-card-foreground hover:bg-accent'
-                                        }`}
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border transition-all ${
+                                        showFilters || activeFiltersCount > 0
+                                            ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-400 dark:border-teal-800'
+                                            : 'bg-background text-foreground border-border hover:bg-accent'
+                                    }`}
                                 >
-                                    Cards
+                                    <SlidersHorizontal className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Filters</span>
+                                    {activeFiltersCount > 0 && (
+                                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-semibold text-white bg-teal-600 rounded-full dark:bg-teal-500">
+                                            {activeFiltersCount}
+                                        </span>
+                                    )}
                                 </button>
-                                <button
-                                    onClick={() => setViewMode('table')}
-                                    className={`px-3 py-2 text-sm font-medium border-l border-border transition-colors ${viewMode === 'table'
-                                        ? 'bg-teal-50 text-teal-800 border-teal-300'
-                                        : 'bg-card text-card-foreground hover:bg-accent'
+
+                                {/* View Mode Toggle */}
+                                <div className="inline-flex rounded-lg border border-border bg-background shadow-sm ml-auto lg:ml-0">
+                                    <button
+                                        onClick={() => setViewMode('cards')}
+                                        className={`inline-flex items-center justify-center px-3 py-2.5 text-sm font-medium rounded-l-lg transition-all ${
+                                            viewMode === 'cards'
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                                         }`}
-                                >
-                                    Table
-                                </button>
+                                        title="Cards view"
+                                    >
+                                        <LayoutGrid className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('table')}
+                                        className={`inline-flex items-center justify-center px-3 py-2.5 text-sm font-medium rounded-r-lg border-l border-border transition-all ${
+                                            viewMode === 'table'
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                        }`}
+                                        title="Table view"
+                                    >
+                                        <List className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
+
+                        {/* Expandable Filters */}
+                        {showFilters && (
+                            <div className="mt-4 pt-4 border-t border-border">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-semibold text-foreground">Advanced Filters</h3>
+                                    {activeFiltersCount > 0 && (
+                                        <button
+                                            onClick={handleClearFilters}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground bg-accent hover:bg-accent/80 rounded-md transition-colors"
+                                        >
+                                            <X className="w-3 h-3" />
+                                            Clear all
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Status</label>
+                                        <select
+                                            value={filters.status}
+                                            onChange={(e) => setFilters({ status: e.target.value })}
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all"
+                                        >
+                                            <option value="all">All Status</option>
+                                            <option value="under-review">Under Review</option>
+                                            <option value="approved">Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                            <option value="in-development">In Development</option>
+                                            <option value="completed">Completed</option>
+                                            <option value="on-hold">On Hold</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Priority</label>
+                                        <select
+                                            value={filters.priority}
+                                            onChange={(e) => setFilters({ priority: e.target.value })}
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all"
+                                        >
+                                            <option value="all">All Priority</option>
+                                            <option value="critical">Critical</option>
+                                            <option value="high">High</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="low">Low</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Category</label>
+                                        <select
+                                            value={filters.category}
+                                            onChange={(e) => setFilters({ category: e.target.value })}
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all"
+                                        >
+                                            <option value="all">All Categories</option>
+                                            <option value="ui-ux">UI/UX</option>
+                                            <option value="performance">Performance</option>
+                                            <option value="security">Security</option>
+                                            <option value="integration">Integration</option>
+                                            <option value="analytics">Analytics</option>
+                                            <option value="accessibility">Accessibility</option>
+                                            <option value="automation">Automation</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Impact</label>
+                                        <select
+                                            value={filters.impact}
+                                            onChange={(e) => setFilters({ impact: e.target.value })}
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all"
+                                        >
+                                            <option value="all">All Impact</option>
+                                            <option value="high">High Impact</option>
+                                            <option value="medium">Medium Impact</option>
+                                            <option value="low">Low Impact</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="bg-card rounded-lg shadow-theme-sm border border-border">
+                <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
                     {viewMode === 'cards' ? (
                         <div className="p-6">
                             <RecommendationCards
@@ -800,13 +877,52 @@ const FeatureRecommendationsPage = () => {
                     )}
 
                     {/* Pagination */}
-                    <Pagination
-                        currentPage={currentPage}
-                        totalItems={filteredRecommendations.length}
-                        itemsPerPage={itemsPerPage}
-                        onPageChange={handlePageChange}
-                        onItemsPerPageChange={handleItemsPerPageChange}
-                    />
+                    {filteredRecommendations.length > 0 && (
+                        <div className="border-t border-border">
+                            <Pagination
+                                currentPage={currentPage}
+                                totalItems={filteredRecommendations.length}
+                                itemsPerPage={itemsPerPage}
+                                onPageChange={handlePageChange}
+                                onItemsPerPageChange={handleItemsPerPageChange}
+                            />
+                        </div>
+                    )}
+
+                    {/* Empty State */}
+                    {filteredRecommendations.length === 0 && (
+                        <div className="p-12 text-center">
+                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                                <Search className="w-8 h-8 text-muted-foreground" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-foreground mb-2">
+                                No suggestions found
+                            </h3>
+                            <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
+                                {filters.search || activeFiltersCount > 0
+                                    ? "Try adjusting your search or filters to find what you're looking for."
+                                    : "Get started by creating your first feature suggestion."}
+                            </p>
+                            {(filters.search || activeFiltersCount > 0) && (
+                                <button
+                                    onClick={() => {
+                                        setFilters({
+                                            search: '',
+                                            status: 'all',
+                                            priority: 'all',
+                                            category: 'all',
+                                            impact: 'all',
+                                            effort: 'all'
+                                        });
+                                    }}
+                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -826,7 +942,6 @@ const FeatureRecommendationsPage = () => {
                 <RecommendationModal
                     recommendation={selectedRecommendation}
                     onSave={async (data) => {
-                        // Use the correct action from the AppProvider
                         if (selectedRecommendation) {
                             return await actions.recommendations.updateRecommendation(data);
                         } else {
