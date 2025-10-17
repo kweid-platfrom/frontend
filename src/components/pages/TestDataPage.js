@@ -257,85 +257,77 @@ const TestData = () => {
       <div className="min-h-screen bg-background">
         <div className="mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="bg-card shadow-sm rounded-lg overflow-hidden transition-all duration-300 border border-border">
-            <div className="border-b border-border px-6 py-5">
+            <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5">
               {/* HEADER ROW */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 {/* Left side: back, icon, title + count */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   <button
                     onClick={() => { setSelectedType(null); setSelectedItemIds([]); setItemsPage(1); }}
-                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors flex-shrink-0"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     Back
                   </button>
 
-                  <div className={`w-12 h-12 rounded-lg ${iconColorClass} flex items-center justify-center`}>
-                    <TypeIcon className="w-6 h-6" />
+                  <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg ${iconColorClass} flex items-center justify-center flex-shrink-0`}>
+                    <TypeIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-foreground">{type?.name}</h2>
-                    <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <h2 className="text-lg sm:text-xl font-bold text-foreground truncate">{type?.name}</h2>
+                    <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground whitespace-nowrap">
                       {currentItems.length} {currentItems.length === 1 ? 'item' : 'items'}
                     </span>
                   </div>
                 </div>
 
-                {/* Right side: Export, Random Generate, AI Generate */}
-                <div className="flex items-center gap-3">
-                  {currentItems.length > 0 && (
+                {/* Right side: Random Generate, AI Generate */}
+                <div className="flex items-center gap-2 flex-1 sm:flex-none sm:gap-2 justify-end">
+                  <div className="flex items-center gap-2 flex-1 sm:flex-none">
                     <button
-                      onClick={() => exportData(selectedType)}
-                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors"
+                      onClick={handleRandomGenerate}
+                      disabled={generateLoading}
+                      className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap flex-1 sm:flex-none"
                     >
-                      <Download className="w-4 h-4" />
-                      Export
+                      {generateLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Random
                     </button>
-                  )}
 
-                  <button
-                    onClick={handleRandomGenerate}
-                    disabled={generateLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {generateLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    Random Generate
-                  </button>
-
-                  <Dialog open={isAIOpen} onOpenChange={setIsAIOpen}>
-                    <DialogTrigger asChild>
-                      <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-orange-500 rounded hover:bg-orange-600 transition-colors">
-                        <Sparkles className="w-4 h-4" />
-                        AI Generate
-                      </button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>AI Generate Test Data</DialogTitle>
-                        <DialogDescription>Describe what test data you need for {type?.name}.</DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 mt-4">
-                        <Textarea
-                          value={aiPrompt}
-                          onChange={(e) => setAiPrompt(e.target.value)}
-                          placeholder={`e.g. "Generate 3 invalid ${type?.name.toLowerCase()} for testing"`}
-                        />
-                        <DialogFooter>
-                          <Button onClick={handleAIGenerate} disabled={aiLoading}>
-                            {aiLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                            Generate with AI
-                          </Button>
-                        </DialogFooter>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                    <Dialog open={isAIOpen} onOpenChange={setIsAIOpen}>
+                      <DialogTrigger asChild>
+                        <button className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-primary-foreground bg-orange-500 rounded hover:bg-orange-600 transition-colors whitespace-nowrap flex-shrink-0">
+                          <Sparkles className="w-4 h-4" />
+                          AI Generate
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>AI Generate Test Data</DialogTitle>
+                          <DialogDescription>Describe what test data you need for {type?.name}.</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 mt-4">
+                          <Textarea
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            placeholder={`e.g. "Generate 3 invalid ${type?.name.toLowerCase()} for testing"`}
+                          />
+                          <DialogFooter>
+                            <Button onClick={handleAIGenerate} disabled={aiLoading}>
+                              {aiLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                              Generate with AI
+                            </Button>
+                          </DialogFooter>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* BODY */}
-            <div className="px-6 py-4">
+            <div className="px-4 sm:px-6 py-4">
               {currentItems.length === 0 ? (
                 <div className="text-center py-16">
                   <Database className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
@@ -344,47 +336,65 @@ const TestData = () => {
               ) : (
                 <div className="space-y-0">
                   {/* Select All Row */}
-                  <div className="flex items-center gap-4 border-b border-border py-2 rounded">
-                    <input
-                      type="checkbox"
-                      checked={selectedItemIds.length === currentItems.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedItemIds(currentItems.map((item) => item.id));
-                        } else {
-                          setSelectedItemIds([]);
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {selectedItemIds.length === currentItems.length
-                        ? "All selected"
-                        : selectedItemIds.length > 0
-                          ? `${selectedItemIds.length} selected`
-                          : "Select all"}
-                    </span>
+                  <div className="flex items-center justify-between gap-2 sm:gap-4 border-b border-border py-2 sm:py-2 rounded">
+                    <div className="flex items-center gap-2 sm:gap-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedItemIds.length === currentItems.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedItemIds(currentItems.map((item) => item.id));
+                          } else {
+                            setSelectedItemIds([]);
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary flex-shrink-0"
+                      />
+                      <span className="text-sm text-muted-foreground truncate">
+                        {selectedItemIds.length === currentItems.length
+                          ? "All selected"
+                          : selectedItemIds.length > 0
+                            ? `${selectedItemIds.length} selected`
+                            : "Select all"}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => exportData(selectedType)}
+                        className="hidden sm:inline-flex items-center gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors whitespace-nowrap flex-shrink-0"
+                      >
+                        <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+                        Export
+                      </button>
+                      <button
+                        onClick={() => exportData(selectedType)}
+                        className="sm:hidden inline-flex items-center gap-2 px-2 py-2 text-xs font-medium text-foreground bg-card border border-border rounded-lg hover:bg-muted transition-colors whitespace-nowrap flex-shrink-0"
+                      >
+                        <Download className="w-3 h-3" />
+                        Export
+                      </button>
+                    </div>
                   </div>
 
                   {/* Items */}
                   {paginatedItems.map((item, index) => (
                     <div
                       key={item.id}
-                      className={`flex items-center gap-4 py-3 hover:bg-muted transition-colors ${index !== paginatedItems.length - 1 ? 'border-b border-border' : ''
+                      className={`flex items-center gap-2 sm:gap-4 py-2 sm:py-3 hover:bg-muted transition-colors ${index !== paginatedItems.length - 1 ? 'border-b border-border' : ''
                         }`}
                     >
                       <input
                         type="checkbox"
                         checked={selectedItemIds.includes(item.id)}
                         onChange={() => toggleItemSelection(item.id)}
-                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
+                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary flex-shrink-0"
                       />
-                      <div className="flex-1 font-mono text-sm text-foreground truncate">
+                      <div className="flex-1 font-mono text-sm text-foreground truncate pr-2">
                         {item.value || '<empty>'}
                       </div>
                       <button
                         onClick={() => copyToClipboard(item.value, item.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground bg-card border border-border rounded hover:bg-muted transition-colors min-w-[75px]"
+                        className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-foreground bg-card border border-border rounded hover:bg-muted transition-colors w-auto sm:min-w-[75px] flex-shrink-0"
                       >
                         {copiedId === item.id ? (
                           <>
@@ -432,23 +442,21 @@ const TestData = () => {
     <div className="min-h-screen bg-background">
       <div className="mx-auto py-4 px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center flex-wrap">
-                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">
-                  <span className="hidden sm:inline">Test Data Library</span>
-                  <span className="sm:hidden">Test Data</span>
-                </h1>
-                <div className="flex items-center space-x-2 ml-2">
-                  <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground">
-                    {filteredTypes.length} {filteredTypes.length === 1 ? 'type' : 'types'}
-                  </span>
-                </div>
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div className="flex items-center flex-wrap gap-2 flex-1">
+              <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">
+                <span className="hidden sm:inline">Test Data Library</span>
+                <span className="sm:hidden">Test Data</span>
+              </h1>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-1 bg-muted rounded-full text-xs font-normal text-foreground whitespace-nowrap">
+                  {filteredTypes.length} {filteredTypes.length === 1 ? 'type' : 'types'}
+                </span>
               </div>
             </div>
             <Dialog open={isTypeOpen} onOpenChange={setIsTypeOpen}>
               <DialogTrigger asChild>
-                <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded hover:bg-primary/90 transition-colors">
+                <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded hover:bg-primary/90 transition-colors whitespace-nowrap">
                   <Plus className="w-4 h-4" />
                   Add Type
                 </button>
@@ -477,7 +485,7 @@ const TestData = () => {
                       placeholder="Brief description..."
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="icon">Icon</Label>
                       <select
@@ -515,48 +523,50 @@ const TestData = () => {
         </div>
 
         <div className="bg-card shadow-sm rounded-lg overflow-hidden border border-border">
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={selectedTypeIds.length === paginatedTypes.length && paginatedTypes.length > 0}
-                onChange={handleSelectAllTypes}
-                className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
-              />
-              <span className="text-sm text-muted-foreground">Select All</span>
-            </div>
-
-            <div className="flex items-center gap-3 flex-1 justify-end">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search types..."
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setTypesPage(1); }}
-                  className="pl-10 w-64 h-9"
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3 order-2 sm:order-1">
+                <input
+                  type="checkbox"
+                  checked={selectedTypeIds.length === paginatedTypes.length && paginatedTypes.length > 0}
+                  onChange={handleSelectAllTypes}
+                  className="w-4 h-4 rounded border-input text-primary focus:ring-primary flex-shrink-0"
                 />
+                <span className="text-sm text-muted-foreground">Select All</span>
               </div>
 
-              <div className="flex gap-1 border border-border rounded-lg p-1 bg-card">
-                <button
-                  onClick={() => setView('grid')}
-                  className={`p-1.5 rounded transition-colors ${view === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                >
-                  <Grid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setView('list')}
-                  className={`p-1.5 rounded transition-colors ${view === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
+              <div className="flex items-center gap-3 flex-1 justify-end order-1 sm:order-2">
+                <div className="relative flex-1 sm:w-auto">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search types..."
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setTypesPage(1); }}
+                    className="pl-10 w-full sm:w-64 h-9"
+                  />
+                </div>
+
+                <div className="flex gap-1 border border-border rounded-lg p-1 bg-card">
+                  <button
+                    onClick={() => setView('grid')}
+                    className={`p-1.5 rounded transition-colors ${view === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                  >
+                    <Grid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setView('list')}
+                    className={`p-1.5 rounded transition-colors ${view === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {view === 'grid' ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
                 {paginatedTypes.map((type) => {
                   const TypeIcon = ICON_MAP[type.icon] || Database;
                   const iconColorClass = COLOR_MAP[type.color] || COLOR_MAP.blue;
@@ -567,18 +577,18 @@ const TestData = () => {
                     <div
                       key={type.id}
                       onDoubleClick={() => setSelectedType(type.id)}
-                      className={`group relative bg-card border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-muted'}`}
+                      className={`group relative bg-card border rounded-lg p-3 sm:p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-muted'}`}
                     >
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => { e.stopPropagation(); toggleTypeSelection(type.id); }}
-                        className="absolute top-3 left-3 w-4 h-4 rounded border-input text-primary focus:ring-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-2 sm:top-3 left-2 sm:left-3 w-4 h-4 rounded border-input text-primary focus:ring-primary opacity-0 group-hover:opacity-100 transition-opacity"
                       />
 
-                      <div className="flex flex-col items-center text-center space-y-3">
-                        <div className={`w-12 h-12 rounded-lg ${iconColorClass} flex items-center justify-center`}>
-                          <TypeIcon className="w-6 h-6" />
+                      <div className="flex flex-col items-center text-center space-y-2 sm:space-y-3">
+                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg ${iconColorClass} flex items-center justify-center`}>
+                          <TypeIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div className="w-full">
                           <h3 className="font-medium text-foreground text-sm truncate">{type.name}</h3>
@@ -608,22 +618,22 @@ const TestData = () => {
                     <div
                       key={type.id}
                       onDoubleClick={() => setSelectedType(type.id)}
-                      className={`group flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${isSelected ? 'ring-2 ring-primary border-primary bg-primary/5' : 'border-border hover:border-muted bg-card'}`}
+                      className={`group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${isSelected ? 'ring-2 ring-primary border-primary bg-primary/5' : 'border-border hover:border-muted bg-card'}`}
                     >
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => { e.stopPropagation(); toggleTypeSelection(type.id); }}
-                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
+                        className="w-4 h-4 rounded border-input text-primary focus:ring-primary flex-shrink-0"
                       />
-                      <div className={`w-10 h-10 rounded-lg ${iconColorClass} flex items-center justify-center flex-shrink-0`}>
-                        <TypeIcon className="w-5 h-5" />
+                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg ${iconColorClass} flex items-center justify-center flex-shrink-0`}>
+                        <TypeIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-foreground text-sm">{type.name}</h3>
+                      <div className="flex-1 min-w-0 pr-2">
+                        <h3 className="font-medium text-foreground text-sm truncate">{type.name}</h3>
                         <p className="text-xs text-muted-foreground truncate">{type.description}</p>
                       </div>
-                      <div className="text-xs text-muted-foreground flex-shrink-0">
+                      <div className="text-xs text-muted-foreground flex-shrink-0 whitespace-nowrap">
                         {itemCount} item{itemCount !== 1 ? 's' : ''}
                       </div>
                     </div>

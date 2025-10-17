@@ -16,6 +16,7 @@ import {
     AlertCircle,
     Settings,
     ExternalLink,
+    ChevronRight,
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import InlineEditCell from './InlineEditCell';
@@ -37,11 +38,23 @@ const BugList = ({
     const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
     const [loadingActions, setLoadingActions] = useState([]);
+    const [expandedBugs, setExpandedBugs] = useState(new Set());
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
+    const toggleExpanded = useCallback((bugId) => {
+        setExpandedBugs(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(bugId)) {
+                newSet.delete(bugId);
+            } else {
+                newSet.add(bugId);
+            }
+            return newSet;
+        });
+    }, []);
 
     const handleSelectAll = useCallback((checked) => {
         if (checked) {
@@ -64,18 +77,15 @@ const BugList = ({
             key,
             direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
         }));
-        setCurrentPage(1); // Reset to first page when sorting
+        setCurrentPage(1);
     }, []);
 
-    // Enhanced bulk action handler with loading states
     const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig, selectedOption) => {
         setLoadingActions(prev => [...prev, actionId]);
         
         try {
-            // Call the original onBulkAction
             await onBulkAction(actionId, selectedItems, actionConfig, selectedOption);
             
-            // Show success notification based on action
             const itemCount = selectedItems.length;
             const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
             
@@ -159,20 +169,18 @@ const BugList = ({
         });
     }, [bugs, sortConfig]);
 
-    // Pagination calculations
     const totalItems = sortedBugs.length;
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedBugs = sortedBugs.slice(startIndex, endIndex);
 
-    // Pagination handlers
     const handlePageChange = useCallback((page) => {
         setCurrentPage(page);
     }, []);
 
     const handleItemsPerPageChange = useCallback((newItemsPerPage) => {
         setItemsPerPage(newItemsPerPage);
-        setCurrentPage(1); // Reset to first page
+        setCurrentPage(1);
     }, []);
 
     const handleLinkTestCase = useCallback((bugId, testCaseIds) => {
@@ -287,25 +295,20 @@ const BugList = ({
     }, []);
 
     const formatEvidence = useCallback((evidence) => {
-        // Handle null, undefined, or empty values
         if (!evidence) return 'None';
 
-        // Handle string values
         if (typeof evidence === 'string') {
             return evidence.length > 100 ? evidence.slice(0, 100) + '...' : evidence;
         }
 
-        // Handle array values
         if (Array.isArray(evidence)) {
             return evidence.length ? `${evidence.length} item(s)` : 'None';
         }
 
-        // Handle object values (this is the critical part for AI-generated bugs)
         if (typeof evidence === 'object' && evidence !== null) {
             try {
                 const parts = [];
 
-                // Check for common evidence properties
                 if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
                 if (evidence.browserVersion || evidence.version) {
                     parts.push(`Version: ${evidence.browserVersion || evidence.version}`);
@@ -317,18 +320,15 @@ const BugList = ({
                         const hostname = new URL(evidence.url).hostname;
                         parts.push(`URL: ${hostname}`);
                     } catch {
-                        // If URL parsing fails, just use the raw URL
                         parts.push(`URL: ${evidence.url}`);
                     }
                 }
 
-                // If we found standard properties, format them nicely
                 if (parts.length > 0) {
                     const result = parts.join(' | ');
                     return result.length > 100 ? result.slice(0, 100) + '...' : result;
                 }
 
-                // If no standard properties, try to create a summary from all properties
                 const allKeys = Object.keys(evidence);
                 if (allKeys.length > 0) {
                     const summary = allKeys.map(key => {
@@ -342,7 +342,6 @@ const BugList = ({
                     return summary.length > 100 ? summary.slice(0, 100) + '...' : summary;
                 }
 
-                // Fallback if object exists but has no meaningful properties
                 return 'Evidence data';
 
             } catch (error) {
@@ -351,7 +350,6 @@ const BugList = ({
             }
         }
 
-        // Handle any other data types by converting to string safely
         try {
             const stringValue = String(evidence);
             return stringValue.length > 100 ? stringValue.slice(0, 100) + '...' : stringValue;
@@ -432,7 +430,7 @@ const BugList = ({
     if (loading) {
         return (
             <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
-                <div className="px-6 py-12 text-center">
+                <div className="px-4 sm:px-6 py-12 text-center">
                     <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-primary"></div>
                     <p className="mt-2 text-sm text-muted-foreground">Loading bugs...</p>
                 </div>
@@ -447,46 +445,47 @@ const BugList = ({
             <EnhancedBulkActionsBar 
                 selectedItems={selectedBugs}
                 onClearSelection={() => onSelectBugs([])}
-                assetType="bugs" // Uses predefined bug configuration
+                assetType="bugs"
                 pageTitle="bug"
                 onAction={handleBulkAction}
                 loadingActions={loadingActions}
             />
             
             {/* Header Controls */}
-            <div className="px-6 py-4 border-b border-border bg-muted">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 border-b border-border bg-muted">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                     {/* Left side - Select all and count */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                         <div className="flex items-center gap-2">
                             {isAllSelected ? (
                                 <CheckSquare
-                                    className="w-4 h-4 text-primary cursor-pointer"
+                                    className="w-4 h-4 text-primary cursor-pointer flex-shrink-0"
                                     onClick={() => handleSelectAll(false)}
                                 />
                             ) : (
                                 <Square
-                                    className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary"
+                                    className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary flex-shrink-0"
                                     onClick={() => handleSelectAll(true)}
                                 />
                             )}
-                            <span className="text-sm text-foreground">
+                            <span className="text-sm text-foreground whitespace-nowrap">
                                 {selectedBugs.length > 0 ? `${selectedBugs.length} selected` : 'Select all'}
                             </span>
                         </div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="text-sm text-muted-foreground whitespace-nowrap">
                             {totalItems} {totalItems === 1 ? 'bug' : 'bugs'}
                         </div>
                     </div>
 
                     {/* Right side - Sort controls */}
-                    <div className="flex items-center gap-3">
-                        <label className="text-sm text-foreground whitespace-nowrap">Sort by:</label>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <label className="text-sm text-foreground whitespace-nowrap hidden sm:inline">Sort by:</label>
+                        <label className="text-sm text-foreground whitespace-nowrap sm:hidden">Sort:</label>
                         <div className="flex items-center gap-2">
                             <select
                                 value={sortConfig.key}
                                 onChange={(e) => handleSort(e.target.value)}
-                                className="border border-border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
+                                className="w-full sm:w-48 border border-border rounded px-2 sm:px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
                             >
                                 {sortOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -496,7 +495,7 @@ const BugList = ({
                             </select>
                             <button
                                 onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
-                                className="p-1.5 rounded hover:bg-accent border border-border"
+                                className="p-1.5 rounded hover:bg-accent border border-border flex-shrink-0"
                                 title={`Sort ${sortConfig.direction === 'asc' ? 'descending' : 'ascending'}`}
                             >
                                 {getSortIcon(sortConfig.key)}
@@ -509,7 +508,7 @@ const BugList = ({
             {/* Bug List */}
             <div className="divide-y divide-border">
                 {paginatedBugs.length === 0 ? (
-                    <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+                    <div className="px-4 sm:px-6 py-12 text-center text-sm text-muted-foreground">
                         <div className="flex flex-col items-center">
                             <Bug className="w-12 h-12 text-muted-foreground/50 mb-4" />
                             <p>No bugs found</p>
@@ -520,21 +519,22 @@ const BugList = ({
                     paginatedBugs.map((bug) => {
                         const linkedTestCases = relationships?.bugToTestCases?.[bug.id] || [];
                         const isSelected = selectedBugs.includes(bug.id);
+                        const isExpanded = expandedBugs.has(bug.id);
 
                         return (
-                            <div key={bug.id} className={`p-6 hover:bg-accent transition-colors ${isSelected ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
+                            <div key={bug.id} className={`p-3 sm:p-4 lg:p-6 hover:bg-accent transition-colors ${isSelected ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
                                 {/* Main content */}
-                                <div className="flex items-start gap-4">
+                                <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
                                     {/* Checkbox and severity indicator */}
-                                    <div className="flex items-center gap-3 pt-1">
+                                    <div className="flex items-center gap-2 sm:gap-3 pt-1 flex-shrink-0">
                                         {isSelected ? (
                                             <CheckSquare
-                                                className="w-4 h-4 text-primary cursor-pointer flex-shrink-0"
+                                                className="w-4 h-4 text-primary cursor-pointer"
                                                 onClick={() => handleSelectItem(bug.id, false)}
                                             />
                                         ) : (
                                             <Square
-                                                className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary flex-shrink-0"
+                                                className="w-4 h-4 text-muted-foreground cursor-pointer hover:text-primary"
                                                 onClick={() => handleSelectItem(bug.id, true)}
                                             />
                                         )}
@@ -543,32 +543,42 @@ const BugList = ({
 
                                     {/* Content */}
                                     <div className="flex-1 min-w-0">
-                                        {/* Header - Title and ID */}
-                                        <div className="flex items-start justify-between gap-4 mb-3">
+                                        {/* Header - Title and Actions */}
+                                        <div className="flex items-start justify-between gap-2 sm:gap-4 mb-2 sm:mb-3">
                                             <div className="flex-1 min-w-0">
-                                                <h3 className="text-lg font-medium text-foreground mb-1 line-clamp-2">
+                                                <h3 className="text-base sm:text-lg font-medium text-foreground mb-1 line-clamp-2 break-words">
                                                     {bug.title || 'Untitled Bug'}
                                                 </h3>
-                                                <div className="text-sm text-muted-foreground">
+                                                <div className="text-xs sm:text-sm text-muted-foreground">
                                                     #{bug.id?.slice(-8) || 'Unknown'}
                                                 </div>
                                             </div>
-                                            <button
-                                                onClick={() => onView(bug)}
-                                                className="p-2 rounded-lg hover:bg-accent border border-border flex-shrink-0 transition-colors"
-                                                title="View bug details"
-                                            >
-                                                <MessageSquare className="w-4 h-4 text-foreground" />
-                                            </button>
+                                            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                                                {/* Mobile expand/collapse button */}
+                                                <button
+                                                    onClick={() => toggleExpanded(bug.id)}
+                                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-accent border border-border transition-colors lg:hidden"
+                                                    title={isExpanded ? "Show less" : "Show more"}
+                                                >
+                                                    <ChevronRight className={`w-4 h-4 text-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                                </button>
+                                                <button
+                                                    onClick={() => onView(bug)}
+                                                    className="p-1.5 sm:p-2 rounded-lg hover:bg-accent border border-border transition-colors"
+                                                    title="View bug details"
+                                                >
+                                                    <MessageSquare className="w-4 h-4 text-foreground" />
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        {/* Status badges */}
-                                        <div className="flex items-center gap-2 mb-4 flex-wrap">
+                                        {/* Status badges - Always visible */}
+                                        <div className="flex items-center gap-1.5 sm:gap-2 mb-3 sm:mb-4 flex-wrap">
                                             <InlineEditCell
                                                 value={bug.status}
                                                 options={statusOptions}
                                                 onChange={(value) => handleUpdateBug(bug.id, { status: value })}
-                                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${getStatusBadge(bug.status)}`}
+                                                className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded text-xs font-medium border ${getStatusBadge(bug.status)}`}
                                                 noSearch
                                             />
                                             <InlineEditCell
@@ -578,125 +588,145 @@ const BugList = ({
                                                     severity: value,
                                                     priority: getDerivedPriority(value)
                                                 })}
-                                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${getSeverityBadge(bug.severity)}`}
+                                                className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded text-xs font-medium border ${getSeverityBadge(bug.severity)}`}
                                                 noSearch
                                             />
-                                            <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${getPriorityBadge(bug.priority)}`}>
+                                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded text-xs font-medium border ${getPriorityBadge(bug.priority)}`}>
                                                 {bug.priority || 'Medium'}
                                             </span>
                                         </div>
 
-                                        {/* Details grid */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
-                                            {/* Assignee */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <User className="w-3 h-3" />
-                                                    <span>Assigned To</span>
-                                                </div>
-                                                <InlineEditCell
-                                                    value={bug.assignee}
-                                                    options={assigneeOptions}
-                                                    onChange={(value) => handleUpdateBug(bug.id, { assignee: value })}
-                                                    className="text-sm text-foreground"
-                                                    noSearch
-                                                />
+                                        {/* Essential info - Always visible on mobile, compact view */}
+                                        <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-3 text-xs sm:text-sm lg:hidden">
+                                            <div className="flex items-center gap-1 text-muted-foreground">
+                                                <User className="w-3 h-3 flex-shrink-0" />
+                                                <span className="truncate max-w-[120px]">{formatReporter(bug)}</span>
                                             </div>
-
-                                            {/* Environment */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <Settings className="w-3 h-3" />
-                                                    <span>Environment</span>
-                                                </div>
-                                                <InlineEditCell
-                                                    value={bug.environment}
-                                                    options={environmentOptions}
-                                                    onChange={(value) => handleUpdateBug(bug.id, { environment: value })}
-                                                    className="text-sm text-foreground"
-                                                    noSearch
-                                                />
-                                            </div>
-
-                                            {/* Frequency */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <AlertCircle className="w-3 h-3" />
-                                                    <span>Frequency</span>
-                                                </div>
-                                                <InlineEditCell
-                                                    value={bug.frequency}
-                                                    options={frequencyOptions}
-                                                    onChange={(value) => handleUpdateBug(bug.id, { frequency: value })}
-                                                    className="text-sm text-foreground"
-                                                    noSearch
-                                                />
-                                            </div>
-
-                                            {/* Reporter */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <User className="w-3 h-3" />
-                                                    <span>Reporter</span>
-                                                </div>
-                                                <div className="text-sm text-foreground">
-                                                    {formatReporter(bug)}
-                                                </div>
-                                            </div>
-
-                                            {/* Created Date */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <Calendar className="w-3 h-3" />
-                                                    <span>Created</span>
-                                                </div>
-                                                <div className="text-sm text-foreground">
-                                                    {bug.due_date && isValidDate(new Date(bug.due_date))
-                                                        ? format(new Date(bug.due_date), 'MMM d, yyyy')
-                                                        : 'Not set'}
-                                                </div>
-                                            </div>
-
-                                            {/* Last Updated */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <Clock className="w-3 h-3" />
-                                                    <span>Updated</span>
-                                                </div>
-                                                <div className="text-sm text-foreground">
+                                            <div className="flex items-center gap-1 text-muted-foreground">
+                                                <Clock className="w-3 h-3 flex-shrink-0" />
+                                                <span className="whitespace-nowrap">
                                                     {bug.updated_at && isValidDate(new Date(bug.updated_at))
                                                         ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
                                                         : 'Unknown'}
-                                                </div>
+                                                </span>
                                             </div>
                                         </div>
 
-                                        {/* Evidence */}
-                                        {bug.evidence && (
-                                            <div className="mb-4">
-                                                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                                                    <ExternalLink className="w-3 h-3" />
-                                                    <span>Evidence</span>
+                                        {/* Expanded details - Hidden on mobile unless expanded, always visible on desktop */}
+                                        <div className={`${isExpanded ? 'block' : 'hidden'} lg:block`}>
+                                            {/* Details grid */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-3 sm:mb-4">
+                                                {/* Assignee */}
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <User className="w-3 h-3" />
+                                                        <span>Assigned To</span>
+                                                    </div>
+                                                    <InlineEditCell
+                                                        value={bug.assignee}
+                                                        options={assigneeOptions}
+                                                        onChange={(value) => handleUpdateBug(bug.id, { assignee: value })}
+                                                        className="text-xs sm:text-sm text-foreground truncate"
+                                                        noSearch
+                                                    />
                                                 </div>
-                                                <div className="text-sm text-foreground bg-muted p-2 rounded border border-border">
-                                                    {formatEvidence(bug.evidence)}
-                                                </div>
-                                            </div>
-                                        )}
 
-                                        {/* Test Cases */}
-                                        <div className="space-y-1">
-                                            <div className="text-xs text-muted-foreground">Linked Test Cases</div>
-                                            <div className="max-w-md">
-                                                <MultiSelectDropdown
-                                                    options={testCaseOptions}
-                                                    value={linkedTestCases}
-                                                    onChange={(newTestCases) => handleLinkTestCase(bug.id, newTestCases)}
-                                                    placeholder="Link test cases..."
-                                                    type="testCases"
-                                                />
+                                                {/* Environment */}
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <Settings className="w-3 h-3" />
+                                                        <span>Environment</span>
+                                                    </div>
+                                                    <InlineEditCell
+                                                        value={bug.environment}
+                                                        options={environmentOptions}
+                                                        onChange={(value) => handleUpdateBug(bug.id, { environment: value })}
+                                                        className="text-xs sm:text-sm text-foreground truncate"
+                                                        noSearch
+                                                    />
+                                                </div>
+
+                                                {/* Frequency */}
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <AlertCircle className="w-3 h-3" />
+                                                        <span>Frequency</span>
+                                                    </div>
+                                                    <InlineEditCell
+                                                        value={bug.frequency}
+                                                        options={frequencyOptions}
+                                                        onChange={(value) => handleUpdateBug(bug.id, { frequency: value })}
+                                                        className="text-xs sm:text-sm text-foreground truncate"
+                                                        noSearch
+                                                    />
+                                                </div>
+
+                                                {/* Reporter - Hidden on mobile (shown in compact view above) */}
+                                                <div className="space-y-1 hidden lg:block">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <User className="w-3 h-3" />
+                                                        <span>Reporter</span>
+                                                    </div>
+                                                    <div className="text-xs sm:text-sm text-foreground truncate">
+                                                        {formatReporter(bug)}
+                                                    </div>
+                                                </div>
                                             </div>
-                                                
+
+                                            {/* Date and Test Cases Row */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-3 sm:mb-4">
+                                                {/* Created Date */}
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <Calendar className="w-3 h-3" />
+                                                        <span>Created</span>
+                                                    </div>
+                                                    <div className="text-xs sm:text-sm text-foreground">
+                                                        {bug.due_date && isValidDate(new Date(bug.due_date))
+                                                            ? format(new Date(bug.due_date), 'MMM d, yyyy')
+                                                            : 'Not set'}
+                                                    </div>
+                                                </div>
+
+                                                {/* Last Updated - Hidden on mobile (shown in compact view above) */}
+                                                <div className="space-y-1 hidden lg:block">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <Clock className="w-3 h-3" />
+                                                        <span>Updated</span>
+                                                    </div>
+                                                    <div className="text-xs sm:text-sm text-foreground">
+                                                        {bug.updated_at && isValidDate(new Date(bug.updated_at))
+                                                            ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
+                                                            : 'Unknown'}
+                                                    </div>
+                                                </div>
+
+                                                {/* Test Cases */}
+                                                <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                                                    <div className="text-xs text-muted-foreground">Linked Test Cases</div>
+                                                    <div className="w-full sm:max-w-md">
+                                                        <MultiSelectDropdown
+                                                            options={testCaseOptions}
+                                                            value={linkedTestCases}
+                                                            onChange={(newTestCases) => handleLinkTestCase(bug.id, newTestCases)}
+                                                            placeholder="Link test cases..."
+                                                            type="testCases"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* Evidence */}
+                                            {bug.evidence && (
+                                                <div className="mb-3 sm:mb-4">
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                                                        <ExternalLink className="w-3 h-3" />
+                                                        <span>Evidence</span>
+                                                    </div>
+                                                    <div className="text-xs sm:text-sm text-foreground bg-muted p-2 rounded border border-border break-words">
+                                                        {formatEvidence(bug.evidence)}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

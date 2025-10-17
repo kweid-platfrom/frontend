@@ -168,9 +168,9 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
         <div className="space-y-6">
             {/* Header */}
             <div className="text-center">
-                <SparklesIcon className="mx-auto h-12 w-12 text-teal-500 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">AI Bug Report Generator</h3>
-                <p className="text-sm text-gray-500">
+                <SparklesIcon className="mx-auto h-12 w-12 text-primary mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">AI Bug Report Generator</h3>
+                <p className="text-sm text-muted">
                     Describe the issue or paste console errors, and AI will generate a detailed bug report
                 </p>
                 
@@ -178,23 +178,23 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                 <div className="mt-3 flex items-center justify-center space-x-2">
                     {!isInitialized ? (
                         <>
-                            <div className="animate-spin rounded h-4 w-4 border-b-2 border-teal-500"></div>
-                            <span className="text-xs text-gray-500">Initializing AI service...</span>
+                            <div className="animate-spin rounded h-4 w-4 border-b-2 border-primary"></div>
+                            <span className="text-xs text-muted">Initializing AI service...</span>
                         </>
                     ) : isHealthy ? (
                         <>
-                            <CheckCircleIcon className="h-4 w-4 text-green-500" />
-                            <span className="text-xs text-green-600">
+                            <CheckCircleIcon className="h-4 w-4 text-success" />
+                            <span className="text-xs text-success">
                                 AI Ready ({provider} - {model})
                             </span>
                         </>
                     ) : (
                         <>
-                            <XCircleIcon className="h-4 w-4 text-red-500" />
-                            <span className="text-xs text-red-600">AI Service Issues</span>
+                            <XCircleIcon className="h-4 w-4 text-destructive" />
+                            <span className="text-xs text-destructive">AI Service Issues</span>
                             <button
                                 onClick={initialize}
-                                className="text-xs text-teal-600 hover:text-teal-700 underline ml-2"
+                                className="text-xs text-primary hover:text-primary ml-2 underline"
                             >
                                 Retry
                             </button>
@@ -205,10 +205,10 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
             {/* Error Display */}
             {(aiError || error) && (
-                <div className="bg-red-50 border border-red-200 rounded p-3">
+                <div className="bg-destructive/5 border border-destructive/20 rounded p-3">
                     <div className="flex items-start">
-                        <XCircleIcon className="h-5 w-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
-                        <div className="text-sm text-red-700 flex-1">
+                        <XCircleIcon className="h-5 w-5 text-destructive mr-2 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-destructive flex-1">
                             <p className="font-medium">Error</p>
                             <p>{aiError || error}</p>
                         </div>
@@ -217,7 +217,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                                 clearError();
                                 setError('');
                             }}
-                            className="text-red-400 hover:text-red-600 ml-2"
+                            className="text-destructive hover:text-destructive ml-2"
                         >
                             <XCircleIcon className="h-4 w-4" />
                         </button>
@@ -230,7 +230,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                 <div className="space-y-4">
                     {/* Issue Description Input */}
                     <div>
-                        <label htmlFor="issue-description" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="issue-description" className="block text-sm font-medium text-foreground mb-2">
                             Issue Description
                         </label>
                         <textarea
@@ -239,7 +239,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder="Describe the issue you're experiencing... (e.g., 'The submit button doesn't work when I click it', 'Page crashes when loading user profile')"
                             rows={4}
-                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                            className="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary resize-vertical"
                             disabled={isProcessing || isGenerating || !isInitialized}
                         />
                     </div>
@@ -247,13 +247,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                     {/* Console Error Input */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
-                            <label htmlFor="console-error" className="block text-sm font-medium text-gray-700">
+                            <label htmlFor="console-error" className="block text-sm font-medium text-foreground">
                                 Console Error (Optional)
                             </label>
                             <button
                                 type="button"
                                 onClick={handlePasteConsoleError}
-                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-secondary hover:bg-accent rounded border border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={isProcessing || isGenerating || !isInitialized}
                             >
                                 <ClipboardDocumentIcon className="h-3 w-3 mr-1" />
@@ -266,17 +266,17 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             onChange={(e) => setConsoleError(e.target.value)}
                             placeholder="Paste console errors here... (e.g., 'ReferenceError: validateSuiteAccess is not defined')"
                             rows={6}
-                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical font-mono text-sm"
+                            className="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary resize-vertical font-mono text-sm"
                             disabled={isProcessing || isGenerating || !isInitialized}
                         />
                     </div>
 
                     {/* AI Analysis Preview */}
                     {hasInput && isHealthy && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                        <div className="bg-warning/5 border border-warning/20 rounded p-3">
                             <div className="flex">
-                                <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
-                                <div className="text-sm text-yellow-700">
+                                <ExclamationTriangleIcon className="h-5 w-5 text-warning mr-2 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-warning">
                                     <p className="font-medium">AI will analyze your input and generate:</p>
                                     <ul className="mt-1 list-disc list-inside space-y-1">
                                         <li>Intelligent bug title and comprehensive description</li>
@@ -293,10 +293,10 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
                     {/* Service Unavailable Warning */}
                     {isInitialized && !isHealthy && (
-                        <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <div className="bg-destructive/5 border border-destructive/20 rounded p-3">
                             <div className="flex">
-                                <XCircleIcon className="h-5 w-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
-                                <div className="text-sm text-red-700">
+                                <XCircleIcon className="h-5 w-5 text-destructive mr-2 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-destructive">
                                     <p className="font-medium">AI Service Issues</p>
                                     <p>The AI service is experiencing issues. Please try again or contact support.</p>
                                 </div>
@@ -312,18 +312,18 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             disabled={isDisabled}
                             className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded transition-colors ${
                                 isDisabled
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-teal-600 text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2'
+                                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                    : 'bg-primary text-primary-foreground hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
                             }`}
                         >
                             {isGenerating ? (
                                 <>
-                                    <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    <div className="animate-spin rounded h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                                     Generating AI Report...
                                 </>
                             ) : !isInitialized ? (
                                 <>
-                                    <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    <div className="animate-spin rounded h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                                     Initializing...
                                 </>
                             ) : (
@@ -337,7 +337,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
                     {/* Additional Info */}
                     {isInitialized && isHealthy && (
-                        <div className="text-xs text-gray-500 text-center">
+                        <div className="text-xs text-muted text-center">
                             Powered by {provider} ({model})
                         </div>
                     )}
@@ -348,10 +348,10 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
             {generatedReport && (
                 <div className="space-y-6">
                     {/* Header for generated report */}
-                    <div className="bg-green-50 border border-green-200 rounded p-3">
+                    <div className="bg-success/5 border border-success/20 rounded p-3">
                         <div className="flex items-center">
-                            <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
-                            <div className="text-sm text-green-700">
+                            <CheckCircleIcon className="h-5 w-5 text-success mr-2" />
+                            <div className="text-sm text-success">
                                 <p className="font-medium">AI Bug Report Generated Successfully</p>
                                 <p>Review the details below and submit when ready</p>
                             </div>
@@ -359,31 +359,31 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                     </div>
 
                     {/* Generated Report Preview */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
+                    <div className="bg-card border border-border rounded-lg p-6 space-y-4">
                         {/* Title */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Bug Title
                             </label>
                             <input
                                 type="text"
                                 value={generatedReport.title || ''}
                                 onChange={(e) => handleEditGenerated('title', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                 disabled={isSubmittingReport}
                             />
                         </div>
 
                         {/* Description */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Description
                             </label>
                             <textarea
                                 value={generatedReport.description || ''}
                                 onChange={(e) => handleEditGenerated('description', e.target.value)}
                                 rows={3}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary resize-vertical"
                                 disabled={isSubmittingReport}
                             />
                         </div>
@@ -391,27 +391,27 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                         {/* Two Column Layout - Actual and Expected Behavior */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Actual Behavior
                                 </label>
                                 <textarea
                                     value={generatedReport.actualBehavior || ''}
                                     onChange={(e) => handleEditGenerated('actualBehavior', e.target.value)}
                                     rows={3}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary resize-vertical"
                                     disabled={isSubmittingReport}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Expected Behavior
                                 </label>
                                 <textarea
                                     value={generatedReport.expectedBehavior || ''}
                                     onChange={(e) => handleEditGenerated('expectedBehavior', e.target.value)}
                                     rows={3}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary resize-vertical"
                                     disabled={isSubmittingReport}
                                 />
                             </div>
@@ -419,14 +419,14 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
                         {/* Steps to Reproduce */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Steps to Reproduce
                             </label>
                             <textarea
                                 value={generatedReport.stepsToReproduce || ''}
                                 onChange={(e) => handleEditGenerated('stepsToReproduce', e.target.value)}
                                 rows={4}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary resize-vertical"
                                 disabled={isSubmittingReport}
                             />
                         </div>
@@ -434,13 +434,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                         {/* Classification Layout - Severity, Category, Feature, Environment, Frequency */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Severity
                                 </label>
                                 <select
                                     value={generatedReport.severity || ''}
                                     onChange={(e) => handleEditGenerated('severity', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                     disabled={isSubmittingReport}
                                 >
                                     <option value="">Select Severity</option>
@@ -452,13 +452,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Category
                                 </label>
                                 <select
                                     value={generatedReport.category || ''}
                                     onChange={(e) => handleEditGenerated('category', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                     disabled={isSubmittingReport}
                                 >
                                     <option value="">Select Category</option>
@@ -472,13 +472,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Feature/Module
                                 </label>
                                 <select
                                     value={generatedReport.feature || ''}
                                     onChange={(e) => handleEditGenerated('feature', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                     disabled={isSubmittingReport}
                                 >
                                     <option value="">Select Feature</option>
@@ -489,13 +489,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Environment
                                 </label>
                                 <select
                                     value={generatedReport.environment || 'Production'}
                                     onChange={(e) => handleEditGenerated('environment', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                     disabled={isSubmittingReport}
                                 >
                                     <option value="Production">Production</option>
@@ -506,13 +506,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Frequency
                                 </label>
                                 <select
                                     value={generatedReport.frequency || 'Once'}
                                     onChange={(e) => handleEditGenerated('frequency', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                     disabled={isSubmittingReport}
                                 >
                                     <option value="Once">Once</option>
@@ -526,7 +526,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                         {/* Workaround and Assignment */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Workaround (Optional)
                                 </label>
                                 <textarea
@@ -534,20 +534,20 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                                     onChange={(e) => handleEditGenerated('workaround', e.target.value)}
                                     placeholder="Any temporary solutions or workarounds"
                                     rows={3}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical"
+                                    className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary resize-vertical"
                                     disabled={isSubmittingReport}
                                 />
                             </div>
 
                             {teamMembers.length > 0 && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-foreground mb-2">
                                         Assign To
                                     </label>
                                     <select
                                         value={generatedReport.assignedTo || ''}
                                         onChange={(e) => handleEditGenerated('assignedTo', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                        className="w-full px-3 py-2 border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                                         disabled={isSubmittingReport}
                                     >
                                         <option value="">Unassigned</option>
@@ -564,11 +564,11 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                         {/* Evidence/Additional Info */}
                         {generatedReport.evidence && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Technical Evidence
                                 </label>
-                                <div className="bg-gray-50 border border-gray-200 rounded p-3">
-                                    <code className="text-sm text-gray-800 whitespace-pre-wrap">
+                                <div className="bg-muted border border-border rounded p-3">
+                                    <code className="text-sm text-foreground whitespace-pre-wrap">
                                         {generatedReport.evidence}
                                     </code>
                                 </div>
@@ -577,7 +577,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                     </div>
 
                     {/* Attachments Section */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                    <div className="bg-card border border-border rounded-lg p-6">
                         <BugReportAttachments
                             attachments={attachments}
                             setAttachments={setAttachments}
@@ -588,11 +588,11 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                     </div>
 
                     {/* Action Buttons for Generated Report */}
-                    <div className="flex justify-between items-center pt-4 border-t">
+                    <div className="flex justify-between items-center pt-4 border-t border-border">
                         <button
                             type="button"
                             onClick={handleStartOver}
-                            className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                             disabled={isSubmittingReport}
                         >
                             <PencilIcon className="h-4 w-4 mr-2" />
@@ -605,13 +605,13 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             disabled={isSubmittingReport || !generatedReport.title || !generatedReport.description || !generatedReport.severity || !generatedReport.category}
                             className={`inline-flex items-center px-6 py-2 text-sm font-medium rounded transition-colors ${
                                 isSubmittingReport || !generatedReport.title || !generatedReport.description || !generatedReport.severity || !generatedReport.category
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-teal-600 text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2'
+                                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                    : 'bg-primary text-primary-foreground hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
                             }`}
                         >
                             {isSubmittingReport ? (
                                 <>
-                                    <div className="animate-spin rounded h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    <div className="animate-spin rounded h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                                     Submitting AI Report...
                                 </>
                             ) : (
@@ -625,7 +625,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
                     {/* AI Generated Badge */}
                     <div className="text-center">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground">
                             <SparklesIcon className="h-3 w-3 mr-1" />
                             AI Generated Report
                         </span>

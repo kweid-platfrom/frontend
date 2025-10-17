@@ -254,13 +254,13 @@ const QuickActions = ({ metrics, loading }) => {
 
     if (loading) {
         return (
-            <div className="bg-card rounded-lg border border-border shadow-theme-sm p-6">
+            <div className="bg-card rounded-lg border border-border shadow-theme-sm p-3 sm:p-4 md:p-6">
                 <div className="animate-pulse space-y-4">
-                    <div className="h-6 bg-muted rounded w-1/4"></div>
-                    <div className="h-4 bg-muted rounded w-1/2"></div>
-                    <div className="space-y-3 mt-6">
+                    <div className="h-5 sm:h-6 bg-muted rounded w-1/3 sm:w-1/4"></div>
+                    <div className="h-3 sm:h-4 bg-muted rounded w-2/3 sm:w-1/2"></div>
+                    <div className="space-y-3 mt-4 sm:mt-6">
                         {[1, 2, 3].map(i => (
-                            <div key={i} className="h-16 bg-muted rounded"></div>
+                            <div key={i} className="h-14 sm:h-16 bg-muted rounded"></div>
                         ))}
                     </div>
                 </div>
@@ -270,25 +270,28 @@ const QuickActions = ({ metrics, loading }) => {
 
     return (
         <div className="bg-card rounded-lg border border-border shadow-theme-sm">
-            <div className="p-6 border-b border-border">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-foreground">Activity Overview</h2>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            Recent activities and key metrics for your testing workspace
+            {/* Header Section - Responsive */}
+            <div className="p-3 sm:p-4 md:p-6 border-b border-border">
+                <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-base sm:text-lg font-semibold text-foreground">Activity Overview</h2>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                            Recent activities and key metrics
                             {activeSuite && (
                                 <span className="ml-2 inline-flex items-center text-[rgb(var(--color-success))]">
                                     <span className="w-2 h-2 bg-[rgb(var(--color-success))] rounded-full animate-pulse mr-1"></span>
-                                    Live
+                                    <span className="hidden sm:inline">Live</span>
                                 </span>
                             )}
                         </p>
                     </div>
-                    <div className="flex items-center space-x-4">
+                    
+                    {/* Quick Stats - Responsive Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 lg:flex lg:space-x-4 lg:gap-0">
                         {quickStats.map((stat, index) => (
                             <div key={index} className="text-center">
-                                <div className="text-lg font-bold text-foreground">{stat.value}</div>
-                                <div className="text-xs text-muted-foreground">{stat.label}</div>
+                                <div className="text-base sm:text-lg font-bold text-foreground">{stat.value}</div>
+                                <div className="text-xs text-muted-foreground truncate">{stat.label}</div>
                                 <div className={`text-xs ${
                                     stat.change.startsWith('+') && stat.change !== '+0' 
                                         ? 'text-[rgb(var(--color-success))]' 
@@ -304,31 +307,33 @@ const QuickActions = ({ metrics, loading }) => {
                 </div>
             </div>
 
-            <div className="p-6">
-                <div className="border-t border-border pt-6">
-                    <div className="flex items-center justify-between mb-4">
+            {/* Main Content - Responsive Padding */}
+            <div className="p-3 sm:p-4 md:p-6">
+                {/* Recent Activities Section */}
+                <div className="border-t border-border pt-4 sm:pt-6">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
                         <h3 className="text-sm font-medium text-foreground">Recent Activities</h3>
                         {activitiesLoading && (
                             <span className="text-xs text-muted-foreground flex items-center">
                                 <Activity className="w-3 h-3 mr-1 animate-spin" />
-                                Loading...
+                                <span className="hidden sm:inline">Loading...</span>
                             </span>
                         )}
                     </div>
                     
                     {!activeSuite ? (
-                        <div className="text-center py-12">
-                            <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                        <div className="text-center py-8 sm:py-12">
+                            <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                             <p className="text-sm text-muted-foreground">Select a test suite to view activities</p>
                         </div>
                     ) : recentActivities.length === 0 ? (
-                        <div className="text-center py-12">
-                            <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                        <div className="text-center py-8 sm:py-12">
+                            <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                             <p className="text-sm text-muted-foreground">No recent activities yet</p>
                             <p className="text-xs text-muted-foreground mt-1">Activities will appear here as you work</p>
                         </div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-2 sm:space-y-3">
                             {recentActivities.map((activity) => {
                                 const colors = getColorClasses(activity.color);
                                 const IconComponent = activity.icon;
@@ -336,58 +341,58 @@ const QuickActions = ({ metrics, loading }) => {
                                 return (
                                     <div 
                                         key={activity.id} 
-                                        className={`flex items-center space-x-3 p-3 rounded-lg ${colors.hoverBg} transition-colors cursor-pointer`}
+                                        className={`flex items-start sm:items-center space-x-2 sm:space-x-3 p-2 sm:p-3 rounded-lg ${colors.hoverBg} transition-colors cursor-pointer`}
                                     >
-                                        <div className={`p-2 rounded-full ${colors.bg}`}>
-                                            <IconComponent className={`w-4 h-4 ${colors.text}`} />
+                                        <div className={`p-1.5 sm:p-2 rounded-full ${colors.bg} flex-shrink-0`}>
+                                            <IconComponent className={`w-3 h-3 sm:w-4 sm:h-4 ${colors.text}`} />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-sm font-medium text-foreground truncate">
+                                            <div className="flex items-start sm:items-center justify-between gap-2">
+                                                <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                                                     {activity.title}
                                                 </p>
-                                                <div className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                                                <div className="text-xs text-muted-foreground flex-shrink-0">
                                                     {formatTimeAgo(activity.timestamp)}
                                                 </div>
                                             </div>
                                             {activity.description && (
-                                                <p className="text-xs text-muted-foreground truncate">
+                                                <p className="text-xs text-muted-foreground truncate hidden sm:block">
                                                     {activity.description}
                                                 </p>
                                             )}
-                                            <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                                            <div className="flex items-center flex-wrap gap-1 sm:gap-1.5 mt-1">
                                                 <span className="text-xs text-muted-foreground">
                                                     by {activity.user}
                                                 </span>
                                                 
                                                 {activity.details?.aiGenerated && (
-                                                    <span className={`px-1.5 py-0.5 ${colors.tagBg} ${colors.tagText} rounded text-xs flex items-center space-x-1`}>
-                                                        <Brain className="w-3 h-3" />
+                                                    <span className={`px-1 sm:px-1.5 py-0.5 ${colors.tagBg} ${colors.tagText} rounded text-xs flex items-center space-x-0.5 sm:space-x-1`}>
+                                                        <Brain className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                                         <span>AI</span>
                                                     </span>
                                                 )}
                                                 
                                                 {activity.details?.hasRecording && (
-                                                    <span className="px-1.5 py-0.5 bg-[rgb(var(--color-info)/0.15)] text-[rgb(var(--color-info))] rounded text-xs flex items-center space-x-1">
-                                                        <Video className="w-3 h-3" />
-                                                        <span>Video</span>
+                                                    <span className="px-1 sm:px-1.5 py-0.5 bg-[rgb(var(--color-info)/0.15)] text-[rgb(var(--color-info))] rounded text-xs flex items-center space-x-0.5 sm:space-x-1">
+                                                        <Video className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                                        <span className="hidden sm:inline">Video</span>
                                                     </span>
                                                 )}
                                                 
                                                 {activity.details?.assetType && (
-                                                    <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-xs">
+                                                    <span className="px-1 sm:px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-xs hidden sm:inline-block">
                                                         {activity.details.assetType}
                                                     </span>
                                                 )}
                                                 
                                                 {activity.details?.feature && (
-                                                    <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-xs">
+                                                    <span className="px-1 sm:px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-xs hidden md:inline-block">
                                                         {activity.details.feature}
                                                     </span>
                                                 )}
                                                 
                                                 {activity.details?.severity && (
-                                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                                    <span className={`px-1 sm:px-1.5 py-0.5 rounded text-xs font-medium ${
                                                         activity.details.severity === 'critical' 
                                                             ? 'bg-[rgb(var(--color-error)/0.15)] text-[rgb(var(--color-error))]'
                                                             : activity.details.severity === 'high'
@@ -406,21 +411,22 @@ const QuickActions = ({ metrics, loading }) => {
                     )}
                     
                     {recentActivities.length > 0 && (
-                        <div className="mt-4 pt-3 border-t border-border/50">
+                        <div className="mt-3 sm:mt-4 pt-3 border-t border-border/50">
                             <a 
                                 href="/activities" 
-                                className="text-sm text-[rgb(var(--color-info))] hover:text-[rgb(var(--color-info)/0.8)] font-medium inline-flex items-center space-x-1 transition-colors"
+                                className="text-xs sm:text-sm text-[rgb(var(--color-info))] hover:text-[rgb(var(--color-info)/0.8)] font-medium inline-flex items-center space-x-1 transition-colors"
                             >
                                 <span>View All Activities</span>
-                                <ArrowRight className="w-4 h-4" />
+                                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                             </a>
                         </div>
                     )}
                 </div>
 
-                <div className="border-t border-border pt-6 mt-6">
-                    <h3 className="text-sm font-medium text-foreground mb-4">Quick Links</h3>
-                    <div className="flex flex-wrap gap-2">
+                {/* Quick Links Section - Responsive */}
+                <div className="border-t border-border pt-4 sm:pt-6 mt-4 sm:mt-6">
+                    <h3 className="text-sm font-medium text-foreground mb-3 sm:mb-4">Quick Links</h3>
+                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                         {[
                             { label: "Documentation", href: "/docs", color: "info" },
                             { label: "API Reference", href: "/api-docs", color: "success" },
@@ -434,7 +440,7 @@ const QuickActions = ({ metrics, loading }) => {
                                     key={index}
                                     href={link.href}
                                     className={`
-                                        inline-flex items-center px-3 py-2 rounded-md text-sm font-medium
+                                        inline-flex items-center justify-center px-2 sm:px-3 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium
                                         ${colors.bg} ${colors.text} ${colors.hoverBg}
                                         transition-colors
                                     `}
