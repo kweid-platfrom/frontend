@@ -208,7 +208,7 @@ const MinimalBugTable = ({
     if (loading) {
         return (
             <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
-                <div className="px-6 py-12 text-center">
+                <div className="px-4 sm:px-6 py-12 text-center">
                     <div className="inline-block animate-spin rounded h-8 w-8 border-b-2 border-teal-600"></div>
                     <p className="mt-2 text-sm text-muted-foreground">Loading minimal bug reports...</p>
                 </div>
@@ -228,21 +228,129 @@ const MinimalBugTable = ({
             />
             
             {/* Header */}
-            <div className="px-6 py-4 border-b border-border">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
                 <div className="flex items-center gap-2">
-                    <Terminal className="w-5 h-5 text-muted-foreground" />
-                    <h3 className="text-lg font-medium text-card-foreground">Minimal Bug Reports</h3>
-                    <span className="text-sm text-muted-foreground">
-                        - Focused view for quick developer action
-                    </span>
+                    <Terminal className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
+                        <h3 className="text-base sm:text-lg font-medium text-card-foreground truncate">Minimal Bug Reports</h3>
+                        <span className="text-xs sm:text-sm text-muted-foreground hidden md:inline">
+                            - Focused view for quick developer action
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            <div className="relative overflow-x-auto">
+            {/* Mobile Card View (< md) */}
+            <div className="block md:hidden">
+                {paginatedBugs.length === 0 ? (
+                    <div className="px-4 sm:px-6 py-12 text-center text-sm text-muted-foreground">
+                        <div className="flex flex-col items-center">
+                            <Bug className="w-12 h-12 text-muted-foreground mb-4" />
+                            <p>No bugs found</p>
+                            <p className="text-xs text-muted-foreground mt-1">Create your first bug report to get started</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-border">
+                        {paginatedBugs.map((bug) => {
+                            const isSelected = selectedBugs.includes(bug.id);
+                            const isLogExpanded = expandedLogs.has(bug.id);
+                            const consoleLog = formatConsoleLog(bug.console_log || bug.log || bug.error_log);
+
+                            return (
+                                <div key={bug.id} className={`p-4 ${isSelected ? 'bg-teal-50' : ''}`}>
+                                    {/* Header Row */}
+                                    <div className="flex items-start justify-between gap-3 mb-3">
+                                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                                            <div className="pt-1">
+                                                {isSelected ? (
+                                                    <CheckSquare
+                                                        className="w-5 h-5 text-teal-600 cursor-pointer flex-shrink-0"
+                                                        onClick={() => handleSelectItem(bug.id, false)}
+                                                    />
+                                                ) : (
+                                                    <Square
+                                                        className="w-5 h-5 text-muted-foreground cursor-pointer hover:text-teal-600 transition-colors flex-shrink-0"
+                                                        onClick={() => handleSelectItem(bug.id, true)}
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-card-foreground mb-1 break-words">
+                                                    {bug.title || 'Untitled Bug'}
+                                                </div>
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                                                    <FileText className="w-3 h-3 flex-shrink-0" />
+                                                    <span className="truncate">{getModuleInfo(bug)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <InlineEditCell
+                                            value={bug.status}
+                                            options={statusOptions}
+                                            onChange={(value) => handleUpdateBug(bug.id, { status: value })}
+                                            className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border whitespace-nowrap flex-shrink-0 ${getStatusBadge(bug.status)}`}
+                                            noSearch
+                                        />
+                                    </div>
+
+                                    {/* Description */}
+                                    <div className="text-xs text-muted-foreground mb-3 line-clamp-2 break-words">
+                                        {bug.description || 'No description provided'}
+                                    </div>
+
+                                    {/* Console Log */}
+                                    <div className="mb-3">
+                                        <div className="flex items-start gap-2">
+                                            <Code className="w-3 h-3 text-muted-foreground mt-1 flex-shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className={`text-xs font-mono bg-gray-900 text-green-400 p-2 rounded border border-gray-700 ${isLogExpanded ? '' : 'max-h-16 overflow-hidden'}`}>
+                                                    <pre className="whitespace-pre-wrap break-words text-xs">
+                                                        {consoleLog}
+                                                    </pre>
+                                                </div>
+                                                {consoleLog.length > 200 && (
+                                                    <button
+                                                        onClick={() => toggleLogExpansion(bug.id)}
+                                                        className="mt-1 text-xs text-teal-600 hover:text-teal-800 hover:underline transition-colors"
+                                                    >
+                                                        {isLogExpanded ? 'Show less' : 'Show more'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div className="flex items-center justify-between gap-3 text-xs">
+                                        <div className="flex items-center text-muted-foreground">
+                                            <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
+                                            <span className="truncate">
+                                                {bug.updated_at && isValidDate(new Date(bug.updated_at))
+                                                    ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
+                                                    : 'Unknown'}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => onView(bug)}
+                                            className="text-teal-600 hover:text-teal-800 hover:underline transition-colors whitespace-nowrap flex-shrink-0"
+                                        >
+                                            View details →
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block relative overflow-x-auto">
                 <table className="min-w-full divide-y divide-border">
                     <thead className="bg-muted sticky top-0 z-20">
                         <tr>
-                            <th className="px-6 py-3 text-left border-r border-border w-12 sticky left-0 bg-muted z-30">
+                            <th className="px-4 lg:px-6 py-3 text-left border-r border-border w-12 sticky left-0 bg-muted z-30">
                                 <div className="flex items-center">
                                     {isAllSelected ? (
                                         <CheckSquare
@@ -258,7 +366,7 @@ const MinimalBugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border w-32"
+                                className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border w-32"
                                 onClick={() => handleSort('module')}
                             >
                                 <div className="flex items-center gap-1">
@@ -267,7 +375,7 @@ const MinimalBugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border"
+                                className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border"
                                 onClick={() => handleSort('title')}
                             >
                                 <div className="flex items-center gap-1">
@@ -276,7 +384,7 @@ const MinimalBugTable = ({
                                 </div>
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border w-32"
+                                className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors border-r border-border w-32"
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center gap-1">
@@ -284,11 +392,11 @@ const MinimalBugTable = ({
                                     {getSortIcon('status')}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-r border-border">
+                            <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-r border-border">
                                 Console Log
                             </th>
                             <th
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors w-32"
+                                className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors w-32"
                                 onClick={() => handleSort('updated_at')}
                             >
                                 <div className="flex items-center gap-1">
@@ -301,7 +409,7 @@ const MinimalBugTable = ({
                     <tbody className="bg-card divide-y divide-border">
                         {paginatedBugs.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="px-6 py-12 text-center text-sm text-muted-foreground">
+                                <td colSpan="6" className="px-4 lg:px-6 py-12 text-center text-sm text-muted-foreground">
                                     <div className="flex flex-col items-center">
                                         <Bug className="w-12 h-12 text-muted-foreground mb-4" />
                                         <p>No bugs found</p>
@@ -317,7 +425,7 @@ const MinimalBugTable = ({
 
                                 return (
                                     <tr key={bug.id} className={`hover:bg-accent transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
-                                        <td className="px-6 py-4 border-r border-border w-12 sticky left-0 bg-card z-30">
+                                        <td className="px-4 lg:px-6 py-4 border-r border-border w-12 sticky left-0 bg-card z-30">
                                             <div className="flex items-center">
                                                 {isSelected ? (
                                                     <CheckSquare
@@ -332,20 +440,20 @@ const MinimalBugTable = ({
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-border w-32">
+                                        <td className="px-4 lg:px-6 py-4 border-r border-border w-32">
                                             <div className="flex items-center gap-2">
-                                                <FileText className="w-4 h-4 text-muted-foreground" />
-                                                <span className="text-sm font-medium text-card-foreground">
+                                                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                <span className="text-sm font-medium text-card-foreground truncate">
                                                     {getModuleInfo(bug)}
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-border">
+                                        <td className="px-4 lg:px-6 py-4 border-r border-border">
                                             <div className="max-w-md">
-                                                <div className="text-sm font-medium text-card-foreground mb-1">
+                                                <div className="text-sm font-medium text-card-foreground mb-1 break-words">
                                                     {bug.title || 'Untitled Bug'}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground line-clamp-2">
+                                                <div className="text-xs text-muted-foreground line-clamp-2 break-words">
                                                     {bug.description || 'No description provided'}
                                                 </div>
                                                 <button
@@ -356,7 +464,7 @@ const MinimalBugTable = ({
                                                 </button>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 border-r border-border w-32">
+                                        <td className="px-4 lg:px-6 py-4 border-r border-border w-32">
                                             <InlineEditCell
                                                 value={bug.status}
                                                 options={statusOptions}
@@ -365,7 +473,7 @@ const MinimalBugTable = ({
                                                 noSearch
                                             />
                                         </td>
-                                        <td className="px-6 py-4 border-r border-border">
+                                        <td className="px-4 lg:px-6 py-4 border-r border-border">
                                             <div className="max-w-lg">
                                                 <div className="flex items-start gap-2">
                                                     <Code className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -387,12 +495,14 @@ const MinimalBugTable = ({
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 w-32">
+                                        <td className="px-4 lg:px-6 py-4 w-32">
                                             <div className="flex items-center text-xs text-muted-foreground">
                                                 <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
-                                                {bug.updated_at && isValidDate(new Date(bug.updated_at))
-                                                    ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
-                                                    : 'Unknown'}
+                                                <span className="truncate">
+                                                    {bug.updated_at && isValidDate(new Date(bug.updated_at))
+                                                        ? formatDistanceToNow(new Date(bug.updated_at), { addSuffix: true })
+                                                        : 'Unknown'}
+                                                </span>
                                             </div>
                                         </td>
                                     </tr>

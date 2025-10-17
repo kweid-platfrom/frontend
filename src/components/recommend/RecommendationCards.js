@@ -127,157 +127,162 @@ const RecommendationCard = ({
     };
 
     return (
-        <div className={`bg-card rounded-lg shadow-theme-sm border transition-all ${
+        <div className={`bg-card rounded-lg shadow-theme-sm border transition-all flex flex-col h-full ${
             isSelected 
                 ? 'border-teal-500 ring-2 ring-teal-200' 
                 : 'border-border hover:shadow-theme-md'
         }`}>
-            <div className="p-6">
-                {/* Header with Selection Checkbox */}
-                <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-start gap-3 flex-1">
-                        {/* Selection Checkbox */}
-                        <div className="flex items-center pt-1">
-                            <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={handleSelectChange}
-                                className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
-                            />
-                        </div>
-                        
-                        <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-card-foreground mb-2 line-clamp-2">
-                                {recommendation.title}
-                            </h3>
-                            <div className="flex items-center gap-2 mb-3">
-                                {/* Status Badge with Dropdown */}
-                                <div className="relative">
-                                    <button
-                                        onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                                        className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border cursor-pointer hover:opacity-80 ${getStatusBadge(recommendation.status)}`}
-                                    >
-                                        {recommendation.status?.replace('-', ' ')?.toUpperCase() || 'UNDER REVIEW'}
-                                        <ChevronDown className="w-3 h-3 ml-1" />
-                                    </button>
-                                    
-                                    {showStatusDropdown && (
-                                        <div className="absolute top-full left-0 mt-1 w-40 bg-popover border border-border rounded-md shadow-theme-lg z-10">
-                                            {statusOptions.map((option) => (
-                                                <button
-                                                    key={option.value}
-                                                    onClick={() => {
-                                                        onStatusUpdate(recommendation.id, option.value);
-                                                        setShowStatusDropdown(false);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent first:rounded-t-md last:rounded-b-md"
-                                                >
-                                                    {option.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getPriorityBadge(recommendation.priority)}`}>
-                                    {recommendation.priority?.toUpperCase() || 'MEDIUM'}
-                                </span>
-                            </div>
-                        </div>
+            {/* Header Section */}
+            <div className="p-5 border-b border-border">
+                <div className="flex items-start gap-3 mb-4">
+                    {/* Selection Checkbox */}
+                    <div className="flex items-center pt-0.5 flex-shrink-0">
+                        <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={handleSelectChange}
+                            className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
+                        />
+                    </div>
+                    
+                    {/* Title and Description */}
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-semibold text-card-foreground mb-2 break-words line-clamp-2">
+                            {recommendation.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground line-clamp-2 break-words">
+                            {recommendation.description}
+                        </p>
                     </div>
                     
                     {/* Actions Dropdown */}
-                    <div className="relative">
+                    <div className="relative flex-shrink-0">
                         <button
                             onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                            className="p-2 text-muted-foreground hover:text-card-foreground rounded-full hover:bg-accent"
+                            className="p-1.5 text-muted-foreground hover:text-card-foreground rounded-md hover:bg-accent transition-colors"
                         >
                             <MoreHorizontal className="w-4 h-4" />
                         </button>
                         
                         {showActionsDropdown && (
-                            <div className="absolute top-full right-0 mt-1 w-36 bg-popover border border-border rounded-md shadow-theme-lg z-10">
+                            <div className="absolute top-full right-0 mt-1 w-40 bg-popover border border-border rounded-md shadow-theme-lg z-10">
                                 <button
                                     onClick={() => {
                                         onEdit(recommendation);
                                         setShowActionsDropdown(false);
                                     }}
-                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2"
+                                    className="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 first:rounded-t-md whitespace-nowrap transition-colors"
                                 >
-                                    <Edit className="w-3 h-3" />
-                                    Edit
+                                    <Edit className="w-4 h-4 flex-shrink-0" />
+                                    <span>Edit</span>
                                 </button>
                                 <button
                                     onClick={handleArchive}
                                     disabled={actionLoading === onArchive}
-                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 disabled:opacity-50"
+                                    className="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 disabled:opacity-50 whitespace-nowrap transition-colors"
                                 >
-                                    <Archive className="w-3 h-3" />
-                                    {actionLoading === onArchive ? 'Archiving...' : 'Archive'}
+                                    <Archive className="w-4 h-4 flex-shrink-0" />
+                                    <span>{actionLoading === onArchive ? 'Archiving...' : 'Archive'}</span>
                                 </button>
                                 <button
                                     onClick={handleDelete}
                                     disabled={actionLoading === onDelete}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600 flex items-center gap-2 rounded-b-md disabled:opacity-50"
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600 flex items-center gap-2 rounded-b-md disabled:opacity-50 whitespace-nowrap transition-colors"
                                 >
-                                    <Trash2 className="w-3 h-3" />
-                                    {actionLoading === onDelete ? 'Deleting...' : 'Delete'}
+                                    <Trash2 className="w-4 h-4 flex-shrink-0" />
+                                    <span>{actionLoading === onDelete ? 'Deleting...' : 'Delete'}</span>
                                 </button>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* Description */}
-                <p className="text-muted-foreground text-sm mb-4 line-clamp-3">
-                    {recommendation.description}
-                </p>
-
-                {/* Metrics */}
-                <div className="flex items-center justify-between mb-4 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3" />
-                            <span>Impact:</span>
-                            <div className={getImpactIndicator(recommendation.impact)}>
-                                {recommendation.impact || 'Medium'}
+                {/* Badges Row */}
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Status Badge with Dropdown */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap ${getStatusBadge(recommendation.status)}`}
+                        >
+                            <span>{recommendation.status?.replace('-', ' ')?.toUpperCase() || 'UNDER REVIEW'}</span>
+                            <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                        </button>
+                        
+                        {showStatusDropdown && (
+                            <div className="absolute top-full left-0 mt-1 w-44 bg-popover border border-border rounded-md shadow-theme-lg z-10">
+                                {statusOptions.map((option) => (
+                                    <button
+                                        key={option.value}
+                                        onClick={() => {
+                                            onStatusUpdate(recommendation.id, option.value);
+                                            setShowStatusDropdown(false);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent first:rounded-t-md last:rounded-b-md whitespace-nowrap transition-colors"
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
                             </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            <span>Effort:</span>
-                            {getEffortIndicator(recommendation.effort)}
-                        </div>
+                        )}
+                    </div>
+
+                    {/* Priority Badge */}
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border whitespace-nowrap ${getPriorityBadge(recommendation.priority)}`}>
+                        {recommendation.priority?.toUpperCase() || 'MEDIUM'}
+                    </span>
+                </div>
+            </div>
+
+            {/* Content Section */}
+            <div className="p-5 flex-1 flex flex-col gap-4">
+                {/* Metrics */}
+                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <TrendingUp className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Impact:</span>
+                        <span className={getImpactIndicator(recommendation.impact)}>
+                            {recommendation.impact || 'Medium'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Effort:</span>
+                        {getEffortIndicator(recommendation.effort)}
                     </div>
                 </div>
 
                 {/* Tags */}
                 {recommendation.tags && recommendation.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-4">
+                    <div className="flex flex-wrap gap-1.5">
                         {recommendation.tags.slice(0, 3).map((tag, index) => (
                             <span 
                                 key={index}
-                                className="inline-flex items-center px-2 py-1 rounded text-xs bg-muted text-muted-foreground"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-muted text-muted-foreground whitespace-nowrap"
                             >
-                                <Tag className="w-3 h-3 mr-1" />
-                                {tag}
+                                <Tag className="w-3 h-3 flex-shrink-0" />
+                                <span>{tag}</span>
                             </span>
                         ))}
                         {recommendation.tags.length > 3 && (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="inline-flex items-center px-2 py-1 text-xs text-muted-foreground whitespace-nowrap">
                                 +{recommendation.tags.length - 3} more
                             </span>
                         )}
                     </div>
                 )}
+            </div>
 
-                {/* Footer */}
-                <div className="flex items-center justify-between pt-4 border-t border-border">
+            {/* Footer Section */}
+            <div className="p-5 border-t border-border mt-auto">
+                <div className="flex items-center justify-between gap-3">
+                    {/* Voting Section */}
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                             <button
                                 onClick={() => onVote(recommendation.id, 'up')}
                                 disabled={actionLoading}
-                                className={`p-1.5 rounded-full transition-colors disabled:opacity-50 ${
+                                className={`p-1.5 rounded-md transition-colors disabled:opacity-50 flex-shrink-0 ${
                                     hasUserVoted === 'up' 
                                         ? 'bg-green-100 text-green-600' 
                                         : 'text-muted-foreground hover:text-green-600 hover:bg-green-50'
@@ -285,7 +290,7 @@ const RecommendationCard = ({
                             >
                                 <ThumbsUp className="w-4 h-4" />
                             </button>
-                            <span className={`text-sm font-medium ${
+                            <span className={`min-w-[2rem] text-center text-sm font-medium ${
                                 netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : 'text-muted-foreground'
                             }`}>
                                 {netVotes}
@@ -293,7 +298,7 @@ const RecommendationCard = ({
                             <button
                                 onClick={() => onVote(recommendation.id, 'down')}
                                 disabled={actionLoading}
-                                className={`p-1.5 rounded-full transition-colors disabled:opacity-50 ${
+                                className={`p-1.5 rounded-md transition-colors disabled:opacity-50 flex-shrink-0 ${
                                     hasUserVoted === 'down' 
                                         ? 'bg-red-100 text-red-600' 
                                         : 'text-muted-foreground hover:text-red-600 hover:bg-red-50'
@@ -303,13 +308,15 @@ const RecommendationCard = ({
                             </button>
                         </div>
                         {recommendation.comments && (
-                            <div className="flex items-center gap-1 text-muted-foreground">
-                                <MessageSquare className="w-4 h-4" />
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <MessageSquare className="w-4 h-4 flex-shrink-0" />
                                 <span className="text-sm">{recommendation.comments.length}</span>
                             </div>
                         )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    
+                    {/* Timestamp */}
+                    <div className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
                         {safeFormatDate(recommendation.created_at)}
                     </div>
                 </div>
@@ -336,7 +343,7 @@ const BulkSelectionHeader = ({
 
     return (
         <div className="flex items-center gap-3 mb-6 p-4 bg-muted rounded-lg border border-border">
-            <div className="flex items-center">
+            <div className="flex items-center flex-shrink-0">
                 <input
                     type="checkbox"
                     checked={allSelected}
@@ -398,7 +405,7 @@ const RecommendationCards = ({
             />
             
             {/* Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {recommendations.map((rec) => (
                     <RecommendationCard
                         key={rec.id}

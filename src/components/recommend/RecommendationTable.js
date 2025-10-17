@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     TrendingUp,
     Clock,
@@ -9,10 +9,12 @@ import {
     Lightbulb,
     Trash2,
     Archive,
-    MoreHorizontal
+    MoreHorizontal,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 
-// Utility functions for styling (same as cards)
+// Utility functions for styling
 const getStatusBadge = (status) => {
     const statusConfig = {
         'under-review': 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -119,48 +121,48 @@ const RecommendationTableRow = ({
                 : 'hover:bg-accent'
         }`}>
             {/* Selection Checkbox Column */}
-            <td className="px-6 py-4">
+            <td className="px-3 md:px-6 py-3 md:py-4">
                 <input
                     type="checkbox"
                     checked={isSelected}
                     onChange={handleSelectChange}
-                    className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
+                    className="w-5 h-5 md:w-4 md:h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
                 />
             </td>
-            <td className="px-6 py-4">
-                <div className="max-w-xs">
-                    <div className="text-sm font-medium text-card-foreground truncate">
+            <td className="px-3 md:px-6 py-3 md:py-4">
+                <div className="min-w-[200px] md:max-w-xs">
+                    <div className="text-sm font-medium text-card-foreground line-clamp-1 md:truncate">
                         {recommendation.title}
                     </div>
-                    <div className="text-sm text-muted-foreground truncate">
+                    <div className="text-sm text-muted-foreground line-clamp-2 md:line-clamp-1 md:truncate mt-1">
                         {recommendation.description}
                     </div>
                 </div>
             </td>
-            <td className="px-6 py-4">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getStatusBadge(recommendation.status)}`}>
+            <td className="px-3 md:px-6 py-3 md:py-4">
+                <span className={`inline-flex items-center px-2 md:px-2.5 py-1 md:py-0.5 rounded text-xs font-medium border whitespace-nowrap ${getStatusBadge(recommendation.status)}`}>
                     {recommendation.status?.replace('-', ' ')?.toUpperCase() || 'UNDER REVIEW'}
                 </span>
             </td>
-            <td className="px-6 py-4">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border ${getPriorityBadge(recommendation.priority)}`}>
+            <td className="px-3 md:px-6 py-3 md:py-4">
+                <span className={`inline-flex items-center px-2 md:px-2.5 py-1 md:py-0.5 rounded text-xs font-medium border whitespace-nowrap ${getPriorityBadge(recommendation.priority)}`}>
                     {recommendation.priority?.toUpperCase() || 'MEDIUM'}
                 </span>
             </td>
-            <td className="px-6 py-4">
-                <div className="flex items-center gap-2">
+            <td className="px-3 md:px-6 py-3 md:py-4">
+                <div className="flex items-center gap-1.5 md:gap-2">
                     <button
                         onClick={() => onVote(recommendation.id, 'up')}
                         disabled={actionLoading}
-                        className={`p-1 rounded-full transition-colors disabled:opacity-50 ${
+                        className={`p-1.5 md:p-1 rounded-full transition-colors disabled:opacity-50 touch-manipulation ${
                             hasUserVoted === 'up' 
                                 ? 'bg-green-100 text-green-600' 
                                 : 'text-muted-foreground hover:text-green-600 hover:bg-green-50'
                         }`}
                     >
-                        <ThumbsUp className="w-3 h-3" />
+                        <ThumbsUp className="w-4 h-4 md:w-3 md:h-3" />
                     </button>
-                    <span className={`text-sm font-medium min-w-[24px] text-center ${
+                    <span className={`text-sm font-medium min-w-[28px] md:min-w-[24px] text-center ${
                         netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : 'text-muted-foreground'
                     }`}>
                         {netVotes > 0 ? '+' : ''}{netVotes}
@@ -168,18 +170,18 @@ const RecommendationTableRow = ({
                     <button
                         onClick={() => onVote(recommendation.id, 'down')}
                         disabled={actionLoading}
-                        className={`p-1 rounded-full transition-colors disabled:opacity-50 ${
+                        className={`p-1.5 md:p-1 rounded-full transition-colors disabled:opacity-50 touch-manipulation ${
                             hasUserVoted === 'down' 
                                 ? 'bg-red-100 text-red-600' 
                                 : 'text-muted-foreground hover:text-red-600 hover:bg-red-50'
                         }`}
                     >
-                        <ThumbsDown className="w-3 h-3" />
+                        <ThumbsDown className="w-4 h-4 md:w-3 md:h-3" />
                     </button>
                 </div>
             </td>
-            <td className="px-6 py-4">
-                <div className="flex items-center gap-3 text-xs">
+            <td className="px-3 md:px-6 py-3 md:py-4 hidden lg:table-cell">
+                <div className="flex items-center gap-3 text-xs whitespace-nowrap">
                     <div className="flex items-center gap-1">
                         <TrendingUp className="w-3 h-3" />
                         <span className={getImpactIndicator(recommendation.impact)}>
@@ -192,14 +194,14 @@ const RecommendationTableRow = ({
                     </div>
                 </div>
             </td>
-            <td className="px-6 py-4 text-sm text-muted-foreground">
+            <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-muted-foreground hidden md:table-cell whitespace-nowrap">
                 {safeFormatDate(recommendation.created_at, 'short')}
             </td>
-            <td className="px-6 py-4">
+            <td className="px-3 md:px-6 py-3 md:py-4">
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => onEdit(recommendation)}
-                        className="text-teal-600 hover:text-teal-800 text-sm font-medium transition-colors"
+                        className="text-teal-600 hover:text-teal-800 text-sm font-medium transition-colors px-2 py-1 md:px-0 md:py-0 touch-manipulation"
                     >
                         Edit
                     </button>
@@ -208,30 +210,36 @@ const RecommendationTableRow = ({
                     <div className="relative">
                         <button
                             onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                            className="p-1 text-muted-foreground hover:text-card-foreground rounded-full hover:bg-accent"
+                            className="p-2 md:p-1 text-muted-foreground hover:text-card-foreground rounded-full hover:bg-accent touch-manipulation"
                         >
-                            <MoreHorizontal className="w-4 h-4" />
+                            <MoreHorizontal className="w-5 h-5 md:w-4 md:h-4" />
                         </button>
                         
                         {showActionsDropdown && (
-                            <div className="absolute top-full right-0 mt-1 w-32 bg-popover border border-border rounded-md shadow-theme-lg z-10">
-                                <button
-                                    onClick={handleArchive}
-                                    disabled={actionLoading === onArchive}
-                                    className="w-full text-left px-3 py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    <Archive className="w-3 h-3" />
-                                    {actionLoading === onArchive ? 'Archiving...' : 'Archive'}
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    disabled={actionLoading === onDelete}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600 flex items-center gap-2 rounded-b-md disabled:opacity-50"
-                                >
-                                    <Trash2 className="w-3 h-3" />
-                                    {actionLoading === onDelete ? 'Deleting...' : 'Delete'}
-                                </button>
-                            </div>
+                            <>
+                                <div 
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setShowActionsDropdown(false)}
+                                />
+                                <div className="absolute top-full right-0 mt-1 w-36 md:w-32 bg-popover border border-border rounded-md shadow-lg z-20">
+                                    <button
+                                        onClick={handleArchive}
+                                        disabled={actionLoading === onArchive}
+                                        className="w-full text-left px-3 py-2.5 md:py-2 text-sm text-popover-foreground hover:bg-accent flex items-center gap-2 disabled:opacity-50 touch-manipulation"
+                                    >
+                                        <Archive className="w-4 h-4 md:w-3 md:h-3" />
+                                        {actionLoading === onArchive ? 'Archiving...' : 'Archive'}
+                                    </button>
+                                    <button
+                                        onClick={handleDelete}
+                                        disabled={actionLoading === onDelete}
+                                        className="w-full text-left px-3 py-2.5 md:py-2 text-sm hover:bg-red-50 text-red-600 flex items-center gap-2 rounded-b-md disabled:opacity-50 touch-manipulation"
+                                    >
+                                        <Trash2 className="w-4 h-4 md:w-3 md:h-3" />
+                                        {actionLoading === onDelete ? 'Deleting...' : 'Delete'}
+                                    </button>
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>
@@ -255,6 +263,38 @@ const RecommendationTable = ({
     sortConfig,
     safeFormatDate
 }) => {
+    const scrollContainerRef = useRef(null);
+    const [showLeftScroll, setShowLeftScroll] = useState(false);
+    const [showRightScroll, setShowRightScroll] = useState(false);
+
+    // Check scroll position
+    const checkScroll = () => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        setShowLeftScroll(container.scrollLeft > 10);
+        setShowRightScroll(
+            container.scrollLeft < container.scrollWidth - container.clientWidth - 10
+        );
+    };
+
+    useEffect(() => {
+        checkScroll();
+        window.addEventListener('resize', checkScroll);
+        return () => window.removeEventListener('resize', checkScroll);
+    }, [recommendations]);
+
+    const scroll = (direction) => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const scrollAmount = 300;
+        container.scrollBy({
+            left: direction === 'left' ? -scrollAmount : scrollAmount,
+            behavior: 'smooth'
+        });
+    };
+
     const getSortIcon = (columnKey) => {
         if (sortConfig.key !== columnKey) {
             return <ChevronUp className="w-3 h-3 text-muted-foreground" />;
@@ -277,102 +317,128 @@ const RecommendationTable = ({
 
     if (recommendations.length === 0) {
         return (
-            <div className="bg-card rounded-lg shadow-theme-sm border border-border p-12 text-center">
-                <Lightbulb className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-card-foreground mb-2">No recommendations found</h3>
-                <p className="text-muted-foreground">Try adjusting your filters or create a new recommendation.</p>
+            <div className="bg-card rounded-lg shadow-sm border border-border p-8 md:p-12 text-center">
+                <Lightbulb className="w-12 h-12 md:w-16 md:h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-base md:text-lg font-medium text-card-foreground mb-2">No recommendations found</h3>
+                <p className="text-sm md:text-base text-muted-foreground">Try adjusting your filters or create a new recommendation.</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-card rounded-lg shadow-theme-sm border border-border overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-muted">
-                        <tr>
-                            {/* Select All Checkbox */}
-                            <th className="px-6 py-3 text-left">
-                                <input
-                                    type="checkbox"
-                                    checked={allSelected}
-                                    ref={input => {
-                                        if (input) input.indeterminate = someSelected;
-                                    }}
-                                    onChange={handleSelectAllChange}
-                                    className="w-4 h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
+        <div className="bg-card rounded-lg shadow-sm border border-border overflow-hidden">
+            {/* Scroll Indicators */}
+            <div className="relative">
+                {showLeftScroll && (
+                    <button
+                        onClick={() => scroll('left')}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-card/90 backdrop-blur-sm border border-border rounded-r-lg p-2 shadow-lg hover:bg-accent transition-colors lg:hidden"
+                        aria-label="Scroll left"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                )}
+                {showRightScroll && (
+                    <button
+                        onClick={() => scroll('right')}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-card/90 backdrop-blur-sm border border-border rounded-l-lg p-2 shadow-lg hover:bg-accent transition-colors lg:hidden"
+                        aria-label="Scroll right"
+                    >
+                        <ChevronRight className="w-5 h-5" />
+                    </button>
+                )}
+                
+                <div 
+                    ref={scrollContainerRef}
+                    className="overflow-x-auto"
+                    onScroll={checkScroll}
+                >
+                    <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-muted">
+                            <tr>
+                                {/* Select All Checkbox */}
+                                <th className="px-3 md:px-6 py-3 text-left">
+                                    <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        ref={input => {
+                                            if (input) input.indeterminate = someSelected;
+                                        }}
+                                        onChange={handleSelectAllChange}
+                                        className="w-5 h-5 md:w-4 md:h-4 text-teal-600 border-input rounded focus:ring-teal-500 focus:ring-2"
+                                    />
+                                </th>
+                                <th 
+                                    className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
+                                    onClick={() => onSort('title')}
+                                >
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                        Title
+                                        {getSortIcon('title')}
+                                    </div>
+                                </th>
+                                <th 
+                                    className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
+                                    onClick={() => onSort('status')}
+                                >
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                        Status
+                                        {getSortIcon('status')}
+                                    </div>
+                                </th>
+                                <th 
+                                    className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
+                                    onClick={() => onSort('priority')}
+                                >
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                        Priority
+                                        {getSortIcon('priority')}
+                                    </div>
+                                </th>
+                                <th 
+                                    className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
+                                    onClick={() => onSort('votes')}
+                                >
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                        Votes
+                                        {getSortIcon('votes')}
+                                    </div>
+                                </th>
+                                <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
+                                    <div className="whitespace-nowrap">Impact/Effort</div>
+                                </th>
+                                <th 
+                                    className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors hidden md:table-cell"
+                                    onClick={() => onSort('created_at')}
+                                >
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                        Created
+                                        {getSortIcon('created_at')}
+                                    </div>
+                                </th>
+                                <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    <div className="whitespace-nowrap">Actions</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-card divide-y divide-border">
+                            {recommendations.map((rec) => (
+                                <RecommendationTableRow
+                                    key={rec.id}
+                                    recommendation={rec}
+                                    onEdit={onEdit}
+                                    onVote={onVote}
+                                    onDelete={onDelete}
+                                    onArchive={onArchive}
+                                    currentUser={currentUser}
+                                    safeFormatDate={safeFormatDate}
+                                    selectedRecommendations={selectedRecommendations}
+                                    onSelectRecommendation={onSelectRecommendation}
                                 />
-                            </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
-                                onClick={() => onSort('title')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Title
-                                    {getSortIcon('title')}
-                                </div>
-                            </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
-                                onClick={() => onSort('status')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Status
-                                    {getSortIcon('status')}
-                                </div>
-                            </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
-                                onClick={() => onSort('priority')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Priority
-                                    {getSortIcon('priority')}
-                                </div>
-                            </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
-                                onClick={() => onSort('votes')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Votes
-                                    {getSortIcon('votes')}
-                                </div>
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Impact/Effort
-                            </th>
-                            <th 
-                                className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent transition-colors"
-                                onClick={() => onSort('created_at')}
-                            >
-                                <div className="flex items-center gap-1">
-                                    Created
-                                    {getSortIcon('created_at')}
-                                </div>
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Actions
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-card divide-y divide-border">
-                        {recommendations.map((rec) => (
-                            <RecommendationTableRow
-                                key={rec.id}
-                                recommendation={rec}
-                                onEdit={onEdit}
-                                onVote={onVote}
-                                onDelete={onDelete}
-                                onArchive={onArchive}
-                                currentUser={currentUser}
-                                safeFormatDate={safeFormatDate}
-                                selectedRecommendations={selectedRecommendations}
-                                onSelectRecommendation={onSelectRecommendation}
-                            />
-                        ))}
-                    </tbody>
-                </table>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
