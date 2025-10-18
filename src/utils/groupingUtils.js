@@ -9,38 +9,38 @@
  * @returns {array} Array of grouping options
  */
 export const getGroupingOptions = (assetType, metadata = {}) => {
-  const { sprints = [], modules = [], users = [] } = metadata;
+  const { sprints = [], modules = [] } = metadata;
 
   const baseOptions = {
     bugs: [
-      { id: 'status', label: 'Status', icon: '📊', description: 'Group by bug status' },
-      { id: 'severity', label: 'Severity', icon: '⚠️', description: 'Group by severity level' },
-      { id: 'priority', label: 'Priority', icon: '🚩', description: 'Group by priority' },
-      { id: 'assignee', label: 'Assignee', icon: '👤', description: 'Group by assigned person' },
-      { id: 'category', label: 'Category', icon: '📂', description: 'Group by category' },
-      { id: 'date', label: 'Date Created', icon: '📅', description: 'Group by creation date' },
+      { id: 'status', label: 'Status', description: 'Group by bug status' },
+      { id: 'severity', label: 'Severity', description: 'Group by severity level' },
+      { id: 'priority', label: 'Priority', description: 'Group by priority' },
+      { id: 'assignee', label: 'Assignee', description: 'Group by assigned person' },
+      { id: 'category', label: 'Category', description: 'Group by category' },
+      { id: 'date', label: 'Date Created', description: 'Group by creation date' },
     ],
     testCases: [
-      { id: 'status', label: 'Status', icon: '📊', description: 'Group by test status' },
-      { id: 'priority', label: 'Priority', icon: '🚩', description: 'Group by priority' },
-      { id: 'category', label: 'Category', icon: '📂', description: 'Group by category' },
-      { id: 'assignee', label: 'Assignee', icon: '👤', description: 'Group by assigned person' },
-      { id: 'date', label: 'Date Created', icon: '📅', description: 'Group by creation date' },
+      { id: 'status', label: 'Status', description: 'Group by test status' },
+      { id: 'priority', label: 'Priority', description: 'Group by priority' },
+      { id: 'category', label: 'Category', description: 'Group by category' },
+      { id: 'assignee', label: 'Assignee', description: 'Group by assigned person' },
+      { id: 'date', label: 'Date Created', description: 'Group by creation date' },
     ],
     recommendations: [
-      { id: 'status', label: 'Status', icon: '📊', description: 'Group by status' },
-      { id: 'priority', label: 'Priority', icon: '🚩', description: 'Group by priority' },
-      { id: 'category', label: 'Category', icon: '📂', description: 'Group by category' },
-      { id: 'impact', label: 'Impact', icon: '💥', description: 'Group by impact level' },
-      { id: 'date', label: 'Date Created', icon: '📅', description: 'Group by creation date' },
+      { id: 'status', label: 'Status', description: 'Group by status' },
+      { id: 'priority', label: 'Priority', description: 'Group by priority' },
+      { id: 'category', label: 'Category', description: 'Group by category' },
+      { id: 'impact', label: 'Impact', description: 'Group by impact level' },
+      { id: 'date', label: 'Date Created', description: 'Group by creation date' },
     ],
     sprints: [
-      { id: 'status', label: 'Status', icon: '📊', description: 'Group by sprint status' },
-      { id: 'date', label: 'Date Range', icon: '📅', description: 'Group by date range' },
+      { id: 'status', label: 'Status', description: 'Group by sprint status' },
+      { id: 'date', label: 'Date Range', description: 'Group by date range' },
     ],
     recordings: [
-      { id: 'date', label: 'Date Recorded', icon: '📅', description: 'Group by recording date' },
-      { id: 'category', label: 'Category', icon: '📂', description: 'Group by category' },
+      { id: 'date', label: 'Date Recorded', description: 'Group by recording date' },
+      { id: 'category', label: 'Category', description: 'Group by category' },
     ]
   };
 
@@ -51,7 +51,6 @@ export const getGroupingOptions = (assetType, metadata = {}) => {
     options.unshift({
       id: 'sprint',
       label: 'Sprint',
-      icon: '🎯',
       description: 'Group by sprint',
       count: sprints.length
     });
@@ -62,7 +61,6 @@ export const getGroupingOptions = (assetType, metadata = {}) => {
     options.splice(1, 0, {
       id: 'module',
       label: 'Module',
-      icon: '📁',
       description: 'Group by module/feature',
       count: modules.length
     });
@@ -87,8 +85,8 @@ export const getGroupDisplayName = (groupBy, value, metadata = {}) => {
       return sprint?.name || `Sprint ${value.slice(0, 8)}`;
     
     case 'module':
-      const module = metadata.modules?.find(m => m.id === value);
-      return module?.name || `Module ${value.slice(0, 8)}`;
+      const moduleData = metadata.modules?.find(m => m.id === value);
+      return moduleData?.name || `Module ${value.slice(0, 8)}`;
     
     case 'assignee':
       const user = metadata.users?.find(u => u.id === value || u.uid === value);

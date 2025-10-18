@@ -21,7 +21,9 @@ const TestCases = () => {
     // Get data from hooks - make sure these are stable
     const testCasesHook = useTestCases();
     const uiHook = useUI();
-    const [_loadingActions, setLoadingActions] = useState([]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [_loadingActions, setLoadingActions] = useState({});
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_selectedItems, setSelectedItems] = useState([]);
 
     // Debug logging for hook data

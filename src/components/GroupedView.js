@@ -52,14 +52,14 @@ const GroupedView = ({
           }
           break;
 
-        case 'module':
+         case 'module':
           groupKey = item.module_id || item.moduleId || 'no-module';
           if (groupKey === 'no-module') {
             groupLabel = 'No Module';
             groupColor = 'gray';
           } else {
-            const module = groupMetadata.modules?.find(m => m.id === groupKey);
-            groupLabel = module?.name || `Module ${groupKey.slice(0, 8)}`;
+            const moduleData = groupMetadata.modules?.find(m => m.id === groupKey);
+            groupLabel = moduleData?.name || `Module ${groupKey.slice(0, 8)}`;
             groupColor = 'indigo';
             groupIcon = '📁';
           }

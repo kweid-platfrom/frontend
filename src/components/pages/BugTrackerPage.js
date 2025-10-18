@@ -103,7 +103,9 @@ const BugTrackerPage = () => {
 
     // Mobile menu state
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [_loadingActions, setLoadingActions] = useState([]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [_loadingActions, setLoadingActions] = useState({});
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_selectedItems, setSelectedItems] = useState([]);
 
     // Stable refs

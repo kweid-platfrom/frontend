@@ -16,8 +16,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppProvider';
 
-const SprintDashboard = ({ sprintId, suiteId }) => {
-    const { state, actions } = useApp();
+const SprintDashboard = ({ sprintId }) => {
+    const { state } = useApp();
     const { sprints = [], activeSprint } = state?.sprints || {};
 
     const [loading, setLoading] = useState(true);
