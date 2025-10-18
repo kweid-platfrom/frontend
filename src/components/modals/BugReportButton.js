@@ -14,6 +14,23 @@ import {
     DEFAULT_BUG_FORM_DATA
 } from "../../utils/bugUtils";
 
+export const STANDARD_SOFTWARE_MODULES = [
+    { id: 'authentication', name: 'Authentication' },
+    { id: 'user-management', name: 'User Management' },
+    { id: 'dashboard', name: 'Dashboard' },
+    { id: 'reporting', name: 'Reporting' },
+    { id: 'settings', name: 'Settings' },
+    { id: 'file-upload', name: 'File Upload' },
+    { id: 'search', name: 'Search' },
+    { id: 'notifications', name: 'Notifications' },
+    { id: 'api-integration', name: 'API Integration' },
+    { id: 'ui-components', name: 'UI Components' },
+    { id: 'performance', name: 'Performance' },
+    { id: 'security', name: 'Security' },
+    { id: 'other', name: 'Other (Specify below)' }
+];
+
+
 const BugReportButton = ({ className = "", onCreateBug }) => {
     const {
         state,
@@ -38,6 +55,15 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     // Memoized data from context
     const suites = useMemo(() => state.suites.testSuites || [], [state.suites.testSuites]);
     const userProfile = useMemo(() => state.auth.profile, [state.auth.profile]);
+
+    // Memoized sprints and modules from context
+    const sprints = useMemo(() => {
+        const sprintsList = state.sprints?.sprints || state.sprints?.list || [];
+        console.log('Sprints available for bug report:', sprintsList);
+        return sprintsList;
+    }, [state.sprints]);
+    
+    const modules = useMemo(() => STANDARD_SOFTWARE_MODULES, []);
 
     // Permission checks
     const canCreateBugs = useMemo(() => {
@@ -233,6 +259,15 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 throw new Error('User authentication required');
             }
 
+            // Handle module - use custom module if "other" is selected
+            const moduleId = sourceData.module_id || sourceData.moduleId || null;
+            const finalModule = moduleId === 'other'
+                ? (sourceData.customModule || 'Other')
+                : moduleId;
+
+            // Handle sprint
+            const sprintId = sourceData.sprint_id || sourceData.sprintId || null;
+
             const bugData = {
                 title: sourceData.title.trim(),
                 description: sourceData.description.trim(),
@@ -246,6 +281,11 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 priority: priority,
                 severity: sourceData.severity,
                 category: sourceData.category,
+                module: finalModule,
+                module_id: moduleId,
+                customModule: moduleId === 'other' ? sourceData.customModule : null,
+                sprint_id: sprintId,
+                sprintId: sprintId,
                 tags: [safeToLowerCase(sourceData.category).replace(/\s+/g, '_')],
                 source: isAIReport ? "AI Generated" : "Manual",
                 creationType: isAIReport ? "ai" : "manual",
@@ -287,6 +327,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                     safeToLowerCase(sourceData.description),
                     safeToLowerCase(sourceData.category),
                     safeToLowerCase(sourceData.severity),
+                    finalModule ? safeToLowerCase(finalModule) : null,
                     "new",
                     isAIReport ? "ai_generated" : "manual",
                     safeToLowerCase(sourceData.environment)
@@ -295,6 +336,8 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
 
             console.log('Submitting bug with user UID:', currentUser.uid);
             console.log('Bug creation type:', bugData.creationType);
+            console.log('Bug module:', bugData.module);
+            console.log('Bug sprint:', bugData.sprint_id);
             console.log('Bug data keys:', Object.keys(bugData));
 
             const result = await actions.bugs.createBug(bugData);
@@ -470,6 +513,8 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                                 userDisplayName={userDisplayName}
                                 currentUser={currentUser}
                                 showSuiteSelector={true}
+                                sprints={sprints}
+                                modules={modules}
                             />
                         </div>
                     </div>

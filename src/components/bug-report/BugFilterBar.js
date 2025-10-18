@@ -2,8 +2,18 @@
 
 import { useState, useMemo } from 'react';
 import { List, Table, ChevronUp, ChevronDown, Search, Filter, X } from 'lucide-react';
+import GroupSelect from '@/components/common/GroupSelect';
 
-export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode, setViewMode }) {
+export default function BugFilterBar({ 
+    filters, 
+    onFiltersChange, 
+    bugs, 
+    viewMode, 
+    setViewMode,
+    groupBy,
+    onGroupByChange,
+    groupingOptions = []
+}) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -111,6 +121,20 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
 
                 {/* Filter Content */}
                 <div className="p-4 space-y-6">
+                    {/* Group By - Mobile */}
+                    <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                            Group By
+                        </label>
+                        <GroupSelect
+                            value={groupBy}
+                            onChange={onGroupByChange}
+                            options={groupingOptions}
+                            placeholder="No grouping"
+                            className="w-full"
+                        />
+                    </div>
+
                     {/* Search */}
                     <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
@@ -306,15 +330,15 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                         {/* Mobile Filter Button */}
                         <button
                             onClick={() => setShowMobileFilters(true)}
-                            className={`relative px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors ${hasActiveFilters()
+                            className={`relative px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors ${hasActiveFilters() || groupBy
                                     ? 'bg-teal-50 text-teal-700 border-teal-500 dark:bg-teal-900/20 dark:text-teal-300 dark:border-teal-500'
                                     : 'bg-card text-foreground border-border hover:bg-accent'
                                 }`}
                         >
                             <Filter className="w-4 h-4" />
-                            {hasActiveFilters() && (
+                            {(hasActiveFilters() || groupBy) && (
                                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
-                                    {getActiveFiltersCount()}
+                                    {getActiveFiltersCount() + (groupBy ? 1 : 0)}
                                 </span>
                             )}
                         </button>
@@ -347,12 +371,15 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             </button>
                         </div>
 
-                        {hasActiveFilters() && (
+                        {(hasActiveFilters() || groupBy) && (
                             <button
-                                onClick={clearFilters}
+                                onClick={() => {
+                                    clearFilters();
+                                    if (groupBy) onGroupByChange(null);
+                                }}
                                 className="px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
                             >
-                                Clear ({getActiveFiltersCount()})
+                                Clear ({getActiveFiltersCount() + (groupBy ? 1 : 0)})
                             </button>
                         )}
                     </div>
@@ -442,14 +469,28 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                             </div>
                         </div>
 
+                        {/* Group By Selector - Desktop */}
+                        <div className="lg:flex-none lg:w-48">
+                            <GroupSelect
+                                value={groupBy}
+                                onChange={onGroupByChange}
+                                options={groupingOptions}
+                                placeholder="Group by..."
+                                className="w-full"
+                            />
+                        </div>
+
                         {/* Action Buttons and View Toggle - Responsive */}
                         <div className="flex items-center justify-end gap-2 mt-4 lg:mt-0 lg:ml-auto lg:flex-none">
-                            {hasActiveFilters() && (
+                            {(hasActiveFilters() || groupBy) && (
                                 <button
-                                    onClick={clearFilters}
+                                    onClick={() => {
+                                        clearFilters();
+                                        if (groupBy) onGroupByChange(null);
+                                    }}
                                     className="px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium h-10 whitespace-nowrap"
                                 >
-                                    Clear Filters ({getActiveFiltersCount()})
+                                    Clear All ({getActiveFiltersCount() + (groupBy ? 1 : 0)})
                                 </button>
                             )}
 
@@ -578,10 +619,22 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                     )}
 
                     {/* Active Filters Summary */}
-                    {hasActiveFilters() && (
+                    {(hasActiveFilters() || groupBy) && (
                         <div className="mt-4 pt-4 border-t border-border">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-medium text-foreground">Active filters:</span>
+
+                                {groupBy && (
+                                    <span className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs rounded-full">
+                                        Grouped by: {groupingOptions.find(opt => opt.id === groupBy)?.label || groupBy}
+                                        <button
+                                            onClick={() => onGroupByChange(null)}
+                                            className="ml-1 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                )}
 
                                 {filters.status !== 'all' && (
                                     <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-xs rounded-full">
@@ -656,11 +709,11 @@ export default function BugFilterBar({ filters, onFiltersChange, bugs, viewMode,
                                 )}
 
                                 {filters.tags && filters.tags.map(tag => (
-                                    <span key={tag} className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs rounded-full">
+                                    <span key={tag} className="inline-flex items-center px-2 py-1 bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300 text-xs rounded-full">
                                         Tag: {tag}
                                         <button
                                             onClick={() => handleTagToggle(tag)}
-                                            className="ml-1 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200"
+                                            className="ml-1 text-cyan-600 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-200"
                                         >
                                             ×
                                         </button>

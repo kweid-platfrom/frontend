@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Calendar, 
     Target, 
@@ -11,7 +11,6 @@ import {
     TrendingUp,
     FileText,
     Bug,
-    Video,
     Lightbulb,
     BarChart3
 } from 'lucide-react';
@@ -19,14 +18,8 @@ import { useApp } from '../context/AppProvider';
 
 const SprintDashboard = ({ sprintId, suiteId }) => {
     const { state, actions } = useApp();
-    const { sprints = [], activeSprint } = state.sprints || {};
+    const { sprints = [], activeSprint } = state?.sprints || {};
 
-    const [assets, setAssets] = useState({
-        testCases: [],
-        bugs: [],
-        recordings: [],
-        recommendations: []
-    });
     const [loading, setLoading] = useState(true);
 
     // Get sprint data
@@ -34,50 +27,97 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
         ? sprints.find(s => s.id === sprintId)
         : activeSprint;
 
-    // Load sprint assets
-    useEffect(() => {
-    const loadSprintAssets = async () => {
-        if (!sprint || !suiteId) return;
-
-        setLoading(true);
-        try {
-            const [testCases, bugs, recordings, recommendations] = await Promise.all([
-                actions.assets?.getTestCases?.(suiteId, sprint.id) || { success: true, data: [] },
-                actions.assets?.getBugs?.(suiteId, sprint.id) || { success: true, data: [] },
-                actions.assets?.getRecordings?.(suiteId, sprint.id) || { success: true, data: [] },
-                actions.assets?.getRecommendations?.(suiteId, sprint.id) || { success: true, data: [] }
-            ]);
-
-            setAssets({
-                testCases: testCases.success ? testCases.data || [] : [],
-                bugs: bugs.success ? bugs.data || [] : [],
-                recordings: recordings.success ? recordings.data || [] : [],
-                recommendations: recommendations.success ? recommendations.data || [] : []
-            });
-        } catch (error) {
-            console.error('Error loading sprint assets:', error);
-        } finally {
-            setLoading(false);
+    // ✅ FIXED: Filter assets from global state by sprint_id
+    const assets = useMemo(() => {
+        if (!sprint?.id) {
+            return {
+                testCases: [],
+                bugs: [],
+                recommendations: []
+            };
         }
+
+        const allTestCases = state?.testCases?.testCases || [];
+        const allBugs = state?.bugs?.bugs || [];
+        const allRecommendations = state?.recommendations?.recommendations || [];
+
+        const filteredTestCases = allTestCases.filter(tc => 
+            (tc.sprint_id === sprint.id || tc.sprintId === sprint.id) &&
+            tc.status !== 'deleted' && tc.status !== 'archived'
+        );
+
+        const filteredBugs = allBugs.filter(bug => 
+            (bug.sprint_id === sprint.id || bug.sprintId === sprint.id) &&
+            bug.status !== 'deleted' && bug.status !== 'archived'
+        );
+
+        const filteredRecommendations = allRecommendations.filter(rec => 
+            (rec.sprint_id === sprint.id || rec.sprintId === sprint.id) &&
+            rec.status !== 'deleted' && rec.status !== 'archived'
+        );
+
+        console.log('📊 Sprint assets filtered from global state:', {
+            sprintId: sprint.id,
+            testCases: filteredTestCases.length,
+            bugs: filteredBugs.length,
+            recommendations: filteredRecommendations.length
+        });
+
+        return {
+            testCases: filteredTestCases,
+            bugs: filteredBugs,
+            recommendations: filteredRecommendations
+        };
+    }, [sprint?.id, state?.testCases?.testCases, state?.bugs?.bugs, state?.recommendations?.recommendations]);
+
+    useEffect(() => {
+        // Simulate loading for smoother UX
+        setLoading(true);
+        const timer = setTimeout(() => setLoading(false), 300);
+        return () => clearTimeout(timer);
+    }, [sprint?.id]);
+
+    // ✅ FIXED: Case-insensitive status checks with accurate completion logic
+    const isTestCaseCompleted = (status) => {
+        const normalizedStatus = (status || '').toLowerCase();
+        return normalizedStatus === 'passed' || 
+               normalizedStatus === 'completed' || 
+               normalizedStatus === 'success';
     };
 
-    loadSprintAssets();
-}, [sprint, suiteId, actions.assets]); // Added sprint to dependencies
+    const isBugResolved = (status) => {
+        const normalizedStatus = (status || '').toLowerCase();
+        return normalizedStatus === 'resolved' || 
+               normalizedStatus === 'closed' || 
+               normalizedStatus === 'fixed';
+    };
 
-    // Calculate sprint metrics
+    const isRecommendationImplemented = (status) => {
+        const normalizedStatus = (status || '').toLowerCase();
+        return normalizedStatus === 'implemented' || 
+               normalizedStatus === 'completed' || 
+               normalizedStatus === 'done';
+    };
+
+    // ✅ FIXED: Real-time metrics calculation with accurate status checks
     const getSprintMetrics = () => {
         const totalTestCases = assets.testCases.length;
         const completedTestCases = assets.testCases.filter(tc => 
-            tc.status === 'passed' || tc.status === 'completed'
+            isTestCaseCompleted(tc.status)
         ).length;
 
         const totalBugs = assets.bugs.length;
         const resolvedBugs = assets.bugs.filter(bug => 
-            bug.status === 'resolved' || bug.status === 'closed'
+            isBugResolved(bug.status)
         ).length;
 
-        const totalAssets = totalTestCases + totalBugs + assets.recordings.length + assets.recommendations.length;
-        const completedAssets = completedTestCases + resolvedBugs;
+        const totalRecommendations = assets.recommendations.length;
+        const implementedRecommendations = assets.recommendations.filter(rec =>
+            isRecommendationImplemented(rec.status)
+        ).length;
+
+        const totalAssets = totalTestCases + totalBugs + totalRecommendations;
+        const completedAssets = completedTestCases + resolvedBugs + implementedRecommendations;
 
         return {
             totalAssets,
@@ -92,26 +132,98 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                 total: totalBugs,
                 resolved: resolvedBugs,
                 rate: totalBugs > 0 ? Math.round((resolvedBugs / totalBugs) * 100) : 0
+            },
+            recommendations: {
+                total: totalRecommendations,
+                implemented: implementedRecommendations,
+                rate: totalRecommendations > 0 ? Math.round((implementedRecommendations / totalRecommendations) * 100) : 0
             }
         };
     };
 
-    // Get sprint status info
-    const getStatusInfo = (status) => {
-        switch (status) {
-            case 'active':
-                return { icon: Play, color: 'text-green-600', bgColor: 'bg-green-100', label: 'Active' };
-            case 'completed':
-                return { icon: CheckCircle, color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'Completed' };
-            case 'on-hold':
-                return { icon: Pause, color: 'text-yellow-600', bgColor: 'bg-yellow-100', label: 'On Hold' };
-            case 'planning':
-            default:
-                return { icon: Clock, color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Planning' };
+    // ✅ FIXED: Accurate status badge function with case-insensitive checks
+    const getTestCaseStatusBadge = (status) => {
+        const normalizedStatus = (status || '').toLowerCase();
+        
+        if (normalizedStatus === 'passed' || normalizedStatus === 'completed' || normalizedStatus === 'success') {
+            return 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300';
+        } else if (normalizedStatus === 'failed' || normalizedStatus === 'failure') {
+            return 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300';
+        } else if (normalizedStatus === 'in-progress' || normalizedStatus === 'in progress' || normalizedStatus === 'running') {
+            return 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
+        } else if (normalizedStatus === 'blocked') {
+            return 'bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-300';
+        } else {
+            return 'bg-muted text-muted-foreground';
         }
     };
 
-    // Get days remaining
+    const getBugStatusBadge = (status) => {
+        const normalizedStatus = (status || '').toLowerCase();
+        
+        if (normalizedStatus === 'resolved' || normalizedStatus === 'closed' || normalizedStatus === 'fixed') {
+            return 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300';
+        } else if (normalizedStatus === 'in-progress' || normalizedStatus === 'in progress') {
+            return 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
+        } else if (normalizedStatus === 'open' || normalizedStatus === 'new') {
+            return 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300';
+        } else if (normalizedStatus === 'on-hold' || normalizedStatus === 'blocked') {
+            return 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-300';
+        } else {
+            return 'bg-muted text-muted-foreground';
+        }
+    };
+
+    const getRecommendationStatusBadge = (status) => {
+        const normalizedStatus = (status || '').toLowerCase();
+        
+        if (normalizedStatus === 'implemented' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
+            return 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300';
+        } else if (normalizedStatus === 'rejected' || normalizedStatus === 'declined') {
+            return 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300';
+        } else if (normalizedStatus === 'in-progress' || normalizedStatus === 'in progress') {
+            return 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
+        } else if (normalizedStatus === 'pending' || normalizedStatus === 'new') {
+            return 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-300';
+        } else {
+            return 'bg-muted text-muted-foreground';
+        }
+    };
+
+    const getStatusInfo = (status) => {
+        switch (status) {
+            case 'active':
+                return { 
+                    icon: Play, 
+                    color: 'text-success', 
+                    bgColor: 'bg-green-100 dark:bg-green-950', 
+                    label: 'Active' 
+                };
+            case 'completed':
+                return { 
+                    icon: CheckCircle, 
+                    color: 'text-info', 
+                    bgColor: 'bg-blue-100 dark:bg-blue-950', 
+                    label: 'Completed' 
+                };
+            case 'on-hold':
+                return { 
+                    icon: Pause, 
+                    color: 'text-warning', 
+                    bgColor: 'bg-yellow-100 dark:bg-yellow-950', 
+                    label: 'On Hold' 
+                };
+            case 'planning':
+            default:
+                return { 
+                    icon: Clock, 
+                    color: 'text-muted-foreground', 
+                    bgColor: 'bg-muted', 
+                    label: 'Planning' 
+                };
+        }
+    };
+
     const getDaysRemaining = () => {
         if (!sprint?.endDate) return null;
         const end = typeof sprint.endDate === 'string' ? new Date(sprint.endDate) : sprint.endDate;
@@ -134,7 +246,7 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
     if (!sprint) {
         return (
             <div className="p-6 text-center text-muted-foreground">
-                <Calendar className="h-12 w-12 mx-auto mb-3 text-muted" />
+                <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                 <h3 className="text-lg font-medium mb-2">No Sprint Selected</h3>
                 <p className="text-sm">Select a sprint to view its dashboard</p>
             </div>
@@ -177,8 +289,8 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                             )}
                             {daysRemaining !== null && (
                                 <div className={`flex items-center space-x-1 ${
-                                    daysRemaining < 0 ? 'text-red-600' : 
-                                    daysRemaining <= 7 ? 'text-yellow-600' : 'text-muted-foreground'
+                                    daysRemaining < 0 ? 'text-error' : 
+                                    daysRemaining <= 7 ? 'text-warning' : 'text-muted-foreground'
                                 }`}>
                                     <AlertCircle className="h-4 w-4" />
                                     <span>
@@ -197,12 +309,12 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
 
                 {/* Sprint Goals */}
                 {sprint.goals && (
-                    <div className="mt-4 p-3 bg-teal-50 rounded-lg border border-teal-200">
+                    <div className="mt-4 p-3 bg-teal-50 dark:bg-teal-800/20 rounded-lg border border-teal-300 dark:border-teal-600">
                         <div className="flex items-start space-x-2">
-                            <Target className="h-5 w-5 text-teal-600 mt-0.5 flex-shrink-0" />
+                            <Target className="h-5 w-5 text-teal-600 dark:text-teal-400 mt-0.5 flex-shrink-0" />
                             <div>
-                                <h3 className="font-medium text-teal-800 mb-1">Sprint Goals</h3>
-                                <p className="text-sm text-teal-700">{sprint.goals}</p>
+                                <h3 className="font-medium text-teal-800 dark:text-teal-300 mb-1">Sprint Goals</h3>
+                                <p className="text-sm text-teal-700 dark:text-teal-400">{sprint.goals}</p>
                             </div>
                         </div>
                     </div>
@@ -210,7 +322,7 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
             </div>
 
             {/* Progress Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Overall Progress */}
                 <div className="bg-card rounded-lg border border-border p-4">
                     <div className="flex items-center justify-between mb-3">
@@ -224,7 +336,7 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                                 {metrics.completedAssets} of {metrics.totalAssets}
                             </span>
                         </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                             <div 
                                 className="h-full bg-primary rounded-full transition-all duration-300"
                                 style={{ width: `${metrics.completionRate}%` }}
@@ -237,7 +349,7 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                 <div className="bg-card rounded-lg border border-border p-4">
                     <div className="flex items-center justify-between mb-3">
                         <h3 className="font-medium text-foreground">Test Cases</h3>
-                        <FileText className="h-5 w-5 text-blue-500" />
+                        <FileText className="h-5 w-5 text-info" />
                     </div>
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
@@ -246,9 +358,9 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                                 {metrics.testCases.completed} of {metrics.testCases.total}
                             </span>
                         </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                             <div 
-                                className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                                className="h-full bg-info rounded-full transition-all duration-300"
                                 style={{ width: `${metrics.testCases.rate}%` }}
                             />
                         </div>
@@ -259,7 +371,7 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                 <div className="bg-card rounded-lg border border-border p-4">
                     <div className="flex items-center justify-between mb-3">
                         <h3 className="font-medium text-foreground">Bugs Resolved</h3>
-                        <Bug className="h-5 w-5 text-red-500" />
+                        <Bug className="h-5 w-5 text-error" />
                     </div>
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
@@ -268,10 +380,32 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                                 {metrics.bugs.resolved} of {metrics.bugs.total}
                             </span>
                         </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                             <div 
-                                className="h-full bg-red-500 rounded-full transition-all duration-300"
+                                className="h-full bg-error rounded-full transition-all duration-300"
                                 style={{ width: `${metrics.bugs.rate}%` }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Recommendations Progress */}
+                <div className="bg-card rounded-lg border border-border p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-foreground">Recommendations</h3>
+                        <Lightbulb className="h-5 w-5 text-warning" />
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-2xl font-bold text-foreground">{metrics.recommendations.rate}%</span>
+                            <span className="text-sm text-muted-foreground">
+                                {metrics.recommendations.implemented} of {metrics.recommendations.total}
+                            </span>
+                        </div>
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-warning rounded-full transition-all duration-300"
+                                style={{ width: `${metrics.recommendations.rate}%` }}
                             />
                         </div>
                     </div>
@@ -279,27 +413,21 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
             </div>
 
             {/* Asset Summary */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-card rounded-lg border border-border p-4 text-center">
-                    <FileText className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                    <FileText className="h-8 w-8 text-info mx-auto mb-2" />
                     <div className="text-2xl font-bold text-foreground">{assets.testCases.length}</div>
                     <div className="text-sm text-muted-foreground">Test Cases</div>
                 </div>
                 
                 <div className="bg-card rounded-lg border border-border p-4 text-center">
-                    <Bug className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                    <Bug className="h-8 w-8 text-error mx-auto mb-2" />
                     <div className="text-2xl font-bold text-foreground">{assets.bugs.length}</div>
                     <div className="text-sm text-muted-foreground">Bugs</div>
                 </div>
                 
                 <div className="bg-card rounded-lg border border-border p-4 text-center">
-                    <Video className="h-8 w-8 text-purple-500 mx-auto mb-2" />
-                    <div className="text-2xl font-bold text-foreground">{assets.recordings.length}</div>
-                    <div className="text-sm text-muted-foreground">Recordings</div>
-                </div>
-                
-                <div className="bg-card rounded-lg border border-border p-4 text-center">
-                    <Lightbulb className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+                    <Lightbulb className="h-8 w-8 text-warning mx-auto mb-2" />
                     <div className="text-2xl font-bold text-foreground">{assets.recommendations.length}</div>
                     <div className="text-sm text-muted-foreground">Recommendations</div>
                 </div>
@@ -321,32 +449,60 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                             <p>Loading assets...</p>
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                             {/* Test Cases */}
                             {assets.testCases.length > 0 && (
                                 <div>
-                                    <h4 className="font-medium text-foreground mb-2 flex items-center space-x-2">
-                                        <FileText className="h-4 w-4 text-blue-500" />
-                                        <span>Test Cases ({assets.testCases.length})</span>
-                                    </h4>
-                                    <div className="space-y-1">
-                                        {assets.testCases.slice(0, 3).map((testCase) => (
-                                            <div key={testCase.id} className="flex items-center justify-between py-2 px-3 bg-secondary rounded">
-                                                <span className="text-sm text-foreground truncate flex-1">{testCase.title || testCase.name}</span>
-                                                <span className={`text-xs px-2 py-1 rounded-full ${
-                                                    testCase.status === 'passed' || testCase.status === 'completed'
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : testCase.status === 'failed'
-                                                            ? 'bg-red-100 text-red-800'
-                                                            : 'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {testCase.status || 'pending'}
-                                                </span>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-medium text-foreground flex items-center space-x-2">
+                                            <FileText className="h-4 w-4 text-info" />
+                                            <span>Test Cases ({assets.testCases.length})</span>
+                                        </h4>
+                                        <a 
+                                            href={`/test-cases?sprint=${sprint.id}`}
+                                            className="text-xs text-primary hover:underline font-medium"
+                                        >
+                                            View all →
+                                        </a>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {assets.testCases.slice(0, 5).map((testCase) => (
+                                            <div
+                                                key={testCase.id}
+                                                className="flex items-center gap-3 py-2.5 px-4 bg-secondary rounded-lg border border-border"
+                                            >
+                                                <div className="shrink-0">
+                                                    <span className="inline-flex items-center justify-center w-10 h-10 rounded bg-info/10 text-info text-xs font-mono font-semibold">
+                                                        {testCase.id?.slice(0, 4).toUpperCase() || '????'}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className="text-sm font-medium text-foreground truncate mb-0.5">
+                                                        {testCase.title || testCase.name || `Test Case ${testCase.id?.slice(0, 8)}`}
+                                                    </h5>
+                                                    {testCase.description && (
+                                                        <p className="text-xs text-muted-foreground line-clamp-1">
+                                                            {testCase.description}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="shrink-0">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTestCaseStatusBadge(testCase.status)}`}>
+                                                        {testCase.status || 'pending'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         ))}
-                                        {assets.testCases.length > 3 && (
-                                            <div className="text-xs text-muted-foreground text-center py-1">
-                                                +{assets.testCases.length - 3} more test cases
+                                        {assets.testCases.length > 5 && (
+                                            <div className="text-center pt-2">
+                                                <a 
+                                                    href={`/test-cases?sprint=${sprint.id}`}
+                                                    className="text-xs text-primary hover:underline"
+                                                >
+                                                    +{assets.testCases.length - 5} more test cases
+                                                </a>
                                             </div>
                                         )}
                                     </div>
@@ -356,28 +512,115 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                             {/* Bugs */}
                             {assets.bugs.length > 0 && (
                                 <div>
-                                    <h4 className="font-medium text-foreground mb-2 flex items-center space-x-2">
-                                        <Bug className="h-4 w-4 text-red-500" />
-                                        <span>Bugs ({assets.bugs.length})</span>
-                                    </h4>
-                                    <div className="space-y-1">
-                                        {assets.bugs.slice(0, 3).map((bug) => (
-                                            <div key={bug.id} className="flex items-center justify-between py-2 px-3 bg-secondary rounded">
-                                                <span className="text-sm text-foreground truncate flex-1">{bug.title || bug.name}</span>
-                                                <span className={`text-xs px-2 py-1 rounded-full ${
-                                                    bug.status === 'resolved' || bug.status === 'closed'
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : bug.priority === 'high'
-                                                            ? 'bg-red-100 text-red-800'
-                                                            : 'bg-yellow-100 text-yellow-800'
-                                                }`}>
-                                                    {bug.status || 'open'}
-                                                </span>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-medium text-foreground flex items-center space-x-2">
+                                            <Bug className="h-4 w-4 text-error" />
+                                            <span>Bugs ({assets.bugs.length})</span>
+                                        </h4>
+                                        <a 
+                                            href={`/bugs?sprint=${sprint.id}`}
+                                            className="text-xs text-primary hover:underline font-medium"
+                                        >
+                                            View all →
+                                        </a>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {assets.bugs.slice(0, 5).map((bug) => (
+                                            <div
+                                                key={bug.id}
+                                                className="flex items-center gap-3 py-2.5 px-4 bg-secondary rounded-lg border border-border"
+                                            >
+                                                <div className="shrink-0">
+                                                    <span className="inline-flex items-center justify-center w-10 h-10 rounded bg-error/10 text-error text-xs font-mono font-semibold">
+                                                        {bug.id?.slice(0, 4).toUpperCase() || '????'}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className="text-sm font-medium text-foreground truncate mb-0.5">
+                                                        {bug.title || bug.name || `Bug ${bug.id?.slice(0, 8)}`}
+                                                    </h5>
+                                                    {bug.description && (
+                                                        <p className="text-xs text-muted-foreground line-clamp-1">
+                                                            {bug.description}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="shrink-0">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getBugStatusBadge(bug.status)}`}>
+                                                        {bug.status || 'open'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         ))}
-                                        {assets.bugs.length > 3 && (
-                                            <div className="text-xs text-muted-foreground text-center py-1">
-                                                +{assets.bugs.length - 3} more bugs
+                                        {assets.bugs.length > 5 && (
+                                            <div className="text-center pt-2">
+                                                <a 
+                                                    href={`/bugs?sprint=${sprint.id}`}
+                                                    className="text-xs text-primary hover:underline"
+                                                >
+                                                    +{assets.bugs.length - 5} more bugs
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recommendations */}
+                            {assets.recommendations.length > 0 && (
+                                <div>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-medium text-foreground flex items-center space-x-2">
+                                            <Lightbulb className="h-4 w-4 text-warning" />
+                                            <span>Recommendations ({assets.recommendations.length})</span>
+                                        </h4>
+                                        <a 
+                                            href={`/bugs?sprint=${sprint.id}&tab=recommendations`}
+                                            className="text-xs text-primary hover:underline font-medium"
+                                        >
+                                            View all →
+                                        </a>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {assets.recommendations.slice(0, 5).map((rec) => (
+                                            <div
+                                                key={rec.id}
+                                                className="flex items-center gap-3 py-2.5 px-4 bg-secondary rounded-lg border border-border"
+                                            >
+                                                <div className="shrink-0">
+                                                    <span className="inline-flex items-center justify-center w-10 h-10 rounded bg-warning/10 text-warning text-xs font-mono font-semibold">
+                                                        {rec.id?.slice(0, 4).toUpperCase() || '????'}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className="text-sm font-medium text-foreground truncate mb-0.5">
+                                                        {rec.title || rec.name || `Recommendation ${rec.id?.slice(0, 8)}`}
+                                                    </h5>
+                                                    {rec.description && (
+                                                        <p className="text-xs text-muted-foreground line-clamp-1">
+                                                            {rec.description}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="shrink-0">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getRecommendationStatusBadge(rec.status)}`}>
+                                                        {rec.status || 'pending'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {assets.recommendations.length > 5 && (
+                                            <div className="text-center pt-2">
+                                                <a 
+                                                    href={`/bugs?sprint=${sprint.id}&tab=recommendations`}
+                                                    className="text-xs text-primary hover:underline"
+                                                >
+                                                    +{assets.recommendations.length - 5} more recommendations
+                                                </a>
                                             </div>
                                         )}
                                     </div>
@@ -385,11 +628,11 @@ const SprintDashboard = ({ sprintId, suiteId }) => {
                             )}
 
                             {/* Empty state */}
-                            {Object.values(assets).every(assetArray => assetArray.length === 0) && (
+                            {assets.testCases.length === 0 && assets.bugs.length === 0 && assets.recommendations.length === 0 && (
                                 <div className="text-center py-8 text-muted-foreground">
-                                    <Target className="h-12 w-12 mx-auto mb-3 text-muted" />
+                                    <Target className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                                     <h4 className="font-medium mb-2">No Assets Yet</h4>
-                                    <p className="text-sm">Start adding test cases, bugs, and other assets to this sprint</p>
+                                    <p className="text-sm">Start adding test cases, bugs, and recommendations to this sprint</p>
                                 </div>
                             )}
                         </div>

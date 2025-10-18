@@ -15,34 +15,19 @@ const BugReportForm = ({
     onAISubmit,
     onClose,
     userDisplayName,
-    currentUser
+    currentUser,
+    sprints = [],
+    modules = []
 }) => {
     const [activeTab, setActiveTab] = useState('manual');
     const [generatedAIReport, setGeneratedAIReport] = useState(null);
     const [submitButtonState, setSubmitButtonState] = useState('idle'); // 'idle', 'loading', 'success'
 
-    const features = [
-        'Authentication',
-        'User Management',
-        'Dashboard',
-        'Reports',
-        'Settings',
-        'File Upload',
-        'Search',
-        'Notifications',
-        'API Integration',
-        'Database',
-        'UI Components',
-        'Performance',
-        'Security',
-        'Other'
-    ];
-
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
         e.stopPropagation();
         setSubmitButtonState('loading');
-        
+
         try {
             await onSubmit();
             setSubmitButtonState('success');
@@ -57,7 +42,7 @@ const BugReportForm = ({
     // Handle AI-generated bug report submission - now called directly from AI tab
     const handleAISubmit = useCallback(async (aiFormData) => {
         setSubmitButtonState('loading');
-        
+
         try {
             // Ensure the data is marked as AI-generated
             const aiReportData = {
@@ -65,7 +50,7 @@ const BugReportForm = ({
                 creationType: 'ai',
                 source: 'AI Generated'
             };
-            
+
             await onAISubmit(aiReportData);
             setSubmitButtonState('success');
             // Clear the generated report and reset
@@ -108,11 +93,10 @@ const BugReportForm = ({
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`group py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-200 ${
-                                    activeTab === tab.id
+                                className={`group py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-200 ${activeTab === tab.id
                                         ? 'border-primary text-primary'
                                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                                }`}
+                                    }`}
                                 disabled={isSubmitting || submitButtonState === 'loading'}
                             >
                                 <div className="flex items-center">
@@ -136,7 +120,7 @@ const BugReportForm = ({
                                     {/* Header Section */}
                                     <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
                                         <h2 className="text-lg font-semibold text-foreground mb-6">Bug Details</h2>
-                                        
+
                                         {/* Title - Full Width */}
                                         <div className="mb-6">
                                             <label htmlFor="title" className="block text-sm font-medium text-foreground mb-3">
@@ -175,7 +159,7 @@ const BugReportForm = ({
                                     {/* Behavior Section */}
                                     <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
                                         <h3 className="text-lg font-semibold text-foreground mb-6">Behavior Description</h3>
-                                        
+
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                             <div>
                                                 <label htmlFor="actualBehavior" className="block text-sm font-medium text-foreground mb-3">
@@ -213,7 +197,7 @@ const BugReportForm = ({
                                     {/* Steps Section */}
                                     <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
                                         <h3 className="text-lg font-semibold text-foreground mb-6">Steps to Reproduce</h3>
-                                        
+
                                         <div>
                                             <textarea
                                                 id="stepsToReproduce"
@@ -230,8 +214,9 @@ const BugReportForm = ({
                                     {/* Classification Section */}
                                     <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
                                         <h3 className="text-lg font-semibold text-foreground mb-6">Classification</h3>
-                                        
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                                        {/* First Row - Severity and Category */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                                             <div>
                                                 <label htmlFor="severity" className="block text-sm font-medium text-foreground mb-3">
                                                     Severity <span className="text-destructive">*</span>
@@ -273,28 +258,10 @@ const BugReportForm = ({
                                                     <option value="Integration">Integration</option>
                                                 </select>
                                             </div>
-
-                                            <div>
-                                                <label htmlFor="feature" className="block text-sm font-medium text-foreground mb-3">
-                                                    Feature/Module <span className="text-destructive">*</span>
-                                                </label>
-                                                <select
-                                                    id="feature"
-                                                    value={formData.feature || ''}
-                                                    onChange={(e) => updateFormData('feature', e.target.value)}
-                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
-                                                    disabled={isSubmitting || submitButtonState === 'loading'}
-                                                    required
-                                                >
-                                                    <option value="">Select feature</option>
-                                                    {features.map(feature => (
-                                                        <option key={feature} value={feature}>{feature}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
+                                        {/* Second Row - Environment and Frequency */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                                             <div>
                                                 <label htmlFor="environment" className="block text-sm font-medium text-foreground mb-3">
                                                     Environment
@@ -331,12 +298,102 @@ const BugReportForm = ({
                                                 </select>
                                             </div>
                                         </div>
+
+                                        {/* Third Row - Module (with optional custom input) */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                                            <div>
+                                                <label htmlFor="module" className="block text-sm font-medium text-foreground mb-3">
+                                                    <span className="flex items-center gap-2">
+                                                        <span>📁</span>
+                                                        <span>Module</span>
+                                                        <span className="text-destructive">*</span>
+                                                    </span>
+                                                </label>
+                                                <select
+                                                    id="module"
+                                                    value={formData.module_id || formData.moduleId || ''}
+                                                    onChange={(e) => {
+                                                        updateFormData('module_id', e.target.value);
+                                                        updateFormData('moduleId', e.target.value);
+                                                        if (e.target.value !== 'other') {
+                                                            updateFormData('customModule', '');
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
+                                                    disabled={isSubmitting || submitButtonState === 'loading'}
+                                                    required
+                                                >
+                                                    <option value="">Select module</option>
+                                                    {modules.map(module => (
+                                                        <option key={module.id} value={module.id}>
+                                                            {module.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Custom Module Input - Shows when "Other" is selected */}
+                                            {(formData.module_id === 'other' || formData.moduleId === 'other') && (
+                                                <div>
+                                                    <label htmlFor="customModule" className="block text-sm font-medium text-foreground mb-3">
+                                                        Specify Module <span className="text-destructive">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        id="customModule"
+                                                        placeholder="Enter module name..."
+                                                        value={formData.customModule || ''}
+                                                        onChange={(e) => updateFormData('customModule', e.target.value)}
+                                                        className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
+                                                        disabled={isSubmitting || submitButtonState === 'loading'}
+                                                        required
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Fourth Row - Sprint (Full Width) */}
+                                        <div>
+                                            <label htmlFor="sprint" className="block text-sm font-medium text-foreground mb-3">
+                                                <span className="flex items-center gap-2">
+                                                    <span>🎯</span>
+                                                    <span>Sprint (Optional)</span>
+                                                </span>
+                                            </label>
+                                            <select
+                                                id="sprint"
+                                                value={formData.sprint_id || formData.sprintId || ''}
+                                                onChange={(e) => {
+                                                    updateFormData('sprint_id', e.target.value);
+                                                    updateFormData('sprintId', e.target.value);
+                                                }}
+                                                className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200 text-sm bg-background text-foreground"
+                                                disabled={isSubmitting || submitButtonState === 'loading'}
+                                            >
+                                                <option value="">No Sprint</option>
+                                                {sprints && sprints.length > 0 ? (
+                                                    sprints.map(sprint => (
+                                                        <option key={sprint.id} value={sprint.id}>
+                                                            {sprint.name}
+                                                            {sprint.status && ` (${sprint.status})`}
+                                                        </option>
+                                                    ))
+                                                ) : (
+                                                    <option value="" disabled>No sprints available</option>
+                                                )}
+                                            </select>
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                {sprints && sprints.length > 0 
+                                                    ? 'Assign to a sprint for tracking'
+                                                    : 'No sprints configured yet'}
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Additional Information Section */}
                                     <div className="bg-card rounded-xl shadow-theme-sm border border-border p-6">
                                         <h3 className="text-lg font-semibold text-foreground mb-6">Additional Information</h3>
-                                        
+
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                             <div>
                                                 <label htmlFor="workaround" className="block text-sm font-medium text-foreground mb-3">

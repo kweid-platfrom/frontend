@@ -5,7 +5,7 @@ import {
   FileText, TestTube, Video, BarChart3, Lightbulb,
   Shield, RefreshCw, Eye, Users, Database, FolderOpen,
   GitBranch, Move, Copy, Star, Lock, Unlock, Mail, Bell,
-  Calendar, Clock, Flag, Target, Link2, Bookmark, ChevronDown, X, 
+  Calendar, Clock, Flag, Target, Link2, Bookmark, ChevronDown, X,
   AlertTriangle, Layers
 } from 'lucide-react';
 import { BugAntIcon } from '@heroicons/react/24/outline';
@@ -16,29 +16,27 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText
   if (!isOpen) return null;
 
   return createPortal(
-    <div 
+    <div
       className="fixed inset-0 flex items-center justify-center p-4 z-[9999]"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start space-x-3">
-          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-            confirmColor === 'red' ? 'bg-red-100' : 'bg-yellow-100'
-          }`}>
-            <AlertTriangle className={`w-6 h-6 ${
-              confirmColor === 'red' ? 'text-red-600' : 'text-yellow-600'
-            }`} />
+          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${confirmColor === 'red' ? 'bg-red-100' : 'bg-yellow-100'
+            }`}>
+            <AlertTriangle className={`w-6 h-6 ${confirmColor === 'red' ? 'text-red-600' : 'text-yellow-600'
+              }`} />
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
             <p className="text-sm text-gray-600">{message}</p>
           </div>
         </div>
-        
+
         <div className="flex justify-end space-x-3 mt-6">
           <button
             onClick={onClose}
@@ -48,11 +46,10 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${
-              confirmColor === 'red'
-                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
-                : 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
-            }`}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${confirmColor === 'red'
+              ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+              : 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
+              }`}
           >
             {confirmText}
           </button>
@@ -96,7 +93,7 @@ const ICONS = {
 };
 
 // Function to generate dynamic action configs with real sprint data
-const generateAssetActionConfig = (assetType, sprints = [], users = [], modules = []) => {
+const generateAssetActionConfig = (assetType, sprints = [], users = [], modules = [], bugs = []) => {
   const sprintOptions = sprints.map(sprint => ({
     id: sprint.id,
     label: sprint.name,
@@ -113,6 +110,12 @@ const generateAssetActionConfig = (assetType, sprints = [], users = [], modules 
     id: module.id,
     label: module.name,
     data: module
+  }));
+
+  const bugOptions = bugs.map(bug => ({
+    id: bug.id,
+    label: bug.title,
+    data: bug
   }));
 
   const groupingOptions = [
@@ -274,6 +277,7 @@ const generateAssetActionConfig = (assetType, sprints = [], users = [], modules 
       ]
     },
 
+    // ✅ UPDATED: Recordings config - NO sprint addition, only bug linking
     recordings: {
       icon: 'Video',
       color: 'purple',
@@ -283,6 +287,20 @@ const generateAssetActionConfig = (assetType, sprints = [], users = [], modules 
           actions: [
             { id: 'download', label: 'Download', icon: 'Download', color: 'blue' },
             { id: 'share', label: 'Share', icon: 'Link2', color: 'green' }
+          ]
+        },
+        {
+          name: 'linking',
+          actions: [
+            // Recordings are evidence - they get linked to bugs, not sprints
+            ...(bugOptions.length > 0 ? [{
+              id: 'link-to-bug',
+              label: 'Link to Bug',
+              icon: 'Link2',
+              color: 'red',
+              type: 'select',
+              options: bugOptions
+            }] : [])
           ]
         },
         {
@@ -677,11 +695,10 @@ const EnhancedBulkActionsBar = ({
                         <button
                           onClick={() => handleAction(action.id, action)}
                           disabled={isLoading}
-                          className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                            action.destructive || action.requiresConfirm
-                              ? 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
-                              : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
-                          } focus:outline-none focus:ring-2 focus:ring-offset-1`}
+                          className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${action.destructive || action.requiresConfirm
+                            ? 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
+                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
+                            } focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         >
                           <ActionIcon className={`w-3 h-3 sm:w-4 sm:h-4 ${isLoading ? 'animate-spin' : ''}`} />
                         </button>

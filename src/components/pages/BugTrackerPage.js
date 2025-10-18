@@ -12,6 +12,8 @@ import BugReportButton from '@/components/modals/BugReportButton';
 import BugFilterBar from '@/components/bug-report/BugFilterBar';
 import BugDetailsModal from '@/components/modals/BugDetailsModal';
 import BugImportModal from '@/components/modals/BugImportModal';
+import GroupedView from '@/components/GroupedView';
+import { getGroupingOptions } from '@/utils/groupingUtils';
 import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
 import { useApp } from '@/context/AppProvider';
@@ -73,14 +75,36 @@ const setStoredPageMode = (mode) => {
     }
 };
 
+const getStoredGroupBy = () => {
+    try {
+        return localStorage.getItem('bugTracker_groupBy') || null;
+    } catch {
+        return null;
+    }
+};
+
+const setStoredGroupBy = (groupBy) => {
+    try {
+        if (groupBy) {
+            localStorage.setItem('bugTracker_groupBy', groupBy);
+        } else {
+            localStorage.removeItem('bugTracker_groupBy');
+        }
+    } catch {
+        // Silently fail if localStorage is not available
+    }
+};
+
 const BugTrackerPage = () => {
     const router = useRouter();
     const bugsHook = useBugs();
     const uiHook = useUI();
-    const { currentUser, activeSuite } = useApp();
+    const { currentUser, activeSuite, actions, state } = useApp();
 
     // Mobile menu state
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [_loadingActions, setLoadingActions] = useState([]);
+    const [_selectedItems, setSelectedItems] = useState([]);
 
     // Stable refs
     const bugsRef = useRef(bugsHook.bugs || []);
@@ -101,6 +125,38 @@ const BugTrackerPage = () => {
         relationshipsRef.current = bugsHook.relationships || { bugToTestCases: {} };
     }, [bugsHook.relationships]);
 
+    // Handle shared bug URLs
+    useEffect(() => {
+        if (typeof window !== 'undefined' && bugsHook.bugs && bugsHook.bugs.length > 0) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const bugId = urlParams.get('id');
+
+            if (bugId) {
+                // Find the bug with this ID
+                const sharedBug = bugsHook.bugs.find(bug => bug.id === bugId);
+
+                if (sharedBug) {
+                    // Open the bug details modal
+                    handleViewBug(sharedBug);
+
+                    // Clean up the URL (optional - removes the ?id= param)
+                    window.history.replaceState({}, '', '/bugs');
+                } else {
+                    // Bug not found - show notification
+                    uiHook.addNotification?.({
+                        type: 'warning',
+                        title: 'Bug Not Found',
+                        message: 'The shared bug could not be found or you may not have access to it.',
+                        duration: 5000,
+                    });
+
+                    // Clean up the URL
+                    window.history.replaceState({}, '', '/bugs');
+                }
+            }
+        }
+    }, [bugsHook.bugs]);
+
     // State for filtered bugs
     const [filteredBugs, setFilteredBugs] = useState([]);
     const [selectedBug, setSelectedBug] = useState(null);
@@ -111,6 +167,7 @@ const BugTrackerPage = () => {
     const [viewMode, setViewMode] = useState(() => getStoredViewMode());
     const [pageMode, setPageMode] = useState(() => getStoredPageMode());
     const [bugViewType, setBugViewType] = useState(() => getStoredBugViewType());
+    const [groupBy, setGroupBy] = useState(() => getStoredGroupBy());
 
     // Modal states - only Import now
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -127,6 +184,38 @@ const BugTrackerPage = () => {
         lastUpdated: 'all',
     });
 
+    // Get grouping options with metadata
+    const groupingOptions = useMemo(() => {
+        // Get sprints from global state like BugDetailsModal does
+        const globalSprints = state?.sprints?.sprints || [];
+
+        console.log('🔍 Computing grouping options:', {
+            globalSprintsCount: globalSprints.length,
+            globalSprints: globalSprints.map(s => ({ id: s.id, name: s.name })),
+            bugsHookSprintsCount: (bugsHook.sprints || []).length,
+            modulesCount: (bugsHook.modules || []).length,
+            hasSprintOption: globalSprints.length > 0
+        });
+
+        return getGroupingOptions('bugs', {
+            sprints: globalSprints.length > 0 ? globalSprints : (bugsHook.sprints || []),
+            modules: bugsHook.modules || [],
+            users: bugsHook.teamMembers || []
+        });
+    }, [state?.sprints?.sprints, bugsHook.sprints, bugsHook.modules, bugsHook.teamMembers]);
+
+    // Metadata for grouped view
+    const groupMetadata = useMemo(() => {
+        // Use global state for sprints to ensure consistency
+        const globalSprints = state?.sprints?.sprints || [];
+
+        return {
+            sprints: globalSprints.length > 0 ? globalSprints : (bugsHook.sprints || []),
+            modules: bugsHook.modules || [],
+            users: bugsHook.teamMembers || []
+        };
+    }, [state?.sprints?.sprints, bugsHook.sprints, bugsHook.modules, bugsHook.teamMembers]);
+
     // Persist view mode changes to localStorage
     const handleViewModeChange = useCallback((newViewMode) => {
         setViewMode(newViewMode);
@@ -142,6 +231,11 @@ const BugTrackerPage = () => {
     const handleBugViewTypeChange = useCallback((newBugViewType) => {
         setBugViewType(newBugViewType);
         setStoredBugViewType(newBugViewType);
+    }, []);
+
+    const handleGroupByChange = useCallback((newGroupBy) => {
+        setGroupBy(newGroupBy);
+        setStoredGroupBy(newGroupBy);
     }, []);
 
     // Stable filter function
@@ -361,103 +455,65 @@ const BugTrackerPage = () => {
         handleError
     ]);
 
-    // Simplified bulk action handler with proper field mapping
-    const handleBulkAction = useCallback(async (actionId, selectedIds, actionConfig, selectedOption) => {
-        console.log('BULK ACTION:', actionId, 'OPTION:', selectedOption);
+    const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
+        const assetType = 'bugs';
+
+        console.log('🎯 Bulk action triggered:', {
+            actionId,
+            assetType,
+            selectedIds,
+            selectedOption,
+            suiteId: activeSuite.id
+        });
+
+        setLoadingActions(prev => [...prev, actionId]);
+
         try {
-            if (bugsHook.bugsLocked) {
-                throw new Error('Bugs are locked. Upgrade to access.');
+            switch (actionId) {
+                case 'add-to-sprint':
+                    if (!selectedOption || !selectedOption.id) {
+                        console.error('❌ No sprint selected');
+                        actions.ui?.showNotification?.({
+                            id: 'no-sprint-selected',
+                            type: 'error',
+                            message: 'Please select a sprint',
+                            duration: 3000
+                        });
+                        return;
+                    }
+
+                    const bugResult = await actions.linking.addBugsToSprint(
+                        selectedOption.id,
+                        selectedIds
+                    );
+
+                    if (bugResult.success) {
+                        actions.ui?.showNotification?.({
+                            id: 'bulk-add-to-sprint-success',
+                            type: 'success',
+                            message: `${bugResult.data.added} item(s) added to ${selectedOption.label}`,
+                            duration: 3000
+                        });
+                    }
+                    break;
+
+                default:
+                    console.warn('Unhandled action:', actionId);
             }
 
-            const timestamp = new Date();
-
-            // Handle delete action
-            if (actionId === 'delete' || actionId === 'permanent-delete') {
-                await Promise.all(selectedIds.map((id) => bugsHook.deleteBug(id)));
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: `${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} deleted`,
-                });
-                return;
-            }
-
-            // Map action IDs to proper bug field updates
-            const updates = {};
-
-            // Status actions
-            if (['open', 'resolved', 'close'].includes(actionId)) {
-                updates.status = actionId === 'open' ? 'Open' :
-                    actionId === 'resolved' ? 'Resolved' :
-                        'Closed';
-            }
-            // Archive action
-            else if (actionId === 'archive') {
-                updates.status = 'Archived';
-            }
-            // Restore action
-            else if (actionId === 'restore') {
-                updates.status = 'Open';
-            }
-            // Assignment actions with select dropdown
-            else if (actionId === 'assign' && selectedOption) {
-                updates.assignee = selectedOption.id;
-            }
-            // Severity action with select dropdown
-            else if (actionId === 'severity' && selectedOption) {
-                updates.severity = selectedOption.id;
-            }
-            // Priority actions
-            else if (['low', 'medium', 'high', 'critical'].includes(actionId)) {
-                updates.priority = actionId.charAt(0).toUpperCase() + actionId.slice(1);
-            }
-
-            // Handle sprint assignment separately
-            if (actionId === 'add-to-sprint' && selectedOption) {
-                const sprintId = selectedOption.id;
-
-                for (const bugId of selectedIds) {
-                    await bugsHook.updateBug(bugId, {
-                        sprintId: sprintId,
-                        updated_at: timestamp,
-                    });
-                }
-
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: `Added ${selectedIds.length} bug${selectedIds.length > 1 ? 's' : ''} to ${selectedOption.label}`,
-                });
-                return;
-            }
-
-            // Group actions
-            else if (actionId === 'group' && selectedOption) {
-                updates.group = selectedOption.id;
-            }
-            else {
-                console.warn('Unknown bulk action:', actionId);
-                return;
-            }
-
-            // Apply updates to all selected bugs
-            for (const id of selectedIds) {
-                await bugsHook.updateBug(id, {
-                    ...updates,
-                    updated_at: timestamp,
-                });
-            }
-
+            setSelectedItems([]);
         } catch (error) {
-            handleError(error, 'bulk action');
+            console.error('💥 Bulk action failed:', error);
+            actions.ui?.showNotification?.({
+                id: 'bulk-action-error',
+                type: 'error',
+                message: `Failed to ${actionId}: ${error.message}`,
+                duration: 5000
+            });
+        } finally {
+            setLoadingActions(prev => prev.filter(id => id !== actionId));
         }
-    }, [
-        bugsHook.bugsLocked,
-        bugsHook.deleteBug,
-        bugsHook.updateBug,
-        uiHook.addNotification,
-        handleError
-    ]);
+    };
 
     const handleCloseModal = useCallback(() => {
         console.log('Closing bug modal');
@@ -466,7 +522,6 @@ const BugTrackerPage = () => {
         setSelectedBug(null);
     }, []);
 
-    // Simple update handler
     const handleUpdateBug = useCallback(async (bugId, updates) => {
         try {
             if (bugsHook.bugsLocked) {
@@ -496,12 +551,83 @@ const BugTrackerPage = () => {
         }
     }, [bugsHook.bugsLocked, bugsHook.updateBug, selectedBug, uiHook.addNotification, handleError]);
 
-    // Handler to navigate to traceability page
     const handleOpenTraceability = useCallback(() => {
         router.push('/bugs/bug-trace');
     }, [router]);
 
-    // Debug logging once
+    // Render function for bug items in grouped view
+    const renderBugItem = useCallback((bug, index, isSelected) => {
+        const formatDate = (date) => {
+            if (!date) return 'N/A';
+            const d = date.toDate ? date.toDate() : new Date(date);
+            return d.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        };
+
+        return (
+            <div
+                className={`grid grid-cols-12 gap-4 items-center w-full py-2 px-2 cursor-pointer hover:bg-accent/50 transition-colors ${isSelected ? 'bg-primary/10' : ''
+                    }`}
+                onClick={(e) => {
+                    if (!e.target.closest('input[type="checkbox"]')) {
+                        handleViewBug(bug);
+                    }
+                }}
+            >
+                <div className="col-span-12 sm:col-span-5 lg:col-span-4 min-w-0">
+                    <h4 className="text-sm font-medium text-foreground truncate">
+                        {bug.title}
+                    </h4>
+                    {bug.description && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {bug.description}
+                        </p>
+                    )}
+                </div>
+
+                <div className="col-span-3 sm:col-span-2 lg:col-span-2 hidden sm:block">
+                    <span className="text-xs text-muted-foreground font-mono truncate block">
+                        {bug.id?.slice(0, 8) || 'N/A'}
+                    </span>
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {bug.status && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${bug.status === 'open' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                                bug.status === 'in-progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                    bug.status === 'resolved' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                                        'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'}`}>
+                            {bug.status}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {bug.severity && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${bug.severity === 'critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                                bug.severity === 'high' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' :
+                                    bug.severity === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                                        'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}`}>
+                            {bug.severity}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-1 lg:col-span-2 text-right">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDate(bug.created_at)}
+                    </span>
+                </div>
+            </div>
+        );
+    }, [handleViewBug]);
+
+
     useEffect(() => {
         if (!hasInitializedRef.current) {
             console.log('Bugs Hook Debug:', {
@@ -514,11 +640,12 @@ const BugTrackerPage = () => {
                 activeSuiteId: bugsHook.activeSuite?.id,
                 viewMode,
                 bugViewType,
-                pageMode
+                pageMode,
+                groupBy
             });
             hasInitializedRef.current = true;
         }
-    }, [bugsHook.updateBug, bugsHook.createBug, bugsHook.deleteBug, bugsHook.bugs?.length, bugsHook.loading, bugsHook.bugsLocked, bugsHook.activeSuite, viewMode, bugViewType, pageMode]);
+    }, [bugsHook.updateBug, bugsHook.createBug, bugsHook.deleteBug, bugsHook.bugs?.length, bugsHook.loading, bugsHook.bugsLocked, bugsHook.activeSuite, viewMode, bugViewType, pageMode, groupBy]);
 
     // Memoize components
     const tableComponent = useMemo(() => (
@@ -585,7 +712,22 @@ const BugTrackerPage = () => {
         handleUpdateBug
     ]);
 
-    // Mobile Action Menu Component
+    // Replace your groupedComponent:
+    const groupedComponent = useMemo(() => (
+        <GroupedView
+            items={filteredBugs}
+            groupBy={groupBy}
+            renderItem={renderBugItem}
+            emptyMessage="No bugs to display"
+            groupMetadata={groupMetadata}
+            defaultExpanded={true}
+            selectedItems={bugsHook.selectedBugs || []}
+            onSelectionChange={(selectedIds) => {
+                bugsHook.selectBugs?.(selectedIds);
+            }}
+        />
+    ), [filteredBugs, groupBy, renderBugItem, groupMetadata, bugsHook.selectedBugs, bugsHook.selectBugs]);
+
     const MobileActionMenu = () => (
         <div className={`
             fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out
@@ -655,7 +797,6 @@ const BugTrackerPage = () => {
         </div>
     );
 
-    // Show locked state
     if (bugsHook.bugsLocked && pageMode === 'bugs') {
         return (
             <div className="min-h-screen bg-background">
@@ -671,7 +812,6 @@ const BugTrackerPage = () => {
         );
     }
 
-    // Show Recommendations page
     if (pageMode === 'recommendations') {
         return (
             <div className="min-h-screen bg-background">
@@ -720,7 +860,6 @@ const BugTrackerPage = () => {
         );
     }
 
-    // Main Bugs page
     return (
         <div className="min-h-screen bg-background">
             {/* Responsive Page Mode Toggle */}
@@ -892,7 +1031,7 @@ const BugTrackerPage = () => {
                     </div>
                 </div>
 
-                {/* Responsive Filter Bar */}
+                {/* Responsive Filter Bar with Grouping */}
                 {bugViewType === 'full' && (
                     <div className="mb-4">
                         <BugFilterBar
@@ -901,6 +1040,9 @@ const BugTrackerPage = () => {
                             bugs={bugsRef.current}
                             viewMode={viewMode}
                             setViewMode={handleViewModeChange}
+                            groupBy={groupBy}
+                            onGroupByChange={handleGroupByChange}
+                            groupingOptions={groupingOptions}
                         />
                     </div>
                 )}
@@ -908,7 +1050,11 @@ const BugTrackerPage = () => {
                 {/* Content with smooth transitions */}
                 <div className="transition-all duration-300 ease-in-out">
                     <div className="overflow-hidden">
-                        {viewMode === 'table' ? (
+                        {groupBy ? (
+                            <div className="isolate">
+                                {groupedComponent}
+                            </div>
+                        ) : viewMode === 'table' ? (
                             <div className="overflow-x-auto">
                                 {tableComponent}
                             </div>
@@ -932,6 +1078,8 @@ const BugTrackerPage = () => {
                                 teamMembers={bugsHook.teamMembers || []}
                                 onUpdateBug={handleUpdateBug}
                                 onClose={handleCloseModal}
+                                sprints={bugsHook.sprints || []}
+                                modules={bugsHook.modules || []}
                             />
                         </div>
                     </div>,

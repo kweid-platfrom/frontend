@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    X, Calendar, User, Paperclip, Clock, CheckCircle, History, Eye, Folder, 
+import {
+    X, Calendar, User, Paperclip, Clock, CheckCircle, History, Eye, Folder,
     Terminal, Video, Network, MessageSquare, AlertTriangle, Info,
     Settings, Activity, FileText, Monitor, Bug, Users, TrendingUp, ChevronDown,
-    ChevronUp, ExternalLink, Copy,
+    ChevronUp, ExternalLink, Copy, Share2, Check,
 } from 'lucide-react';
+import { useApp } from '../../context/AppProvider';
 import EditableField from '../bugview/EditableField';
 import BugComments from '../bug-report/BugComments';
 import AttachmentsList from '../bugview/AttachmentsList';
@@ -22,7 +23,29 @@ import {
     getPriorityFromSeverity,
 } from '../../utils/bugUtils';
 
-const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
+const BugDetailsModal = ({
+    bug,
+    teamMembers = [],
+    onUpdateBug,
+    modules = [],
+    onClose
+}) => {
+    // ✅ FIXED: Get sprints from global state using useApp
+    const { state } = useApp();
+    const globalSprints = state?.sprints?.sprints || [];
+    
+    // ✅ SAFE: Ensure arrays at the top level with comprehensive checks
+    // Use global sprints instead of prop sprints to capture reassignments
+    const safeSprints = Array.isArray(globalSprints) ? globalSprints : [];
+    const safeModules = Array.isArray(modules) ? modules : [];
+    const safeTeamMembers = Array.isArray(teamMembers) ? teamMembers : [];
+
+    console.log('🔍 BugDetailsModal Sprint State:', {
+        globalSprintsCount: safeSprints.length,
+        bugCurrentSprint: bug.sprint_id || bug.sprintId,
+        availableSprints: safeSprints.map(s => ({ id: s.id, name: s.name }))
+    });
+
     const [editedBug, setEditedBug] = useState({ ...bug });
     const [comments, setComments] = useState(bug.comments || []);
     const [editingField, setEditingField] = useState(null);
@@ -31,6 +54,10 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [collapsedSections, setCollapsedSections] = useState(new Set());
     const [isFullscreen, setIsFullscreen] = useState(false);
+    
+    // Share functionality state
+    const [shareTooltip, setShareTooltip] = useState('Copy link');
+    const [showShareSuccess, setShowShareSuccess] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -57,6 +84,28 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         };
     }, [onClose]);
 
+    // Share functionality
+    const handleShareBug = useCallback(async () => {
+        try {
+            const bugUrl = `${window.location.origin}/bugs?id=${bug.id}`;
+            await navigator.clipboard.writeText(bugUrl);
+            
+            setShareTooltip('Link copied!');
+            setShowShareSuccess(true);
+            
+            setTimeout(() => {
+                setShareTooltip('Copy link');
+                setShowShareSuccess(false);
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy link:', error);
+            setShareTooltip('Failed to copy');
+            setTimeout(() => {
+                setShareTooltip('Copy link');
+            }, 2000);
+        }
+    }, [bug.id]);
+
     const handleFieldEdit = (field, value) => {
         setEditingField(field);
         setTempValues({ ...tempValues, [field]: value });
@@ -67,14 +116,14 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
             console.error('onUpdateBug is not a function');
             return;
         }
-        
+
         try {
             let updateData = { [field]: tempValues[field] };
-            
+
             if (field === 'dueDate' && tempValues[field]) {
                 updateData[field] = new Date(tempValues[field]);
             }
-            
+
             if (field === 'tags') {
                 updateData[field] = tempValues[field].split(',').map(item => item.trim()).filter(item => item);
             }
@@ -83,12 +132,22 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                 const newPriority = getPriorityFromSeverity(tempValues[field]);
                 updateData.priority = newPriority;
             }
-            
+
+            // ✅ Log sprint reassignment
+            if (field === 'sprint_id') {
+                console.log('🔄 Bug sprint reassignment:', {
+                    bugId: editedBug.id,
+                    oldSprint: editedBug.sprint_id || editedBug.sprintId,
+                    newSprint: tempValues[field],
+                    sprintName: safeSprints.find(s => s.id === tempValues[field])?.name
+                });
+            }
+
             const updatedBug = { ...editedBug, ...updateData };
             setEditedBug(updatedBug);
-            
+
             await onUpdateBug(editedBug.id, updateData);
-            
+
             setEditingField(null);
             setTempValues({});
         } catch (error) {
@@ -104,7 +163,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
     const handleAddComment = async (commentText, attachments = []) => {
         if (!commentText.trim() && attachments.length === 0) return;
         if (!onUpdateBug || typeof onUpdateBug !== 'function') return;
-        
+
         try {
             const newComment = {
                 text: commentText,
@@ -135,11 +194,10 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         navigator.clipboard.writeText(editedBug.id);
     };
 
-    // Utility function to safely format device info
     const formatDeviceInfo = (bug) => {
         const browserInfo = bug.browserInfo || 'Unknown';
         let deviceInfo = 'Unknown';
-        
+
         if (bug.deviceInfo) {
             if (typeof bug.deviceInfo === 'string') {
                 deviceInfo = bug.deviceInfo.split(',')[0] || 'Unknown';
@@ -149,26 +207,42 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                 deviceInfo = String(bug.deviceInfo);
             }
         }
-        
+
         return `${browserInfo}, ${deviceInfo}`;
     };
 
     const statusOptions = VALID_BUG_STATUSES.map(status => ({ value: status, label: status }));
-    const assigneeOptions = teamMembers?.map(member => ({
+    
+    // ✅ SAFE: Always map from safe arrays
+    const assigneeOptions = safeTeamMembers.map(member => ({
         value: member.id || member.email,
         label: member.name || member.email?.split('@')[0] || 'Unknown',
-    })) || [];
+    }));
+
     const environmentOptions = ['production', 'staging', 'development', 'testing'].map(env => ({
         value: env,
         label: env.charAt(0).toUpperCase() + env.slice(1),
     }));
+
     const sourceOptions = ['manual', 'automated', 'external'].map(source => ({
         value: source,
         label: source.charAt(0).toUpperCase() + source.slice(1),
     }));
+
     const categoryOptions = ['UI', 'Functionality', 'Performance', 'Security', 'Compatibility', 'Other'].map(category => ({
         value: category,
         label: category,
+    }));
+    
+    // ✅ FIXED: Map sprint options from global state with status indication
+    const sprintOptions = safeSprints.map(sprint => ({
+        value: sprint.id,
+        label: `${sprint.name}${sprint.status ? ` (${sprint.status})` : ''}`,
+    }));
+
+    const moduleOptions = safeModules.map(module => ({
+        value: module.id,
+        label: module.name,
     }));
 
     const editableFieldProps = () => ({
@@ -179,7 +253,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
         onCancel: handleFieldCancel,
         setTempValues,
         disabled: !onUpdateBug || typeof onUpdateBug !== 'function',
-        showEditIcon: true,  // Always show edit icon by default
+        showEditIcon: true,
     });
 
     const getSeverityIcon = (severity) => {
@@ -239,7 +313,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                     <span className="font-mono bg-muted px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-xs">
                                                         #{editedBug.id?.slice(-8) || 'N/A'}
                                                     </span>
-                                                    <button onClick={copyBugId} className="hover:text-foreground">
+                                                    <button onClick={copyBugId} className="hover:text-foreground" title="Copy bug ID">
                                                         <Copy className="h-3 w-3" />
                                                     </button>
                                                 </div>
@@ -255,6 +329,24 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-2">
+                                        {/* Share Button */}
+                                        <div className="relative group">
+                                            <button
+                                                onClick={handleShareBug}
+                                                className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                                                title={shareTooltip}
+                                            >
+                                                {showShareSuccess ? (
+                                                    <Check className="h-5 w-5 text-green-600" />
+                                                ) : (
+                                                    <Share2 className="h-5 w-5" />
+                                                )}
+                                            </button>
+                                            <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                                {shareTooltip}
+                                            </div>
+                                        </div>
+                                        
                                         <button
                                             onClick={() => setIsFullscreen(!isFullscreen)}
                                             className="hidden sm:block p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
@@ -314,11 +406,10 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id)}
-                                                className={`flex-shrink-0 ${
-                                                    activeTab === tab.id
-                                                        ? 'border-primary text-primary bg-accent'
-                                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                                                } whitespace-nowrap flex items-center py-2 sm:py-3 px-3 sm:px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all min-w-max`}
+                                                className={`flex-shrink-0 ${activeTab === tab.id
+                                                    ? 'border-primary text-primary bg-accent'
+                                                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                                                    } whitespace-nowrap flex items-center py-2 sm:py-3 px-3 sm:px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all min-w-max`}
                                             >
                                                 <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
                                                 {tab.label}
@@ -339,8 +430,9 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                             <div className="p-4 sm:p-6">
                                 {activeTab === 'overview' && (
                                     <div className="space-y-4 sm:space-y-6">
-                                        {/* Quick Actions */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+
+                                        {/* Quick Actions - Updated with Sprint and Module */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                                             <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
                                                     field="status"
@@ -367,7 +459,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                 <div className="text-sm font-medium text-foreground">
                                                     {editedBug.priority || 'Low'}
                                                 </div>
-                                                <p className="text-xs text-muted-foreground mt-1">Priority (Auto-derived from Severity)</p>
+                                                <p className="text-xs text-muted-foreground mt-1">Priority (Auto-derived)</p>
                                             </div>
                                             <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
@@ -380,6 +472,57 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                 />
                                                 <p className="text-xs text-muted-foreground mt-1">Environment</p>
                                             </div>
+                                            {/* ✅ FIXED: Sprint selector always shows, uses global state */}
+                                            {safeSprints.length > 0 && (
+                                                <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                                    <div className="text-sm font-medium">
+                                                        {editingField === 'sprint_id' ? (
+                                                            <select
+                                                                value={tempValues.sprint_id !== undefined ? tempValues.sprint_id : (editedBug.sprint_id || editedBug.sprintId || '')}
+                                                                onChange={(e) => setTempValues({ ...tempValues, sprint_id: e.target.value })}
+                                                                onBlur={() => handleFieldSave('sprint_id')}
+                                                                className="w-full px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary"
+                                                                autoFocus
+                                                            >
+                                                                <option value="">No Sprint</option>
+                                                                {sprintOptions.map(opt => (
+                                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleFieldEdit('sprint_id', editedBug.sprint_id || editedBug.sprintId || '')}
+                                                                className="w-full text-left px-2 py-1 hover:bg-accent rounded text-foreground"
+                                                                disabled={!onUpdateBug || typeof onUpdateBug !== 'function'}
+                                                            >
+                                                                {editedBug.sprint_id || editedBug.sprintId
+                                                                    ? (safeSprints.find(s => s.id === (editedBug.sprint_id || editedBug.sprintId))?.name || 'Unknown Sprint')
+                                                                    : 'No Sprint'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-1">🎯 Sprint</p>
+                                                </div>
+                                            )}
+                                            {safeModules.length > 0 && (
+                                                <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                                    <EditableField
+                                                        field="module_id"
+                                                        value={editedBug.module_id || editedBug.moduleId || ''}
+                                                        type="select"
+                                                        options={[
+                                                            { value: '', label: 'No Module' },
+                                                            ...moduleOptions
+                                                        ]}
+                                                        className="text-sm font-medium"
+                                                        displayValue={editedBug.module_id || editedBug.moduleId
+                                                            ? (safeModules.find(m => m.id === (editedBug.module_id || editedBug.moduleId))?.name || 'Unknown Module')
+                                                            : 'No Module'}
+                                                        {...editableFieldProps()}
+                                                    />
+                                                    <p className="text-xs text-muted-foreground mt-1">📁 Module</p>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Description */}
@@ -622,6 +765,46 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                     </div>
                                                 </div>
                                             </div>
+                                            <div className="space-y-1 mt-4">
+                                                <label className="text-sm font-medium text-foreground">Sprint</label>
+                                                <div className="text-sm p-2 bg-muted rounded border border-border flex items-center">
+                                                    <span className="mr-2">🎯</span>
+                                                    {editingField === 'sprint_id' ? (
+                                                        <select
+                                                            value={tempValues.sprint_id !== undefined ? tempValues.sprint_id : (editedBug.sprint_id || editedBug.sprintId || '')}
+                                                            onChange={(e) => setTempValues({ ...tempValues, sprint_id: e.target.value })}
+                                                            onBlur={() => handleFieldSave('sprint_id')}
+                                                            className="flex-1 px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary"
+                                                            autoFocus
+                                                        >
+                                                            <option value="">No Sprint</option>
+                                                            {sprintOptions.map(opt => (
+                                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleFieldEdit('sprint_id', editedBug.sprint_id || editedBug.sprintId || '')}
+                                                            className="flex-1 text-left px-2 py-1 hover:bg-accent rounded text-foreground"
+                                                            disabled={!onUpdateBug || typeof onUpdateBug !== 'function'}
+                                                        >
+                                                            {editedBug.sprint_id || editedBug.sprintId
+                                                                ? (safeSprints.find(s => s.id === (editedBug.sprint_id || editedBug.sprintId))?.name || 'Unknown Sprint')
+                                                                : 'No Sprint'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1 mt-4">
+                                                <label className="text-sm font-medium text-foreground">Module</label>
+                                                <div className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border flex items-center">
+                                                    <span className="mr-2">📁</span>
+                                                    {editedBug.module ||
+                                                        (editedBug.module_id || editedBug.moduleId
+                                                            ? (safeModules.find(m => m.id === (editedBug.module_id || editedBug.moduleId))?.name || 'Unknown Module')
+                                                            : 'No Module')}
+                                                </div>
+                                            </div>
                                         </div>
 
                                         {/* Resolution & Workaround */}
@@ -697,7 +880,7 @@ const BugDetailsModal = ({ bug, teamMembers, onUpdateBug, onClose }) => {
                                                     comments={comments}
                                                     onAddComment={handleAddComment}
                                                     formatDate={formatDate}
-                                                    teamMembers={teamMembers}
+                                                    teamMembers={safeTeamMembers}
                                                 />
                                             </div>
                                         </div>
