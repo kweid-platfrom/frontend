@@ -1,6 +1,6 @@
-
 // HeaderButtons.jsx - Fixed mobile dropdown styling consistency
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Play, Target, FileText, MoreHorizontal, Plus as PlusIcon, Bug as BugIcon } from 'lucide-react';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
@@ -17,6 +17,7 @@ const HeaderButtons = ({
     onReportBug,
     disabled = false
 }) => {
+    const router = useRouter();
     const [showMobileMenu, setShowMobileMenu] = useState(false);
     const [mobileMenuPosition, setMobileMenuPosition] = useState({
         top: 0,
@@ -81,6 +82,11 @@ const HeaderButtons = ({
 
     const handleMobileAction = (action) => {
         action();
+        setShowMobileMenu(false);
+    };
+
+    const handleRunTests = () => {
+        router.push('/testruns');
         setShowMobileMenu(false);
     };
 
@@ -161,7 +167,7 @@ const HeaderButtons = ({
                                 </button>
 
                                 <button
-                                    onClick={() => setShowMobileMenu(false)}
+                                    onClick={handleRunTests}
                                     className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
                                 >
                                     <Play className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -230,6 +236,7 @@ const HeaderButtons = ({
                 <Button
                     variant="ghost"
                     size="iconSm"
+                    onClick={handleRunTests}
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     title="Run Tests"
@@ -290,6 +297,7 @@ const HeaderButtons = ({
 
                 <Button
                     variant="ghost"
+                    onClick={handleRunTests}
                     disabled={disabled}
                     leftIcon={<Play className="h-4 w-4" />}
                     className="text-foreground hover:bg-accent/50"

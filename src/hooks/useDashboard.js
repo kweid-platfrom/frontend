@@ -1,7 +1,3 @@
-// ============================================================================
-// PART 1: Enhanced useDashboard.js with Complete Metrics Tracking
-// ============================================================================
-
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TestSuiteService } from '../services/TestSuiteService';
@@ -36,14 +32,14 @@ export const useDashboard = () => {
         negativeCaseCoverage: 0,
         totalCoveragePoints: 0,
         
-        // Execution Metrics - ENHANCED
+        // Execution Metrics - ENHANCED (FROM TEST RUNS)
         passRate: 0,
         passCount: 0,
         failCount: 0,
         executionCount: 0,
         avgExecutionTime: 0,
         lastExecutionDate: null,
-        executionTrend: 'stable', // 'improving', 'declining', 'stable'
+        executionTrend: 'stable',
         
         // Bug Metrics - ENHANCED
         activeBugs: 0,
@@ -160,7 +156,6 @@ export const useDashboard = () => {
         }));
     }, []);
 
-    // Helper: Calculate time-based metrics
     const getTimePeriods = () => {
         const now = new Date();
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -168,18 +163,18 @@ export const useDashboard = () => {
         return { now, weekAgo, monthAgo };
     };
 
-    // Helper: Extract date from Firestore timestamp
     const extractDate = (timestamp) => {
         if (!timestamp) return null;
-        return timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        if (timestamp.toDate) return timestamp.toDate();
+        if (timestamp instanceof Date) return timestamp;
+        return new Date(timestamp);
     };
 
-    // Helper: Calculate test case coverage metrics
     const calculateCoverageMetrics = (testCases) => {
         let functional = 0, edge = 0, negative = 0, total = 0;
         
         testCases.forEach(tc => {
-            const type = (tc.type || '').toLowerCase();
+            const type = (tc.type || tc.testType || '').toLowerCase();
             const tags = (tc.tags || []).map(t => t.toLowerCase());
             
             total++;
@@ -197,7 +192,6 @@ export const useDashboard = () => {
         };
     };
 
-    // Helper: Calculate bug quality score
     const calculateBugQualityScore = (bugs) => {
         if (bugs.length === 0) return 0;
         
@@ -214,27 +208,68 @@ export const useDashboard = () => {
         return Math.round(totalScore / bugs.length);
     };
 
-    // Helper: Calculate execution trend
-    const calculateExecutionTrend = (testCases) => {
-        const recent = testCases.filter(tc => {
-            const execDate = extractDate(tc.lastExecutionDate);
-            if (!execDate) return false;
-            const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-            return execDate > weekAgo;
+    // NEW: Extract execution metrics from test runs
+    const extractExecutionMetricsFromRuns = (testCases) => {
+        let totalPassed = 0;
+        let totalFailed = 0;
+        let totalBlocked = 0;
+        let totalSkipped = 0;
+        let totalExecuted = 0;
+        let totalDuration = 0;
+        let lastExecDate = null;
+
+        testCases.forEach(tc => {
+            if (tc.runs && Array.isArray(tc.runs)) {
+                tc.runs.forEach(run => {
+                    const status = (run.executionStatus || 'not_executed').toLowerCase();
+                    
+                    if (status !== 'not_executed') {
+                        totalExecuted++;
+                        
+                        if (status === 'passed' || status === 'pass') {
+                            totalPassed++;
+                        } else if (status === 'failed' || status === 'fail') {
+                            totalFailed++;
+                        } else if (status === 'blocked') {
+                            totalBlocked++;
+                        } else if (status === 'skipped') {
+                            totalSkipped++;
+                        }
+                        
+                        if (run.duration) {
+                            totalDuration += run.duration;
+                        }
+                        
+                        const execDate = extractDate(run.executed_at);
+                        if (execDate && (!lastExecDate || execDate > lastExecDate)) {
+                            lastExecDate = execDate;
+                        }
+                    }
+                });
+            }
         });
-        
-        if (recent.length < 5) return 'stable';
-        
-        const passRates = recent.map(tc => {
-            const result = tc.lastExecutionResult || tc.executionResult;
-            return result === 'pass' || result === 'passed' ? 1 : 0;
-        });
-        
-        const avgPassRate = passRates.reduce((sum, val) => sum + val, 0) / passRates.length;
-        
-        if (avgPassRate > 0.8) return 'improving';
-        if (avgPassRate < 0.5) return 'declining';
-        return 'stable';
+
+        const passRate = totalExecuted > 0 ? Math.round((totalPassed / totalExecuted) * 100) : 0;
+        const avgDuration = totalExecuted > 0 ? Math.round(totalDuration / totalExecuted) : 0;
+
+        // Determine trend
+        let trend = 'stable';
+        if (totalExecuted > 0) {
+            if (passRate >= 80) trend = 'improving';
+            else if (passRate < 50) trend = 'declining';
+        }
+
+        return {
+            passRate,
+            passCount: totalPassed,
+            failCount: totalFailed,
+            executionCount: totalExecuted,
+            avgExecutionTime: avgDuration,
+            lastExecutionDate: lastExecDate,
+            executionTrend: trend,
+            blockedCount: totalBlocked,
+            skippedCount: totalSkipped,
+        };
     };
 
     const fetchDashboardData = useCallback(
@@ -297,7 +332,6 @@ export const useDashboard = () => {
                         try {
                             console.log(`Processing ${suites?.length || 0} test suites`);
 
-                            // Initialize all metric accumulators
                             let totalTestCases = 0;
                             let manualTestCases = 0;
                             let automatedTestCases = 0;
@@ -322,11 +356,6 @@ export const useDashboard = () => {
                             let recordingsWithIssues = 0;
                             let totalRecordingDuration = 0;
                             let recordingsLinkedToBugs = 0;
-                            
-                            let totalPassCount = 0;
-                            let totalExecutionCount = 0;
-                            let totalExecutionTime = 0;
-                            let lastExecution = null;
                             
                             let totalResolutionTime = 0;
                             let criticalResolutionTime = 0;
@@ -390,66 +419,34 @@ export const useDashboard = () => {
                                                 
                                                 totalTestCases++;
                                                 
-                                                // Type classification
-                                                if (tc.isAutomated || tc.automated || tc.type === 'automated') {
+                                                if (tc.isAutomated || tc.automated || tc.executionType === 'automated') {
                                                     automatedTestCases++;
                                                 } else {
                                                     manualTestCases++;
                                                 }
                                                 
-                                                // AI generation
                                                 if (tc.isAIGenerated || tc.aiGenerated || tc.source === 'ai') {
                                                     aiGeneratedTestCases++;
                                                 }
                                                 
-                                                // Tags and links
                                                 if (tc.tags && tc.tags.length > 0) testCasesWithTags++;
-                                                if (tc.linkedBugs && tc.linkedBugs.length > 0) testCasesLinkedToBugs++;
+                                                if (tc.linkedBugIds && tc.linkedBugIds.length > 0) testCasesLinkedToBugs++;
                                                 if (tc.linkedRecordings && tc.linkedRecordings.length > 0) testCasesWithRecordings++;
                                                 
-                                                // Outdated check (not updated in 90 days)
                                                 if (updatedDate) {
                                                     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
                                                     if (updatedDate < ninetyDaysAgo) outdatedTestCases++;
                                                 }
                                                 
-                                                // Execution metrics
-                                                const result = tc.lastExecutionResult || tc.executionResult || tc.status;
-                                                const hasExecution = result && (
-                                                    result === 'pass' || result === 'passed' || result === 'success' ||
-                                                    result === 'fail' || result === 'failed' || result === 'error'
-                                                );
-                                                
-                                                if (hasExecution) {
-                                                    totalExecutionCount++;
-                                                    
-                                                    if (result === 'pass' || result === 'passed' || result === 'success') {
-                                                        totalPassCount++;
-                                                    }
-                                                    
-                                                    const execTime = tc.lastExecutionTime || tc.executionTime || tc.duration;
-                                                    if (execTime && typeof execTime === 'number') {
-                                                        totalExecutionTime += execTime;
-                                                    }
-                                                    
-                                                    const execDate = extractDate(tc.lastExecutionDate);
-                                                    if (execDate && (!lastExecution || execDate > lastExecution)) {
-                                                        lastExecution = execDate;
-                                                    }
-                                                }
-                                                
-                                                // Contributor tracking
                                                 if (tc.created_by) contributors.add(tc.created_by);
                                                 if (tc.updated_by) contributors.add(tc.updated_by);
                                             });
                                             
-                                            // Calculate coverage metrics
+                                            // Calculate execution metrics from test runs
+                                            const executionMetrics = extractExecutionMetricsFromRuns(testCases);
+                                            
                                             const coverage = calculateCoverageMetrics(testCases);
                                             
-                                            // Calculate execution trend
-                                            const execTrend = calculateExecutionTrend(testCases);
-                                            
-                                            // Time-based counting
                                             const testsThisWeek = testCases.filter(tc => {
                                                 const date = extractDate(tc.created_at);
                                                 return date && date > weekAgo;
@@ -476,17 +473,7 @@ export const useDashboard = () => {
                                                 outdatedTestCases,
                                                 recentlyUpdatedTestCases: recentlyUpdated,
                                                 ...coverage,
-                                                passRate: totalExecutionCount > 0 
-                                                    ? Math.round((totalPassCount / totalExecutionCount) * 100) 
-                                                    : 0,
-                                                passCount: totalPassCount,
-                                                failCount: totalExecutionCount - totalPassCount,
-                                                executionCount: totalExecutionCount,
-                                                avgExecutionTime: totalExecutionCount > 0 
-                                                    ? Math.round(totalExecutionTime / totalExecutionCount) 
-                                                    : 0,
-                                                lastExecutionDate: lastExecution,
-                                                executionTrend: execTrend,
+                                                ...executionMetrics,
                                                 automationRate: totalTestCases > 0 
                                                     ? Math.round((automatedTestCases / totalTestCases) * 100) 
                                                     : 0,
@@ -521,7 +508,6 @@ export const useDashboard = () => {
                                                 const priority = bug.priority?.toLowerCase() || 'medium';
                                                 const severity = bug.severity?.toLowerCase() || 'medium';
                                                 
-                                                // Evidence tracking
                                                 if (bug.linkedRecordings && bug.linkedRecordings.length > 0) {
                                                     bugsWithVideoEvidence++;
                                                     bugsFromRecordings++;
@@ -532,7 +518,6 @@ export const useDashboard = () => {
                                                 if (status !== 'resolved' && status !== 'closed' && status !== 'fixed') {
                                                     activeBugs++;
                                                     
-                                                    // Priority classification for active bugs
                                                     if (priority === 'critical' || severity === 'critical') {
                                                         criticalBugs++;
                                                     } else if (priority === 'high') {
@@ -545,7 +530,6 @@ export const useDashboard = () => {
                                                 } else {
                                                     resolvedBugs++;
                                                     
-                                                    // Resolution time calculation
                                                     const resTime = bug.resolutionTime || bug.timeToResolve;
                                                     let timeInHours = 0;
                                                     
@@ -561,7 +545,6 @@ export const useDashboard = () => {
                                                     
                                                     totalResolutionTime += timeInHours;
                                                     
-                                                    // Track by priority
                                                     if (priority === 'critical' || severity === 'critical') {
                                                         criticalResolutionTime += timeInHours;
                                                         criticalResolvedCount++;
@@ -571,14 +554,11 @@ export const useDashboard = () => {
                                                     }
                                                 }
                                                 
-                                                // Contributor tracking
                                                 if (bug.reported_by) contributors.add(bug.reported_by);
                                             });
                                             
-                                            // Calculate bug quality
                                             const bugQuality = calculateBugQualityScore(bugs);
                                             
-                                            // Time-based counting
                                             const bugsThisWeek = bugs.filter(b => {
                                                 const date = extractDate(b.created_at);
                                                 return date && date > weekAgo;
@@ -761,7 +741,6 @@ export const useDashboard = () => {
                                                 }
                                             });
                                             
-                                            // Calculate sprint velocity (completed test cases per sprint)
                                             const completedSprintsList = sprints.filter(s => s.status === 'completed');
                                             let totalVelocity = 0;
                                             completedSprintsList.forEach(sprint => {
@@ -815,7 +794,6 @@ export const useDashboard = () => {
 
                             // ========== FINAL CALCULATIONS ==========
                             
-                            // Sort and limit activity
                             const sortedActivity = recentActivity
                                 .sort((a, b) => {
                                     const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp || 0);
@@ -824,12 +802,10 @@ export const useDashboard = () => {
                                 })
                                 .slice(0, 20);
 
-                            // Calculate AI generation success rate
                             const aiSuccessRate = aiGeneratedTestCases > 0 && totalTestCases > 0
-                                ? Math.min(100, Math.round((aiGeneratedTestCases / totalTestCases) * 150)) // Weighted higher
+                                ? Math.min(100, Math.round((aiGeneratedTestCases / totalTestCases) * 150))
                                 : 0;
 
-                            // Calculate trend data (last 7 data points)
                             const testCaseTrend = Array.from({ length: 7 }, (_, i) => {
                                 const daysAgo = 6 - i;
                                 const date = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
@@ -855,17 +831,26 @@ export const useDashboard = () => {
                             const executionTrend = Array.from({ length: 7 }, (_, i) => {
                                 const daysAgo = 6 - i;
                                 const date = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-                                const executions = allTestCases.filter(tc => {
-                                    const execDate = extractDate(tc.lastExecutionDate);
-                                    if (!execDate) return false;
-                                    return execDate.toDateString() === date.toDateString();
+                                const dayExecutions = [];
+                                
+                                allTestCases.forEach(tc => {
+                                    if (tc.runs && Array.isArray(tc.runs)) {
+                                        tc.runs.forEach(run => {
+                                            const execDate = extractDate(run.executed_at);
+                                            if (execDate && execDate.toDateString() === date.toDateString()) {
+                                                dayExecutions.push({
+                                                    status: run.executionStatus,
+                                                    passed: run.executionStatus === 'passed' || run.executionStatus === 'pass'
+                                                });
+                                            }
+                                        });
+                                    }
                                 });
-                                const passed = executions.filter(tc => {
-                                    const result = tc.lastExecutionResult || tc.executionResult;
-                                    return result === 'pass' || result === 'passed' || result === 'success';
-                                }).length;
-                                const total = executions.length;
+                                
+                                const total = dayExecutions.length;
+                                const passed = dayExecutions.filter(e => e.passed).length;
                                 const rate = total > 0 ? Math.round((passed / total) * 100) : 0;
+                                
                                 return { 
                                     date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), 
                                     passRate: rate,
@@ -873,7 +858,6 @@ export const useDashboard = () => {
                                 };
                             });
 
-                            // Final metrics update
                             updateMetricsPartially({
                                 activeContributors: contributors.size,
                                 totalActivities: recentActivity.length,

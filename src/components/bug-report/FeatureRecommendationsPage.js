@@ -18,6 +18,9 @@ import RecommendationTable from '../recommend/RecommendationTable';
 import RecommendationModal from '../recommend/RecommendationModal';
 import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 import Pagination from '../common/Pagination';
+import GroupedView from '../GroupedView';
+import GroupSelect from '../common/GroupSelect';
+import { getGroupingOptions } from '@/utils/groupingUtils';
 
 // Safe date formatting helper
 const safeFormatDate = (dateValue, formatType = 'relative') => {
@@ -57,16 +60,16 @@ const safeFormatDate = (dateValue, formatType = 'relative') => {
 };
 
 const FeatureRecommendationsPage = () => {
-    // FIXED: Get state from useApp hook
+    // Get state from useApp hook
     const { currentUser, activeSuite, state, actions, isLoading } = useApp();
 
-    // Local state for selection and pagination
+    // Local state for selection, pagination, and grouping
     const [selectedRecommendations, setSelectedRecommendations] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [showFilters, setShowFilters] = useState(false);
     const [loadingActions, setLoadingActions] = useState([]);
-    
+    const [groupBy, setGroupBy] = useState(null);
 
     // Safely destructure recommendations state with fallbacks
     const recommendationsState = state?.recommendations || {};
@@ -108,7 +111,27 @@ const FeatureRecommendationsPage = () => {
     const recommendationsAvailable = state?.recommendations !== undefined &&
         actions?.recommendations !== undefined;
 
-    // Filter and sort recommendations using the store selector
+    // Get grouping options with metadata
+    const groupingOptions = useMemo(() => {
+        const globalSprints = state?.sprints?.sprints || [];
+        return getGroupingOptions('recommendations', {
+            sprints: globalSprints,
+            modules: [],
+            users: []
+        });
+    }, [state?.sprints?.sprints]);
+
+    // Metadata for grouped view
+    const groupMetadata = useMemo(() => {
+        const globalSprints = state?.sprints?.sprints || [];
+        return {
+            sprints: globalSprints,
+            modules: [],
+            users: []
+        };
+    }, [state?.sprints?.sprints]);
+
+    // Filter and sort recommendations
     const filteredRecommendations = useMemo(() => {
         if (!recommendationsAvailable || !Array.isArray(recommendations)) {
             return [];
@@ -622,6 +645,86 @@ const FeatureRecommendationsPage = () => {
         }
     }, [archiveRecommendation, currentUser, actions?.ui, recommendationsAvailable]);
 
+    // Render function for recommendation items in grouped view
+    const renderRecommendationItem = useCallback((rec, index, isSelected) => {
+        const formatDate = (date) => {
+            if (!date) return 'N/A';
+            const d = date.toDate ? date.toDate() : new Date(date);
+            return d.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        };
+
+        return (
+            <div
+                className={`grid grid-cols-12 gap-4 items-center w-full py-2 px-2 cursor-pointer hover:bg-accent/50 transition-colors ${
+                    isSelected ? 'bg-primary/10' : ''
+                }`}
+                onClick={(e) => {
+                    if (!e.target.closest('input[type="checkbox"]')) {
+                        handleEditRecommendation(rec);
+                    }
+                }}
+            >
+                <div className="col-span-12 sm:col-span-5 lg:col-span-4 min-w-0">
+                    <h4 className="text-sm font-medium text-foreground truncate">
+                        {rec.title}
+                    </h4>
+                    {rec.description && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {rec.description}
+                        </p>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {rec.status && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${rec.status === 'under-review' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            rec.status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                            rec.status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            rec.status === 'in-development' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                            rec.status === 'completed' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'}`}>
+                            {rec.status}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {rec.priority && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${rec.priority === 'critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            rec.priority === 'high' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' :
+                            rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}`}>
+                            {rec.priority}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {rec.impact && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${rec.impact === 'high' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                            rec.impact === 'medium' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'}`}>
+                            {rec.impact}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-1 lg:col-span-2 text-right">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDate(rec.created_at)}
+                    </span>
+                </div>
+            </div>
+        );
+    }, [handleEditRecommendation]);
+
     // Show loading state
     if (isLoading || recommendationsLoading) {
         return (
@@ -712,10 +815,11 @@ const FeatureRecommendationsPage = () => {
                                 {/* Filter Toggle Button */}
                                 <button
                                     onClick={() => setShowFilters(!showFilters)}
-                                    className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border transition-all ${showFilters || activeFiltersCount > 0
-                                        ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-400 dark:border-teal-800'
-                                        : 'bg-background text-foreground border-border hover:bg-accent'
-                                        }`}
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border transition-all ${
+                                        showFilters || activeFiltersCount > 0
+                                            ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-400 dark:border-teal-800'
+                                            : 'bg-background text-foreground border-border hover:bg-accent'
+                                    }`}
                                 >
                                     <SlidersHorizontal className="w-4 h-4" />
                                     <span className="hidden sm:inline">Filters</span>
@@ -726,24 +830,35 @@ const FeatureRecommendationsPage = () => {
                                     )}
                                 </button>
 
+                                {/* Group By Dropdown */}
+                                <GroupSelect
+                                    value={groupBy}
+                                    onChange={setGroupBy}
+                                    options={groupingOptions}
+                                    placeholder="Group by..."
+                                    className="min-w-[140px]"
+                                />
+
                                 {/* View Mode Toggle */}
                                 <div className="inline-flex rounded-lg border border-border bg-background shadow-sm ml-auto lg:ml-0">
                                     <button
                                         onClick={() => setViewMode('cards')}
-                                        className={`inline-flex items-center justify-center px-3 py-2.5 text-sm font-medium rounded-l-lg transition-all ${viewMode === 'cards'
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                            }`}
+                                        className={`inline-flex items-center justify-center px-3 py-2.5 text-sm font-medium rounded-l-lg transition-all ${
+                                            viewMode === 'cards'
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                        }`}
                                         title="Cards view"
                                     >
                                         <LayoutGrid className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => setViewMode('table')}
-                                        className={`inline-flex items-center justify-center px-3 py-2.5 text-sm font-medium rounded-r-lg border-l border-border transition-all ${viewMode === 'table'
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                                            }`}
+                                        className={`inline-flex items-center justify-center px-3 py-2.5 text-sm font-medium rounded-r-lg border-l border-border transition-all ${
+                                            viewMode === 'table'
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                        }`}
                                         title="Table view"
                                     >
                                         <List className="w-4 h-4" />
@@ -840,7 +955,22 @@ const FeatureRecommendationsPage = () => {
 
                 {/* Content */}
                 <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-                    {viewMode === 'cards' ? (
+                    {groupBy ? (
+                        <div className="p-6">
+                            <GroupedView
+                                items={filteredRecommendations}
+                                groupBy={groupBy}
+                                renderItem={renderRecommendationItem}
+                                emptyMessage="No suggestions to display"
+                                groupMetadata={groupMetadata}
+                                defaultExpanded={true}
+                                selectedItems={selectedRecommendations}
+                                onSelectionChange={(selectedIds) => {
+                                    setSelectedRecommendations(selectedIds);
+                                }}
+                            />
+                        </div>
+                    ) : viewMode === 'cards' ? (
                         <div className="p-6">
                             <RecommendationCards
                                 recommendations={paginatedRecommendations}
@@ -877,8 +1007,8 @@ const FeatureRecommendationsPage = () => {
                         />
                     )}
 
-                    {/* Pagination */}
-                    {filteredRecommendations.length > 0 && (
+                    {/* Pagination - Only show when not grouping */}
+                    {!groupBy && filteredRecommendations.length > 0 && (
                         <div className="border-t border-border">
                             <Pagination
                                 currentPage={currentPage}

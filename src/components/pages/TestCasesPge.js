@@ -8,56 +8,56 @@ import TestCaseModal from '@/components/testCase/TestCaseModal';
 import FilterBar from '@/components/testCase/FilterBar';
 import ImportModal from '@/components/testCase/ImportModal';
 import TraceabilityMatrix from '@/components/testCase/TraceabilityMatrix';
+import CreateTestRunModal from '@/components/testRuns/CreateTestRunModal';
 import { useTestCases } from '@/hooks/useTestCases';
+import { useTestRuns } from '@/hooks/useTestRuns';
 import { useUI } from '@/hooks/useUI';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppProvider';
-
+import { ChevronRight, ChevronDown, Play } from 'lucide-react';
 
 const TestCases = () => {
     const router = useRouter();
-    const { actions, activeSuite } = useApp();
-
-    // Get data from hooks - make sure these are stable
+    const { actions, state } = useApp();
     const testCasesHook = useTestCases();
+    const testRunsHook = useTestRuns();
     const uiHook = useUI();
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [_loadingActions, setLoadingActions] = useState({});
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
+    const [_loadingActions, setLoadingActions] = useState([]);
     const [_selectedItems, setSelectedItems] = useState([]);
+    const [filteredTestCases, setFilteredTestCases] = useState([]);
+    const [selectedTestCase, setSelectedTestCase] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
+    const [isCreateRunModalOpen, setIsCreateRunModalOpen] = useState(false);
+    const [viewMode, setViewMode] = useState('table');
+    const sprints = state?.sprints?.sprints || [];
+    const activeSuite = state?.testSuites?.activeSuite;
 
-    // Debug logging for hook data
-    useEffect(() => {
-        console.log('🔍 TestCases Hook Debug:', {
-            hookData: {
-                currentUser: testCasesHook.currentUser,
-                activeSuite: testCasesHook.activeSuite,
-                testCasesLocked: testCasesHook.testCasesLocked,
-                canCreateTestCases: testCasesHook.canCreateTestCases,
-                testCases: testCasesHook.testCases?.length || 0,
-                loading: testCasesHook.loading
-            },
-            hookMethods: {
-                createTestCase: typeof testCasesHook.createTestCase,
-                updateTestCase: typeof testCasesHook.updateTestCase,
-                deleteTestCase: typeof testCasesHook.deleteTestCase
-            }
-        });
-    }, [
-        testCasesHook.currentUser,
-        testCasesHook.activeSuite,
-        testCasesHook.testCasesLocked,
-        testCasesHook.canCreateTestCases,
-        testCasesHook.testCases?.length,
-        testCasesHook.loading
-    ]);
+    // Grouping state
+    const [groupBy, setGroupBy] = useState(null);
+    const [expandedGroups, setExpandedGroups] = useState({});
 
-    // Use refs to store stable references to prevent circular dependencies
+    const [filters, setFilters] = useState({
+        search: '',
+        status: 'all',
+        priority: 'all',
+        severity: 'all',
+        executionStatus: 'all',
+        assignee: 'all',
+        component: 'all',
+        testType: 'all',
+        environment: 'all',
+        automationStatus: 'all',
+        tags: [],
+        lastUpdated: 'all',
+    });
+
     const testCasesRef = useRef(testCasesHook.testCases || []);
     const bugsRef = useRef(testCasesHook.bugs || []);
     const relationshipsRef = useRef(testCasesHook.relationships || { testCaseToBugs: {} });
 
-    // Update refs when data changes
     useEffect(() => {
         testCasesRef.current = testCasesHook.testCases || [];
     }, [testCasesHook.testCases]);
@@ -70,47 +70,28 @@ const TestCases = () => {
         relationshipsRef.current = testCasesHook.relationships || { testCaseToBugs: {} };
     }, [testCasesHook.relationships]);
 
-    // Local state - FIXED: Added missing filter properties
-    const [filteredTestCases, setFilteredTestCases] = useState([]);
-    const [selectedTestCase, setSelectedTestCase] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-    const [isTraceabilityOpen, setIsTraceabilityOpen] = useState(false);
-    const [viewMode, setViewMode] = useState('table');
-    const [filters, setFilters] = useState({
-        search: '',
-        status: 'all',
-        priority: 'all',
-        severity: 'all',              // FIXED: Added missing filter
-        executionStatus: 'all',       // FIXED: Renamed from executionType
-        assignee: 'all',
-        component: 'all',             // FIXED: Added missing filter
-        testType: 'all',              // FIXED: Added missing filter
-        environment: 'all',           // FIXED: Added missing filter
-        automationStatus: 'all',
-        tags: [],
-        lastUpdated: 'all',
-    });
+    // Unified notification function - FIX FOR TOAST ISSUE
+    const showNotification = useCallback((type, title, message, persistent = false) => {
+        const notification = { type, title, message, persistent };
+        
+        // Try both notification methods to ensure it works
+        if (uiHook.addNotification) {
+            uiHook.addNotification(notification);
+        }
+        if (actions?.ui?.showNotification) {
+            actions.ui.showNotification(notification);
+        }
+        
+        // Fallback to console if neither works
+        if (!uiHook.addNotification && !actions?.ui?.showNotification) {
+            console.warn(`[${type.toUpperCase()}] ${title}: ${message}`);
+        }
+    }, [uiHook, actions]);
 
-    // Debug logging for modal state
-    useEffect(() => {
-        console.log('🔍 Modal state changed:', {
-            isModalOpen,
-            selectedTestCase: selectedTestCase?.id || null,
-            currentUser: testCasesHook.currentUser?.uid || null,
-            activeSuite: testCasesHook.activeSuite?.id || null,
-            canCreateTestCases: testCasesHook.canCreateTestCases,
-            testCasesLocked: testCasesHook.testCasesLocked
-        });
-    }, [isModalOpen, selectedTestCase, testCasesHook.currentUser, testCasesHook.activeSuite]);
-
-    // Create stable function references - FIXED: Complete filter logic
     const applyFiltersStable = useCallback((currentTestCases, currentFilters) => {
         if (!Array.isArray(currentTestCases)) return [];
-
         let filtered = [...currentTestCases];
 
-        // Search filter - Enhanced with more searchable fields
         if (currentFilters.search) {
             const searchTerm = currentFilters.search.toLowerCase();
             filtered = filtered.filter((tc) => {
@@ -126,62 +107,41 @@ const TestCases = () => {
             });
         }
 
-        // Status filter
         if (currentFilters.status !== 'all') {
             filtered = filtered.filter((tc) => tc.status === currentFilters.status);
         }
-
-        // Priority filter
         if (currentFilters.priority !== 'all') {
             filtered = filtered.filter((tc) => tc.priority === currentFilters.priority);
         }
-
-        // FIXED: Severity filter (was missing)
         if (currentFilters.severity !== 'all') {
             filtered = filtered.filter((tc) => tc.severity === currentFilters.severity);
         }
-
-        // FIXED: Execution Status filter (was executionType)
         if (currentFilters.executionStatus !== 'all') {
             filtered = filtered.filter((tc) => tc.executionStatus === currentFilters.executionStatus);
         }
-
-        // Assignee filter
         if (currentFilters.assignee !== 'all') {
             filtered = filtered.filter((tc) =>
                 tc.assignee === currentFilters.assignee ||
                 (!tc.assignee && currentFilters.assignee === '')
             );
         }
-
-        // FIXED: Component filter (was missing)
         if (currentFilters.component !== 'all') {
             filtered = filtered.filter((tc) => tc.component === currentFilters.component);
         }
-
-        // FIXED: Test Type filter (was missing)
         if (currentFilters.testType !== 'all') {
             filtered = filtered.filter((tc) => tc.testType === currentFilters.testType);
         }
-
-        // FIXED: Environment filter (was missing)
         if (currentFilters.environment !== 'all') {
             filtered = filtered.filter((tc) => tc.environment === currentFilters.environment);
         }
-
-        // Automation Status filter
         if (currentFilters.automationStatus !== 'all') {
             filtered = filtered.filter((tc) => tc.automationStatus === currentFilters.automationStatus);
         }
-
-        // Tags filter
         if (currentFilters.tags?.length > 0) {
             filtered = filtered.filter((tc) =>
                 tc.tags && currentFilters.tags.every((tag) => tc.tags.includes(tag))
             );
         }
-
-        // Last Updated filter
         if (currentFilters.lastUpdated !== 'all') {
             const now = new Date();
             filtered = filtered.filter((tc) => {
@@ -204,35 +164,79 @@ const TestCases = () => {
         }
 
         return filtered;
-    }, []); // Empty deps - this function is pure
+    }, []);
 
-    // Apply filters effect - only depend on values that actually change
     useEffect(() => {
         const newFilteredTestCases = applyFiltersStable(testCasesRef.current, filters);
         setFilteredTestCases(newFilteredTestCases);
     }, [testCasesHook.testCases, filters, applyFiltersStable]);
 
-    // Stable error handler
+    const groupedTestCases = useMemo(() => {
+        if (!groupBy) return null;
+
+        const groups = {};
+        filteredTestCases.forEach(testCase => {
+            const groupValue = testCase[groupBy] || 'unassigned';
+            if (!groups[groupValue]) {
+                groups[groupValue] = [];
+            }
+            groups[groupValue].push(testCase);
+        });
+
+        const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+        const statusOrder = { 'open': 0, 'in-progress': 1, 'passed': 2, 'failed': 3, 'blocked': 4, 'closed': 5 };
+
+        const sortedKeys = Object.keys(groups).sort((a, b) => {
+            if (groupBy === 'priority' || groupBy === 'severity') {
+                const orderA = priorityOrder[a?.toLowerCase()] ?? 999;
+                const orderB = priorityOrder[b?.toLowerCase()] ?? 999;
+                return orderA - orderB;
+            }
+            if (groupBy === 'status' || groupBy === 'executionStatus') {
+                const orderA = statusOrder[a?.toLowerCase()] ?? 999;
+                const orderB = statusOrder[b?.toLowerCase()] ?? 999;
+                return orderA - orderB;
+            }
+            return (a || '').localeCompare(b || '');
+        });
+
+        const sortedGroups = {};
+        sortedKeys.forEach(key => {
+            sortedGroups[key] = groups[key];
+        });
+
+        return sortedGroups;
+    }, [filteredTestCases, groupBy]);
+
+    const toggleGroup = useCallback((groupKey) => {
+        setExpandedGroups(prev => ({
+            ...prev,
+            [groupKey]: !prev[groupKey]
+        }));
+    }, []);
+
+    useEffect(() => {
+        if (groupBy && groupedTestCases) {
+            const allGroups = {};
+            Object.keys(groupedTestCases).forEach(key => {
+                allGroups[key] = true;
+            });
+            setExpandedGroups(allGroups);
+        }
+    }, [groupBy, groupedTestCases]);
+
+    const getGroupDisplayName = (groupValue) => {
+        if (!groupValue || groupValue === 'unassigned') return 'Unassigned';
+        return groupValue.charAt(0).toUpperCase() + groupValue.slice(1).replace('_', ' ').replace(/([A-Z])/g, ' $1');
+    };
+
     const handleError = useCallback((error, context) => {
         console.error(`Error in ${context}:`, error);
-        if (uiHook.addNotification) {
-            uiHook.addNotification({
-                type: 'error',
-                title: 'Error',
-                message: `Failed to ${context}: ${error.message}`,
-                persistent: true,
-            });
-        }
-    }, [uiHook.addNotification]);
+        showNotification('error', 'Error', `Failed to ${context}: ${error.message}`, true);
+    }, [showNotification]);
 
-    // All handlers with stable dependencies
     const handleSaveTestCase = useCallback(async (testCaseData) => {
         try {
-            console.log('💾 Saving test case:', {
-                testCaseData: testCaseData.title,
-                isEdit: !!selectedTestCase
-            });
-
             if (testCasesHook.testCasesLocked) {
                 throw new Error('Test cases are locked. Upgrade to access.');
             }
@@ -244,39 +248,22 @@ const TestCases = () => {
                     ...testCaseData,
                     updated_at: timestamp,
                 });
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Test case updated successfully',
-                });
+                showNotification('success', 'Success', 'Test case updated successfully');
             } else {
-                const result = await testCasesHook.createTestCase({
+                await testCasesHook.createTestCase({
                     ...testCaseData,
                     created_at: timestamp,
                     updated_at: timestamp,
                 });
-                console.log('✅ Test case created:', result);
-                uiHook.addNotification?.({
-                    type: 'success',
-                    title: 'Success',
-                    message: 'Test case created successfully',
-                });
+                showNotification('success', 'Success', 'Test case created successfully');
             }
 
             setIsModalOpen(false);
             setSelectedTestCase(null);
         } catch (error) {
-            console.error('❌ Error saving test case:', error);
             handleError(error, 'save test case');
         }
-    }, [
-        testCasesHook.testCasesLocked,
-        testCasesHook.updateTestCase,
-        testCasesHook.createTestCase,
-        selectedTestCase,
-        uiHook.addNotification,
-        handleError
-    ]);
+    }, [testCasesHook, selectedTestCase, showNotification, handleError]);
 
     const handleLinkBug = useCallback(async (testCaseId, newBugIds) => {
         try {
@@ -293,99 +280,61 @@ const TestCases = () => {
                 ...toRemove.map((bugId) => testCasesHook.unlinkBugFromTestCase(testCaseId, bugId)),
             ]);
 
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: `Linked ${newBugIds.length} bug${newBugIds.length > 1 ? 's' : ''} to test case`,
-            });
+            showNotification('success', 'Success', `Linked ${newBugIds.length} bug${newBugIds.length > 1 ? 's' : ''} to test case`);
         } catch (error) {
             handleError(error, 'link bugs');
         }
-    }, [
-        testCasesHook.testCasesLocked,
-        testCasesHook.linkBugToTestCase,
-        testCasesHook.unlinkBugFromTestCase,
-        uiHook.addNotification,
-        handleError
-    ]);
+    }, [testCasesHook, showNotification, handleError]);
 
     const handleCreateTestCase = useCallback(() => {
-        console.log('🚀 Create test case clicked - opening modal');
-
         if (testCasesHook.testCasesLocked) {
-            console.warn('❌ Test cases locked due to subscription');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Test cases are locked. Upgrade to access.',
-            });
+            showNotification('error', 'Upgrade Required', 'Test cases are locked. Upgrade to access.');
             return;
         }
 
         if (testCasesHook.canCreateTestCases === false) {
-            console.warn('❌ Cannot create test cases due to plan limits');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Upgrade to create test cases.',
-            });
+            showNotification('error', 'Upgrade Required', 'Upgrade to create test cases.');
             return;
         }
 
-        console.log('✅ Opening modal');
         setSelectedTestCase(null);
         setIsModalOpen(true);
-    }, [
-        testCasesHook.testCasesLocked,
-        testCasesHook.canCreateTestCases,
-        uiHook.addNotification
-    ]);
+    }, [testCasesHook, showNotification]);
 
     const handleAIGenerate = useCallback(() => {
-        console.log('🚀 AI Generate clicked - navigating to generation page');
-
         if (testCasesHook.testCasesLocked) {
-            console.warn('❌ Test cases locked due to subscription');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Test cases are locked. Upgrade to access.',
-            });
+            showNotification('error', 'Upgrade Required', 'Test cases are locked. Upgrade to access.');
             return;
         }
 
         if (testCasesHook.canCreateTestCases === false) {
-            console.warn('❌ Cannot create test cases due to plan limits');
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Upgrade Required',
-                message: 'Upgrade to create test cases.',
-            });
+            showNotification('error', 'Upgrade Required', 'Upgrade to create test cases.');
             return;
         }
 
-        console.log('✅ Navigating to AI generation page');
         router.push('/testcases/generate');
-    }, [
-        testCasesHook.testCasesLocked,
-        testCasesHook.canCreateTestCases,
-        uiHook.addNotification,
-        router
-    ]);
+    }, [testCasesHook, showNotification, router]);
 
     const handleEditTestCase = useCallback((testCase) => {
         if (testCasesHook.testCasesLocked) {
-            uiHook.addNotification?.({
-                type: 'error',
-                title: 'Error',
-                message: 'Test cases are locked. Upgrade to access.',
-            });
+            showNotification('error', 'Cannot Edit', 'Test cases are locked. Upgrade to access.');
+            return;
+        }
+
+        // FIXED: Check if test case is in a run with proper notification
+        if (testCase.runs && testCase.runs.length > 0) {
+            showNotification(
+                'warning',
+                'Cannot Edit',
+                `This test case is part of ${testCase.runs.length} test run(s). Please edit via the test run.`,
+                true
+            );
             return;
         }
 
         setSelectedTestCase(testCase);
         setIsModalOpen(true);
-    }, [testCasesHook.testCasesLocked, uiHook.addNotification]);
+    }, [testCasesHook.testCasesLocked, showNotification]);
 
     const handleDeleteTestCase = useCallback(async (id) => {
         try {
@@ -393,21 +342,41 @@ const TestCases = () => {
                 throw new Error('Test cases are locked. Upgrade to access.');
             }
 
+            // FIXED: Check if test case is in a run with proper notification
+            const testCase = testCasesRef.current.find(tc => tc.id === id);
+            if (testCase?.runs && testCase.runs.length > 0) {
+                showNotification(
+                    'warning',
+                    'Cannot Delete',
+                    `This test case is part of ${testCase.runs.length} test run(s) and cannot be deleted.`,
+                    true
+                );
+                return;
+            }
+
             await testCasesHook.deleteTestCase(id);
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: 'Test case deleted successfully',
-            });
+            showNotification('success', 'Success', 'Test case deleted successfully');
         } catch (error) {
             handleError(error, 'delete test case');
         }
-    }, [testCasesHook.testCasesLocked, testCasesHook.deleteTestCase, uiHook.addNotification, handleError]);
+    }, [testCasesHook, showNotification, handleError]);
 
     const handleUpdateExecutionStatus = useCallback(async (testCaseId, newStatus) => {
         try {
             if (testCasesHook.testCasesLocked) {
                 throw new Error('Test cases are locked. Upgrade to access.');
+            }
+
+            // FIXED: Check if test case is in a run with proper notification
+            const testCase = testCasesRef.current.find(tc => tc.id === testCaseId);
+            if (testCase?.runs && testCase.runs.length > 0) {
+                showNotification(
+                    'warning',
+                    'Cannot Update',
+                    `This test case is part of ${testCase.runs.length} test run(s). Please update via the test run.`,
+                    true
+                );
+                return;
             }
 
             const timestamp = new Date();
@@ -417,163 +386,309 @@ const TestCases = () => {
                 updated_at: timestamp,
             });
 
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: `Test case marked as ${newStatus}`,
-            });
+            showNotification('success', 'Success', `Test case marked as ${newStatus}`);
         } catch (error) {
             handleError(error, 'update execution status');
         }
-    }, [testCasesHook.testCasesLocked, testCasesHook.updateTestCase, uiHook.addNotification, handleError]);
+    }, [testCasesHook, showNotification, handleError]);
+
+    // NEW: Check if test cases should be prevented from re-adding
+    const checkPassedTestCases = useCallback((selectedIds, targetSprintId) => {
+        const passedTests = [];
+        const eligibleTests = [];
+        
+        selectedIds.forEach(id => {
+            const testCase = testCasesRef.current.find(tc => tc.id === id);
+            if (!testCase) return;
+            
+            // Check if test was passed in the last run
+            const lastRun = testCase.runs && testCase.runs.length > 0
+                ? testCase.runs.sort((a, b) => {
+                    const dateA = a.executed_at instanceof Date ? a.executed_at : new Date(a.executed_at);
+                    const dateB = b.executed_at instanceof Date ? b.executed_at : new Date(b.executed_at);
+                    return dateB - dateA;
+                })[0]
+                : null;
+            
+            const wasPassedRecently = lastRun && lastRun.executionStatus === 'passed';
+            const daysSinceLastRun = lastRun?.executed_at
+                ? Math.floor((new Date() - new Date(lastRun.executed_at)) / (1000 * 60 * 60 * 24))
+                : null;
+            
+            // Criteria for re-testing:
+            // 1. Test was modified since last run
+            // 2. Test failed/blocked in last run
+            // 3. Test hasn't been run in over 30 days
+            // 4. Feature version changed (if tracked)
+            const wasModifiedSinceLastRun = lastRun?.executed_at && testCase.updated_at
+                ? new Date(testCase.updated_at) > new Date(lastRun.executed_at)
+                : true;
+            
+            const shouldRetest = 
+                !wasPassedRecently || 
+                wasModifiedSinceLastRun || 
+                (daysSinceLastRun && daysSinceLastRun > 30);
+            
+            if (wasPassedRecently && !shouldRetest) {
+                passedTests.push({
+                    ...testCase,
+                    lastRunDate: lastRun.executed_at,
+                    daysSinceLastRun
+                });
+            } else {
+                eligibleTests.push(id);
+            }
+        });
+        
+        return { passedTests, eligibleTests };
+    }, []);
+
+    const handleCreateTestRun = useCallback(async (runData) => {
+        try {
+            const runDataWithSuite = {
+                ...runData,
+                suite_id: testCasesHook.activeSuite?.id || activeSuite?.id
+            };
+
+            // NEW: Check for passed test cases
+            const { passedTests, eligibleTests } = checkPassedTestCases(
+                runData.test_cases,
+                runData.sprint_id
+            );
+
+            // Show warning if there are passed tests
+            if (passedTests.length > 0) {
+                const shouldContinue = window.confirm(
+                    `Warning: ${passedTests.length} test case(s) passed in recent runs:\n\n` +
+                    passedTests.slice(0, 5).map(tc => 
+                        `• ${tc.title} (passed ${tc.daysSinceLastRun} days ago)`
+                    ).join('\n') +
+                    (passedTests.length > 5 ? `\n...and ${passedTests.length - 5} more` : '') +
+                    `\n\nDo you want to include them anyway?`
+                );
+
+                if (!shouldContinue) {
+                    // Only create run with eligible tests
+                    if (eligibleTests.length === 0) {
+                        showNotification(
+                            'info',
+                            'No Tests Selected',
+                            'All selected tests passed recently. No test run created.'
+                        );
+                        return;
+                    }
+                    
+                    runDataWithSuite.test_cases = eligibleTests;
+                    showNotification(
+                        'info',
+                        'Tests Filtered',
+                        `Creating run with ${eligibleTests.length} test(s). ${passedTests.length} recently passed test(s) excluded.`
+                    );
+                }
+            }
+
+            await testRunsHook.createTestRun(runDataWithSuite);
+            setIsCreateRunModalOpen(false);
+            showNotification('success', 'Success', 'Test run created successfully');
+            router.push('/testruns');
+        } catch (error) {
+            handleError(error, 'create test run');
+        }
+    }, [testRunsHook, testCasesHook.activeSuite, activeSuite, showNotification, router, handleError, checkPassedTestCases]);
 
     const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
-        const assetType = 'testCases';
+        console.log('Bulk action triggered:', { actionId, selectedIds, actionConfig, selectedOption });
+        
+        // Filter out test cases that are in runs for execution-related actions
+        const executionActions = ['pass', 'fail', 'block', 'reset'];
+        
+        if (executionActions.includes(actionId)) {
+            const testCasesInRuns = selectedIds.filter(id => {
+                const tc = testCasesRef.current.find(t => t.id === id);
+                return tc?.runs && tc.runs.length > 0;
+            });
 
-        console.log('🎯 Bulk action triggered:', {
-            actionId,
-            assetType,
-            selectedIds,
-            selectedOption,
-            suiteId: activeSuite.id
-        });
+            const validTestCases = selectedIds.filter(id => {
+                const tc = testCasesRef.current.find(t => t.id === id);
+                return !tc?.runs || tc.runs.length === 0;
+            });
+
+            if (testCasesInRuns.length > 0) {
+                showNotification(
+                    'warning',
+                    'Cannot Update Test Cases',
+                    `${testCasesInRuns.length} test case(s) are part of test runs and cannot be modified here. Please update them via their respective test runs.`,
+                    true
+                );
+            }
+
+            if (validTestCases.length === 0) {
+                return;
+            }
+
+            selectedIds = validTestCases;
+        }
 
         setLoadingActions(prev => [...prev, actionId]);
 
         try {
             switch (actionId) {
-                // ... other cases (delete, archive, etc.)
+                case 'pass':
+                    await Promise.all(
+                        selectedIds.map(id => handleUpdateExecutionStatus(id, 'passed'))
+                    );
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) marked as passed`);
+                    break;
+
+                case 'fail':
+                    await Promise.all(
+                        selectedIds.map(id => handleUpdateExecutionStatus(id, 'failed'))
+                    );
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) marked as failed`);
+                    break;
+
+                case 'block':
+                    await Promise.all(
+                        selectedIds.map(id => handleUpdateExecutionStatus(id, 'blocked'))
+                    );
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) marked as blocked`);
+                    break;
+
+                case 'reset':
+                    await Promise.all(
+                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                            executionStatus: 'pending',
+                            lastExecuted: null,
+                            updated_at: new Date()
+                        }))
+                    );
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) reset to pending`);
+                    break;
+
+                case 'run':
+                    testCasesHook.selectTestCases(selectedIds);
+                    setIsCreateRunModalOpen(true);
+                    break;
+
+                case 'delete':
+                    // Filter out test cases in runs
+                    const deletableIds = selectedIds.filter(id => {
+                        const tc = testCasesRef.current.find(t => t.id === id);
+                        return !tc?.runs || tc.runs.length === 0;
+                    });
+
+                    const inRunsCount = selectedIds.length - deletableIds.length;
+                    
+                    if (inRunsCount > 0) {
+                        showNotification(
+                            'warning',
+                            'Cannot Delete',
+                            `${inRunsCount} test case(s) are part of test runs and cannot be deleted.`,
+                            true
+                        );
+                    }
+
+                    if (deletableIds.length > 0) {
+                        await Promise.all(deletableIds.map(id => handleDeleteTestCase(id)));
+                    }
+                    break;
+
+                case 'archive':
+                    await Promise.all(
+                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                            status: 'archived',
+                            updated_at: new Date()
+                        }))
+                    );
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) archived`);
+                    break;
+
+                case 'activate':
+                    await Promise.all(
+                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                            status: 'active',
+                            updated_at: new Date()
+                        }))
+                    );
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) activated`);
+                    break;
 
                 case 'add-to-sprint':
                     if (!selectedOption || !selectedOption.id) {
-                        console.error('❌ No sprint selected');
-                        actions.ui?.showNotification?.({
-                            id: 'no-sprint-selected',
-                            type: 'error',
-                            message: 'Please select a sprint',
-                            duration: 3000
-                        });
+                        showNotification('error', 'Error', 'Please select a sprint');
                         return;
                     }
 
-                    console.log('📌 Adding items to sprint:', {
-                        sprintId: selectedOption.id,
-                        sprintName: selectedOption.label,
-                        assetType,
-                        itemCount: selectedIds.length,
-                        itemIds: selectedIds
-                    });
+                    const testCaseResult = await actions.linking.addTestCasesToSprint(
+                        selectedOption.id,
+                        selectedIds
+                    );
 
-                    let addResults = { added: 0, failed: 0, errors: [] };
-
-                    // Different methods for different asset types
-                    switch (assetType) {
-                        case 'testCases':
-                            console.log('🧪 Adding test cases to sprint...');
-                            const testCaseResult = await actions.linking.addTestCasesToSprint(
-                                selectedOption.id,
-                                selectedIds
-                            );
-                            console.log('Test case result:', testCaseResult);
-
-                            if (testCaseResult.success) {
-                                addResults.added = testCaseResult.data.added;
-                                addResults.failed = testCaseResult.data.failed;
-                                addResults.errors = testCaseResult.data.errors || [];
-                            } else {
-                                throw new Error(testCaseResult.error?.message || 'Failed to add test cases');
-                            }
-                            break;
-
-                        case 'bugs':
-                            console.log('🐛 Adding bugs to sprint...');
-                            const bugResult = await actions.linking.addBugsToSprint(
-                                selectedOption.id,
-                                selectedIds
-                            );
-                            console.log('Bug result:', bugResult);
-
-                            if (bugResult.success) {
-                                addResults.added = bugResult.data.added;
-                                addResults.failed = bugResult.data.failed;
-                                addResults.errors = bugResult.data.errors || [];
-                            } else {
-                                throw new Error(bugResult.error?.message || 'Failed to add bugs');
-                            }
-                            break;
-
-                        case 'recommendations':
-                            console.log('💡 Adding recommendations to sprint...');
-                            const recResult = await actions.linking.addRecommendationsToSprint(
-                                selectedOption.id,
-                                selectedIds
-                            );
-                            console.log('Recommendation result:', recResult);
-
-                            if (recResult.success) {
-                                addResults.added = recResult.data.added;
-                                addResults.failed = recResult.data.failed;
-                                addResults.errors = recResult.data.errors || [];
-                            } else {
-                                throw new Error(recResult.error?.message || 'Failed to add recommendations');
-                            }
-                            break;
-
-                        default:
-                            console.error('❌ Unsupported asset type for sprint addition:', assetType);
-                            throw new Error(`Cannot add ${assetType} to sprints`);
+                    if (testCaseResult.success) {
+                        showNotification('success', 'Success', `${testCaseResult.data.added} test case(s) added to ${selectedOption.label}`);
                     }
-
-                    // Show results
-                    if (addResults.added > 0) {
-                        console.log('✅ Successfully added to sprint:', addResults);
-                        actions.ui?.showNotification?.({
-                            id: 'bulk-add-to-sprint-success',
-                            type: 'success',
-                            message: `${addResults.added} item(s) added to ${selectedOption.label}`,
-                            duration: 3000
-                        });
-                    }
-
-                    if (addResults.failed > 0) {
-                        console.warn('⚠️ Some items failed:', addResults.errors);
-                        actions.ui?.showNotification?.({
-                            id: 'bulk-add-to-sprint-partial',
-                            type: 'warning',
-                            message: `${addResults.failed} item(s) failed to add to sprint`,
-                            duration: 5000
-                        });
-                    }
-
                     break;
 
-                // ... rest of your cases (delete, archive, etc.)
+                case 'add-to-module':
+                    if (!selectedOption || !selectedOption.id) {
+                        showNotification('error', 'Error', 'Please select a module');
+                        return;
+                    }
+
+                    await Promise.all(
+                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                            module: selectedOption.label,
+                            updated_at: new Date()
+                        }))
+                    );
+
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) added to ${selectedOption.label}`);
+                    break;
+
+                case 'assign':
+                    if (!selectedOption || !selectedOption.id) {
+                        showNotification('error', 'Error', 'Please select a user');
+                        return;
+                    }
+
+                    await Promise.all(
+                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                            assignee: selectedOption.label,
+                            updated_at: new Date()
+                        }))
+                    );
+
+                    showNotification('success', 'Success', `${selectedIds.length} test case(s) assigned to ${selectedOption.label}`);
+                    break;
+
+                case 'group':
+                    if (!selectedOption || !selectedOption.id) {
+                        showNotification('error', 'Error', 'Please select a grouping option');
+                        return;
+                    }
+
+                    setGroupBy(selectedOption.id);
+                    showNotification('success', 'Success', `Test cases grouped by ${selectedOption.label}`);
+                    break;
 
                 default:
                     console.warn('Unhandled action:', actionId);
+                    showNotification('info', 'Info', `Action "${actionId}" is not yet implemented`);
             }
 
+            testCasesHook.selectTestCases([]);
             setSelectedItems([]);
         } catch (error) {
-            console.error('💥 Bulk action failed:', error);
-            actions.ui?.showNotification?.({
-                id: 'bulk-action-error',
-                type: 'error',
-                message: `Failed to ${actionId}: ${error.message}`,
-                duration: 5000
-            });
+            console.error('Bulk action failed:', error);
+            showNotification('error', 'Error', `Failed to ${actionId}: ${error.message}`);
         } finally {
             setLoadingActions(prev => prev.filter(id => id !== actionId));
         }
     };
 
     const handleRunNotification = useCallback(() => {
-        uiHook.addNotification?.({
-            type: 'info',
-            title: 'Run',
-            message: 'Run functionality not implemented yet',
-        });
-    }, [uiHook.addNotification]);
+        showNotification('info', 'Run', 'Run functionality not implemented yet');
+    }, [showNotification]);
 
     const handleImportComplete = useCallback(async (importedTestCases) => {
         setIsImportModalOpen(false);
@@ -594,40 +709,40 @@ const TestCases = () => {
                 )
             );
 
-            uiHook.addNotification?.({
-                type: 'success',
-                title: 'Success',
-                message: 'Test cases imported successfully',
-            });
+            showNotification('success', 'Success', 'Test cases imported successfully');
         } catch (error) {
             handleError(error, 'import test cases');
         }
-    }, [testCasesHook.testCasesLocked, testCasesHook.createTestCase, uiHook.addNotification, handleError]);
+    }, [testCasesHook, showNotification, handleError]);
 
     const handleCloseModal = useCallback(() => {
-        console.log('🔒 Closing modal');
         setIsModalOpen(false);
         setSelectedTestCase(null);
     }, []);
 
-    // Memoize components with minimal, stable dependencies
-    const tableComponent = useMemo(() => (
-        <TestCaseTable
-            testCases={filteredTestCases}
-            bugs={bugsRef.current}
-            relationships={relationshipsRef.current}
-            selectedTestCases={testCasesHook.selectedTestCases}
-            onSelectTestCases={testCasesHook.selectTestCases}
-            onEdit={handleEditTestCase}
-            onDelete={handleDeleteTestCase}
-            onBulkAction={handleBulkAction}
-            onView={handleEditTestCase}
-            onRun={handleRunNotification}
-            onLinkBug={handleLinkBug}
-            onUpdateExecutionStatus={handleUpdateExecutionStatus}
-        />
-    ), [
-        filteredTestCases,
+    const renderTestCasesComponent = useCallback((testCases) => {
+        const commonProps = {
+            testCases,
+            bugs: bugsRef.current,
+            relationships: relationshipsRef.current,
+            selectedTestCases: testCasesHook.selectedTestCases,
+            onSelectTestCases: testCasesHook.selectTestCases,
+            onEdit: handleEditTestCase,
+            onDelete: handleDeleteTestCase,
+            onBulkAction: handleBulkAction,
+            onView: handleEditTestCase,
+            onRun: handleRunNotification,
+            onLinkBug: handleLinkBug,
+            onUpdateExecutionStatus: handleUpdateExecutionStatus,
+        };
+
+        return viewMode === 'table' ? (
+            <TestCaseTable {...commonProps} />
+        ) : (
+            <TestCaseList {...commonProps} />
+        );
+    }, [
+        viewMode,
         testCasesHook.selectedTestCases,
         testCasesHook.selectTestCases,
         handleEditTestCase,
@@ -638,34 +753,6 @@ const TestCases = () => {
         handleUpdateExecutionStatus
     ]);
 
-    const listComponent = useMemo(() => (
-        <TestCaseList
-            testCases={filteredTestCases}
-            bugs={bugsRef.current}
-            relationships={relationshipsRef.current}
-            selectedTestCases={testCasesHook.selectedTestCases}
-            onSelectTestCases={testCasesHook.selectTestCases}
-            onEdit={handleEditTestCase}
-            onDelete={handleDeleteTestCase}
-            onBulkAction={handleBulkAction}
-            onView={handleEditTestCase}
-            onRun={handleRunNotification}
-            onLinkBug={handleLinkBug}
-            onUpdateExecutionStatus={handleUpdateExecutionStatus}
-        />
-    ), [
-        filteredTestCases,
-        testCasesHook.selectedTestCases,
-        testCasesHook.selectTestCases,
-        handleEditTestCase,
-        handleDeleteTestCase,
-        handleBulkAction,
-        handleRunNotification,
-        handleLinkBug,
-        handleUpdateExecutionStatus
-    ]);
-
-    // Loading state
     if (testCasesHook.loading) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -677,7 +764,6 @@ const TestCases = () => {
         );
     }
 
-    // Early return for locked state
     if (testCasesHook.testCasesLocked) {
         return (
             <div className="min-h-screen bg-background">
@@ -685,7 +771,7 @@ const TestCases = () => {
                     <div className="flex items-center justify-between mb-6">
                         <h1 className="text-2xl font-bold text-foreground">Test Cases</h1>
                     </div>
-                    <div className="bg-card shadow-theme-md rounded-lg p-6">
+                    <div className="bg-card shadow-md rounded-lg p-6">
                         <p className="text-muted-foreground">Test cases are locked. Upgrade to access.</p>
                     </div>
                 </div>
@@ -704,6 +790,13 @@ const TestCases = () => {
                         </span>
                     </div>
                     <div className="flex items-center space-x-2 overflow-x-auto">
+                        <button
+                            onClick={() => router.push('/testruns')}
+                            className="btn-secondary text-sm whitespace-nowrap inline-flex items-center gap-2"
+                        >
+                            <Play className="w-4 h-4" />
+                            View Test Runs
+                        </button>
                         <button
                             onClick={() => setIsTraceabilityOpen(true)}
                             className="btn-primary text-sm whitespace-nowrap"
@@ -737,10 +830,54 @@ const TestCases = () => {
                     testCases={testCasesRef.current}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
+                    groupBy={groupBy}
+                    onGroupByChange={setGroupBy}
                 />
 
                 <div className="transition-opacity duration-300">
-                    {viewMode === 'table' ? tableComponent : listComponent}
+                    {groupBy && groupedTestCases ? (
+                        <div className="space-y-6">
+                            {Object.entries(groupedTestCases).map(([groupKey, testCases]) => (
+                                <div key={groupKey} className="bg-card rounded-lg border border-border overflow-hidden">
+                                    <div
+                                        className="flex items-center justify-between bg-muted/50 px-4 py-3 cursor-pointer hover:bg-muted transition-colors"
+                                        onClick={() => toggleGroup(groupKey)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {expandedGroups[groupKey] ? (
+                                                <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                                            ) : (
+                                                <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                                            )}
+                                            <h3 className="text-lg font-semibold text-foreground">
+                                                {getGroupDisplayName(groupKey)}
+                                            </h3>
+                                            <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-sm font-medium">
+                                                {testCases.length}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleGroup(groupKey);
+                                            }}
+                                            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            {expandedGroups[groupKey] ? 'Collapse' : 'Expand'}
+                                        </button>
+                                    </div>
+
+                                    {expandedGroups[groupKey] && (
+                                        <div className="p-0">
+                                            {renderTestCasesComponent(testCases)}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        renderTestCasesComponent(filteredTestCases)
+                    )}
                 </div>
 
                 {isModalOpen && (
@@ -765,6 +902,16 @@ const TestCases = () => {
                         testCases={testCasesRef.current}
                         relationships={relationshipsRef.current}
                         onClose={() => setIsTraceabilityOpen(false)}
+                    />
+                )}
+
+                {isCreateRunModalOpen && (
+                    <CreateTestRunModal
+                        onClose={() => setIsCreateRunModalOpen(false)}
+                        onSave={handleCreateTestRun}
+                        sprints={sprints}
+                        testCases={testCasesRef.current}
+                        preSelectedTestCases={testCasesHook.selectedTestCases}
                     />
                 )}
             </div>

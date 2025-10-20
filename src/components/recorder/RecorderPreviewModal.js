@@ -184,19 +184,19 @@ const RecorderPreviewModal = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 md:p-6 lg:p-8">
-      <div className="bg-card rounded-2xl shadow-2xl w-full h-full md:w-[90vw] md:h-[90vh] lg:w-[85vw] lg:h-[85vh] xl:w-[80vw] xl:h-[80vh] flex flex-col overflow-hidden border border-border">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-card w-full h-full lg:rounded-2xl lg:shadow-2xl lg:w-[85vw] lg:h-[85vh] xl:w-[80vw] xl:h-[80vh] flex flex-col overflow-hidden border-0 lg:border border-border">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-border flex-shrink-0 bg-card">
+        <div className="flex items-center justify-between px-4 py-3 lg:px-6 lg:py-4 border-b border-border flex-shrink-0 bg-card">
           <div className="flex-1 min-w-0 mr-4">
-            <h2 className="text-base md:text-lg lg:text-xl font-semibold text-foreground truncate">
+            <h2 className="text-lg lg:text-xl font-semibold text-foreground truncate">
               Recording Preview
             </h2>
-            <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+            <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 hidden sm:block">
               {!recordingTitle.trim() && (
                 <span className="text-amber-600 font-medium">
-                  ⚠️ Please enter a title before saving
+                  ⚠️ Scroll down to enter a title before saving
                 </span>
               )}
               {recordingTitle.trim() && (
@@ -204,45 +204,28 @@ const RecorderPreviewModal = ({
               )}
             </p>
           </div>
-          <div className="flex items-center gap-1 md:gap-2">
+          <div className="flex items-center gap-2">
             {onClose && (
               <button
                 onClick={handleClose}
                 className="p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-secondary transition-colors"
                 title="Close preview"
               >
-                <X className="w-4 h-4 md:w-5 md:h-5" />
+                <X className="w-5 h-5" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+        {/* Main Content Area - Mobile: Scrollable vertical layout, Desktop: Side-by-side */}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0">
 
-          {/* Left Panel - Title, Logs & Comments */}
-          <div className="w-full lg:w-2/5 xl:w-1/3 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-border overflow-hidden bg-card">
-            <RecorderLeftPanel
-              consoleLogs={stableConsoleLogs}
-              networkLogs={stableNetworkLogs}
-              detectedIssues={stableDetectedIssues}
-              comments={comments}
-              onAddComment={addComment}
-              videoRef={videoRef}
-              activeSuite={activeSuite}
-              firestoreService={firestoreService}
-              isPreviewMode={true}
-              initialTitle={recordingTitle}
-              onTitleChange={handleTitleChange}
-            />
-          </div>
-
-          {/* Right Panel - Video, Timeline & Actions */}
-          <div className="flex-1 flex flex-col min-w-0 bg-muted">
+          {/* Mobile & Tablet: Video and Timeline First (Top) */}
+          <div className="flex-1 flex flex-col min-w-0 bg-muted lg:order-2">
 
             {/* Video Player Container */}
-            <div className="flex-1 p-3 md:p-4 lg:p-6 flex items-center justify-center min-h-0">
-              <div className="w-full h-full max-w-full max-h-full bg-black relative rounded-xl overflow-hidden shadow-xl border border-border">
+            <div className="flex-shrink-0 p-4 lg:flex-1 lg:p-6 flex items-center justify-center">
+              <div className="w-full aspect-video lg:h-full lg:max-w-full lg:max-h-full bg-black relative rounded-xl overflow-hidden shadow-xl border border-border">
                 {currentPreviewUrl ? (
                   <>
                     {isYouTubeVideo && youtubeVideoId ? (
@@ -268,8 +251,8 @@ const RecorderPreviewModal = ({
                             onClick={handlePlayClick}
                             className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black/20 backdrop-blur-sm"
                           >
-                            <div className="bg-card/90 rounded-full p-4 md:p-6 shadow-lg hover:bg-card transition-colors">
-                              <svg className="w-8 h-8 md:w-12 md:h-12 text-foreground" fill="currentColor" viewBox="0 0 24 24">
+                            <div className="bg-card/90 rounded-full p-4 lg:p-6 shadow-lg hover:bg-card transition-colors">
+                              <svg className="w-10 h-10 lg:w-12 lg:h-12 text-foreground" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M8 5v14l11-7z" />
                               </svg>
                             </div>
@@ -281,9 +264,9 @@ const RecorderPreviewModal = ({
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     <div className="text-center p-6">
-                      <div className="text-5xl md:text-6xl lg:text-7xl mb-4">🎥</div>
-                      <div className="text-base md:text-lg font-medium text-foreground">No recording available</div>
-                      <div className="text-xs md:text-sm text-muted-foreground mt-2">
+                      <div className="text-5xl lg:text-7xl mb-4">🎥</div>
+                      <div className="text-base lg:text-lg font-medium text-foreground">No recording available</div>
+                      <div className="text-xs lg:text-sm text-muted-foreground mt-2">
                         The recording preview could not be loaded
                       </div>
                     </div>
@@ -293,7 +276,7 @@ const RecorderPreviewModal = ({
             </div>
 
             {/* Timeline Container */}
-            <div className="flex-shrink-0 p-3 md:p-4 lg:p-6 pt-0 lg:pt-0">
+            <div className="flex-shrink-0 px-4 pb-4 lg:p-6 lg:pt-0">
               <div className="bg-card rounded-xl shadow-lg border border-border overflow-hidden">
                 <RecorderTimeline
                   duration={duration}
@@ -309,7 +292,7 @@ const RecorderPreviewModal = ({
             </div>
 
             {/* Actions Container */}
-            <div className="flex-shrink-0 p-3 md:p-4 lg:p-6 pt-0 lg:pt-0">
+            <div className="flex-shrink-0 px-4 pb-4 lg:p-6 lg:pt-0">
               <RecorderActions
                 previewUrl={currentPreviewUrl}
                 activeSuite={activeSuite}
@@ -320,6 +303,23 @@ const RecorderPreviewModal = ({
                 hasTrimChanges={hasTrimChanges}
               />
             </div>
+          </div>
+
+          {/* Left Panel - Title, Logs & Comments (Bottom on mobile, Left on desktop) */}
+          <div className="w-full lg:w-2/5 xl:w-1/3 flex-shrink-0 border-t lg:border-t-0 lg:border-r border-border bg-card lg:overflow-hidden lg:order-1">
+            <RecorderLeftPanel
+              consoleLogs={stableConsoleLogs}
+              networkLogs={stableNetworkLogs}
+              detectedIssues={stableDetectedIssues}
+              comments={comments}
+              onAddComment={addComment}
+              videoRef={videoRef}
+              activeSuite={activeSuite}
+              firestoreService={firestoreService}
+              isPreviewMode={true}
+              initialTitle={recordingTitle}
+              onTitleChange={handleTitleChange}
+            />
           </div>
         </div>
       </div>

@@ -4,13 +4,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    X, AlertTriangle, Clock, Copy, FileText, Info, ListOrdered, 
-    Settings, Tag, TrendingUp, User, MessageSquare, Activity, ExternalLink, 
-    Plus, Trash2, Eye, ChevronDown, ChevronUp
+import {
+    X, AlertTriangle, Clock, Copy, FileText, Info, ListOrdered,
+    Settings, Tag, TrendingUp, User, MessageSquare, Activity, ExternalLink,
+    Plus, Trash2, Eye, ChevronDown, ChevronUp, Share2, Check, Play
 } from 'lucide-react';
+import { useApp } from '@/context/AppProvider';
 import EditableField from './EditableField';
 import TestCaseComments from './TestCaseComments';
+import TestCaseRunHistory from './TestCaseRunHistory';
 
 // TestCaseActivityLog component defined inline
 const TestCaseActivityLog = ({ activities, formatDate }) => {
@@ -41,12 +43,27 @@ const TestCaseActivityLog = ({ activities, formatDate }) => {
 };
 
 const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, currentUser }) => {
+    // ✅ Get sprints from global state using useApp (like BugDetailsModal)
+    const { state } = useApp();
+    const globalSprints = state?.sprints?.sprints || [];
+
+    // ✅ Ensure arrays at the top level
+    const safeSprints = Array.isArray(globalSprints) ? globalSprints : [];
+
     const [formData, setFormData] = useState({});
     const [activities, setActivities] = useState([]);
     const [mounted, setMounted] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [collapsedSections, setCollapsedSections] = useState(new Set());
+
+    // ✅ Add editing state (like BugDetailsModal)
+    const [editingField, setEditingField] = useState(null);
+    const [tempValues, setTempValues] = useState({});
+
+    // Share functionality state
+    const [shareTooltip, setShareTooltip] = useState('Copy link');
+    const [showShareSuccess, setShowShareSuccess] = useState(false);
 
     const formatDate = useCallback((date) => {
         if (!date) return 'Unknown';
@@ -111,6 +128,28 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
         setCollapsedSections(newCollapsed);
     };
 
+    // ✅ Share functionality (like BugDetailsModal)
+    const handleShareTestCase = useCallback(async () => {
+        try {
+            const testCaseUrl = `${window.location.origin}/testcases?id=${testCase?.id}`;
+            await navigator.clipboard.writeText(testCaseUrl);
+
+            setShareTooltip('Link copied!');
+            setShowShareSuccess(true);
+
+            setTimeout(() => {
+                setShareTooltip('Copy link');
+                setShowShareSuccess(false);
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy link:', error);
+            setShareTooltip('Failed to copy');
+            setTimeout(() => {
+                setShareTooltip('Copy link');
+            }, 2000);
+        }
+    }, [testCase?.id]);
+
     // Initialize form data and activities when testCase changes
     useEffect(() => {
         if (testCase) {
@@ -118,8 +157,8 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                 title: testCase.title || '',
                 description: testCase.description || '',
                 preconditions: testCase.preconditions || '',
-                steps: testCase.steps && testCase.steps.length > 0 
-                    ? testCase.steps 
+                steps: testCase.steps && testCase.steps.length > 0
+                    ? testCase.steps
                     : [{ action: '', expectedResult: '' }],
                 priority: testCase.priority || 'medium',
                 severity: testCase.severity || 'medium',
@@ -132,6 +171,7 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                 tags: testCase.tags || [],
                 executionStatus: testCase.executionStatus || 'not_executed',
                 comments: testCase.comments || [],
+                sprint_id: testCase.sprint_id || testCase.sprintId || '', // ✅ Add sprint support
             };
             setFormData(data);
             setActivities(testCase.activities || []);
@@ -158,29 +198,55 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
         };
     }, [onClose]);
 
-    const handleFieldSave = useCallback(async (field, value) => {
-        const newFormData = {
-            ...formData,
-            [field]: value
-        };
-        setFormData(newFormData);
+    // ✅ Field edit handlers (like BugDetailsModal)
+    const handleFieldEdit = (field, value) => {
+        setEditingField(field);
+        setTempValues({ ...tempValues, [field]: value });
+    };
 
-        // Instant update
-        if (onUpdateTestCase) {
-            await onUpdateTestCase({ ...testCase, ...newFormData });
+    const handleFieldSave = useCallback(async (field) => {
+        if (!onUpdateTestCase || typeof onUpdateTestCase !== 'function') {
+            console.error('onUpdateTestCase is not a function');
+            return;
         }
 
-        // Capture activity with proper user info
-        const newActivity = {
-            action: `Updated ${field}: ${value}`,
-            user: currentUser?.displayName || currentUser?.email || currentUser?.name || 'Current User',
-            timestamp: new Date().toISOString(),
-        };
-        setActivities(prev => [...prev, newActivity]);
-    }, [formData, testCase, onUpdateTestCase, currentUser]);
+        try {
+            // ✅ Log sprint reassignment
+            if (field === 'sprint_id') {
+                console.log('🔄 Test case sprint reassignment:', {
+                    testCaseId: testCase.id,
+                    oldSprint: formData.sprint_id,
+                    newSprint: tempValues[field],
+                    sprintName: safeSprints.find(s => s.id === tempValues[field])?.name
+                });
+            }
+
+            const newFormData = {
+                ...formData,
+                [field]: tempValues[field]
+            };
+            setFormData(newFormData);
+
+            // Instant update
+            await onUpdateTestCase({ ...testCase, ...newFormData });
+
+            // Capture activity with proper user info
+            const newActivity = {
+                action: `Updated ${field}: ${tempValues[field]}`,
+                user: currentUser?.displayName || currentUser?.email || currentUser?.name || 'Current User',
+                timestamp: new Date().toISOString(),
+            };
+            setActivities(prev => [...prev, newActivity]);
+
+            setEditingField(null);
+            setTempValues({});
+        } catch (error) {
+            console.error(`Error updating ${field}:`, error);
+        }
+    }, [formData, testCase, onUpdateTestCase, currentUser, tempValues, safeSprints]);
 
     const handleStepChange = useCallback(async (index, stepField, value) => {
-        const newSteps = formData.steps.map((step, i) => 
+        const newSteps = formData.steps.map((step, i) =>
             i === index ? { ...step, [stepField]: value } : step
         );
         const newFormData = { ...formData, steps: newSteps };
@@ -287,11 +353,18 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
         setActivities(prev => [...prev, newActivity]);
     }, [formData, testCase, onUpdateTestCase, currentUser]);
 
+    // ✅ Sprint options (like BugDetailsModal)
+    const sprintOptions = safeSprints.map(sprint => ({
+        value: sprint.id,
+        label: `${sprint.name}${sprint.status ? ` (${sprint.status})` : ''}`,
+    }));
+
     if (!mounted || !isOpen) return null;
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: FileText },
         { id: 'details', label: 'Details', icon: Settings },
+        { id: 'runs', label: 'Test Runs', icon: Play },
         { id: 'comments', label: 'Comments', icon: MessageSquare, badge: formData.comments?.length || 0 },
         { id: 'activity', label: 'Activity', icon: Activity, badge: activities.length },
     ];
@@ -336,8 +409,8 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                                         #{testCase?.id?.slice(-8) || 'N/A'}
                                                     </span>
                                                     {testCase?.id && (
-                                                        <button 
-                                                            onClick={() => navigator.clipboard.writeText(testCase.id)} 
+                                                        <button
+                                                            onClick={() => navigator.clipboard.writeText(testCase.id)}
                                                             className="hover:text-foreground"
                                                         >
                                                             <Copy className="h-3 w-3" />
@@ -358,6 +431,24 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-2">
+                                        {/* ✅ Share Button (like BugDetailsModal) */}
+                                        <div className="relative group">
+                                            <button
+                                                onClick={handleShareTestCase}
+                                                className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                                                title={shareTooltip}
+                                            >
+                                                {showShareSuccess ? (
+                                                    <Check className="h-5 w-5 text-green-600" />
+                                                ) : (
+                                                    <Share2 className="h-5 w-5" />
+                                                )}
+                                            </button>
+                                            <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                                {shareTooltip}
+                                            </div>
+                                        </div>
+
                                         <button
                                             onClick={() => setIsFullscreen(!isFullscreen)}
                                             className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
@@ -415,11 +506,10 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id)}
-                                                className={`${
-                                                    activeTab === tab.id
+                                                className={`${activeTab === tab.id
                                                         ? 'border-primary text-primary bg-accent'
                                                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                                                } whitespace-nowrap flex items-center py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all`}
+                                                    } whitespace-nowrap flex items-center py-3 px-4 border-b-2 font-medium text-sm rounded-t-lg transition-all`}
                                             >
                                                 <Icon className="h-4 w-4 mr-2" />
                                                 {tab.label}
@@ -440,8 +530,8 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                             <div className="p-6">
                                 {activeTab === 'overview' && (
                                     <div className="space-y-6">
-                                        {/* Quick Actions */}
-                                        <div className="grid grid-cols-4 gap-4">
+                                        {/* Quick Actions - ✅ Added Sprint like BugDetailsModal */}
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                             <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
                                                     field="status"
@@ -500,6 +590,38 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                                 />
                                                 <p className="text-xs text-muted-foreground mt-1">Environment</p>
                                             </div>
+                                            {/* ✅ Sprint selector (like BugDetailsModal) */}
+                                            {safeSprints.length > 0 && (
+                                                <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm hover:shadow-theme transition-shadow col-span-2 md:col-span-1">
+                                                    <div className="text-sm font-medium">
+                                                        {editingField === 'sprint_id' ? (
+                                                            <select
+                                                                value={tempValues.sprint_id !== undefined ? tempValues.sprint_id : (formData.sprint_id || '')}
+                                                                onChange={(e) => setTempValues({ ...tempValues, sprint_id: e.target.value })}
+                                                                onBlur={() => handleFieldSave('sprint_id')}
+                                                                className="w-full px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary"
+                                                                autoFocus
+                                                            >
+                                                                <option value="">No Sprint</option>
+                                                                {sprintOptions.map(opt => (
+                                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleFieldEdit('sprint_id', formData.sprint_id || '')}
+                                                                className="w-full text-left px-2 py-1 hover:bg-accent rounded text-foreground"
+                                                                disabled={!onUpdateTestCase || typeof onUpdateTestCase !== 'function'}
+                                                            >
+                                                                {formData.sprint_id
+                                                                    ? (safeSprints.find(s => s.id === formData.sprint_id)?.name || 'Unknown Sprint')
+                                                                    : 'No Sprint'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-1">🎯 Sprint</p>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Description */}
@@ -572,7 +694,7 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                                 <div className="space-y-3">
                                                     <div className="max-h-96 overflow-y-auto">
                                                         {formData.steps?.map((step, index) => (
-                                                            <div key={index} className="border border-border rounded-lg p-4 bg-muted">
+                                                            <div key={index} className="border border-border rounded-lg p-4 bg-muted mb-3">
                                                                 <div className="flex items-center justify-between mb-3">
                                                                     <span className="text-sm font-medium text-foreground flex items-center">
                                                                         <span className="bg-primary/10 text-primary w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-2">
@@ -726,6 +848,47 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                             </div>
                                         </div>
 
+                                        {/* ✅ Sprint Assignment Section (like BugDetailsModal) */}
+                                        {safeSprints.length > 0 && (
+                                            <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    🎯 Sprint Assignment
+                                                </h3>
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium text-foreground">Assigned Sprint</label>
+                                                    <div className="text-sm p-2 bg-muted rounded border border-border flex items-center">
+                                                        {editingField === 'sprint_id' ? (
+                                                            <select
+                                                                value={tempValues.sprint_id !== undefined ? tempValues.sprint_id : (formData.sprint_id || '')}
+                                                                onChange={(e) => setTempValues({ ...tempValues, sprint_id: e.target.value })}
+                                                                onBlur={() => handleFieldSave('sprint_id')}
+                                                                className="flex-1 px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary"
+                                                                autoFocus
+                                                            >
+                                                                <option value="">No Sprint</option>
+                                                                {sprintOptions.map(opt => (
+                                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleFieldEdit('sprint_id', formData.sprint_id || '')}
+                                                                className="flex-1 text-left px-2 py-1 hover:bg-accent rounded text-foreground"
+                                                                disabled={!onUpdateTestCase || typeof onUpdateTestCase !== 'function'}
+                                                            >
+                                                                {formData.sprint_id
+                                                                    ? (safeSprints.find(s => s.id === formData.sprint_id)?.name || 'Unknown Sprint')
+                                                                    : 'No Sprint'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Assign this test case to a sprint for better organization and tracking
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Tags */}
                                         <div className="bg-card border border-border rounded-lg p-6 shadow-theme-sm">
                                             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
@@ -741,6 +904,20 @@ const TestCaseSideModal = ({ isOpen, testCase, onUpdateTestCase, onClose, curren
                                                 onSave={(field, value) => handleTagsChange(value)}
                                             />
                                             <p className="text-xs text-muted-foreground mt-1">Separate tags with commas</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'runs' && (
+                                    <div className="space-y-6">
+                                        <div className="bg-card border border-border rounded-lg shadow-theme-sm">
+                                            <div className="p-6">
+                                                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
+                                                    <Play className="h-5 w-5 mr-2 text-primary" />
+                                                    Test Execution History
+                                                </h3>
+                                                <TestCaseRunHistory testCaseId={testCase?.id} />
+                                            </div>
                                         </div>
                                     </div>
                                 )}

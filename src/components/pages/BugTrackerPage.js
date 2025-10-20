@@ -17,6 +17,7 @@ import { getGroupingOptions } from '@/utils/groupingUtils';
 import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
 import { useApp } from '@/context/AppProvider';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 import {
     Lightbulb,
     Minimize,
@@ -103,8 +104,7 @@ const BugTrackerPage = () => {
 
     // Mobile menu state
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [_loadingActions, setLoadingActions] = useState({});
+    const [loadingActions, setLoadingActions] = useState([]);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_selectedItems, setSelectedItems] = useState([]);
 
@@ -457,7 +457,7 @@ const BugTrackerPage = () => {
         handleError
     ]);
 
-    const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
+    const handleBulkAction = useCallback(async (actionId, selectedIds, actionConfig, selectedOption) => {
         const assetType = 'bugs';
 
         console.log('🎯 Bulk action triggered:', {
@@ -465,7 +465,7 @@ const BugTrackerPage = () => {
             assetType,
             selectedIds,
             selectedOption,
-            suiteId: activeSuite.id
+            suiteId: activeSuite?.id
         });
 
         setLoadingActions(prev => [...prev, actionId]);
@@ -515,7 +515,7 @@ const BugTrackerPage = () => {
         } finally {
             setLoadingActions(prev => prev.filter(id => id !== actionId));
         }
-    };
+    }, [activeSuite, actions.linking, actions.ui]);
 
     const handleCloseModal = useCallback(() => {
         console.log('Closing bug modal');
@@ -1048,6 +1048,14 @@ const BugTrackerPage = () => {
                         />
                     </div>
                 )}
+
+                <EnhancedBulkActionsBar
+                    selectedItems={bugsHook.selectedBugs || []}
+                    onClearSelection={() => bugsHook.selectBugs([])}
+                    assetType="bugs"
+                    onAction={handleBulkAction}
+                    loadingActions={loadingActions}
+                />
 
                 {/* Content with smooth transitions */}
                 <div className="transition-all duration-300 ease-in-out">
