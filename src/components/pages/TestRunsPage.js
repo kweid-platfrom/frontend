@@ -7,7 +7,7 @@ import { useTestCases } from '@/hooks/useTestCases';
 import { useUI } from '@/hooks/useUI';
 import { useApp } from '@/context/AppProvider';
 import CreateTestRunModal from '@/components/testRuns/CreateTestRunModal';
-import TestRunExecutionModal from '@/components/testRuns/TestRunExecutionModal';
+import TestRunExecutionView from '@/components/testRuns/TestRunExecutionView';
 import TestRunsListView from '@/components/testRuns/TestRunsListView';
 import TestRunDetailsView from '@/components/testRuns/TestRunDetailsView';
 
@@ -17,11 +17,11 @@ const TestRuns = () => {
     const testCasesHook = useTestCases();
     const uiHook = useUI();
 
-    // View state
-    const [viewMode, setViewMode] = useState('list'); // 'list' | 'details'
+    // View state - now includes 'execution'
+    const [viewMode, setViewMode] = useState('list'); // 'list' | 'details' | 'execution'
     const [selectedRun, setSelectedRun] = useState(null);
+    const [previousView, setPreviousView] = useState('list'); // Track where execution was triggered from
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
 
     // Get sprints from global state
     const sprints = state?.sprints?.sprints || [];
@@ -52,6 +52,15 @@ const TestRuns = () => {
                 status: 'in_progress',
                 started_at: new Date(),
             });
+            
+            // Refresh the selected run if viewing details
+            if (selectedRun?.id === runId) {
+                const updatedRun = testRunsHook.testRuns?.find(r => r.id === runId);
+                if (updatedRun) {
+                    setSelectedRun(updatedRun);
+                }
+            }
+            
             uiHook.addNotification?.({
                 type: 'success',
                 title: 'Success',
@@ -65,7 +74,7 @@ const TestRuns = () => {
                 message: `Failed to start test run: ${error.message}`,
             });
         }
-    }, [testRunsHook, uiHook]);
+    }, [testRunsHook, uiHook, selectedRun]);
 
     const handleCompleteRun = useCallback(async (runId) => {
         try {
@@ -73,6 +82,13 @@ const TestRuns = () => {
                 status: 'completed',
                 completed_at: new Date(),
             });
+            
+            // Refresh the selected run
+            const updatedRun = testRunsHook.testRuns?.find(r => r.id === runId);
+            if (updatedRun) {
+                setSelectedRun(updatedRun);
+            }
+            
             uiHook.addNotification?.({
                 type: 'success',
                 title: 'Success',
@@ -120,12 +136,48 @@ const TestRuns = () => {
 
     const handleBackToList = useCallback(() => {
         setViewMode('list');
+        setSelectedRun(null);
     }, []);
 
-    const handleExecuteRun = useCallback((run) => {
+    const handleExecuteRun = useCallback((run, fromView = 'list') => {
         setSelectedRun(run);
-        setIsExecutionModalOpen(true);
+        setPreviousView(fromView); // Remember where execution was triggered from
+        setViewMode('execution');
     }, []);
+
+    const handleBackFromExecution = useCallback(() => {
+        // Return to the view that triggered execution
+        setViewMode(previousView);
+        
+        // Refresh the selected run to show updated results
+        if (selectedRun) {
+            const updatedRun = testRunsHook.testRuns?.find(r => r.id === selectedRun.id);
+            if (updatedRun) {
+                setSelectedRun(updatedRun);
+            }
+        }
+    }, [previousView, selectedRun, testRunsHook.testRuns]);
+
+    const handleUpdateTestResult = useCallback(async (testCaseId, result) => {
+        if (!selectedRun) return;
+        
+        try {
+            await testRunsHook.updateTestRunResult(selectedRun.id, testCaseId, result);
+            
+            // Refresh the selected run
+            const updatedRun = testRunsHook.testRuns?.find(r => r.id === selectedRun.id);
+            if (updatedRun) {
+                setSelectedRun(updatedRun);
+            }
+        } catch (error) {
+            console.error('Error updating test result:', error);
+            uiHook.addNotification?.({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to update test result: ${error.message}`,
+            });
+        }
+    }, [selectedRun, testRunsHook, uiHook]);
 
     const handleExportReport = useCallback((run) => {
         const runTestCases = run.test_cases
@@ -249,10 +301,11 @@ const TestRuns = () => {
             <div className="relative overflow-hidden">
                 {/* List View */}
                 <div
-                    className={`transition-all duration-300 ${viewMode === 'list'
+                    className={`transition-all duration-300 ${
+                        viewMode === 'list'
                             ? 'opacity-100 translate-x-0'
                             : 'opacity-0 -translate-x-full absolute inset-0 pointer-events-none'
-                        }`}
+                    }`}
                 >
                     <TestRunsListView
                         testRuns={testRunsHook.testRuns || []}
@@ -261,7 +314,7 @@ const TestRuns = () => {
                         onStartRun={handleStartRun}
                         onCompleteRun={handleCompleteRun}
                         onDeleteRun={handleDeleteRun}
-                        onExecuteRun={handleExecuteRun}
+                        onExecuteRun={(run) => handleExecuteRun(run, 'list')}
                         onCreateRun={() => setIsCreateModalOpen(true)}
                         selectedRunId={selectedRun?.id}
                     />
@@ -269,10 +322,13 @@ const TestRuns = () => {
 
                 {/* Details View */}
                 <div
-                    className={`transition-all duration-300 ${viewMode === 'details'
+                    className={`transition-all duration-300 ${
+                        viewMode === 'details'
                             ? 'opacity-100 translate-x-0'
-                            : 'opacity-0 translate-x-full absolute inset-0 pointer-events-none'
-                        }`}
+                            : viewMode === 'list'
+                            ? 'opacity-0 translate-x-full absolute inset-0 pointer-events-none'
+                            : 'opacity-0 -translate-x-full absolute inset-0 pointer-events-none'
+                    }`}
                 >
                     {selectedRun && (
                         <TestRunDetailsView
@@ -280,34 +336,40 @@ const TestRuns = () => {
                             testCases={testCasesHook.testCases || []}
                             onBack={handleBackToList}
                             onDelete={handleDeleteRun}
-                            onExecute={handleExecuteRun}
+                            onExecute={(run) => handleExecuteRun(run, 'details')}
                             onExport={handleExportReport}
                             onStartRun={handleStartRun}
                             onCompleteRun={handleCompleteRun}
                         />
                     )}
                 </div>
+
+                {/* Execution View */}
+                <div
+                    className={`transition-all duration-300 ${
+                        viewMode === 'execution'
+                            ? 'opacity-100 translate-x-0'
+                            : 'opacity-0 translate-x-full absolute inset-0 pointer-events-none'
+                    }`}
+                >
+                    {selectedRun && viewMode === 'execution' && (
+                        <TestRunExecutionView
+                            run={selectedRun}
+                            onBack={handleBackFromExecution}
+                            onUpdateResult={handleUpdateTestResult}
+                            onCompleteRun={handleCompleteRun}
+                            testCases={testCasesHook.testCases || []}
+                        />
+                    )}
+                </div>
             </div>
 
-            {/* Modals */}
+            {/* Create Modal */}
             {isCreateModalOpen && (
                 <CreateTestRunModal
                     onClose={() => setIsCreateModalOpen(false)}
                     onSave={handleCreateRun}
                     sprints={sprints}
-                    testCases={testCasesHook.testCases || []}
-                />
-            )}
-
-            {isExecutionModalOpen && selectedRun && (
-                <TestRunExecutionModal
-                    run={selectedRun}
-                    onClose={() => {
-                        setIsExecutionModalOpen(false);
-                    }}
-                    onUpdateResult={(testCaseId, result) => {
-                        testRunsHook.updateTestRunResult(selectedRun.id, testCaseId, result);
-                    }}
                     testCases={testCasesHook.testCases || []}
                 />
             )}

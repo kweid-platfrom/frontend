@@ -243,8 +243,320 @@ class FirestoreService extends BaseFirestoreService {
                 } catch (error) {
                     return { success: false, error: { message: error.message } };
                 }
-            }
+            },
+
+            createAutoReport: async (runId, runName, format = 'pdf') => {
+                try {
+                    console.log('Creating auto-report for run:', { runId, runName, format });
+
+                    const userId = this.getCurrentUserId();
+                    if (!userId) {
+                        return {
+                            success: false,
+                            error: { message: 'User not authenticated' }
+                        };
+                    }
+
+                    // Validate format
+                    if (!['pdf', 'csv'].includes(format)) {
+                        return {
+                            success: false,
+                            error: { message: 'Invalid format. Supported formats: pdf, csv' }
+                        };
+                    }
+
+                    // Get current suite
+                    const suiteId = this.getCurrentSuiteId();
+                    if (!suiteId) {
+                        return {
+                            success: false,
+                            error: { message: 'No active test suite' }
+                        };
+                    }
+
+                    // Validate suite access
+                    const hasAccess = await this.testSuite.validateTestSuiteAccess(suiteId, 'write');
+                    if (!hasAccess) {
+                        return {
+                            success: false,
+                            error: { message: 'Insufficient permissions to create reports' }
+                        };
+                    }
+
+                    // Get all test cases for this suite to find the run data
+                    const testCasesResult = await this.getTestCases(suiteId, null, { includeAll: true });
+                    if (!testCasesResult.success) {
+                        return {
+                            success: false,
+                            error: { message: 'Failed to fetch test cases for report generation' }
+                        };
+                    }
+
+                    const allTestCases = testCasesResult.data;
+
+                    // Extract run data from test cases
+                    let runData = null;
+                    const testCasesInRun = [];
+
+                    allTestCases.forEach(testCase => {
+                        if (testCase.runs && Array.isArray(testCase.runs)) {
+                            const run = testCase.runs.find(r => r.runId === runId);
+                            if (run) {
+                                // Store run metadata (same for all test cases)
+                                if (!runData) {
+                                    runData = {
+                                        id: run.runId,
+                                        name: run.runName || runName,
+                                        sprint_id: run.sprintId,
+                                        build_version: run.buildVersion,
+                                        environment: run.environment,
+                                        description: run.description,
+                                        status: run.status,
+                                        created_by: run.created_by,
+                                        created_at: run.created_at,
+                                        started_at: run.started_at,
+                                        completed_at: run.completed_at
+                                    };
+                                }
+
+                                // Add test case with its execution result
+                                testCasesInRun.push({
+                                    id: testCase.id,
+                                    title: testCase.title,
+                                    description: testCase.description,
+                                    priority: testCase.priority,
+                                    category: testCase.category,
+                                    executionStatus: run.executionStatus || 'not_executed',
+                                    executed_at: run.executed_at,
+                                    executed_by: run.executed_by,
+                                    duration: run.duration,
+                                    notes: run.notes,
+                                    bugs_created: run.bugs_created || []
+                                });
+                            }
+                        }
+                    });
+
+                    if (!runData) {
+                        return {
+                            success: false,
+                            error: { message: 'Run data not found' }
+                        };
+                    }
+
+                    // Calculate summary statistics
+                    const summary = {
+                        total: testCasesInRun.length,
+                        passed: testCasesInRun.filter(tc => tc.executionStatus === 'passed').length,
+                        failed: testCasesInRun.filter(tc => tc.executionStatus === 'failed').length,
+                        blocked: testCasesInRun.filter(tc => tc.executionStatus === 'blocked').length,
+                        skipped: testCasesInRun.filter(tc => tc.executionStatus === 'skipped').length,
+                        not_executed: testCasesInRun.filter(tc => tc.executionStatus === 'not_executed').length
+                    };
+
+                    // Calculate pass rate
+                    const executedCount = summary.total - summary.not_executed;
+                    const passRate = executedCount > 0
+                        ? Math.round((summary.passed / executedCount) * 100)
+                        : 0;
+
+                    // Get organization ID if suite is org-owned
+                    const suiteResult = await this.testSuite.getTestSuite(suiteId);
+                    const organizationId = suiteResult.success && suiteResult.data?.access_control?.ownerType === 'organization'
+                        ? suiteResult.data.access_control.ownerId
+                        : null;
+
+                    // Validate organization access if needed
+                    if (organizationId) {
+                        const orgAccess = await this.organization.validateOrganizationAccess(
+                            organizationId,
+                            'member'
+                        );
+                        if (!orgAccess) {
+                            return {
+                                success: false,
+                                error: { message: 'Insufficient organization permissions' }
+                            };
+                        }
+                    }
+
+                    // Create report document
+                    const reportData = {
+                        type: 'test_run',
+                        title: `Test Run Report: ${runData.name}`,
+                        description: `Auto-generated ${format.toUpperCase()} report for test run: ${runData.name}`,
+
+                        // Run metadata
+                        run_id: runId,
+                        run_name: runData.name,
+                        sprint_id: runData.sprint_id,
+                        build_version: runData.build_version,
+                        environment: runData.environment,
+
+                        // Suite/Org context
+                        suite_id: suiteId,
+                        organizationId: organizationId,
+
+                        // Summary metrics
+                        summary: summary,
+                        pass_rate: passRate,
+
+                        // Detailed results
+                        test_cases: testCasesInRun,
+
+                        // Timestamps
+                        run_started_at: runData.started_at,
+                        run_completed_at: runData.completed_at,
+                        generated_at: new Date(),
+                        generated_by: userId,
+
+                        // Report metadata
+                        status: 'generated',
+                        format: format, // 'pdf' or 'csv'
+                        version: '1.0',
+                        auto_generated: true
+                    };
+
+                    // Save report using the existing saveReport method
+                    const saveResult = await this.reports.saveReport(reportData);
+
+                    if (!saveResult.success) {
+                        return saveResult;
+                    }
+
+                    const reportId = saveResult.data?.id;
+
+                    // Generate the actual PDF or CSV file using existing generatePDF method
+                    let fileResult;
+                    if (format === 'pdf') {
+                        // Use existing generatePDF method
+                        fileResult = await this.reports.generatePDF(reportData);
+                    } else if (format === 'csv') {
+                        // Generate CSV format
+                        fileResult = await this.generateCSV(reportData);
+                    }
+
+                    if (fileResult && fileResult.success) {
+                        console.log(`Auto-report ${format.toUpperCase()} created successfully:`, reportId);
+                        return {
+                            success: true,
+                            data: {
+                                reportId: reportId,
+                                runId: runId,
+                                format: format,
+                                summary: summary,
+                                passRate: passRate,
+                                fileUrl: fileResult.data?.url
+                            }
+                        };
+                    }
+
+                    // Even if file generation fails, the report metadata is saved
+                    console.log('Report metadata saved, but file generation had issues');
+                    return {
+                        success: true,
+                        data: {
+                            reportId: reportId,
+                            runId: runId,
+                            format: format,
+                            summary: summary,
+                            passRate: passRate,
+                            warning: 'Report saved but file generation may have failed'
+                        }
+                    };
+
+                } catch (error) {
+                    console.error('Error creating auto-report:', error);
+                    return {
+                        success: false,
+                        error: {
+                            message: `Failed to create auto-report: ${error.message}`,
+                            code: error.code
+                        }
+                    };
+                }
+            },
+
+            // Helper method for CSV generation
+            generateCSV: async (reportData) => {
+                try {
+                    // CSV Header
+                    const headers = [
+                        'Test Case ID',
+                        'Title',
+                        'Description',
+                        'Priority',
+                        'Category',
+                        'Status',
+                        'Executed At',
+                        'Executed By',
+                        'Duration (s)',
+                        'Notes',
+                        'Bugs Created'
+                    ];
+
+                    // CSV Rows
+                    const rows = reportData.test_cases.map(tc => [
+                        tc.id,
+                        tc.title || '',
+                        (tc.description || '').replace(/"/g, '""'), // Escape quotes
+                        tc.priority || '',
+                        tc.category || '',
+                        tc.executionStatus || 'not_executed',
+                        tc.executed_at ? new Date(tc.executed_at).toISOString() : '',
+                        tc.executed_by || '',
+                        tc.duration || '',
+                        (tc.notes || '').replace(/"/g, '""'), // Escape quotes
+                        (tc.bugs_created || []).join('; ')
+                    ]);
+
+                    // Build CSV content
+                    let csvContent = headers.map(h => `"${h}"`).join(',') + '\n';
+
+                    // Add summary header
+                    csvContent += '\n';
+                    csvContent += `"Summary Statistics"\n`;
+                    csvContent += `"Total Test Cases","${reportData.summary.total}"\n`;
+                    csvContent += `"Passed","${reportData.summary.passed}"\n`;
+                    csvContent += `"Failed","${reportData.summary.failed}"\n`;
+                    csvContent += `"Blocked","${reportData.summary.blocked}"\n`;
+                    csvContent += `"Skipped","${reportData.summary.skipped}"\n`;
+                    csvContent += `"Not Executed","${reportData.summary.not_executed}"\n`;
+                    csvContent += `"Pass Rate","${reportData.pass_rate}%"\n`;
+                    csvContent += '\n';
+
+                    // Add test case details
+                    csvContent += `"Test Case Details"\n`;
+                    csvContent += headers.map(h => `"${h}"`).join(',') + '\n';
+                    rows.forEach(row => {
+                        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+                    });
+
+                    // Create a blob and URL (client-side would handle actual file download)
+                    // For server-side, you might store this in Firebase Storage
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+
+                    return {
+                        success: true,
+                        data: {
+                            url: url,
+                            content: csvContent,
+                            filename: `test_run_report_${reportData.run_id}_${Date.now()}.csv`
+                        }
+                    };
+                } catch (error) {
+                    console.error('Error generating CSV:', error);
+                    return {
+                        success: false,
+                        error: { message: `Failed to generate CSV: ${error.message}` }
+                    };
+                }
+            },
+
+
         };
+
     }
 
     // ========================

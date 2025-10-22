@@ -7,7 +7,6 @@ import {
     User, FileText, BarChart3, TrendingUp, AlertCircle,
     Download, Play, Edit2, Trash2, ArrowLeft
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 
 const TestRunDetailsView = ({ 
     run, 
@@ -65,9 +64,24 @@ const TestRunDetailsView = ({
     // Helper function to safely format dates
     const formatDate = (dateValue) => {
         if (!dateValue) return 'N/A';
-        const date = new Date(dateValue);
-        if (isNaN(date.getTime())) return 'N/A';
-        return formatDistanceToNow(date, { addSuffix: true });
+        try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) return 'N/A';
+            
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            if (diffMins < 1) return 'just now';
+            if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+            if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'N/A';
+        }
     };
 
     return (
@@ -209,7 +223,7 @@ const TestRunDetailsView = ({
 
                 {/* Timeline Info */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm">
+                    <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
                         <div className="flex items-center gap-2 text-muted-foreground mb-2">
                             <Calendar className="w-4 h-4" />
                             <span className="text-sm font-medium">Created</span>
@@ -219,7 +233,7 @@ const TestRunDetailsView = ({
                         </p>
                     </div>
 
-                    <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm">
+                    <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
                         <div className="flex items-center gap-2 text-muted-foreground mb-2">
                             <Clock className="w-4 h-4" />
                             <span className="text-sm font-medium">Duration</span>
@@ -229,7 +243,7 @@ const TestRunDetailsView = ({
                         </p>
                     </div>
 
-                    <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm">
+                    <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
                         <div className="flex items-center gap-2 text-muted-foreground mb-2">
                             <TrendingUp className="w-4 h-4" />
                             <span className="text-sm font-medium">Status</span>
@@ -242,7 +256,7 @@ const TestRunDetailsView = ({
 
                 {/* Description */}
                 {run.description && (
-                    <div className="bg-card border border-border rounded-lg p-4 shadow-theme-sm">
+                    <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
                         <h3 className="font-semibold text-foreground mb-2">Description</h3>
                         <p className="text-sm text-foreground whitespace-pre-wrap">
                             {run.description}
@@ -253,7 +267,7 @@ const TestRunDetailsView = ({
                 {/* Test Cases Results */}
                 <div>
                     <h3 className="font-semibold text-foreground mb-4">Test Cases Results</h3>
-                    <div className="bg-card border border-border rounded-lg overflow-hidden shadow-theme-sm">
+                    <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-border">
                                 <thead className="bg-muted">

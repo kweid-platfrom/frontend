@@ -12,9 +12,11 @@ import {
     getDoc
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
+import { useReports } from './useReports';
 
 export const useTestRuns = () => {
     const { state, actions } = useApp();
+    const { createAutoReport } = useReports();
 
     const currentUser = state?.auth?.currentUser;
     const activeSuite = state?.suites?.activeSuite;
@@ -213,6 +215,7 @@ export const useTestRuns = () => {
     }, [activeSuite, currentUser, allTestCases, actions]);
 
     // Update test run - updates the run data across all test cases that have this run
+    // ENHANCED: Auto-generates report when run status changes to 'completed'
     const updateTestRun = useCallback(async (runId, updates) => {
         if (!runId) {
             throw new Error('Run ID is required');
@@ -222,6 +225,7 @@ export const useTestRuns = () => {
             const testCasesRef = collection(db, 'testSuites', activeSuite?.id, 'testCases');
             const snapshot = await getDocs(testCasesRef);
             const updatePromises = [];
+            let runName = '';
 
             snapshot.forEach((docSnapshot) => {
                 const testCase = docSnapshot.data();
@@ -233,6 +237,11 @@ export const useTestRuns = () => {
                             ...updatedRuns[runIndex],
                             ...updates
                         };
+
+                        // Store run name for report generation
+                        if (!runName) {
+                            runName = updatedRuns[runIndex].runName;
+                        }
 
                         const testCaseRef = doc(db, 'testSuites', activeSuite?.id, 'testCases', docSnapshot.id);
                         updatePromises.push(
@@ -247,6 +256,17 @@ export const useTestRuns = () => {
 
             await Promise.all(updatePromises);
 
+            // AUTO-GENERATE REPORT when run status changes to 'completed'
+            if (updates.status === 'completed' && createAutoReport) {
+                try {
+                    console.log('Test run completed, generating auto-report...');
+                    await createAutoReport(runId, runName);
+                } catch (reportErr) {
+                    console.error('Failed to auto-generate report:', reportErr);
+                    // Don't throw - report generation failure shouldn't break run completion
+                }
+            }
+
             actions.ui?.showNotification?.({
                 type: 'success',
                 message: 'Test run updated successfully',
@@ -259,7 +279,7 @@ export const useTestRuns = () => {
             });
             throw err;
         }
-    }, [activeSuite, actions]);
+    }, [activeSuite, actions, createAutoReport]);
 
     // Update test run result for a specific test case
     // UPDATED: Updates both run-specific result and global test case status
