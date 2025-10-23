@@ -1,4 +1,4 @@
-// components/report/GenerateReportModal.jsx
+// components/report/GenerateReportModal.jsx - ENHANCED for Priority Reports
 'use client';
 
 import React, { useState } from 'react';
@@ -20,7 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { FileText, Loader2, Info } from 'lucide-react';
+import { FileText, Loader2, Info, AlertCircle } from 'lucide-react';
 
 const GenerateReportModal = ({ 
     open, 
@@ -29,16 +29,22 @@ const GenerateReportModal = ({
     suites, 
     sprints,
     testRuns,
+    builds,
+    releases,
+    modules,
     onGenerate 
 }) => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
-        type: reportTypes[0] || 'Test Run Summary',
+        type: reportTypes[0] || 'Test Summary Report',
         description: '',
         suiteId: '',
         sprintId: '',
         runId: '',
+        buildId: '',
+        releaseId: '',
+        moduleFilter: '',
         format: 'pdf'
     });
 
@@ -50,17 +56,34 @@ const GenerateReportModal = ({
             return;
         }
 
+        // Validate required fields based on report type
+        if (requiresRun && !formData.runId) {
+            alert('Please select a test run');
+            return;
+        }
+        if (requiresSprint && !formData.sprintId) {
+            alert('Please select a sprint');
+            return;
+        }
+        if (requiresBuild && !formData.buildId) {
+            alert('Please select a build');
+            return;
+        }
+
         setIsGenerating(true);
         try {
             await onGenerate(formData);
             // Reset form
             setFormData({
                 name: '',
-                type: reportTypes[0] || 'Test Run Summary',
+                type: reportTypes[0] || 'Test Summary Report',
                 description: '',
                 suiteId: '',
                 sprintId: '',
                 runId: '',
+                buildId: '',
+                releaseId: '',
+                moduleFilter: '',
                 format: 'pdf'
             });
             onOpenChange(false);
@@ -71,13 +94,30 @@ const GenerateReportModal = ({
         }
     };
 
+    // Determine which fields are required based on report type
     const requiresSuite = ['Coverage Report', 'Bug Analysis'].includes(formData.type);
     const requiresSprint = ['Sprint Summary'].includes(formData.type);
     const requiresRun = ['Test Run Summary'].includes(formData.type);
+    const requiresBuild = false; // Optional for Test Summary Report
+    const requiresRelease = false; // Optional for Release Readiness Report
+    
+    // Fields that can be used with certain reports
+    const supportsBuild = ['Test Summary Report', 'Release Readiness Report'].includes(formData.type);
+    const supportsRelease = ['Release Readiness Report'].includes(formData.type);
+    const supportsModule = ['Defect Report'].includes(formData.type);
+    const supportsSprint = ['Test Summary Report'].includes(formData.type);
+    const supportsRun = ['Test Summary Report'].includes(formData.type);
 
     const getReportDescription = (type) => {
         const descriptions = {
-            'Test Run Summary': 'Detailed summary of a specific test run',
+            // PRIORITY REPORTS
+            'Test Summary Report': 'Comprehensive test execution summary per build, sprint, or release with pass/fail metrics and progress tracking',
+            'Defect Report': 'Detailed defect analysis with severity distribution, aging metrics, and module hotspots',
+            'Release Readiness Report': 'Quality gate evaluation with GO/NO-GO recommendation based on pass rate, critical defects, and coverage',
+            'Requirement Coverage Report': 'Traceability matrix showing requirement coverage, test mapping, and execution status',
+            
+            // SECONDARY REPORTS
+            'Test Run Summary': 'Detailed summary of a specific test run execution',
             'Bug Analysis': 'Analysis of bugs in your test suite',
             'Sprint Summary': 'Overview of testing activities in a sprint',
             'Coverage Report': 'Test coverage analysis for your suite',
@@ -86,6 +126,8 @@ const GenerateReportModal = ({
         };
         return descriptions[type] || '';
     };
+
+    const isPriorityReport = ['Test Summary Report', 'Defect Report', 'Release Readiness Report', 'Requirement Coverage Report'].includes(formData.type);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,7 +172,18 @@ const GenerateReportModal = ({
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {reportTypes.map((type) => (
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                                        PRIORITY REPORTS
+                                    </div>
+                                    {reportTypes.slice(0, 4).map((type) => (
+                                        <SelectItem key={type} value={type}>
+                                            {type}
+                                        </SelectItem>
+                                    ))}
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1">
+                                        OTHER REPORTS
+                                    </div>
+                                    {reportTypes.slice(4).map((type) => (
                                         <SelectItem key={type} value={type}>
                                             {type}
                                         </SelectItem>
@@ -138,27 +191,36 @@ const GenerateReportModal = ({
                                 </SelectContent>
                             </Select>
                             {getReportDescription(formData.type) && (
-                                <p className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                    <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                                    {getReportDescription(formData.type)}
-                                </p>
+                                <div className={`text-xs flex items-start gap-1.5 p-3 rounded-md ${
+                                    isPriorityReport ? 'bg-blue-50 border border-blue-200 text-blue-900' : 'bg-muted'
+                                }`}>
+                                    {isPriorityReport ? (
+                                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
+                                    ) : (
+                                        <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                                    )}
+                                    <span>{getReportDescription(formData.type)}</span>
+                                </div>
                             )}
                         </div>
 
-                        {/* Conditional Fields */}
-                        {requiresRun && (
+                        {/* Conditional Fields Based on Report Type */}
+                        
+                        {/* Test Run - Required for Test Run Summary, Optional for Test Summary Report */}
+                        {(requiresRun || supportsRun) && (
                             <div className="space-y-2">
                                 <Label htmlFor="report-run" className="text-sm font-medium">
-                                    Test Run <span className="text-destructive">*</span>
+                                    Test Run {requiresRun && <span className="text-destructive">*</span>}
                                 </Label>
                                 <Select
                                     value={formData.runId}
                                     onValueChange={(value) => setFormData({ ...formData, runId: value })}
                                 >
                                     <SelectTrigger id="report-run" className="h-11">
-                                        <SelectValue placeholder="Select a test run" />
+                                        <SelectValue placeholder="Select a test run (optional)" />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="no-runs">None - All runs</SelectItem>
                                         {testRuns && testRuns.length > 0 ? (
                                             testRuns.map((run) => (
                                                 <SelectItem key={run.id} value={run.id}>
@@ -175,19 +237,86 @@ const GenerateReportModal = ({
                             </div>
                         )}
 
-                        {requiresSprint && (
+                        {/* Build Version - For Test Summary and Release Readiness */}
+                        {supportsBuild && (
+                            <div className="space-y-2">
+                                <Label htmlFor="report-build" className="text-sm font-medium">
+                                    Build Version {requiresBuild && <span className="text-destructive">*</span>}
+                                </Label>
+                                <Select
+                                    value={formData.buildId}
+                                    onValueChange={(value) => setFormData({ ...formData, buildId: value })}
+                                >
+                                    <SelectTrigger id="report-build" className="h-11">
+                                        <SelectValue placeholder="Select a build (optional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="no-runs">None - All builds</SelectItem>
+                                        {builds && builds.length > 0 ? (
+                                            builds.map((build) => (
+                                                <SelectItem key={build.id} value={build.id}>
+                                                    {build.version} - {build.name}
+                                                </SelectItem>
+                                            ))
+                                        ) : (
+                                            <SelectItem value="none" disabled>
+                                                No builds available
+                                            </SelectItem>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                    Filter report by specific build version
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Release - For Release Readiness Report */}
+                        {supportsRelease && (
+                            <div className="space-y-2">
+                                <Label htmlFor="report-release" className="text-sm font-medium">
+                                    Release {requiresRelease && <span className="text-destructive">*</span>}
+                                </Label>
+                                <Select
+                                    value={formData.releaseId}
+                                    onValueChange={(value) => setFormData({ ...formData, releaseId: value })}
+                                >
+                                    <SelectTrigger id="report-release" className="h-11">
+                                        <SelectValue placeholder="Select a release (optional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="no-runs">Current Release</SelectItem>
+                                        {releases && releases.length > 0 ? (
+                                            releases.map((release) => (
+                                                <SelectItem key={release.id} value={release.id}>
+                                                    {release.name} - {release.version}
+                                                </SelectItem>
+                                            ))
+                                        ) : (
+                                            <SelectItem value="none" disabled>
+                                                No releases defined
+                                            </SelectItem>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {/* Sprint - Required for Sprint Summary, Optional for Test Summary Report */}
+                        {(requiresSprint || supportsSprint) && (
                             <div className="space-y-2">
                                 <Label htmlFor="report-sprint" className="text-sm font-medium">
-                                    Sprint <span className="text-destructive">*</span>
+                                    Sprint {requiresSprint && <span className="text-destructive">*</span>}
                                 </Label>
                                 <Select
                                     value={formData.sprintId}
                                     onValueChange={(value) => setFormData({ ...formData, sprintId: value })}
                                 >
                                     <SelectTrigger id="report-sprint" className="h-11">
-                                        <SelectValue placeholder="Select a sprint" />
+                                        <SelectValue placeholder="Select a sprint (optional)" />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="no-runs">None - All sprints</SelectItem>
                                         {sprints && sprints.length > 0 ? (
                                             sprints.map((sprint) => (
                                                 <SelectItem key={sprint.id} value={sprint.id}>
@@ -204,6 +333,41 @@ const GenerateReportModal = ({
                             </div>
                         )}
 
+                        {/* Module Filter - For Defect Report */}
+                        {supportsModule && (
+                            <div className="space-y-2">
+                                <Label htmlFor="report-module" className="text-sm font-medium">
+                                    Module Filter
+                                </Label>
+                                <Select
+                                    value={formData.moduleFilter}
+                                    onValueChange={(value) => setFormData({ ...formData, moduleFilter: value })}
+                                >
+                                    <SelectTrigger id="report-module" className="h-11">
+                                        <SelectValue placeholder="All modules" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="no-runs">All Modules</SelectItem>
+                                        {modules && modules.length > 0 ? (
+                                            modules.map((module) => (
+                                                <SelectItem key={module} value={module}>
+                                                    {module}
+                                                </SelectItem>
+                                            ))
+                                        ) : (
+                                            <SelectItem value="none" disabled>
+                                                No modules defined
+                                            </SelectItem>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                    Optional - Filter defects by specific module
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Suite Filter - For Coverage and Bug Analysis Reports */}
                         {requiresSuite && (
                             <div className="space-y-2">
                                 <Label htmlFor="report-suite" className="text-sm font-medium">

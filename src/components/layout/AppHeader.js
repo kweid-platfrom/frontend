@@ -13,6 +13,9 @@ import { X, Bell } from 'lucide-react';
 // Import components
 import { Button } from '../ui/button';
 import CreateSprintModal from '../modals/CreateSprintModal';
+import TestCaseModal from '../testCase/TestCaseModal';
+import ImportModal from '../testCase/ImportModal';
+import GenerateReportModal from '../report/GenerateReportModal'; // NEW IMPORT
 import UserMenuDropdown from '../UserMenuDropdown';
 import SuiteSelector from './head/SuiteSelector';
 import CalendarTime from './head/CalendarTime';
@@ -22,12 +25,12 @@ import AddUserButton from './head/AddUserButton';
 import { safeArray, safeLength, safeMap } from '../../utils/safeArrayUtils';
 
 
-const AppHeader = ({ 
-    onMenuClick, 
-    setShowBugForm, 
-    setActivePage, 
+const AppHeader = ({
+    onMenuClick,
+    setShowBugForm,
+    setActivePage,
     onCreateDocument,
-    disabled = false 
+    disabled = false
 }) => {
     const { state, actions } = useApp();
     const router = useRouter();
@@ -38,16 +41,21 @@ const AppHeader = ({
     const { accountType, userRole } = state.subscription;
     const { notifications } = state.notifications || { notifications: [] };
 
-    // State management for dropdowns
+    // State management for dropdowns and modals
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [showCreateSprintModal, setShowCreateSprintModal] = useState(false);
+    const [showGenerateReportModal, setShowGenerateReportModal] = useState(false); // NEW STATE
+    
+    // Add missing state for test case modals
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     // Notification dropdown position
-    const [notificationsPosition, setNotificationsPosition] = useState({ 
-        top: 0, 
-        left: 0, 
-        right: 'auto' 
+    const [notificationsPosition, setNotificationsPosition] = useState({
+        top: 0,
+        left: 0,
+        right: 'auto'
     });
 
     // Refs for dropdown positioning
@@ -68,7 +76,7 @@ const AppHeader = ({
     // Close menus when clicking outside
     useEffect(() => {
         if (disabled) return;
-        
+
         const handleClickOutside = (event) => {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
                 setShowUserMenu(false);
@@ -90,7 +98,7 @@ const AppHeader = ({
     // Calculate notification dropdown position
     useEffect(() => {
         if (disabled) return;
-        
+
         if (showNotifications && notificationsButtonRef.current) {
             const rect = notificationsButtonRef.current.getBoundingClientRect();
             const dropdownWidth = 320;
@@ -107,7 +115,7 @@ const AppHeader = ({
 
     const handleSignOut = async () => {
         if (disabled) return;
-        
+
         try {
             if (actions.auth && typeof actions.auth.signOut === 'function') {
                 await actions.auth.signOut();
@@ -127,58 +135,162 @@ const AppHeader = ({
     // Sprint creation handlers
     const handleCreateSprint = () => {
         if (disabled) return;
-        
+
         if (!activeSuite) {
             actions.ui.showError('Please select a test suite first');
             return;
         }
-        
+
         setShowCreateSprintModal(true);
     };
 
     const handleSprintCreated = (sprint) => {
         if (disabled) return;
-        
+
         // Set the new sprint as active
         actions.sprints?.setActiveSprint?.(sprint);
         setShowCreateSprintModal(false);
         actions.ui.showNotification('success', `Sprint "${sprint.name}" created successfully!`, 3000);
     };
-    
-    // Document creation handler - FIXED
-    const handleCreateDocument = () => {
+
+    // Report generation handlers - NEW
+    const handleGenerateReport = () => {
         if (disabled) return;
-        
+
         if (!activeSuite) {
             actions.ui.showError('Please select a test suite first');
             return;
         }
-        
+
+        setShowGenerateReportModal(true);
+    };
+
+    const handleReportGenerated = async (reportData) => {
+        if (disabled) return;
+
+        try {
+            // Call your report generation service/API here
+            // For example: await actions.reports.generateReport(reportData);
+            
+            actions.ui.showNotification('success', `Report "${reportData.name}" generated successfully!`, 3000);
+            setShowGenerateReportModal(false);
+        } catch (error) {
+            console.error('Error generating report:', error);
+            actions.ui.showError('Failed to generate report. Please try again.');
+        }
+    };
+
+    // Document creation handler
+    const handleCreateDocument = () => {
+        if (disabled) return;
+
+        if (!activeSuite) {
+            actions.ui.showError('Please select a test suite first');
+            return;
+        }
+
         // Priority 1: Use parent callback if provided
         if (onCreateDocument && typeof onCreateDocument === 'function') {
             onCreateDocument();
             return;
         }
-        
+
         // Priority 2: Use context action if available
         if (actions.documents?.showDocumentEditor) {
             actions.documents.showDocumentEditor();
             return;
         }
-        
+
         // Priority 3: Navigate to documents page with create flag
         const suiteId = activeSuite.id;
         const activeSprint = state.sprints?.activeSprint;
         const sprintId = activeSprint?.id;
-        
+
         if (sprintId) {
             router.push(`/documents?suiteId=${suiteId}&sprintId=${sprintId}&create=true`);
         } else {
             router.push(`/documents?suiteId=${suiteId}&create=true`);
         }
-        
+
         // Show success notification
         actions.ui.showNotification('info', 'Opening document editor...', 2000);
+    };
+
+    // Test case handlers
+    const handleCreateTestCase = () => {
+        if (disabled) return;
+
+        if (!activeSuite) {
+            actions.ui.showError('Please select a test suite first');
+            return;
+        }
+
+        // Use context action if available, otherwise open modal
+        if (actions.testCases?.showTestCaseEditor) {
+            actions.testCases.showTestCaseEditor();
+        } else {
+            setIsModalOpen(true);
+        }
+    };
+
+    const handleSaveTestCase = async (testCaseData) => {
+        if (disabled) return;
+
+        try {
+            // Use context action if available
+            if (actions.testCases?.createTestCase) {
+                await actions.testCases.createTestCase(testCaseData);
+            } else {
+                // Fallback: call firestore directly
+                if (actions.firestore) {
+                    await actions.firestore.createTestCase(testCaseData);
+                }
+            }
+            actions.ui.showNotification('success', 'Test case created successfully!', 3000);
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error('Error saving test case:', error);
+            throw error; // Let the modal handle the error display
+        }
+    };
+
+    const handleImportTestCases = () => {
+        if (disabled) return;
+
+        if (!activeSuite) {
+            actions.ui.showError('Please select a test suite first');
+            return;
+        }
+
+        // Use context action if available, otherwise open import modal
+        if (actions.testCases?.showImportModal) {
+            actions.testCases.showImportModal();
+        } else {
+            setIsImportModalOpen(true);
+        }
+    };
+
+    const handleImportComplete = () => {
+        if (disabled) return;
+
+        actions.ui.showNotification('success', 'Test cases imported successfully!', 3000);
+        setIsImportModalOpen(false);
+        
+        // Refresh test cases if action exists
+        if (actions.testCases?.fetchTestCases) {
+            actions.testCases.fetchTestCases(activeSuite.id);
+        }
+    };
+
+    const handleGenerateTestCases = () => {
+        if (disabled) return;
+
+        if (!activeSuite) {
+            actions.ui.showError('Please select a test suite first');
+            return;
+        }
+
+        router.push('/testcases/generate');
     };
 
     // Get unread notifications count
@@ -199,6 +311,26 @@ const AppHeader = ({
         if (disabled) return;
         actions.ui.clearNotification(notificationId);
     };
+
+    // Mock data for report modal - Replace with actual data from your state
+    const reportTypes = [
+        'Test Summary Report',
+        'Defect Report',
+        'Release Readiness Report',
+        'Requirement Coverage Report',
+        'Test Run Summary',
+        'Bug Analysis',
+        'Sprint Summary',
+        'Coverage Report',
+        'Weekly QA Summary',
+        'Monthly QA Summary'
+    ];
+
+    const sprints = state.sprints?.sprints || [];
+    const testRuns = state.testRuns?.testRuns || [];
+    const builds = state.builds?.builds || [];
+    const releases = state.releases?.releases || [];
+    const modules = state.modules?.modules || [];
 
     return (
         <>
@@ -336,6 +468,10 @@ const AppHeader = ({
                                 actions={actions}
                                 activeSuite={activeSuite}
                                 firestoreService={actions?.firestore}
+                                onCreateTestCase={handleCreateTestCase}
+                                onImportTestCases={handleImportTestCases}
+                                onGenerateTestCases={handleGenerateTestCases}
+                                onGenerateReport={handleGenerateReport}
                                 disabled={disabled}
                             />
                         </div>
@@ -379,18 +515,16 @@ const AppHeader = ({
                                         {safeMap(safeNotifications, (notification) => (
                                             <div
                                                 key={notification.id}
-                                                className={`p-3 rounded-lg border transition-colors ${
-                                                    notification.read
+                                                className={`p-3 rounded-lg border transition-colors ${notification.read
                                                         ? 'bg-secondary border-border'
                                                         : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
-                                                }`}
+                                                    }`}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1 min-w-0">
                                                         <p
-                                                            className={`text-sm ${
-                                                                notification.read ? 'text-foreground' : 'text-blue-800 font-medium dark:text-blue-200'
-                                                            }`}
+                                                            className={`text-sm ${notification.read ? 'text-foreground' : 'text-blue-800 font-medium dark:text-blue-200'
+                                                                }`}
                                                         >
                                                             {notification.message}
                                                         </p>
@@ -434,6 +568,39 @@ const AppHeader = ({
                 onCancel={() => setShowCreateSprintModal(false)}
                 suiteId={activeSuite?.id}
             />
+
+            {/* Generate Report Modal - NEW */}
+            <GenerateReportModal
+                open={showGenerateReportModal && !disabled}
+                onOpenChange={setShowGenerateReportModal}
+                reportTypes={reportTypes}
+                suites={testSuites}
+                sprints={sprints}
+                testRuns={testRuns}
+                builds={builds}
+                releases={releases}
+                modules={modules}
+                onGenerate={handleReportGenerated}
+            />
+
+            {/* Test Case Creation Modal */}
+            {isModalOpen && !disabled && (
+                <TestCaseModal
+                    testCase={null}
+                    onClose={() => setIsModalOpen(false)}
+                    onSave={handleSaveTestCase}
+                    activeSuite={activeSuite}
+                    currentUser={currentUser}
+                />
+            )}
+
+            {/* Import Test Cases Modal */}
+            {isImportModalOpen && !disabled && (
+                <ImportModal
+                    onClose={() => setIsImportModalOpen(false)}
+                    onImportComplete={handleImportComplete}
+                />
+            )}
         </>
     );
 

@@ -163,7 +163,7 @@ const Reports = () => {
     ], []);
 
     // Handle Bulk Actions
-    const handleBulkAction = async (actionId, selectedReportIds, actionConfig, selectedOption) => {
+    const handleBulkAction = async (actionId, selectedReportIds) => {
         setLoadingActions(prev => [...prev, actionId]);
         
         try {

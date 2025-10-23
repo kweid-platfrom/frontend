@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-    X, CheckCircle, XCircle, Shield, Clock, Bug,
+    CheckCircle, XCircle, Shield, Clock, Bug,
     ChevronRight, ChevronDown, Play, Pause, Save,
     FileText, AlertCircle, Timer, User, ArrowLeft
 } from 'lucide-react';
@@ -460,7 +460,7 @@ const TestRunExecutionView = ({ run, onBack, onUpdateResult, onCompleteRun, test
                                     <div className="flex-1">
                                         <p className="font-medium">All tests executed!</p>
                                         <p className="text-xs text-teal-700 mt-0.5">
-                                            Click "Complete Run" to finish and return to test run details.
+                                            Click &quot;Complete Run&quot; to finish and return to test run details.
                                         </p>
                                     </div>
                                 </div>

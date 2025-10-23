@@ -20,7 +20,6 @@ const BugTable = ({
     testCases = [],
     relationships = { bugToTestCases: {} },
     loading,
-    onBulkAction,
     onView,
     selectedBugs,
     onSelectBugs,

@@ -23,8 +23,8 @@ const TestCases = () => {
     const testRunsHook = useTestRuns();
     const uiHook = useUI();
 
-    const [_loadingActions, setLoadingActions] = useState([]);
-    const [_selectedItems, setSelectedItems] = useState([]);
+    const [setLoadingActions] = useState([]);
+    const [setSelectedItems] = useState([]);
     const [filteredTestCases, setFilteredTestCases] = useState([]);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -393,7 +393,7 @@ const TestCases = () => {
     }, [testCasesHook, showNotification, handleError]);
 
     // NEW: Check if test cases should be prevented from re-adding
-    const checkPassedTestCases = useCallback((selectedIds, targetSprintId) => {
+    const checkPassedTestCases = useCallback((selectedIds) => {
         const passedTests = [];
         const eligibleTests = [];
         

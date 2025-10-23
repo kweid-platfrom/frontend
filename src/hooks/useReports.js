@@ -1,13 +1,12 @@
-// hooks/useReports.js - FIXED: Prevent duplicate report generation
+// hooks/useReports.js - COMPLETE FIXED VERSION
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useApp } from '@/context/AppProvider';
 import {
     collection,
     doc,
     getDocs,
-    getDoc,
     addDoc,
     updateDoc,
     deleteDoc,
@@ -24,8 +23,12 @@ export const useReports = () => {
     const { state, actions } = useApp();
     const currentUser = state?.auth?.currentUser;
     const activeSuite = state?.suites?.activeSuite;
-    const allTestCases = state?.testCases?.testCases || [];
-    const testRuns = state?.testRuns?.testRuns || [];
+    
+    // Wrap in useMemo to prevent exhaustive-deps warnings
+    const allTestCases = useMemo(() => state?.testCases?.testCases || [], [state?.testCases?.testCases]);
+    const testRuns = useMemo(() => state?.testRuns?.testRuns || [], [state?.testRuns?.testRuns]);
+    const bugs = useMemo(() => state?.bugs?.bugs || [], [state?.bugs?.bugs]);
+    const requirements = useMemo(() => state?.requirements?.requirements || [], [state?.requirements?.requirements]);
 
     const [reports, setReports] = useState([]);
     const [schedules, setSchedules] = useState([]);
@@ -41,12 +44,18 @@ export const useReports = () => {
 
     const unsubscribeReportsRef = useRef(null);
     const unsubscribeSchedulesRef = useRef(null);
-    
-    // FIXED: Add locks to prevent duplicate generation
     const isGeneratingRef = useRef(false);
     const processingSchedulesRef = useRef(new Set());
 
+    // PRIORITY REPORT TYPES
     const reportTypes = [
+        // PRIORITY REPORTS (Top 4)
+        'Test Summary Report',
+        'Defect Report',
+        'Release Readiness Report',
+        'Requirement Coverage Report',
+        
+        // SECONDARY REPORTS
         'Test Run Summary',
         'Bug Analysis',
         'Sprint Summary',
@@ -64,257 +73,741 @@ export const useReports = () => {
         'Quality Metrics Dashboard'
     ];
 
-    // Check if user has permission to generate reports
     const hasPermission = useCallback(() => {
         if (!currentUser) return false;
         const role = currentUser.role || 'tester';
         return ['admin', 'manager', 'lead'].includes(role);
     }, [currentUser]);
 
-    // ========== AUTO-GENERATION HELPERS ==========
+    // ========== HELPER FUNCTIONS ==========
 
-    /**
-     * Generate report data based on type
-     */
-    const generateReportData = useCallback((type, params = {}) => {
-        const suiteId = params.suiteId || activeSuite?.id;
-        const sprintId = params.sprintId;
-        const runId = params.runId;
+    const calculatePassRate = (passed, total) => {
+        return total > 0 ? Math.round((passed / total) * 100) : 0;
+    };
 
-        let data = {
-            summary: {},
-            details: [],
-            charts: []
-        };
+    const calculateDefectDensity = (defects, testCases) => {
+        return testCases > 0 ? (defects / testCases * 100).toFixed(2) : 0;
+    };
 
-        switch (type) {
-            case 'Test Run Summary': {
-                const run = testRuns.find(r => r.id === runId);
-                if (!run) break;
+    const getDefectAging = (createdAt) => {
+        if (!createdAt) return 0;
+        const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+        const now = new Date();
+        return Math.floor((now - created) / (1000 * 60 * 60 * 24)); // days
+    };
 
-                data.summary = {
-                    runName: run.name,
-                    totalTests: run.summary.total,
-                    passed: run.summary.passed,
-                    failed: run.summary.failed,
-                    blocked: run.summary.blocked,
-                    skipped: run.summary.skipped,
-                    passRate: run.summary.total > 0 
-                        ? Math.round((run.summary.passed / run.summary.total) * 100) 
-                        : 0,
-                    duration: run.completed_at && run.started_at
-                        ? Math.round((new Date(run.completed_at) - new Date(run.started_at)) / 1000 / 60)
-                        : 0,
-                    environment: run.environment,
-                    buildVersion: run.build_version
-                };
+    const getCriticalDefects = (bugs) => {
+        return bugs.filter(b => 
+            b.severity === 'critical' || b.priority === 'critical'
+        );
+    };
 
-                data.details = run.test_cases.map(tcId => {
-                    const testCase = allTestCases.find(tc => tc.id === tcId);
-                    const result = run.results[tcId];
-                    return {
-                        id: tcId,
-                        title: testCase?.title || 'Unknown',
-                        status: result?.status || 'not_executed',
-                        duration: result?.duration || 0,
-                        executedBy: result?.executed_by || '',
-                        notes: result?.notes || '',
-                        bugsCreated: result?.bugs_created || []
-                    };
-                });
+    const getOpenDefects = (bugs) => {
+        return bugs.filter(b => 
+            !['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
+        );
+    };
 
-                data.charts = [
-                    {
-                        type: 'pie',
-                        title: 'Test Results Distribution',
-                        data: [
-                            { name: 'Passed', value: run.summary.passed },
-                            { name: 'Failed', value: run.summary.failed },
-                            { name: 'Blocked', value: run.summary.blocked },
-                            { name: 'Skipped', value: run.summary.skipped }
-                        ]
-                    }
-                ];
-                break;
+    const calculateAvgResolutionTime = (closedBugs) => {
+        if (closedBugs.length === 0) return 'N/A';
+        
+        let totalTime = 0;
+        let count = 0;
+
+        closedBugs.forEach(bug => {
+            if (bug.created_at && bug.resolved_at) {
+                const created = bug.created_at.toDate ? bug.created_at.toDate() : new Date(bug.created_at);
+                const resolved = bug.resolved_at.toDate ? bug.resolved_at.toDate() : new Date(bug.resolved_at);
+                totalTime += (resolved - created) / (1000 * 60 * 60 * 24); // days
+                count++;
             }
+        });
 
-            case 'Bug Analysis': {
-                const suiteBugs = state?.bugs?.bugs?.filter(b => 
-                    !suiteId || b.suite_id === suiteId
-                ) || [];
+        return count > 0 ? `${Math.round(totalTime / count)} days` : 'N/A';
+    };
 
-                const statusCounts = {};
-                const priorityCounts = {};
-                const severityCounts = {};
+    // ========== PRIORITY REPORT #1: TEST SUMMARY REPORT ==========
+    const generateTestSummaryReport = useCallback((params = {}) => {
+        const { buildId, sprintId, runId } = params;
+        
+        let relevantRuns = testRuns;
+        let relevantTestCases = allTestCases;
+        let contextName = 'All Tests';
 
-                suiteBugs.forEach(bug => {
-                    const status = bug.status || 'open';
-                    const priority = bug.priority || 'medium';
-                    const severity = bug.severity || 'medium';
-
-                    statusCounts[status] = (statusCounts[status] || 0) + 1;
-                    priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
-                    severityCounts[severity] = (severityCounts[severity] || 0) + 1;
-                });
-
-                data.summary = {
-                    totalBugs: suiteBugs.length,
-                    active: suiteBugs.filter(b => 
-                        !['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
-                    ).length,
-                    resolved: suiteBugs.filter(b => 
-                        ['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
-                    ).length,
-                    critical: suiteBugs.filter(b => 
-                        b.priority === 'critical' || b.severity === 'critical'
-                    ).length
-                };
-
-                data.details = suiteBugs.map(bug => ({
-                    id: bug.id,
-                    title: bug.title,
-                    status: bug.status,
-                    priority: bug.priority,
-                    severity: bug.severity,
-                    reportedBy: bug.reported_by,
-                    createdAt: bug.created_at
-                }));
-
-                data.charts = [
-                    {
-                        type: 'bar',
-                        title: 'Bugs by Status',
-                        data: Object.entries(statusCounts).map(([name, value]) => ({ name, value }))
-                    },
-                    {
-                        type: 'bar',
-                        title: 'Bugs by Priority',
-                        data: Object.entries(priorityCounts).map(([name, value]) => ({ name, value }))
-                    }
-                ];
-                break;
-            }
-
-            case 'Weekly QA Summary':
-            case 'Monthly QA Summary': {
-                const days = type === 'Weekly QA Summary' ? 7 : 30;
-                const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-
-                const recentTests = allTestCases.filter(tc => {
-                    const created = tc.created_at?.toDate ? tc.created_at.toDate() : new Date(tc.created_at);
-                    return created > cutoffDate;
-                });
-
-                const recentBugs = state?.bugs?.bugs?.filter(bug => {
-                    const created = bug.created_at?.toDate ? bug.created_at.toDate() : new Date(bug.created_at);
-                    return created > cutoffDate;
-                }) || [];
-
-                // Calculate execution stats from test runs
-                let totalExecutions = 0;
-                let passedExecutions = 0;
-                let failedExecutions = 0;
-
-                testRuns.forEach(run => {
-                    const runDate = run.created_at?.toDate ? run.created_at.toDate() : new Date(run.created_at);
-                    if (runDate > cutoffDate) {
-                        totalExecutions += run.summary.total;
-                        passedExecutions += run.summary.passed;
-                        failedExecutions += run.summary.failed;
-                    }
-                });
-
-                data.summary = {
-                    period: type === 'Weekly QA Summary' ? 'Last 7 Days' : 'Last 30 Days',
-                    testsCreated: recentTests.length,
-                    bugsReported: recentBugs.length,
-                    testExecutions: totalExecutions,
-                    passRate: totalExecutions > 0 
-                        ? Math.round((passedExecutions / totalExecutions) * 100) 
-                        : 0,
-                    activeBugs: recentBugs.filter(b => 
-                        !['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
-                    ).length
-                };
-
-                data.charts = [
-                    {
-                        type: 'line',
-                        title: 'Daily Activity',
-                        data: Array.from({ length: days }, (_, i) => {
-                            const date = new Date(Date.now() - (days - 1 - i) * 24 * 60 * 60 * 1000);
-                            const dateStr = date.toDateString();
-                            
-                            const testsCreated = recentTests.filter(tc => {
-                                const created = tc.created_at?.toDate ? tc.created_at.toDate() : new Date(tc.created_at);
-                                return created.toDateString() === dateStr;
-                            }).length;
-
-                            const bugsCreated = recentBugs.filter(bug => {
-                                const created = bug.created_at?.toDate ? bug.created_at.toDate() : new Date(bug.created_at);
-                                return created.toDateString() === dateStr;
-                            }).length;
-
-                            return {
-                                date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                                tests: testsCreated,
-                                bugs: bugsCreated
-                            };
-                        })
-                    }
-                ];
-                break;
-            }
-
-            case 'Coverage Report': {
-                const suiteCases = allTestCases.filter(tc => 
-                    !suiteId || tc.suite_id === suiteId
-                );
-
-                const typeCount = {};
-                suiteCases.forEach(tc => {
-                    const type = tc.type || tc.testType || 'functional';
-                    typeCount[type] = (typeCount[type] || 0) + 1;
-                });
-
-                data.summary = {
-                    totalTestCases: suiteCases.length,
-                    automated: suiteCases.filter(tc => tc.isAutomated || tc.automated).length,
-                    manual: suiteCases.filter(tc => !(tc.isAutomated || tc.automated)).length,
-                    withSteps: suiteCases.filter(tc => tc.steps && tc.steps.length > 0).length,
-                    coverage: suiteCases.length > 0 
-                        ? Math.round((suiteCases.filter(tc => tc.executionStatus && tc.executionStatus !== 'pending').length / suiteCases.length) * 100)
-                        : 0
-                };
-
-                data.charts = [
-                    {
-                        type: 'bar',
-                        title: 'Test Cases by Type',
-                        data: Object.entries(typeCount).map(([name, value]) => ({ name, value }))
-                    }
-                ];
-                break;
-            }
-
-            default:
-                data.summary = { message: 'Report type not implemented yet' };
+        if (runId) {
+            relevantRuns = testRuns.filter(r => r.id === runId);
+            contextName = relevantRuns[0]?.name || 'Test Run';
+        } else if (buildId) {
+            relevantRuns = testRuns.filter(r => r.build_version === buildId);
+            contextName = `Build ${buildId}`;
+        } else if (sprintId) {
+            relevantRuns = testRuns.filter(r => r.sprint_id === sprintId);
+            relevantTestCases = allTestCases.filter(tc => tc.sprint_id === sprintId);
+            contextName = `Sprint ${sprintId}`;
         }
 
-        return data;
-    }, [activeSuite, allTestCases, testRuns, state?.bugs]);
+        let totalTests = 0;
+        let passedTests = 0;
+        let failedTests = 0;
+        let blockedTests = 0;
+        let skippedTests = 0;
+        let notExecuted = 0;
+        let totalDuration = 0;
+        let lastExecutionDate = null;
 
-    /**
-     * FIXED: Create an auto-generated report with duplicate prevention
-     */
+        relevantRuns.forEach(run => {
+            totalTests += run.summary.total || 0;
+            passedTests += run.summary.passed || 0;
+            failedTests += run.summary.failed || 0;
+            blockedTests += run.summary.blocked || 0;
+            skippedTests += run.summary.skipped || 0;
+
+            if (run.completed_at) {
+                const completedDate = run.completed_at.toDate ? run.completed_at.toDate() : new Date(run.completed_at);
+                if (!lastExecutionDate || completedDate > lastExecutionDate) {
+                    lastExecutionDate = completedDate;
+                }
+            }
+
+            if (run.started_at && run.completed_at) {
+                const start = run.started_at.toDate ? run.started_at.toDate() : new Date(run.started_at);
+                const end = run.completed_at.toDate ? run.completed_at.toDate() : new Date(run.completed_at);
+                totalDuration += (end - start) / 1000 / 60; // minutes
+            }
+        });
+
+        notExecuted = relevantTestCases.length - totalTests;
+        const executionProgress = relevantTestCases.length > 0 
+            ? Math.round((totalTests / relevantTestCases.length) * 100) 
+            : 0;
+
+        const passRate = calculatePassRate(passedTests, totalTests);
+
+        return {
+            summary: {
+                context: contextName,
+                totalTestCases: relevantTestCases.length,
+                executed: totalTests,
+                notExecuted,
+                executionProgress: `${executionProgress}%`,
+                passed: passedTests,
+                failed: failedTests,
+                blocked: blockedTests,
+                skipped: skippedTests,
+                passRate: `${passRate}%`,
+                totalDuration: `${Math.round(totalDuration)} min`,
+                lastExecutionDate: lastExecutionDate?.toLocaleString() || 'N/A'
+            },
+            details: relevantRuns.map(run => ({
+                runName: run.name,
+                environment: run.environment,
+                buildVersion: run.build_version,
+                executed: run.summary.total,
+                passed: run.summary.passed,
+                failed: run.summary.failed,
+                passRate: calculatePassRate(run.summary.passed, run.summary.total),
+                executedAt: run.completed_at?.toDate ? run.completed_at.toDate().toLocaleString() : 'N/A'
+            })),
+            charts: [
+                {
+                    type: 'pie',
+                    title: 'Execution Status Distribution',
+                    data: [
+                        { name: 'Passed', value: passedTests },
+                        { name: 'Failed', value: failedTests },
+                        { name: 'Blocked', value: blockedTests },
+                        { name: 'Skipped', value: skippedTests },
+                        { name: 'Not Executed', value: notExecuted }
+                    ]
+                },
+                {
+                    type: 'bar',
+                    title: 'Execution Progress',
+                    data: [
+                        { name: 'Executed', value: totalTests },
+                        { name: 'Remaining', value: notExecuted }
+                    ]
+                }
+            ]
+        };
+    }, [testRuns, allTestCases]);
+
+    // ========== PRIORITY REPORT #2: DEFECT REPORT ==========
+    const generateDefectReport = useCallback((params = {}) => {
+        const { moduleFilter } = params;
+        
+        let relevantBugs = bugs;
+        if (moduleFilter) {
+            relevantBugs = bugs.filter(b => b.module === moduleFilter);
+        }
+
+        const openBugs = getOpenDefects(relevantBugs);
+        const closedBugs = relevantBugs.filter(b => 
+            ['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
+        );
+
+        const criticalCount = relevantBugs.filter(b => b.severity === 'critical').length;
+        const highCount = relevantBugs.filter(b => b.severity === 'high').length;
+        const mediumCount = relevantBugs.filter(b => b.severity === 'medium').length;
+        const lowCount = relevantBugs.filter(b => b.severity === 'low').length;
+
+        const agingBuckets = {
+            '0-7 days': 0,
+            '8-14 days': 0,
+            '15-30 days': 0,
+            '30+ days': 0
+        };
+
+        openBugs.forEach(bug => {
+            const age = getDefectAging(bug.created_at);
+            if (age <= 7) agingBuckets['0-7 days']++;
+            else if (age <= 14) agingBuckets['8-14 days']++;
+            else if (age <= 30) agingBuckets['15-30 days']++;
+            else agingBuckets['30+ days']++;
+        });
+
+        const moduleDefects = {};
+        relevantBugs.forEach(bug => {
+            const moduleName = bug.module || 'Unassigned';
+            moduleDefects[moduleName] = (moduleDefects[moduleName] || 0) + 1;
+        });
+
+        const hotspots = Object.entries(moduleDefects)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([moduleName, count]) => ({ module: moduleName, count }));
+
+        return {
+            summary: {
+                totalDefects: relevantBugs.length,
+                openDefects: openBugs.length,
+                closedDefects: closedBugs.length,
+                criticalDefects: criticalCount,
+                defectDensity: calculateDefectDensity(relevantBugs.length, allTestCases.length),
+                avgResolutionTime: calculateAvgResolutionTime(closedBugs)
+            },
+            details: relevantBugs.map(bug => ({
+                id: bug.id,
+                title: bug.title,
+                severity: bug.severity,
+                priority: bug.priority,
+                status: bug.status,
+                module: bug.module || 'N/A',
+                age: getDefectAging(bug.created_at),
+                assignee: bug.assigned_to || 'Unassigned',
+                createdAt: bug.created_at?.toDate ? bug.created_at.toDate().toLocaleDateString() : 'N/A'
+            })),
+            charts: [
+                {
+                    type: 'pie',
+                    title: 'Defect Status',
+                    data: [
+                        { name: 'Open', value: openBugs.length },
+                        { name: 'Closed', value: closedBugs.length }
+                    ]
+                },
+                {
+                    type: 'bar',
+                    title: 'Severity Distribution',
+                    data: [
+                        { name: 'Critical', value: criticalCount },
+                        { name: 'High', value: highCount },
+                        { name: 'Medium', value: mediumCount },
+                        { name: 'Low', value: lowCount }
+                    ]
+                },
+                {
+                    type: 'bar',
+                    title: 'Defect Aging',
+                    data: Object.entries(agingBuckets).map(([name, value]) => ({ name, value }))
+                },
+                {
+                    type: 'bar',
+                    title: 'Top 5 Module Hotspots',
+                    data: hotspots.map(h => ({ name: h.module, value: h.count }))
+                }
+            ]
+        };
+    }, [bugs, allTestCases]);
+
+    // ========== PRIORITY REPORT #3: RELEASE READINESS REPORT ==========
+    const generateReleaseReadinessReport = useCallback(() => {
+        const latestRun = testRuns.sort((a, b) => {
+            const aDate = a.completed_at?.toDate ? a.completed_at.toDate() : new Date(0);
+            const bDate = b.completed_at?.toDate ? b.completed_at.toDate() : new Date(0);
+            return bDate - aDate;
+        })[0];
+
+        const totalTests = latestRun?.summary.total || allTestCases.length;
+        const passedTests = latestRun?.summary.passed || 0;
+        const passRate = calculatePassRate(passedTests, totalTests);
+
+        const criticalOpenDefects = getCriticalDefects(getOpenDefects(bugs));
+        const allOpenDefects = getOpenDefects(bugs);
+
+        const totalRequirements = requirements.length || 0;
+        const coveredRequirements = requirements.filter(req => 
+            req.linked_tests && req.linked_tests.length > 0
+        ).length;
+        const coveragePercent = totalRequirements > 0 
+            ? Math.round((coveredRequirements / totalRequirements) * 100) 
+            : 0;
+
+        const passRateThreshold = 95;
+        const criticalDefectThreshold = 0;
+        const coverageThreshold = 80;
+
+        const passRatePass = passRate >= passRateThreshold;
+        const criticalDefectPass = criticalOpenDefects.length <= criticalDefectThreshold;
+        const coveragePass = coveragePercent >= coverageThreshold;
+
+        const allCriteriaMet = passRatePass && criticalDefectPass && coveragePass;
+
+        let riskScore = 0;
+        riskScore += (100 - passRate) * 0.4;
+        riskScore += criticalOpenDefects.length * 10;
+        riskScore += (100 - coveragePercent) * 0.3;
+        riskScore = Math.min(100, Math.round(riskScore));
+
+        const recommendation = allCriteriaMet ? 'GO' : 'NO-GO';
+        const riskLevel = riskScore < 20 ? 'Low' : riskScore < 50 ? 'Medium' : 'High';
+
+        return {
+            summary: {
+                releaseId: 'Current',
+                recommendation,
+                riskLevel,
+                riskScore: `${riskScore}/100`,
+                passRate: `${passRate}%`,
+                passRateStatus: passRatePass ? 'PASS' : 'FAIL',
+                criticalDefects: criticalOpenDefects.length,
+                criticalDefectStatus: criticalDefectPass ? 'PASS' : 'FAIL',
+                requirementCoverage: `${coveragePercent}%`,
+                coverageStatus: coveragePass ? 'PASS' : 'FAIL',
+                totalOpenDefects: allOpenDefects.length,
+                evaluatedAt: new Date().toLocaleString()
+            },
+            details: [
+                {
+                    criterion: 'Pass Rate',
+                    threshold: `>= ${passRateThreshold}%`,
+                    actual: `${passRate}%`,
+                    status: passRatePass ? 'PASS' : 'FAIL',
+                    impact: 'Critical'
+                },
+                {
+                    criterion: 'Critical Defects',
+                    threshold: `<= ${criticalDefectThreshold}`,
+                    actual: criticalOpenDefects.length,
+                    status: criticalDefectPass ? 'PASS' : 'FAIL',
+                    impact: 'Critical'
+                },
+                {
+                    criterion: 'Requirement Coverage',
+                    threshold: `>= ${coverageThreshold}%`,
+                    actual: `${coveragePercent}%`,
+                    status: coveragePass ? 'PASS' : 'FAIL',
+                    impact: 'High'
+                }
+            ],
+            blockers: [
+                ...(!passRatePass ? [`Pass rate (${passRate}%) below threshold (${passRateThreshold}%)`] : []),
+                ...(!criticalDefectPass ? [`${criticalOpenDefects.length} critical defect(s) open`] : []),
+                ...(!coveragePass ? [`Requirement coverage (${coveragePercent}%) below threshold (${coverageThreshold}%)`] : [])
+            ],
+            charts: [
+                {
+                    type: 'gauge',
+                    title: 'Quality Gate Status',
+                    data: [
+                        { name: 'Pass Rate', value: passRate, threshold: passRateThreshold },
+                        { name: 'Coverage', value: coveragePercent, threshold: coverageThreshold }
+                    ]
+                },
+                {
+                    type: 'bar',
+                    title: 'Open Defects by Severity',
+                    data: [
+                        { name: 'Critical', value: criticalOpenDefects.length },
+                        { name: 'High', value: allOpenDefects.filter(b => b.severity === 'high').length },
+                        { name: 'Medium', value: allOpenDefects.filter(b => b.severity === 'medium').length },
+                        { name: 'Low', value: allOpenDefects.filter(b => b.severity === 'low').length }
+                    ]
+                }
+            ]
+        };
+    }, [testRuns, bugs, requirements, allTestCases]);
+
+    // ========== PRIORITY REPORT #4: REQUIREMENT COVERAGE REPORT ==========
+    const generateRequirementCoverageReport = useCallback(() => {
+        const totalRequirements = requirements.length;
+        
+        const requirementDetails = requirements.map(req => {
+            const linkedTests = allTestCases.filter(tc => 
+                tc.requirement_id === req.id || 
+                (tc.linked_requirements && tc.linked_requirements.includes(req.id))
+            );
+
+            const testResults = linkedTests.map(tc => {
+                const latestRun = testRuns
+                    .filter(run => run.test_cases && run.test_cases.includes(tc.id))
+                    .sort((a, b) => {
+                        const aDate = a.completed_at?.toDate ? a.completed_at.toDate() : new Date(0);
+                        const bDate = b.completed_at?.toDate ? b.completed_at.toDate() : new Date(0);
+                        return bDate - aDate;
+                    })[0];
+
+                const result = latestRun?.results?.[tc.id];
+                return result?.status || 'not_executed';
+            });
+
+            const passedTests = testResults.filter(r => r === 'passed' || r === 'pass').length;
+            const failedTests = testResults.filter(r => r === 'failed' || r === 'fail').length;
+            const totalExecuted = testResults.filter(r => r !== 'not_executed').length;
+
+            const status = linkedTests.length === 0 ? 'Uncovered' :
+                          failedTests > 0 ? 'Failed' :
+                          totalExecuted === 0 ? 'Not Tested' :
+                          'Passed';
+
+            return {
+                requirementId: req.id,
+                requirementTitle: req.title || req.name,
+                category: req.category || 'Functional',
+                priority: req.priority || 'Medium',
+                linkedTestsCount: linkedTests.length,
+                passedTests,
+                failedTests,
+                status,
+                coverage: linkedTests.length > 0 ? 'Covered' : 'Uncovered'
+            };
+        });
+
+        const coveredRequirements = requirementDetails.filter(r => r.coverage === 'Covered');
+        const uncoveredRequirements = requirementDetails.filter(r => r.coverage === 'Uncovered');
+        const passedRequirements = requirementDetails.filter(r => r.status === 'Passed');
+        const failedRequirements = requirementDetails.filter(r => r.status === 'Failed');
+
+        const coveragePercent = totalRequirements > 0 
+            ? Math.round((coveredRequirements.length / totalRequirements) * 100) 
+            : 0;
+
+        return {
+            summary: {
+                totalRequirements,
+                coveredRequirements: coveredRequirements.length,
+                uncoveredRequirements: uncoveredRequirements.length,
+                coveragePercent: `${coveragePercent}%`,
+                passedRequirements: passedRequirements.length,
+                failedRequirements: failedRequirements.length,
+                notTestedRequirements: requirementDetails.filter(r => r.status === 'Not Tested').length
+            },
+            details: requirementDetails,
+            charts: [
+                {
+                    type: 'pie',
+                    title: 'Requirement Coverage',
+                    data: [
+                        { name: 'Covered', value: coveredRequirements.length },
+                        { name: 'Uncovered', value: uncoveredRequirements.length }
+                    ]
+                },
+                {
+                    type: 'bar',
+                    title: 'Requirement Status',
+                    data: [
+                        { name: 'Passed', value: passedRequirements.length },
+                        { name: 'Failed', value: failedRequirements.length },
+                        { name: 'Not Tested', value: requirementDetails.filter(r => r.status === 'Not Tested').length },
+                        { name: 'Uncovered', value: uncoveredRequirements.length }
+                    ]
+                }
+            ]
+        };
+    }, [requirements, allTestCases, testRuns]);
+
+    // ========== LEGACY REPORT GENERATORS (Keep for backward compatibility) ==========
+    
+    const generateTestRunSummary = useCallback((params = {}) => {
+        const { runId } = params;
+        const run = testRuns.find(r => r.id === runId);
+        if (!run) {
+            return {
+                summary: { message: 'Test run not found' },
+                details: [],
+                charts: []
+            };
+        }
+
+        return {
+            summary: {
+                runName: run.name,
+                totalTests: run.summary.total,
+                passed: run.summary.passed,
+                failed: run.summary.failed,
+                blocked: run.summary.blocked,
+                skipped: run.summary.skipped,
+                passRate: run.summary.total > 0 
+                    ? Math.round((run.summary.passed / run.summary.total) * 100) 
+                    : 0,
+                duration: run.completed_at && run.started_at
+                    ? Math.round((new Date(run.completed_at) - new Date(run.started_at)) / 1000 / 60)
+                    : 0,
+                environment: run.environment,
+                buildVersion: run.build_version
+            },
+            details: run.test_cases.map(tcId => {
+                const testCase = allTestCases.find(tc => tc.id === tcId);
+                const result = run.results[tcId];
+                return {
+                    id: tcId,
+                    title: testCase?.title || 'Unknown',
+                    status: result?.status || 'not_executed',
+                    duration: result?.duration || 0,
+                    executedBy: result?.executed_by || '',
+                    notes: result?.notes || '',
+                    bugsCreated: result?.bugs_created || []
+                };
+            }),
+            charts: [
+                {
+                    type: 'pie',
+                    title: 'Test Results Distribution',
+                    data: [
+                        { name: 'Passed', value: run.summary.passed },
+                        { name: 'Failed', value: run.summary.failed },
+                        { name: 'Blocked', value: run.summary.blocked },
+                        { name: 'Skipped', value: run.summary.skipped }
+                    ]
+                }
+            ]
+        };
+    }, [testRuns, allTestCases]);
+
+    const generateBugAnalysis = useCallback((params = {}) => {
+        const { suiteId } = params;
+        const suiteBugs = suiteId 
+            ? bugs.filter(b => b.suite_id === suiteId)
+            : bugs;
+
+        const statusCounts = {};
+        const priorityCounts = {};
+        const severityCounts = {};
+
+        suiteBugs.forEach(bug => {
+            const status = bug.status || 'open';
+            const priority = bug.priority || 'medium';
+            const severity = bug.severity || 'medium';
+
+            statusCounts[status] = (statusCounts[status] || 0) + 1;
+            priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
+            severityCounts[severity] = (severityCounts[severity] || 0) + 1;
+        });
+
+        return {
+            summary: {
+                totalBugs: suiteBugs.length,
+                active: suiteBugs.filter(b => 
+                    !['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
+                ).length,
+                resolved: suiteBugs.filter(b => 
+                    ['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
+                ).length,
+                critical: suiteBugs.filter(b => 
+                    b.priority === 'critical' || b.severity === 'critical'
+                ).length
+            },
+            details: suiteBugs.map(bug => ({
+                id: bug.id,
+                title: bug.title,
+                status: bug.status,
+                priority: bug.priority,
+                severity: bug.severity,
+                reportedBy: bug.reported_by,
+                createdAt: bug.created_at
+            })),
+            charts: [
+                {
+                    type: 'bar',
+                    title: 'Bugs by Status',
+                    data: Object.entries(statusCounts).map(([name, value]) => ({ name, value }))
+                },
+                {
+                    type: 'bar',
+                    title: 'Bugs by Priority',
+                    data: Object.entries(priorityCounts).map(([name, value]) => ({ name, value }))
+                }
+            ]
+        };
+    }, [bugs]);
+
+    const generateCoverageReport = useCallback((params = {}) => {
+        const { suiteId } = params;
+        const suiteCases = suiteId
+            ? allTestCases.filter(tc => tc.suite_id === suiteId)
+            : allTestCases;
+
+        const typeCount = {};
+        suiteCases.forEach(tc => {
+            const type = tc.type || tc.testType || 'functional';
+            typeCount[type] = (typeCount[type] || 0) + 1;
+        });
+
+        return {
+            summary: {
+                totalTestCases: suiteCases.length,
+                automated: suiteCases.filter(tc => tc.isAutomated || tc.automated).length,
+                manual: suiteCases.filter(tc => !(tc.isAutomated || tc.automated)).length,
+                withSteps: suiteCases.filter(tc => tc.steps && tc.steps.length > 0).length,
+                coverage: suiteCases.length > 0 
+                    ? Math.round((suiteCases.filter(tc => tc.executionStatus && tc.executionStatus !== 'pending').length / suiteCases.length) * 100)
+                    : 0
+            },
+            details: suiteCases.map(tc => ({
+                id: tc.id,
+                title: tc.title,
+                type: tc.type || tc.testType,
+                automated: tc.isAutomated || tc.automated,
+                status: tc.executionStatus || 'pending'
+            })),
+            charts: [
+                {
+                    type: 'bar',
+                    title: 'Test Cases by Type',
+                    data: Object.entries(typeCount).map(([name, value]) => ({ name, value }))
+                }
+            ]
+        };
+    }, [allTestCases]);
+
+    const generateWeeklyOrMonthlySummary = useCallback((type) => {
+        const days = type === 'Weekly QA Summary' ? 7 : 30;
+        const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+        const recentTests = allTestCases.filter(tc => {
+            const created = tc.created_at?.toDate ? tc.created_at.toDate() : new Date(tc.created_at);
+            return created > cutoffDate;
+        });
+
+        const recentBugs = bugs.filter(bug => {
+            const created = bug.created_at?.toDate ? bug.created_at.toDate() : new Date(bug.created_at);
+            return created > cutoffDate;
+        });
+
+        let totalExecutions = 0;
+        let passedExecutions = 0;
+
+        testRuns.forEach(run => {
+            const runDate = run.created_at?.toDate ? run.created_at.toDate() : new Date(run.created_at);
+            if (runDate > cutoffDate) {
+                totalExecutions += run.summary.total;
+                passedExecutions += run.summary.passed;
+            }
+        });
+
+        return {
+            summary: {
+                period: type === 'Weekly QA Summary' ? 'Last 7 Days' : 'Last 30 Days',
+                testsCreated: recentTests.length,
+                bugsReported: recentBugs.length,
+                testExecutions: totalExecutions,
+                passRate: totalExecutions > 0 
+                    ? Math.round((passedExecutions / totalExecutions) * 100) 
+                    : 0,
+                activeBugs: recentBugs.filter(b => 
+                    !['resolved', 'closed', 'fixed'].includes(b.status?.toLowerCase())
+                ).length
+            },
+            details: [],
+            charts: [
+                {
+                    type: 'line',
+                    title: 'Daily Activity',
+                    data: Array.from({ length: days }, (_, i) => {
+                        const date = new Date(Date.now() - (days - 1 - i) * 24 * 60 * 60 * 1000);
+                        const dateStr = date.toDateString();
+                        
+                        const testsCreated = recentTests.filter(tc => {
+                            const created = tc.created_at?.toDate ? tc.created_at.toDate() : new Date(tc.created_at);
+                            return created.toDateString() === dateStr;
+                        }).length;
+
+                        const bugsCreated = recentBugs.filter(bug => {
+                            const created = bug.created_at?.toDate ? bug.created_at.toDate() : new Date(bug.created_at);
+                            return created.toDateString() === dateStr;
+                        }).length;
+
+                        return {
+                            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                            tests: testsCreated,
+                            bugs: bugsCreated
+                        };
+                    })
+                }
+            ]
+        };
+    }, [allTestCases, bugs, testRuns]);
+
+    // ========== MAIN REPORT DATA GENERATOR ==========
+    const generateReportData = useCallback((type, params = {}) => {
+        console.log('Generating report:', type, params);
+
+        switch (type) {
+            // PRIORITY REPORTS
+            case 'Test Summary Report':
+                return generateTestSummaryReport(params);
+            
+            case 'Defect Report':
+                return generateDefectReport(params);
+            
+            case 'Release Readiness Report':
+                return generateReleaseReadinessReport();
+            
+            case 'Requirement Coverage Report':
+                return generateRequirementCoverageReport();
+
+            // LEGACY REPORTS
+            case 'Test Run Summary':
+                return generateTestRunSummary(params);
+            
+            case 'Bug Analysis':
+                return generateBugAnalysis(params);
+            
+            case 'Coverage Report':
+                return generateCoverageReport(params);
+            
+            case 'Weekly QA Summary':
+                return generateWeeklyOrMonthlySummary('Weekly QA Summary');
+            
+            case 'Monthly QA Summary':
+                return generateWeeklyOrMonthlySummary('Monthly QA Summary');
+            
+            default:
+                return {
+                    summary: { message: 'Report type not implemented yet' },
+                    details: [],
+                    charts: []
+                };
+        }
+    }, [
+        generateTestSummaryReport,
+        generateDefectReport,
+        generateReleaseReadinessReport,
+        generateRequirementCoverageReport,
+        generateTestRunSummary,
+        generateBugAnalysis,
+        generateCoverageReport,
+        generateWeeklyOrMonthlySummary
+    ]);
+
+    // ========== AUTO-GENERATION ==========
     const createAutoReport = useCallback(async (runId, runName, format = 'pdf') => {
         if (!currentUser || !activeSuite?.id) {
             console.warn('createAutoReport: Missing user or suite');
             return;
         }
 
-        // FIXED: Prevent duplicate generation
-        const lockKey = `${runId}-${format}`;
+        // Prevent duplicate generation
         if (isGeneratingRef.current) {
             console.log('Report generation already in progress, skipping...');
             return;
@@ -325,7 +818,7 @@ export const useReports = () => {
         try {
             console.log('useReports.createAutoReport called:', { runId, runName, format, suiteId: activeSuite.id });
 
-            // FIXED: Check if report already exists for this run
+            // Check if report already exists for this run
             const reportsRef = collection(db, 'testSuites', activeSuite.id, 'reports');
             const existingQuery = query(
                 reportsRef,
@@ -372,7 +865,7 @@ export const useReports = () => {
             });
             throw err;
         } finally {
-            // FIXED: Release lock after a delay to prevent rapid re-triggers
+            // Release lock after delay to prevent rapid re-triggers
             setTimeout(() => {
                 isGeneratingRef.current = false;
             }, 2000);
@@ -380,17 +873,13 @@ export const useReports = () => {
     }, [currentUser, activeSuite, generateReportData, actions]);
 
     // ========== SCHEDULED REPORTS ==========
-
-    /**
-     * FIXED: Process due schedules with duplicate prevention
-     */
     const processDueSchedules = useCallback(async () => {
         if (!currentUser || !activeSuite?.id) return;
 
         const now = new Date();
         const dueSchedules = schedules.filter(schedule => {
             if (!schedule.active) return false;
-            if (processingSchedulesRef.current.has(schedule.id)) return false; // FIXED: Skip if already processing
+            if (processingSchedulesRef.current.has(schedule.id)) return false;
             const nextRun = schedule.nextRun?.toDate ? schedule.nextRun.toDate() : new Date(schedule.nextRun);
             return nextRun <= now;
         });
@@ -400,11 +889,9 @@ export const useReports = () => {
         console.log(`Processing ${dueSchedules.length} due schedules...`);
 
         for (const schedule of dueSchedules) {
-            // FIXED: Mark as processing
             processingSchedulesRef.current.add(schedule.id);
 
             try {
-                // FIXED: Check if report was already generated for this schedule run
                 const reportsRef = collection(db, 'testSuites', activeSuite.id, 'reports');
                 const lastRunTime = schedule.lastRun?.toDate ? schedule.lastRun.toDate() : null;
                 
@@ -423,7 +910,6 @@ export const useReports = () => {
                     }
                 }
 
-                // Generate the scheduled report
                 const reportData = generateReportData(schedule.type, {
                     suiteId: schedule.suiteId
                 });
@@ -446,7 +932,6 @@ export const useReports = () => {
 
                 await addDoc(reportsRef, newReport);
 
-                // Update schedule with next run time
                 const frequency = schedule.frequency || 'weekly';
                 const nextRunDate = new Date(now);
                 
@@ -472,17 +957,12 @@ export const useReports = () => {
             } catch (err) {
                 console.error('Error processing schedule:', err);
             } finally {
-                // FIXED: Remove from processing set
                 processingSchedulesRef.current.delete(schedule.id);
             }
         }
     }, [currentUser, activeSuite, schedules, generateReportData, actions]);
 
     // ========== SCHEDULE MANAGEMENT ==========
-
-    /**
-     * Create or update a report schedule
-     */
     const saveSchedule = useCallback(async (scheduleData) => {
         if (!currentUser || !activeSuite?.id) {
             throw new Error('User or suite not available');
@@ -532,9 +1012,6 @@ export const useReports = () => {
         }
     }, [currentUser, activeSuite, actions]);
 
-    /**
-     * Delete a schedule
-     */
     const deleteSchedule = useCallback(async (scheduleId) => {
         if (!activeSuite?.id) {
             throw new Error('No active suite');
@@ -559,10 +1036,6 @@ export const useReports = () => {
     }, [activeSuite, actions]);
 
     // ========== REPORT MANAGEMENT ==========
-
-    /**
-     * Manually generate a report (supports PDF and CSV)
-     */
     const generateReport = useCallback(async (reportConfig) => {
         if (!currentUser || !activeSuite?.id) {
             throw new Error('User or suite not available');
@@ -573,7 +1046,10 @@ export const useReports = () => {
             const reportData = generateReportData(reportConfig.type, {
                 suiteId: reportConfig.suiteId || activeSuite.id,
                 sprintId: reportConfig.sprintId,
-                runId: reportConfig.runId
+                runId: reportConfig.runId,
+                buildId: reportConfig.buildId,
+                releaseId: reportConfig.releaseId,
+                moduleFilter: reportConfig.moduleFilter
             });
 
             const newReport = {
@@ -585,6 +1061,8 @@ export const useReports = () => {
                 suiteName: activeSuite.name,
                 sprintId: reportConfig.sprintId || null,
                 runId: reportConfig.runId || null,
+                buildId: reportConfig.buildId || null,
+                releaseId: reportConfig.releaseId || null,
                 created_by: currentUser.uid,
                 createdBy: currentUser.email || currentUser.uid,
                 createdAt: serverTimestamp(),
@@ -612,9 +1090,6 @@ export const useReports = () => {
         }
     }, [currentUser, activeSuite, generateReportData, actions]);
 
-    /**
-     * Update report status
-     */
     const updateReportStatus = useCallback(async (reportId, newStatus) => {
         if (!activeSuite?.id) {
             throw new Error('No active suite');
@@ -642,9 +1117,6 @@ export const useReports = () => {
         }
     }, [activeSuite, currentUser, actions]);
 
-    /**
-     * Delete a report
-     */
     const deleteReport = useCallback(async (reportId) => {
         if (!activeSuite?.id) {
             throw new Error('No active suite');
@@ -669,7 +1141,6 @@ export const useReports = () => {
     }, [activeSuite, actions]);
 
     // ========== REAL-TIME SUBSCRIPTIONS ==========
-
     useEffect(() => {
         if (!currentUser || !activeSuite?.id) {
             setReports([]);
@@ -680,7 +1151,6 @@ export const useReports = () => {
 
         setLoading(true);
 
-        // Subscribe to reports subcollection
         const reportsQuery = query(
             collection(db, 'testSuites', activeSuite.id, 'reports'),
             orderBy('createdAt', 'desc')
@@ -703,7 +1173,6 @@ export const useReports = () => {
             }
         );
 
-        // Subscribe to schedules subcollection
         const schedulesQuery = query(
             collection(db, 'testSuites', activeSuite.id, 'reportSchedules'),
             where('userId', '==', currentUser.uid)
@@ -731,7 +1200,7 @@ export const useReports = () => {
                 unsubscribeSchedulesRef.current();
             }
         };
-    }, [currentUser?.uid, activeSuite?.id]);
+    }, [currentUser, activeSuite?.id]);
 
     // Apply filters
     const filteredReports = reports.filter(report => {

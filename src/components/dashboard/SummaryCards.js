@@ -1,6 +1,6 @@
 // components/SummaryCards.jsx
 import React from 'react';
-import { TestTube, CheckCircle, Target, AlertTriangle, Bot, Activity } from 'lucide-react';
+import { TestTube, CheckCircle, Target, AlertTriangle, Bot } from 'lucide-react';
 import { BugAntIcon } from '@heroicons/react/24/outline';
 
 export const SummaryCards = ({ summaryStats, dataStatus }) => {

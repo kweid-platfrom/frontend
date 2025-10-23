@@ -1,24 +1,28 @@
-// HeaderButtons.jsx - Fixed mobile dropdown styling consistency
+// HeaderButtons.jsx - Added Generate Report Button
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Target, FileText, MoreHorizontal, Plus as PlusIcon, Bug as BugIcon } from 'lucide-react';
+import { Play, Target, FileText, MoreHorizontal, Plus as PlusIcon, Upload, Sparkles, Bug, ChevronDown } from 'lucide-react';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
 import BugReportButton from '../../modals/BugReportButton';
 import ScreenRecorderButton from '../../recorder/ScreenRecorderButton';
-import ReportDropdown from '../../ReportDropdown';
-import TestCaseDropdown from '../../TestCaseDropdown';
 
 const HeaderButtons = ({
     onCreateSprint,
     onCreateDocument,
     activeSuite,
     firestoreService,
-    onReportBug,
+    setShowBugForm,
+    onCreateTestCase,
+    onImportTestCases,
+    onGenerateTestCases,
+    onGenerateReport, // NEW PROP
     disabled = false
 }) => {
     const router = useRouter();
     const [showMobileMenu, setShowMobileMenu] = useState(false);
+    const [showTabletTestCaseMenu, setShowTabletTestCaseMenu] = useState(false);
+    const [showDesktopTestCaseMenu, setShowDesktopTestCaseMenu] = useState(false);
     const [mobileMenuPosition, setMobileMenuPosition] = useState({
         top: 0,
         left: 0,
@@ -27,14 +31,9 @@ const HeaderButtons = ({
 
     const mobileMenuRef = useRef(null);
     const mobileMenuButtonRef = useRef(null);
-
-    const toggleMobileMenu = () => {
-        if (disabled) return;
-        if (!showMobileMenu) {
-            calculateMobileMenuPosition();
-        }
-        setShowMobileMenu(!showMobileMenu);
-    };
+    const tabletTestCaseMenuRef = useRef(null);
+    const tabletTestCaseButtonRef = useRef(null);
+    const desktopTestCaseMenuRef = useRef(null);
 
     const calculateMobileMenuPosition = () => {
         if (mobileMenuButtonRef.current) {
@@ -51,10 +50,20 @@ const HeaderButtons = ({
         }
     };
 
+    const toggleMobileMenu = () => {
+        if (disabled) return;
+        if (!showMobileMenu) {
+            calculateMobileMenuPosition();
+        }
+        setShowMobileMenu(!showMobileMenu);
+    };
+
+    // Close dropdowns when clicking outside
     useEffect(() => {
         if (disabled) return;
 
         const handleClickOutside = (event) => {
+            // Mobile menu
             if (
                 mobileMenuRef.current &&
                 !mobileMenuRef.current.contains(event.target) &&
@@ -63,16 +72,38 @@ const HeaderButtons = ({
             ) {
                 setShowMobileMenu(false);
             }
+
+            // Tablet test case menu
+            if (
+                tabletTestCaseMenuRef.current &&
+                !tabletTestCaseMenuRef.current.contains(event.target) &&
+                tabletTestCaseButtonRef.current &&
+                !tabletTestCaseButtonRef.current.contains(event.target)
+            ) {
+                setShowTabletTestCaseMenu(false);
+            }
+
+            // Desktop test case menu
+            if (
+                desktopTestCaseMenuRef.current &&
+                !desktopTestCaseMenuRef.current.contains(event.target)
+            ) {
+                setShowDesktopTestCaseMenu(false);
+            }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [disabled]);
 
+    // Close mobile menu on resize
     useEffect(() => {
         const handleResize = () => {
             if (window.innerWidth >= 768) {
                 setShowMobileMenu(false);
+            }
+            if (window.innerWidth >= 1024) {
+                setShowTabletTestCaseMenu(false);
             }
         };
 
@@ -80,34 +111,65 @@ const HeaderButtons = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const handleMobileAction = (action) => {
-        action();
-        setShowMobileMenu(false);
-    };
-
+    // Handler functions
     const handleRunTests = () => {
+        setShowMobileMenu(false);
         router.push('/testruns');
-        setShowMobileMenu(false);
     };
 
-    const handleReportGeneration = (reportType) => {
-        console.log('Generate report:', reportType);
+    const handleNewTestCase = () => {
         setShowMobileMenu(false);
-        // Add your report generation logic here
+        setShowTabletTestCaseMenu(false);
+        setShowDesktopTestCaseMenu(false);
+        if (onCreateTestCase) {
+            onCreateTestCase();
+        }
     };
 
-    const handleTestCaseAction = (actionType) => {
-        console.log('Test case action:', actionType);
+    const handleImportTestCases = () => {
         setShowMobileMenu(false);
-        // Add your test case logic here
+        setShowTabletTestCaseMenu(false);
+        setShowDesktopTestCaseMenu(false);
+        if (onImportTestCases) {
+            onImportTestCases();
+        }
+    };
+
+    const handleGenerateTestCases = () => {
+        setShowMobileMenu(false);
+        setShowTabletTestCaseMenu(false);
+        setShowDesktopTestCaseMenu(false);
+        if (onGenerateTestCases) {
+            onGenerateTestCases();
+        }
+    };
+
+    const handleGenerateReport = () => {
+        setShowMobileMenu(false);
+        if (onGenerateReport) {
+            onGenerateReport();
+        }
     };
 
     const handleBugReport = () => {
         setShowMobileMenu(false);
-        if (onReportBug) {
-            onReportBug();
+        if (setShowBugForm) {
+            setShowBugForm(true);
         }
-        // Bug report logic will be handled by the parent component
+    };
+
+    const handleCreateSprint = () => {
+        setShowMobileMenu(false);
+        if (onCreateSprint) {
+            onCreateSprint();
+        }
+    };
+
+    const handleCreateDocument = () => {
+        setShowMobileMenu(false);
+        if (onCreateDocument) {
+            onCreateDocument();
+        }
     };
 
     return (
@@ -138,7 +200,7 @@ const HeaderButtons = ({
                     {showMobileMenu && !disabled && (
                         <div
                             ref={mobileMenuRef}
-                            className="fixed bg-card border border-border shadow-lg rounded-lg z-50"
+                            className="fixed bg-card border border-border shadow-lg rounded-lg z-[60]"
                             style={{
                                 top: `${mobileMenuPosition.top}px`,
                                 left: mobileMenuPosition.left !== 'auto' ? `${mobileMenuPosition.left}px` : 'auto',
@@ -148,9 +210,8 @@ const HeaderButtons = ({
                             }}
                         >
                             <div className="py-2">
-                                {/* Consistent button styling for mobile dropdown */}
                                 <button
-                                    onClick={() => handleMobileAction(onCreateSprint)}
+                                    onClick={handleCreateSprint}
                                     disabled={!activeSuite}
                                     className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -159,7 +220,7 @@ const HeaderButtons = ({
                                 </button>
 
                                 <button
-                                    onClick={() => handleMobileAction(onCreateDocument)}
+                                    onClick={handleCreateDocument}
                                     className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
                                 >
                                     <FileText className="h-4 w-4 mr-3 flex-shrink-0" />
@@ -174,23 +235,42 @@ const HeaderButtons = ({
                                     <span className="flex-1 text-left">Run Tests</span>
                                 </button>
 
-                                <div className="border-t border-border my-2"></div>
-
-                                {/* Simple buttons for mobile - consistent styling */}
                                 <button
-                                    onClick={() => handleReportGeneration('bug-summary')}
-                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
+                                    onClick={handleGenerateReport}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <DocumentTextIcon className="h-4 w-4 mr-3 flex-shrink-0" />
                                     <span className="flex-1 text-left">Generate Report</span>
                                 </button>
 
+                                <div className="border-t border-border my-2"></div>
+
                                 <button
-                                    onClick={() => handleTestCaseAction('new-test-case')}
-                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
+                                    onClick={handleNewTestCase}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <PlusIcon className="h-4 w-4 mr-3 flex-shrink-0" />
-                                    <span className="flex-1 text-left">Add Test Case</span>
+                                    <span className="flex-1 text-left">New Test Case</span>
+                                </button>
+
+                                <button
+                                    onClick={handleImportTestCases}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Upload className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Import Test Cases</span>
+                                </button>
+
+                                <button
+                                    onClick={handleGenerateTestCases}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Sparkles className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <span className="flex-1 text-left">Generate with AI</span>
                                 </button>
 
                                 <div className="border-t border-border my-2"></div>
@@ -200,7 +280,7 @@ const HeaderButtons = ({
                                     disabled={disabled}
                                     className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <BugIcon className="h-4 w-4 mr-3 flex-shrink-0" />
+                                    <Bug className="h-4 w-4 mr-3 flex-shrink-0" />
                                     <span className="flex-1 text-left">Report Bug</span>
                                 </button>
                             </div>
@@ -209,12 +289,12 @@ const HeaderButtons = ({
                 </div>
             </div>
 
-            {/* Tablet Layout (md to lg) - Fixed icon visibility */}
+            {/* Tablet Layout (md to lg) */}
             <div className="hidden md:flex lg:hidden items-center space-x-1">
                 <Button
                     variant="ghost"
                     size="iconSm"
-                    onClick={onCreateSprint}
+                    onClick={handleCreateSprint}
                     disabled={disabled || !activeSuite}
                     className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     title="Create Sprint"
@@ -225,7 +305,7 @@ const HeaderButtons = ({
                 <Button
                     variant="ghost"
                     size="iconSm"
-                    onClick={onCreateDocument}
+                    onClick={handleCreateDocument}
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     title="Create Document"
@@ -244,6 +324,17 @@ const HeaderButtons = ({
                     <Play className="h-4 w-4" />
                 </Button>
 
+                <Button
+                    variant="ghost"
+                    size="iconSm"
+                    onClick={handleGenerateReport}
+                    disabled={disabled || !activeSuite}
+                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
+                    title="Generate Report"
+                >
+                    <DocumentTextIcon className="h-4 w-4" />
+                </Button>
+
                 <ScreenRecorderButton
                     firestoreService={firestoreService}
                     activeSuite={activeSuite}
@@ -253,21 +344,59 @@ const HeaderButtons = ({
                     iconOnly={true}
                 />
 
-                <ReportDropdown
-                    disabled={disabled}
-                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
-                    iconOnly={true}
-                />
-
-                <TestCaseDropdown
-                    disabled={disabled}
-                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
-                    iconOnly={true}
-                />
+                {/* Test Case Dropdown for Tablet */}
+                <div className="relative">
+                    <Button
+                        ref={tabletTestCaseButtonRef}
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => setShowTabletTestCaseMenu(!showTabletTestCaseMenu)}
+                        disabled={disabled || !activeSuite}
+                        className="text-foreground hover:bg-accent/50 flex-shrink-0"
+                        title="Test Case Actions"
+                    >
+                        <PlusIcon className="h-4 w-4" />
+                    </Button>
+                    
+                    {showTabletTestCaseMenu && !disabled && (
+                        <div 
+                            ref={tabletTestCaseMenuRef}
+                            className="absolute right-0 mt-2 w-56 bg-card border border-border shadow-lg rounded-lg z-[60]"
+                        >
+                            <div className="py-2">
+                                <button
+                                    onClick={handleNewTestCase}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <PlusIcon className="h-4 w-4 mr-3" />
+                                    <span>New Test Case</span>
+                                </button>
+                                <button
+                                    onClick={handleImportTestCases}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <Upload className="h-4 w-4 mr-3" />
+                                    <span>Import Test Cases</span>
+                                </button>
+                                <button
+                                    onClick={handleGenerateTestCases}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <Sparkles className="h-4 w-4 mr-3" />
+                                    <span>Generate with AI</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 <BugReportButton
                     variant="ghost"
                     disabled={disabled}
+                    onClick={handleBugReport}
                     className="text-foreground hover:bg-accent/50 flex-shrink-0"
                     iconOnly={true}
                 />
@@ -277,7 +406,7 @@ const HeaderButtons = ({
             <div className="hidden lg:flex items-center space-x-2">
                 <Button
                     variant="ghost"
-                    onClick={onCreateSprint}
+                    onClick={handleCreateSprint}
                     disabled={disabled || !activeSuite}
                     leftIcon={<Target className="h-4 w-4" />}
                     className="text-foreground hover:bg-accent/50"
@@ -287,7 +416,7 @@ const HeaderButtons = ({
 
                 <Button
                     variant="ghost"
-                    onClick={onCreateDocument}
+                    onClick={handleCreateDocument}
                     disabled={disabled}
                     leftIcon={<FileText className="h-4 w-4" />}
                     className="text-foreground hover:bg-accent/50"
@@ -305,6 +434,16 @@ const HeaderButtons = ({
                     Run Tests
                 </Button>
 
+                <Button
+                    variant="ghost"
+                    onClick={handleGenerateReport}
+                    disabled={disabled || !activeSuite}
+                    leftIcon={<DocumentTextIcon className="h-4 w-4" />}
+                    className="text-foreground hover:bg-accent/50"
+                >
+                    Generate Report
+                </Button>
+
                 <ScreenRecorderButton
                     firestoreService={firestoreService}
                     activeSuite={activeSuite}
@@ -313,19 +452,58 @@ const HeaderButtons = ({
                     isPrimary={true}
                 />
 
-                <ReportDropdown
-                    disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
-                />
-
-                <TestCaseDropdown
-                    disabled={disabled}
-                    className="text-foreground hover:bg-accent/50"
-                />
+                {/* Test Case Dropdown for Desktop */}
+                <div className="relative">
+                    <Button
+                        variant="ghost"
+                        onClick={() => setShowDesktopTestCaseMenu(!showDesktopTestCaseMenu)}
+                        disabled={disabled || !activeSuite}
+                        leftIcon={<PlusIcon className="h-4 w-4" />}
+                        rightIcon={<ChevronDown className="h-3 w-3 ml-1" />}
+                        className="text-foreground hover:bg-accent/50"
+                    >
+                        Test Case
+                    </Button>
+                    
+                    {showDesktopTestCaseMenu && !disabled && (
+                        <div 
+                            ref={desktopTestCaseMenuRef}
+                            className="absolute right-0 mt-2 w-56 bg-card border border-border shadow-lg rounded-lg z-[60]"
+                        >
+                            <div className="py-2">
+                                <button
+                                    onClick={handleNewTestCase}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <PlusIcon className="h-4 w-4 mr-3" />
+                                    <span>New Test Case</span>
+                                </button>
+                                <button
+                                    onClick={handleImportTestCases}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <Upload className="h-4 w-4 mr-3" />
+                                    <span>Import Test Cases</span>
+                                </button>
+                                <button
+                                    onClick={handleGenerateTestCases}
+                                    disabled={!activeSuite}
+                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <Sparkles className="h-4 w-4 mr-3" />
+                                    <span>Generate with AI</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 <BugReportButton
                     variant="ghost"
                     disabled={disabled}
+                    onClick={handleBugReport}
                     className="text-foreground hover:bg-accent/50"
                 />
             </div>

@@ -226,7 +226,7 @@ const CreateTestRunModal = ({
                             <div className="text-sm text-muted-foreground mb-2">
                                 {formData.test_cases.length} test case(s) selected
                             </div>
-                            
+
                             {/* Selected Test Cases */}
                             {selectedTestCaseObjects.length > 0 && (
                                 <div className="border border-border rounded-md p-3 mb-3 max-h-40 overflow-y-auto">
@@ -262,13 +262,13 @@ const CreateTestRunModal = ({
                                         <p className="text-sm text-muted-foreground mb-3">
                                             {passedTestsAnalysis.passedTests.length} test case(s) passed in recent runs and may not need re-testing:
                                         </p>
-                                        
+
                                         <div className="space-y-2 mb-4 max-h-32 overflow-y-auto">
                                             {passedTestsAnalysis.passedTests.slice(0, 5).map(test => (
                                                 <div key={test.id} className="text-sm bg-card/50 rounded px-3 py-2">
                                                     <div className="font-medium text-foreground">{test.title}</div>
                                                     <div className="text-xs text-muted-foreground mt-1">
-                                                        Passed {test.daysSinceLastRun} days ago in "{test.runName}"
+                                                        Passed {test.daysSinceLastRun} days ago in &quot;{test.runName}&quot;
                                                     </div>
                                                 </div>
                                             ))}
@@ -312,8 +312,8 @@ const CreateTestRunModal = ({
                                     <div>
                                         <div className="text-muted-foreground">Will be Executed:</div>
                                         <div className="text-lg font-semibold text-primary">
-                                            {includePassedTests 
-                                                ? formData.test_cases.length 
+                                            {includePassedTests
+                                                ? formData.test_cases.length
                                                 : passedTestsAnalysis.eligibleTests.length}
                                         </div>
                                     </div>

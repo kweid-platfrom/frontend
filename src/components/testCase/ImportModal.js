@@ -143,22 +143,25 @@ export default function ImportModal({ onClose, onImportComplete }) {
 
     return (
         <div 
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-background/80"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
             onClick={handleBackdropClick}
         >
-            <div className="relative bg-card rounded-lg shadow-theme-xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-border">
+            <div className="relative bg-card rounded-lg shadow-theme-xl w-full max-w-4xl max-h-[95vh] overflow-hidden border border-border flex flex-col z-[10000]">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-border">
+                <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-border">
                     <h2 className="text-xl font-semibold text-foreground">Import Test Cases</h2>
                     <button
                         onClick={onClose}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-muted-foreground hover:text-foreground transition-colors text-2xl p-1"
+                        type="button"
+                        aria-label="Close"
                     >
-                        <X size={24} />
+                        ×
                     </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div className="flex-1 p-6 overflow-y-auto">
                     {!file && !importResults && (
                         <>
                             {/* File Upload */}
@@ -354,7 +357,7 @@ export default function ImportModal({ onClose, onImportComplete }) {
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 p-6 border-t border-border bg-muted">
+                <div className="flex-shrink-0 flex justify-end gap-3 p-6 border-t border-border bg-muted">
                     <button
                         onClick={onClose}
                         className="px-4 py-2 text-foreground bg-background border border-border rounded-lg hover:bg-secondary transition-colors"
