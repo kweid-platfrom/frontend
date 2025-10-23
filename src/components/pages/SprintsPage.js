@@ -17,6 +17,7 @@ import {
 import { useApp } from '../../context/AppProvider';
 import CreateSprintModal from '../modals/CreateSprintModal';
 import SprintDashboard from '../SprintDashboard';
+import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 
 const SprintsPage = () => {
     const { state, actions } = useApp();
@@ -29,18 +30,19 @@ const SprintsPage = () => {
     const [filter, setFilter] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [showOptions, setShowOptions] = useState(null);
+    const [selectedItems, setSelectedItems] = useState([]);
+    const [loadingActions, setLoadingActions] = useState([]);
     
-    // Only track suite changes for UI reset - NO manual loading
     const lastSuiteIdRef = useRef(null);
 
     useEffect(() => {
         if (activeSuite?.id !== lastSuiteIdRef.current) {
             lastSuiteIdRef.current = activeSuite?.id;
-            // Reset view when switching suites
             if (view === 'dashboard') {
                 setView('list');
                 setSelectedSprint(null);
             }
+            setSelectedItems([]);
         }
     }, [activeSuite?.id, view]);
 
@@ -107,9 +109,123 @@ const SprintsPage = () => {
             const result = await actions.sprints.deleteSprint(sprintId, activeSuite.id);
             if (result?.success) {
                 setShowOptions(null);
+                setSelectedItems([]);
             }
         } catch (error) {
             console.error('Failed to delete sprint:', error);
+        }
+    };
+
+    const handleSelectSprint = (sprintId, event) => {
+        event.stopPropagation();
+        setSelectedItems(prev => {
+            if (prev.includes(sprintId)) {
+                return prev.filter(id => id !== sprintId);
+            } else {
+                return [...prev, sprintId];
+            }
+        });
+    };
+
+    const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
+        if (!activeSuite?.id) return;
+
+        console.log('🎯 Bulk action triggered:', {
+            actionId,
+            selectedIds,
+            selectedOption,
+            suiteId: activeSuite.id
+        });
+
+        setLoadingActions(prev => [...prev, actionId]);
+
+        try {
+            switch (actionId) {
+                case 'delete':
+                    console.log('🗑️ Deleting sprints:', selectedIds);
+                    for (const sprintId of selectedIds) {
+                        const result = await actions.sprints.deleteSprint(sprintId, activeSuite.id);
+                        console.log(`Delete result for ${sprintId}:`, result);
+                    }
+                    actions.ui?.showNotification?.({
+                        id: 'bulk-delete-success',
+                        type: 'success',
+                        message: `${selectedIds.length} sprint(s) deleted successfully`,
+                        duration: 3000
+                    });
+                    break;
+
+                case 'archive':
+                    console.log('📦 Archiving sprints:', selectedIds);
+                    for (const sprintId of selectedIds) {
+                        const result = await actions.sprints.archiveSprint?.(activeSuite.id, sprintId, 'Bulk archive');
+                        console.log(`Archive result for ${sprintId}:`, result);
+                    }
+                    actions.ui?.showNotification?.({
+                        id: 'bulk-archive-success',
+                        type: 'success',
+                        message: `${selectedIds.length} sprint(s) archived successfully`,
+                        duration: 3000
+                    });
+                    break;
+
+                case 'start':
+                    console.log('▶️ Starting sprints:', selectedIds);
+                    for (const sprintId of selectedIds) {
+                        const result = await actions.sprints.updateSprint(sprintId, { status: 'active' }, activeSuite.id);
+                        console.log(`Start result for ${sprintId}:`, result);
+                    }
+                    actions.ui?.showNotification?.({
+                        id: 'bulk-start-success',
+                        type: 'success',
+                        message: `${selectedIds.length} sprint(s) started successfully`,
+                        duration: 3000
+                    });
+                    break;
+
+                case 'complete':
+                    console.log('✅ Completing sprints:', selectedIds);
+                    for (const sprintId of selectedIds) {
+                        const result = await actions.sprints.updateSprint(sprintId, { status: 'completed' }, activeSuite.id);
+                        console.log(`Complete result for ${sprintId}:`, result);
+                    }
+                    actions.ui?.showNotification?.({
+                        id: 'bulk-complete-success',
+                        type: 'success',
+                        message: `${selectedIds.length} sprint(s) completed successfully`,
+                        duration: 3000
+                    });
+                    break;
+
+                case 'close':
+                    console.log('🔒 Closing sprints:', selectedIds);
+                    for (const sprintId of selectedIds) {
+                        const result = await actions.sprints.updateSprint(sprintId, { status: 'closed' }, activeSuite.id);
+                        console.log(`Close result for ${sprintId}:`, result);
+                    }
+                    actions.ui?.showNotification?.({
+                        id: 'bulk-close-success',
+                        type: 'success',
+                        message: `${selectedIds.length} sprint(s) closed successfully`,
+                        duration: 3000
+                    });
+                    break;
+
+                default:
+                    console.warn('Unhandled action:', actionId);
+            }
+
+            setSelectedItems([]);
+        } catch (error) {
+            console.error('💥 Bulk action failed:', error);
+            actions.ui?.showNotification?.({
+                id: 'bulk-action-error',
+                type: 'error',
+                message: `Failed to ${actionId} sprints: ${error.message}`,
+                duration: 5000
+            });
+        } finally {
+            setLoadingActions(prev => prev.filter(id => id !== actionId));
         }
     };
 
@@ -209,16 +325,27 @@ const SprintsPage = () => {
                         const statusInfo = getStatusInfo(sprint.status);
                         const StatusIcon = statusInfo.icon;
                         const daysRemaining = getDaysRemaining(sprint.endDate);
+                        const isSelected = selectedItems.includes(sprint.id);
                         
                         return (
                             <div
                                 key={sprint.id}
-                                className={`bg-card rounded-lg border border-border p-4 hover:shadow-theme-md transition-all cursor-pointer ${
-                                    activeSprint?.id === sprint.id ? 'ring-2 ring-primary border-primary' : ''
-                                }`}
+                                className={`bg-card rounded-lg border p-4 hover:shadow-theme-md transition-all cursor-pointer relative ${
+                                    isSelected ? 'ring-2 ring-primary border-primary' : 'border-border'
+                                } ${activeSprint?.id === sprint.id ? 'ring-2 ring-blue-500' : ''}`}
                                 onClick={() => handleSprintClick(sprint)}
                             >
-                                <div className="flex items-start justify-between mb-3">
+                                <div className="absolute top-4 left-4">
+                                    <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={(e) => handleSelectSprint(sprint.id, e)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                    />
+                                </div>
+
+                                <div className="flex items-start justify-between mb-3 ml-8">
                                     <div className="flex-1">
                                         <h3 className="font-semibold text-foreground mb-1 truncate">{sprint.name}</h3>
                                         {sprint.description && (
@@ -273,7 +400,7 @@ const SprintsPage = () => {
                                     </div>
                                 </div>
 
-                                <div className="space-y-2 text-sm text-muted-foreground">
+                                <div className="space-y-2 text-sm text-muted-foreground ml-8">
                                     {sprint.startDate && sprint.endDate && (
                                         <div className="flex items-center justify-between">
                                             <span>{formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}</span>
@@ -299,10 +426,57 @@ const SprintsPage = () => {
                                             <p className="text-xs line-clamp-2">{sprint.goals}</p>
                                         </div>
                                     )}
+
+                                    {/* Display REAL asset counts from global state - FIXED */}
+                                    {(() => {
+                                        const allTestCases = state?.testCases?.testCases || [];
+                                        const allBugs = state?.bugs?.bugs || [];
+                                        const allRecommendations = state?.recommendations?.recommendations || [];
+                                        
+                                        const sprintTestCases = allTestCases.filter(tc => 
+                                            (tc.sprint_id === sprint.id || tc.sprintId === sprint.id) &&
+                                            tc.status !== 'deleted' && tc.status !== 'archived'
+                                        ).length;
+                                        
+                                        const sprintBugs = allBugs.filter(bug => 
+                                            (bug.sprint_id === sprint.id || bug.sprintId === sprint.id) &&
+                                            bug.status !== 'deleted' && bug.status !== 'archived'
+                                        ).length;
+                                        
+                                        const sprintRecs = allRecommendations.filter(rec => 
+                                            (rec.sprint_id === sprint.id || rec.sprintId === sprint.id) &&
+                                            rec.status !== 'deleted' && rec.status !== 'archived'
+                                        ).length;
+                                        
+                                        const hasAssets = sprintTestCases > 0 || sprintBugs > 0 || sprintRecs > 0;
+                                        
+                                        return hasAssets && (
+                                            <div className="flex items-center space-x-3 mt-2 pt-2 border-t border-border text-xs">
+                                                {sprintTestCases > 0 && (
+                                                    <span className="flex items-center space-x-1">
+                                                        <span className="text-blue-600 dark:text-blue-400 font-medium">{sprintTestCases}</span>
+                                                        <span className="text-muted-foreground">tests</span>
+                                                    </span>
+                                                )}
+                                                {sprintBugs > 0 && (
+                                                    <span className="flex items-center space-x-1">
+                                                        <span className="text-red-600 dark:text-red-400 font-medium">{sprintBugs}</span>
+                                                        <span className="text-muted-foreground">bugs</span>
+                                                    </span>
+                                                )}
+                                                {sprintRecs > 0 && (
+                                                    <span className="flex items-center space-x-1">
+                                                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">{sprintRecs}</span>
+                                                        <span className="text-muted-foreground">recommendations</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 {sprint.progress && (
-                                    <div className="mt-3 pt-3 border-t border-border">
+                                    <div className="mt-3 pt-3 border-t border-border ml-8">
                                         <div className="flex items-center justify-between mb-1">
                                             <span className="text-xs text-muted-foreground">Progress</span>
                                             <span className="text-xs font-medium text-foreground">
@@ -322,6 +496,14 @@ const SprintsPage = () => {
                     })}
                 </div>
             )}
+
+            <EnhancedBulkActionsBar
+                selectedItems={selectedItems}
+                onClearSelection={() => setSelectedItems([])}
+                assetType="sprints"
+                onAction={handleBulkAction}
+                loadingActions={loadingActions}
+            />
 
             <CreateSprintModal
                 isOpen={showCreateModal}

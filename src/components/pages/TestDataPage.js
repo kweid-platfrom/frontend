@@ -208,7 +208,9 @@ const TestData = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleTypeAction = (actionId, selectedIds) => {
+  const handleTypeAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
+    console.log('Type action triggered:', { actionId, selectedIds, actionConfig, selectedOption });
+
     if (actionId === 'delete') {
       setTypes(prev => prev.filter(t => !selectedIds.includes(t.id)));
       selectedIds.forEach(id => {
@@ -222,7 +224,9 @@ const TestData = () => {
     }
   };
 
-  const handleItemAction = (actionId, selectedIds) => {
+  const handleItemAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
+    console.log('Item action triggered:', { actionId, selectedIds, actionConfig, selectedOption });
+
     if (actionId === 'delete') {
       setData(prev => ({
         ...prev,

@@ -7,16 +7,20 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         title: '',
         description: '',
         priority: 'medium',
+        severity: 'medium', // ADD THIS - needed for test runs
         status: 'draft',
         assignee: '',
         tags: [],
         preconditions: '',
-        testSteps: [{ action: '', expectedResult: '' }],
+        steps: [{ action: '', expectedResult: '' }], // RENAMED from testSteps
         automationStatus: 'none',
         executionType: 'manual',
+        executionStatus: 'not_executed', // ADD THIS - needed for test runs tracking
         estimatedTime: '',
         environment: '',
         testData: '',
+        testType: 'functional', // ADD THIS - needed for filtering
+        component: '', // ADD THIS - needed for organization
         linkedBugIds: [],
     });
     const [tagInput, setTagInput] = useState('');
@@ -27,11 +31,14 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         if (testCase) {
             setFormData({
                 ...testCase,
-                testSteps: testCase.testSteps && testCase.testSteps.length > 0
-                    ? testCase.testSteps
-                    : [{ action: '', expectedResult: '' }],
+                // Handle both old and new field names
+                steps: testCase.steps || testCase.testSteps || [{ action: '', expectedResult: '' }],
                 tags: testCase.tags || [],
                 linkedBugIds: testCase.linkedBugIds || [],
+                severity: testCase.severity || 'medium',
+                executionStatus: testCase.executionStatus || 'not_executed',
+                testType: testCase.testType || 'functional',
+                component: testCase.component || '',
             });
         }
     }, [testCase]);
@@ -49,31 +56,35 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         if (!formData.title.trim()) {
             newErrors.title = 'Title is required';
         }
-        const validTestSteps = formData.testSteps.filter(
+        const validTestSteps = formData.steps.filter(
             (step) => step.action.trim() || step.expectedResult.trim()
         );
         if (validTestSteps.length === 0) {
-            newErrors.testSteps = 'At least one test step with action or expected result is required';
+            newErrors.steps = 'At least one test step with action or expected result is required';
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [formData.title, formData.testSteps]);
+    }, [formData.title, formData.steps]);
 
     const resetForm = useCallback(() => {
         setFormData({
             title: '',
             description: '',
             priority: 'medium',
+            severity: 'medium',
             status: 'draft',
             assignee: '',
             tags: [],
             preconditions: '',
-            testSteps: [{ action: '', expectedResult: '' }],
+            steps: [{ action: '', expectedResult: '' }],
             automationStatus: 'none',
             executionType: 'manual',
+            executionStatus: 'not_executed',
             estimatedTime: '',
             environment: '',
             testData: '',
+            testType: 'functional',
+            component: '',
             linkedBugIds: [],
         });
         setTagInput('');
@@ -110,33 +121,33 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
     const handleAddTestStep = useCallback(() => {
         setFormData((prev) => ({
             ...prev,
-            testSteps: [...prev.testSteps, { action: '', expectedResult: '' }],
+            steps: [...prev.steps, { action: '', expectedResult: '' }],
         }));
-        if (errors.testSteps) {
-            setErrors((prev) => ({ ...prev, testSteps: null }));
+        if (errors.steps) {
+            setErrors((prev) => ({ ...prev, steps: null }));
         }
     }, [errors]);
 
     const handleUpdateTestStep = useCallback((index, field, value) => {
         setFormData((prev) => ({
             ...prev,
-            testSteps: prev.testSteps.map((step, i) =>
+            steps: prev.steps.map((step, i) =>
                 i === index ? { ...step, [field]: value } : step
             ),
         }));
-        if (errors.testSteps) {
-            setErrors((prev) => ({ ...prev, testSteps: null }));
+        if (errors.steps) {
+            setErrors((prev) => ({ ...prev, steps: null }));
         }
     }, [errors]);
 
     const handleRemoveTestStep = useCallback((index) => {
-        if (formData.testSteps.length > 1) {
+        if (formData.steps.length > 1) {
             setFormData((prev) => ({
                 ...prev,
-                testSteps: prev.testSteps.filter((_, i) => i !== index),
+                steps: prev.steps.filter((_, i) => i !== index),
             }));
         }
-    }, [formData.testSteps.length]);
+    }, [formData.steps.length]);
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
@@ -148,7 +159,7 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
         setLoading(true);
 
         try {
-            const validTestSteps = formData.testSteps.filter(
+            const validTestSteps = formData.steps.filter(
                 (step) => step.action.trim() || step.expectedResult.trim()
             );
 
@@ -160,7 +171,8 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                 preconditions: formData.preconditions.trim(),
                 environment: formData.environment.trim(),
                 testData: formData.testData.trim(),
-                testSteps: validTestSteps.map((step) => ({
+                component: formData.component.trim(),
+                steps: validTestSteps.map((step) => ({
                     action: step.action.trim(),
                     expectedResult: step.expectedResult.trim(),
                 })),
@@ -297,6 +309,25 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                         </select>
                                     </div>
 
+                                    {/* ADD Severity field */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground mb-2">
+                                            Severity
+                                        </label>
+                                        <select
+                                            value={formData.severity}
+                                            onChange={(e) => handleInputChange('severity', e.target.value)}
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                                        >
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                            <option value="critical">Critical</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-foreground mb-2">
                                             Status
@@ -311,6 +342,20 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                             <option value="archived">Archived</option>
                                             <option value="deprecated">Deprecated</option>
                                         </select>
+                                    </div>
+
+                                    {/* ADD Component field */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground mb-2">
+                                            Component
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.component}
+                                            onChange={(e) => handleInputChange('component', e.target.value)}
+                                            className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                                            placeholder="e.g., Authentication, Dashboard"
+                                        />
                                     </div>
                                 </div>
 
@@ -387,6 +432,27 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* ADD Test Type field */}
+                                <div>
+                                    <label className="block text-sm font-medium text-foreground mb-2">
+                                        Test Type
+                                    </label>
+                                    <select
+                                        value={formData.testType}
+                                        onChange={(e) => handleInputChange('testType', e.target.value)}
+                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                                    >
+                                        <option value="functional">Functional</option>
+                                        <option value="integration">Integration</option>
+                                        <option value="unit">Unit</option>
+                                        <option value="regression">Regression</option>
+                                        <option value="performance">Performance</option>
+                                        <option value="security">Security</option>
+                                        <option value="ui">UI</option>
+                                        <option value="api">API</option>
+                                    </select>
+                                </div>
+
                                 <div>
                                     <label className="block text-sm font-medium text-foreground mb-2">
                                         Execution Type
@@ -430,19 +496,6 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                         placeholder="e.g., Production, Staging, QA"
                                     />
                                 </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground mb-2">
-                                        Test Data
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.testData}
-                                        onChange={(e) => handleInputChange('testData', e.target.value)}
-                                        className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
-                                        placeholder="Required test data or dataset reference"
-                                    />
-                                </div>
                             </div>
 
                             <div>
@@ -471,15 +524,15 @@ export default function TestCaseModal({ testCase, onClose, onSave, activeSuite, 
                                         Add Step
                                     </button>
                                 </div>
-                                {errors.testSteps && (
-                                    <p className="text-destructive text-xs mt-1">{errors.testSteps}</p>
+                                {errors.steps && (
+                                    <p className="text-destructive text-xs mt-1">{errors.steps}</p>
                                 )}
                                 <div className="space-y-4">
-                                    {formData.testSteps.map((step, index) => (
+                                    {formData.steps.map((step, index) => (
                                         <div key={index} className="border border-border rounded-lg p-3 sm:p-4">
                                             <div className="flex items-center justify-between mb-3">
                                                 <h4 className="text-sm font-medium text-foreground">Step {index + 1}</h4>
-                                                {formData.testSteps.length > 1 && (
+                                                {formData.steps.length > 1 && (
                                                     <button
                                                         type="button"
                                                         onClick={() => handleRemoveTestStep(index)}

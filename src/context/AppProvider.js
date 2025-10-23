@@ -756,6 +756,15 @@ export const AppProvider = ({ children }) => {
         slices.subscription.state.isSubscriptionActive,
     ]);
 
+    useEffect(() => {
+        if (slices.auth.state.isAuthenticated && slices.suites.state.activeSuite) {
+            // Mark services as operating in authenticated context
+            FirestoreService.assets.setAuthenticatedContext(true);
+        } else {
+            FirestoreService.assets.setAuthenticatedContext(false);
+        }
+    }, [slices.auth.state.isAuthenticated, slices.suites.state.activeSuite]);
+
     // Asset subscriptions effect with NEW: Documents and TestData support
     useEffect(() => {
         if (
@@ -1666,8 +1675,245 @@ export const AppProvider = ({ children }) => {
                     unlinkTestCaseFromBug,
                     linkBugsToTestCase,
                     unlinkBugFromTestCase,
-                    addTestCasesToSprint,
-                    addBugsToSprint,
+
+                    // Sprint management - FIXED with proper implementations
+                    addTestCasesToSprint: async (sprintId, testCaseIds) => {
+                        const suiteId = slices.suites.state.activeSuite?.id;
+                        if (!suiteId) {
+                            slices.ui.actions.showNotification?.({
+                                id: 'add-to-sprint-no-suite',
+                                type: 'error',
+                                message: 'No active suite selected',
+                                duration: 5000,
+                            });
+                            return { success: false, error: { message: 'No active suite' } };
+                        }
+
+                        console.log('Adding test cases to sprint:', { sprintId, testCaseIds, suiteId });
+
+                        try {
+                            const result = await FirestoreService.assets.addTestCasesToSprint(
+                                sprintId,
+                                testCaseIds,
+                                suiteId
+                            );
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'add-to-sprint-success',
+                                    type: 'success',
+                                    message: `${result.data.added} test case(s) added to sprint successfully`,
+                                    duration: 3000,
+                                });
+
+                                if (result.data.failed > 0) {
+                                    slices.ui.actions.showNotification?.({
+                                        id: 'add-to-sprint-partial',
+                                        type: 'warning',
+                                        message: `${result.data.failed} test case(s) failed to add`,
+                                        duration: 5000,
+                                    });
+                                }
+                            } else {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'add-to-sprint-error',
+                                    type: 'error',
+                                    message: result.error?.message || 'Failed to add test cases to sprint',
+                                    duration: 5000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('Error adding test cases to sprint:', error);
+                            slices.ui.actions.showNotification?.({
+                                id: 'add-to-sprint-exception',
+                                type: 'error',
+                                message: `Error: ${error.message}`,
+                                duration: 5000,
+                            });
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    addBugsToSprint: async (sprintId, bugIds) => {
+                        const suiteId = slices.suites.state.activeSuite?.id;
+                        if (!suiteId) {
+                            slices.ui.actions.showNotification?.({
+                                id: 'add-bugs-to-sprint-no-suite',
+                                type: 'error',
+                                message: 'No active suite selected',
+                                duration: 5000,
+                            });
+                            return { success: false, error: { message: 'No active suite' } };
+                        }
+
+                        console.log('Adding bugs to sprint:', { sprintId, bugIds, suiteId });
+
+                        try {
+                            const result = await FirestoreService.assets.addBugsToSprint(
+                                sprintId,
+                                bugIds,
+                                suiteId
+                            );
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'add-bugs-to-sprint-success',
+                                    type: 'success',
+                                    message: `${result.data.added} bug(s) added to sprint successfully`,
+                                    duration: 3000,
+                                });
+
+                                if (result.data.failed > 0) {
+                                    slices.ui.actions.showNotification?.({
+                                        id: 'add-bugs-to-sprint-partial',
+                                        type: 'warning',
+                                        message: `${result.data.failed} bug(s) failed to add`,
+                                        duration: 5000,
+                                    });
+                                }
+                            } else {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'add-bugs-to-sprint-error',
+                                    type: 'error',
+                                    message: result.error?.message || 'Failed to add bugs to sprint',
+                                    duration: 5000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('Error adding bugs to sprint:', error);
+                            slices.ui.actions.showNotification?.({
+                                id: 'add-bugs-to-sprint-exception',
+                                type: 'error',
+                                message: `Error: ${error.message}`,
+                                duration: 5000,
+                            });
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    addRecommendationsToSprint: async (sprintId, recommendationIds) => {
+                        const suiteId = slices.suites.state.activeSuite?.id;
+                        if (!suiteId) {
+                            slices.ui.actions.showNotification?.({
+                                id: 'add-recommendations-to-sprint-no-suite',
+                                type: 'error',
+                                message: 'No active suite selected',
+                                duration: 5000,
+                            });
+                            return { success: false, error: { message: 'No active suite' } };
+                        }
+
+                        console.log('Adding recommendations to sprint:', { sprintId, recommendationIds, suiteId });
+
+                        try {
+                            const result = await FirestoreService.assets.addRecommendationsToSprint(
+                                sprintId,
+                                recommendationIds,
+                                suiteId
+                            );
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'add-recommendations-to-sprint-success',
+                                    type: 'success',
+                                    message: `${result.data.added} recommendation(s) added to sprint successfully`,
+                                    duration: 3000,
+                                });
+
+                                if (result.data.failed > 0) {
+                                    slices.ui.actions.showNotification?.({
+                                        id: 'add-recommendations-to-sprint-partial',
+                                        type: 'warning',
+                                        message: `${result.data.failed} recommendation(s) failed to add`,
+                                        duration: 5000,
+                                    });
+                                }
+                            } else {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'add-recommendations-to-sprint-error',
+                                    type: 'error',
+                                    message: result.error?.message || 'Failed to add recommendations to sprint',
+                                    duration: 5000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('Error adding recommendations to sprint:', error);
+                            slices.ui.actions.showNotification?.({
+                                id: 'add-recommendations-to-sprint-exception',
+                                type: 'error',
+                                message: `Error: ${error.message}`,
+                                duration: 5000,
+                            });
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    // Remove from sprint methods
+                    removeTestCasesFromSprint: async (sprintId, testCaseIds) => {
+                        const suiteId = slices.suites.state.activeSuite?.id;
+                        if (!suiteId) {
+                            return { success: false, error: { message: 'No active suite' } };
+                        }
+
+                        try {
+                            const result = await FirestoreService.assets.removeTestCasesFromSprint(
+                                sprintId,
+                                testCaseIds,
+                                suiteId
+                            );
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'remove-from-sprint-success',
+                                    type: 'success',
+                                    message: `${result.data.removed} test case(s) removed from sprint`,
+                                    duration: 3000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('Error removing test cases from sprint:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    removeBugsFromSprint: async (sprintId, bugIds) => {
+                        const suiteId = slices.suites.state.activeSuite?.id;
+                        if (!suiteId) {
+                            return { success: false, error: { message: 'No active suite' } };
+                        }
+
+                        try {
+                            const result = await FirestoreService.assets.removeBugsFromSprint(
+                                sprintId,
+                                bugIds,
+                                suiteId
+                            );
+
+                            if (result.success) {
+                                slices.ui.actions.showNotification?.({
+                                    id: 'remove-bugs-from-sprint-success',
+                                    type: 'success',
+                                    message: `${result.data.removed} bug(s) removed from sprint`,
+                                    duration: 3000,
+                                });
+                            }
+
+                            return result;
+                        } catch (error) {
+                            console.error('Error removing bugs from sprint:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    // Advanced linking methods (existing)
                     linkTestCasesToBugAdvanced: FirestoreService.linkTestCasesToBug.bind(FirestoreService),
                     unlinkTestCasesFromBug: FirestoreService.unlinkTestCasesFromBug.bind(FirestoreService),
                     linkBugsToTestCaseAdvanced: FirestoreService.linkBugsToTestCase.bind(FirestoreService),

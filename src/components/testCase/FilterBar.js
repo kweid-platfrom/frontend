@@ -2,8 +2,17 @@
 
 import { useState, useMemo } from 'react';
 import { List, Table, ChevronUp, ChevronDown } from 'lucide-react';
+import GroupSelect from '@/components/common/GroupSelect';
 
-export default function FilterBar({ filters, onFiltersChange, testCases, viewMode, setViewMode }) {
+export default function FilterBar({ 
+    filters, 
+    onFiltersChange, 
+    testCases, 
+    viewMode, 
+    setViewMode,
+    groupBy,
+    onGroupByChange
+}) {
     const [isExpanded, setIsExpanded] = useState(false);
 
     // Extract unique values for filter options
@@ -30,6 +39,19 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
             allTags
         };
     }, [testCases]);
+
+    // Generate grouping options
+    const groupingOptions = useMemo(() => [
+        { id: 'status', label: 'Status', description: 'Group by test status' },
+        { id: 'priority', label: 'Priority', description: 'Group by priority' },
+        { id: 'severity', label: 'Severity', description: 'Group by severity level' },
+        { id: 'executionStatus', label: 'Execution Status', description: 'Group by execution status' },
+        { id: 'assignee', label: 'Assignee', description: 'Group by assigned person', count: filterOptions.assignees.length },
+        { id: 'component', label: 'Component', description: 'Group by component', count: filterOptions.components.length },
+        { id: 'testType', label: 'Test Type', description: 'Group by test type', count: filterOptions.testTypes.length },
+        { id: 'environment', label: 'Environment', description: 'Group by environment', count: filterOptions.environments.length },
+        { id: 'automationStatus', label: 'Automation', description: 'Group by automation status' }
+    ], [filterOptions]);
 
     const handleFilterChange = (key, value) => {
         onFiltersChange(prev => ({
@@ -62,6 +84,10 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
             search: '',
             lastUpdated: 'all'
         });
+        // Clear grouping when clearing filters
+        if (onGroupByChange) {
+            onGroupByChange(null);
+        }
     };
 
     const hasActiveFilters = () => {
@@ -76,7 +102,8 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
             filters.automationStatus !== 'all' ||
             (filters.tags && filters.tags.length > 0) ||
             filters.search !== '' ||
-            filters.lastUpdated !== 'all';
+            filters.lastUpdated !== 'all' ||
+            groupBy !== null;
     };
 
     const getActiveFiltersCount = () => {
@@ -93,6 +120,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
         if (filters.tags && filters.tags.length > 0) count++;
         if (filters.search !== '') count++;
         if (filters.lastUpdated !== 'all') count++;
+        if (groupBy !== null) count++;
         return count;
     };
 
@@ -201,7 +229,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                     </select>
                 </div>
 
-                {/* Action Buttons and View Toggle */}
+                {/* Action Buttons, Group Select, and View Toggle */}
                 <div className="flex items-center gap-2 ml-auto">
                     {hasActiveFilters() && (
                         <button
@@ -210,6 +238,17 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                         >
                             Clear Filters ({getActiveFiltersCount()})
                         </button>
+                    )}
+
+                    {/* NEW: Group Select */}
+                    {onGroupByChange && (
+                        <GroupSelect
+                            value={groupBy}
+                            onChange={onGroupByChange}
+                            options={groupingOptions}
+                            placeholder="Group by..."
+                            className="min-w-[140px]"
+                        />
                     )}
 
                     {/* View Mode Buttons */}
@@ -247,7 +286,7 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                 </div>
             </div>
 
-            {/* Expanded Filters */}
+            {/* Expandable Filters - UNCHANGED */}
             {isExpanded && (
                 <div className="border-t border-border pt-4">
                     <div className="space-y-4">
@@ -608,6 +647,19 @@ export default function FilterBar({ filters, onFiltersChange, testCases, viewMod
                                 <button
                                     onClick={() => handleFilterChange('search', '')}
                                     className="ml-1 text-muted-foreground hover:text-foreground"
+                                >
+                                    ×
+                                </button>
+                            </span>
+                        )}
+
+                        {/* NEW: Show active grouping */}
+                        {groupBy && (
+                            <span className="inline-flex items-center px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full">
+                                Grouped by: {groupBy.charAt(0).toUpperCase() + groupBy.slice(1).replace(/([A-Z])/g, ' $1')}
+                                <button
+                                    onClick={() => onGroupByChange && onGroupByChange(null)}
+                                    className="ml-1 text-teal-600 hover:text-teal-800"
                                 >
                                     ×
                                 </button>

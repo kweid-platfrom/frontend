@@ -18,6 +18,9 @@ import RecommendationTable from '../recommend/RecommendationTable';
 import RecommendationModal from '../recommend/RecommendationModal';
 import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 import Pagination from '../common/Pagination';
+import GroupedView from '../GroupedView';
+import GroupSelect from '../common/GroupSelect';
+import { getGroupingOptions } from '@/utils/groupingUtils';
 
 // Safe date formatting helper
 const safeFormatDate = (dateValue, formatType = 'relative') => {
@@ -57,18 +60,19 @@ const safeFormatDate = (dateValue, formatType = 'relative') => {
 };
 
 const FeatureRecommendationsPage = () => {
-    // Get app state and actions
-    const { state, actions, currentUser, isLoading } = useApp();
+    // Get state from useApp hook
+    const { currentUser, activeSuite, state, actions, isLoading } = useApp();
 
-    // Local state for selection and pagination
+    // Local state for selection, pagination, and grouping
     const [selectedRecommendations, setSelectedRecommendations] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
-    const [bulkLoadingActions, setBulkLoadingActions] = useState([]);
     const [showFilters, setShowFilters] = useState(false);
+    const [loadingActions, setLoadingActions] = useState([]);
+    const [groupBy, setGroupBy] = useState(null);
 
     // Safely destructure recommendations state with fallbacks
-    const recommendationsState = state.recommendations || {};
+    const recommendationsState = state?.recommendations || {};
     const {
         recommendations = [],
         filters = {
@@ -90,7 +94,7 @@ const FeatureRecommendationsPage = () => {
     } = recommendationsState;
 
     // Safely get recommendation actions with fallbacks
-    const recommendationActions = actions.recommendations || {};
+    const recommendationActions = actions?.recommendations || {};
     const {
         updateRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
         deleteRecommendation = async () => ({ success: false, error: { message: 'Recommendations not available' } }),
@@ -104,10 +108,30 @@ const FeatureRecommendationsPage = () => {
     } = recommendationActions;
 
     // Check if recommendations feature is available
-    const recommendationsAvailable = state.recommendations !== undefined &&
-        actions.recommendations !== undefined;
+    const recommendationsAvailable = state?.recommendations !== undefined &&
+        actions?.recommendations !== undefined;
 
-    // Filter and sort recommendations using the store selector
+    // Get grouping options with metadata
+    const groupingOptions = useMemo(() => {
+        const globalSprints = state?.sprints?.sprints || [];
+        return getGroupingOptions('recommendations', {
+            sprints: globalSprints,
+            modules: [],
+            users: []
+        });
+    }, [state?.sprints?.sprints]);
+
+    // Metadata for grouped view
+    const groupMetadata = useMemo(() => {
+        const globalSprints = state?.sprints?.sprints || [];
+        return {
+            sprints: globalSprints,
+            modules: [],
+            users: []
+        };
+    }, [state?.sprints?.sprints]);
+
+    // Filter and sort recommendations
     const filteredRecommendations = useMemo(() => {
         if (!recommendationsAvailable || !Array.isArray(recommendations)) {
             return [];
@@ -258,120 +282,123 @@ const FeatureRecommendationsPage = () => {
     }, [setFilters, filters.search]);
 
     // Bulk action handler
-    const handleBulkAction = useCallback(async (actionId, selectedItems, actionConfig, selectedOption) => {
-        if (!currentUser?.uid) {
-            actions.ui.showNotification({
-                id: 'bulk-no-auth',
-                type: 'error',
-                message: 'You must be logged in to perform bulk actions',
-                duration: 3000
-            });
-            return;
-        }
+    const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
+        const assetType = 'recommendations';
 
-        setBulkLoadingActions(prev => [...prev, actionId]);
+        console.log('🎯 Bulk action triggered:', {
+            actionId,
+            assetType,
+            selectedIds,
+            selectedOption,
+            suiteId: activeSuite?.id
+        });
+
+        setLoadingActions(prev => [...prev, actionId]);
 
         try {
-            let successCount = 0;
-            let failureCount = 0;
+            switch (actionId) {
+                case 'delete':
+                    console.log('🗑️ Deleting recommendations...');
+                    let deleteCount = 0;
+                    for (const id of selectedIds) {
+                        const result = await deleteRecommendation(id);
+                        if (result.success) deleteCount++;
+                    }
+                    
+                    if (deleteCount > 0) {
+                        actions?.ui?.showNotification?.({
+                            id: 'bulk-delete-success',
+                            type: 'success',
+                            message: `${deleteCount} recommendation(s) deleted`,
+                            duration: 3000
+                        });
+                    }
+                    break;
 
-            for (const recId of selectedItems) {
-                try {
-                    let result;
+                case 'archive':
+                    console.log('📦 Archiving recommendations...');
+                    let archiveCount = 0;
+                    for (const id of selectedIds) {
+                        const result = await archiveRecommendation(id);
+                        if (result.success) archiveCount++;
+                    }
+                    
+                    if (archiveCount > 0) {
+                        actions?.ui?.showNotification?.({
+                            id: 'bulk-archive-success',
+                            type: 'success',
+                            message: `${archiveCount} recommendation(s) archived`,
+                            duration: 3000
+                        });
+                    }
+                    break;
 
-                    switch (actionId) {
-                        case 'approve':
-                            result = await handleStatusUpdate(recId, 'approved');
-                            break;
-                        case 'reject':
-                            result = await handleStatusUpdate(recId, 'rejected');
-                            break;
-                        case 'review':
-                            result = await handleStatusUpdate(recId, 'under-review');
-                            break;
-                        case 'assign':
-                            if (selectedOption) {
-                                const recommendation = recommendations.find(r => r.id === recId);
-                                if (recommendation) {
-                                    result = await updateRecommendation({
-                                        ...recommendation,
-                                        assigned_to: selectedOption.id,
-                                        updated_at: new Date().toISOString()
-                                    });
-                                }
-                            }
-                            break;
-                        case 'add-to-sprint':
-                            if (selectedOption) {
-                                const recommendation = recommendations.find(r => r.id === recId);
-                                if (recommendation) {
-                                    result = await updateRecommendation({
-                                        ...recommendation,
-                                        sprint_id: selectedOption.id,
-                                        updated_at: new Date().toISOString()
-                                    });
-                                }
-                            }
-                            break;
-                        case 'archive':
-                            result = await archiveRecommendation(recId);
-                            break;
-                        case 'delete':
-                            result = await deleteRecommendation(recId);
-                            break;
-                        default:
-                            console.warn(`Unknown bulk action: ${actionId}`);
-                            failureCount++;
-                            continue;
+                case 'add-to-sprint':
+                    if (!selectedOption || !selectedOption.id) {
+                        console.error('❌ No sprint selected');
+                        actions?.ui?.showNotification?.({
+                            id: 'no-sprint-selected',
+                            type: 'error',
+                            message: 'Please select a sprint',
+                            duration: 3000
+                        });
+                        return;
                     }
 
-                    if (result && result.success !== false) {
-                        successCount++;
+                    console.log('📌 Adding recommendations to sprint:', {
+                        sprintId: selectedOption.id,
+                        sprintName: selectedOption.label,
+                        itemCount: selectedIds.length
+                    });
+
+                    const recResult = await actions?.linking?.addRecommendationsToSprint?.(
+                        selectedOption.id,
+                        selectedIds
+                    );
+
+                    console.log('Recommendation result:', recResult);
+
+                    if (recResult?.success) {
+                        const addResults = recResult.data;
+                        if (addResults.added > 0) {
+                            actions?.ui?.showNotification?.({
+                                id: 'bulk-add-to-sprint-success',
+                                type: 'success',
+                                message: `${addResults.added} recommendation(s) added to ${selectedOption.label}`,
+                                duration: 3000
+                            });
+                        }
+
+                        if (addResults.failed > 0) {
+                            actions?.ui?.showNotification?.({
+                                id: 'bulk-add-to-sprint-partial',
+                                type: 'warning',
+                                message: `${addResults.failed} recommendation(s) failed to add`,
+                                duration: 5000
+                            });
+                        }
                     } else {
-                        failureCount++;
+                        throw new Error(recResult?.error?.message || 'Failed to add recommendations to sprint');
                     }
-                } catch (error) {
-                    console.error(`Error performing ${actionId} on recommendation ${recId}:`, error);
-                    failureCount++;
-                }
+                    break;
+
+                default:
+                    console.warn('Unhandled action:', actionId);
             }
 
-            // Show summary notification
-            if (successCount > 0 && failureCount === 0) {
-                actions.ui.showNotification({
-                    id: 'bulk-success',
-                    type: 'success',
-                    message: `Successfully ${actionConfig.label.toLowerCase()} ${successCount} recommendation${successCount > 1 ? 's' : ''}`,
-                    duration: 3000
-                });
-            } else if (successCount > 0 && failureCount > 0) {
-                actions.ui.showNotification({
-                    id: 'bulk-partial',
-                    type: 'warning',
-                    message: `${successCount} successful, ${failureCount} failed`,
-                    duration: 4000
-                });
-            } else {
-                actions.ui.showNotification({
-                    id: 'bulk-failure',
-                    type: 'error',
-                    message: `Failed to ${actionConfig.label.toLowerCase()} recommendations`,
-                    duration: 3000
-                });
-            }
-
+            setSelectedRecommendations([]);
         } catch (error) {
-            console.error('Bulk action error:', error);
-            actions.ui.showNotification({
-                id: 'bulk-error',
+            console.error('💥 Bulk action failed:', error);
+            actions?.ui?.showNotification?.({
+                id: 'bulk-action-error',
                 type: 'error',
-                message: 'An error occurred while performing bulk actions',
-                duration: 3000
+                message: `Failed to ${actionId}: ${error.message}`,
+                duration: 5000
             });
         } finally {
-            setBulkLoadingActions(prev => prev.filter(id => id !== actionId));
+            setLoadingActions(prev => prev.filter(id => id !== actionId));
         }
-    }, [currentUser, actions.ui, recommendations, updateRecommendation, archiveRecommendation, deleteRecommendation]);
+    };
 
     // Pagination handlers
     const handlePageChange = useCallback((page) => {
@@ -388,7 +415,7 @@ const FeatureRecommendationsPage = () => {
     // Standard handlers
     const handleCreateRecommendation = useCallback(() => {
         if (!recommendationsAvailable) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'recommendations-unavailable',
                 type: 'error',
                 message: 'Recommendations feature is not available',
@@ -397,11 +424,11 @@ const FeatureRecommendationsPage = () => {
             return;
         }
         openModal(null);
-    }, [openModal, recommendationsAvailable, actions.ui]);
+    }, [openModal, recommendationsAvailable, actions?.ui]);
 
     const handleEditRecommendation = useCallback((rec) => {
         if (!recommendationsAvailable) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'recommendations-unavailable',
                 type: 'error',
                 message: 'Recommendations feature is not available',
@@ -410,11 +437,11 @@ const FeatureRecommendationsPage = () => {
             return;
         }
         openModal(rec);
-    }, [openModal, recommendationsAvailable, actions.ui]);
+    }, [openModal, recommendationsAvailable, actions?.ui]);
 
     const handleVote = useCallback(async (recId, voteType) => {
         if (!currentUser?.uid) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'vote-no-auth',
                 type: 'error',
                 message: 'You must be logged in to vote',
@@ -424,7 +451,7 @@ const FeatureRecommendationsPage = () => {
         }
 
         if (!recommendationsAvailable) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'recommendations-unavailable',
                 type: 'error',
                 message: 'Recommendations feature is not available',
@@ -436,7 +463,7 @@ const FeatureRecommendationsPage = () => {
         try {
             const result = await voteOnRecommendation(recId, voteType);
             if (result && result.success === false) {
-                actions.ui.showNotification({
+                actions?.ui?.showNotification?.({
                     id: 'vote-error',
                     type: 'error',
                     message: result.error?.message || 'Failed to vote on recommendation',
@@ -445,18 +472,18 @@ const FeatureRecommendationsPage = () => {
             }
         } catch (error) {
             console.error('Error voting:', error);
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'vote-error',
                 type: 'error',
                 message: 'Failed to vote on recommendation',
                 duration: 3000
             });
         }
-    }, [voteOnRecommendation, currentUser, actions.ui, recommendationsAvailable]);
+    }, [voteOnRecommendation, currentUser, actions?.ui, recommendationsAvailable]);
 
     const handleStatusUpdate = useCallback(async (recId, newStatus) => {
         if (!currentUser?.uid) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'status-no-auth',
                 type: 'error',
                 message: 'You must be logged in to update status',
@@ -466,7 +493,7 @@ const FeatureRecommendationsPage = () => {
         }
 
         if (!recommendationsAvailable) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'recommendations-unavailable',
                 type: 'error',
                 message: 'Recommendations feature is not available',
@@ -496,7 +523,7 @@ const FeatureRecommendationsPage = () => {
             const result = await updateRecommendation(updateData);
 
             if (result && result.success === false) {
-                actions.ui.showNotification({
+                actions?.ui?.showNotification?.({
                     id: 'status-update-error',
                     type: 'error',
                     message: result.error?.message || 'Failed to update recommendation status',
@@ -508,7 +535,7 @@ const FeatureRecommendationsPage = () => {
             }
         } catch (error) {
             console.error('Error updating status:', error);
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'status-update-error',
                 type: 'error',
                 message: 'Failed to update recommendation status',
@@ -516,11 +543,11 @@ const FeatureRecommendationsPage = () => {
             });
             return { success: false, error };
         }
-    }, [updateRecommendation, recommendations, currentUser, actions.ui, recommendationsAvailable]);
+    }, [updateRecommendation, recommendations, currentUser, actions?.ui, recommendationsAvailable]);
 
     const handleDeleteRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'delete-no-auth',
                 type: 'error',
                 message: 'You must be logged in to delete Suggestions',
@@ -530,7 +557,7 @@ const FeatureRecommendationsPage = () => {
         }
 
         if (!recommendationsAvailable) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'recommendations-unavailable',
                 type: 'error',
                 message: 'Suggestions feature is not available',
@@ -543,14 +570,14 @@ const FeatureRecommendationsPage = () => {
             const result = await deleteRecommendation(recId);
 
             if (result && result.success === false) {
-                actions.ui.showNotification({
+                actions?.ui?.showNotification?.({
                     id: 'delete-error',
                     type: 'error',
                     message: result.error?.message || 'Failed to delete Suggestion',
                     duration: 3000
                 });
             } else {
-                actions.ui.showNotification({
+                actions?.ui?.showNotification?.({
                     id: 'delete-success',
                     type: 'success',
                     message: 'Suggestion deleted successfully',
@@ -559,18 +586,18 @@ const FeatureRecommendationsPage = () => {
             }
         } catch (error) {
             console.error('Error deleting Suggestion:', error);
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'delete-error',
                 type: 'error',
                 message: 'Failed to delete suggestion',
                 duration: 3000
             });
         }
-    }, [deleteRecommendation, currentUser, actions.ui, recommendationsAvailable]);
+    }, [deleteRecommendation, currentUser, actions?.ui, recommendationsAvailable]);
 
     const handleArchiveRecommendation = useCallback(async (recId) => {
         if (!currentUser?.uid) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'archive-no-auth',
                 type: 'error',
                 message: 'You must be logged in to archive suggestions',
@@ -580,7 +607,7 @@ const FeatureRecommendationsPage = () => {
         }
 
         if (!recommendationsAvailable) {
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'recommendations-unavailable',
                 type: 'error',
                 message: 'Suggestions feature is not available',
@@ -593,14 +620,14 @@ const FeatureRecommendationsPage = () => {
             const result = await archiveRecommendation(recId);
 
             if (result && result.success === false) {
-                actions.ui.showNotification({
+                actions?.ui?.showNotification?.({
                     id: 'archive-error',
                     type: 'error',
                     message: result.error?.message || 'Failed to archive suggestion',
                     duration: 3000
                 });
             } else {
-                actions.ui.showNotification({
+                actions?.ui?.showNotification?.({
                     id: 'archive-success',
                     type: 'success',
                     message: 'Suggestion archived successfully',
@@ -609,14 +636,94 @@ const FeatureRecommendationsPage = () => {
             }
         } catch (error) {
             console.error('Error archiving suggestion:', error);
-            actions.ui.showNotification({
+            actions?.ui?.showNotification?.({
                 id: 'archive-error',
                 type: 'error',
                 message: 'Failed to archive suggestion',
                 duration: 3000
             });
         }
-    }, [archiveRecommendation, currentUser, actions.ui, recommendationsAvailable]);
+    }, [archiveRecommendation, currentUser, actions?.ui, recommendationsAvailable]);
+
+    // Render function for recommendation items in grouped view
+    const renderRecommendationItem = useCallback((rec, index, isSelected) => {
+        const formatDate = (date) => {
+            if (!date) return 'N/A';
+            const d = date.toDate ? date.toDate() : new Date(date);
+            return d.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        };
+
+        return (
+            <div
+                className={`grid grid-cols-12 gap-4 items-center w-full py-2 px-2 cursor-pointer hover:bg-accent/50 transition-colors ${
+                    isSelected ? 'bg-primary/10' : ''
+                }`}
+                onClick={(e) => {
+                    if (!e.target.closest('input[type="checkbox"]')) {
+                        handleEditRecommendation(rec);
+                    }
+                }}
+            >
+                <div className="col-span-12 sm:col-span-5 lg:col-span-4 min-w-0">
+                    <h4 className="text-sm font-medium text-foreground truncate">
+                        {rec.title}
+                    </h4>
+                    {rec.description && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {rec.description}
+                        </p>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {rec.status && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${rec.status === 'under-review' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            rec.status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                            rec.status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            rec.status === 'in-development' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                            rec.status === 'completed' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'}`}>
+                            {rec.status}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {rec.priority && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${rec.priority === 'critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            rec.priority === 'high' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' :
+                            rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}`}>
+                            {rec.priority}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-2 lg:col-span-2">
+                    {rec.impact && (
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium whitespace-nowrap
+                        ${rec.impact === 'high' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                            rec.impact === 'medium' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'}`}>
+                            {rec.impact}
+                        </span>
+                    )}
+                </div>
+
+                <div className="col-span-4 sm:col-span-1 lg:col-span-2 text-right">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDate(rec.created_at)}
+                    </span>
+                </div>
+            </div>
+        );
+    }, [handleEditRecommendation]);
 
     // Show loading state
     if (isLoading || recommendationsLoading) {
@@ -722,6 +829,15 @@ const FeatureRecommendationsPage = () => {
                                         </span>
                                     )}
                                 </button>
+
+                                {/* Group By Dropdown */}
+                                <GroupSelect
+                                    value={groupBy}
+                                    onChange={setGroupBy}
+                                    options={groupingOptions}
+                                    placeholder="Group by..."
+                                    className="min-w-[140px]"
+                                />
 
                                 {/* View Mode Toggle */}
                                 <div className="inline-flex rounded-lg border border-border bg-background shadow-sm ml-auto lg:ml-0">
@@ -839,7 +955,22 @@ const FeatureRecommendationsPage = () => {
 
                 {/* Content */}
                 <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-                    {viewMode === 'cards' ? (
+                    {groupBy ? (
+                        <div className="p-6">
+                            <GroupedView
+                                items={filteredRecommendations}
+                                groupBy={groupBy}
+                                renderItem={renderRecommendationItem}
+                                emptyMessage="No suggestions to display"
+                                groupMetadata={groupMetadata}
+                                defaultExpanded={true}
+                                selectedItems={selectedRecommendations}
+                                onSelectionChange={(selectedIds) => {
+                                    setSelectedRecommendations(selectedIds);
+                                }}
+                            />
+                        </div>
+                    ) : viewMode === 'cards' ? (
                         <div className="p-6">
                             <RecommendationCards
                                 recommendations={paginatedRecommendations}
@@ -876,8 +1007,8 @@ const FeatureRecommendationsPage = () => {
                         />
                     )}
 
-                    {/* Pagination */}
-                    {filteredRecommendations.length > 0 && (
+                    {/* Pagination - Only show when not grouping */}
+                    {!groupBy && filteredRecommendations.length > 0 && (
                         <div className="border-t border-border">
                             <Pagination
                                 currentPage={currentPage}
@@ -934,7 +1065,7 @@ const FeatureRecommendationsPage = () => {
                 pageIcon="Lightbulb"
                 assetType="recommendations"
                 onAction={handleBulkAction}
-                loadingActions={bulkLoadingActions}
+                loadingActions={loadingActions}
             />
 
             {/* Modal for creating/editing recommendations */}
@@ -943,9 +1074,9 @@ const FeatureRecommendationsPage = () => {
                     recommendation={selectedRecommendation}
                     onSave={async (data) => {
                         if (selectedRecommendation) {
-                            return await actions.recommendations.updateRecommendation(data);
+                            return await actions?.recommendations?.updateRecommendation(data);
                         } else {
-                            return await actions.recommendations.createRecommendation(data);
+                            return await actions?.recommendations?.createRecommendation(data);
                         }
                     }}
                     onClose={closeModal}

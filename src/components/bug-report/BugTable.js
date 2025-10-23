@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import InlineEditCell from './InlineEditCell';
-import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
 import Pagination from '../common/Pagination';
 
 const BugTable = ({
@@ -21,7 +20,6 @@ const BugTable = ({
     testCases = [],
     relationships = { bugToTestCases: {} },
     loading,
-    onBulkAction,
     onView,
     selectedBugs,
     onSelectBugs,
@@ -30,7 +28,6 @@ const BugTable = ({
 }) => {
     const { actions: { ui: { showNotification } } } = useApp();
     const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
-    const [loadingActions, setLoadingActions] = useState([]);
     const [hoveredTitle, setHoveredTitle] = useState(null);
 
     // Pagination state
@@ -60,76 +57,6 @@ const BugTable = ({
         }));
         setCurrentPage(1);
     }, []);
-
-    // Enhanced bulk action handler with bulk updates for selected bugs
-    const handleBulkAction = useCallback(async (actionId, selectedIds, actionConfig, selectedOption) => {
-        setLoadingActions(prev => [...prev, actionId]);
-        
-        try {
-            await onBulkAction(actionId, selectedIds, actionConfig, selectedOption);
-            
-            const itemCount = selectedIds.length;
-            const itemLabel = itemCount === 1 ? 'bug' : 'bugs';
-            
-            let successMessage = '';
-            switch (actionId) {
-                case 'resolve':
-                case 'Resolved':
-                    successMessage = `Successfully resolved ${itemCount} ${itemLabel}`;
-                    break;
-                case 'close':
-                    successMessage = `Successfully closed ${itemCount} ${itemLabel}`;
-                    break;
-                case 'open':
-                    successMessage = `Successfully reopened ${itemCount} ${itemLabel}`;
-                    break;
-                case 'assign':
-                    successMessage = `Successfully assigned ${itemCount} ${itemLabel}`;
-                    break;
-                case 'priority':
-                    successMessage = `Successfully updated priority for ${itemCount} ${itemLabel}`;
-                    break;
-                case 'severity':
-                    successMessage = `Successfully updated severity for ${itemCount} ${itemLabel}`;
-                    break;
-                case 'add-to-sprint':
-                    successMessage = `Successfully added ${itemCount} ${itemLabel} to sprint`;
-                    break;
-                case 'tag':
-                    successMessage = `Successfully tagged ${itemCount} ${itemLabel}`;
-                    break;
-                case 'group':
-                    successMessage = `Successfully grouped ${itemCount} ${itemLabel}`;
-                    break;
-                case 'archive':
-                    successMessage = `Successfully archived ${itemCount} ${itemLabel}`;
-                    break;
-                case 'delete':
-                    successMessage = `Successfully deleted ${itemCount} ${itemLabel}`;
-                    break;
-                default:
-                    successMessage = `Successfully processed ${itemCount} ${itemLabel}`;
-            }
-            
-            showNotification({
-                type: 'success',
-                title: 'Bulk Action Complete',
-                message: successMessage,
-                duration: 3000,
-            });
-            
-        } catch (error) {
-            console.error('Bulk action failed:', error);
-            showNotification({
-                type: 'error',
-                title: 'Bulk Action Failed',
-                message: error.message || `Failed to ${actionId} selected bugs. Please try again.`,
-                duration: 5000,
-            });
-        } finally {
-            setLoadingActions(prev => prev.filter(id => id !== actionId));
-        }
-    }, [onBulkAction, showNotification]);
 
     const sortedBugs = useMemo(() => {
         return [...bugs].sort((a, b) => {
@@ -416,15 +343,6 @@ const BugTable = ({
 
     return (
         <div className="relative bg-card shadow-theme-sm rounded-lg border border-border">
-            <EnhancedBulkActionsBar 
-                selectedItems={selectedBugs}
-                onClearSelection={() => onSelectBugs([])}
-                assetType="bugs"
-                pageTitle="bug"
-                onAction={handleBulkAction}
-                loadingActions={loadingActions}
-            />
-            
             <div className="relative overflow-x-auto">
                 {/* Desktop Table */}
                 <table className="min-w-full divide-y divide-border hidden md:table">

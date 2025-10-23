@@ -76,16 +76,39 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                 endDate: new Date(formData.endDate),
                 goals: formData.goals.trim(),
                 status: formData.status,
+                
+                // ✅ FIX: Initialize asset arrays
+                testCases: [],
+                bugs: [],
+                recommendations: [],
+                recordings: [], // Optional: for future use
+                
+                // Progress tracking
                 progress: {
                     totalAssets: 0,
                     completedAssets: 0,
-                    percentage: 0
-                }
+                    percentage: 0,
+                    testCases: { total: 0, completed: 0 },
+                    bugs: { total: 0, resolved: 0 },
+                    recommendations: { total: 0, implemented: 0 }
+                },
+                
+                // Metadata
+                createdAt: new Date(),
+                lastUpdated: new Date(),
+                
+                // Suite reference
+                suite_id: suiteId,
+                suiteId: suiteId // Keep both for compatibility
             };
+
+            console.log('🎯 Creating sprint with data:', sprintData);
 
             const result = await actions.sprints?.createSprint?.(sprintData, { activeSuite: { id: suiteId } });
             
             if (result?.success) {
+                console.log('✅ Sprint created successfully:', result.data);
+                
                 onSprintCreated?.(result.data);
                 
                 // Reset form
@@ -106,11 +129,12 @@ const CreateSprintModal = ({ isOpen, onSprintCreated, onCancel, suiteId }) => {
                     duration: 3000
                 });
             } else {
+                console.error('❌ Sprint creation failed:', result?.error);
                 throw new Error(result?.error?.message || 'Failed to create sprint');
             }
             
         } catch (error) {
-            console.error('Error creating sprint:', error);
+            console.error('💥 Error creating sprint:', error);
             actions.ui?.showNotification?.({
                 id: 'sprint-create-error',
                 type: 'error',

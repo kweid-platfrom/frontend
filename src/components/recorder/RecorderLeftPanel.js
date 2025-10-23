@@ -68,7 +68,7 @@ const RecorderLeftPanel = ({
             {/* Preview Note - Top */}
             <div className="p-3 bg-teal-50 dark:bg-primary/20 rounded-lg border border-teal-200 dark:border-primary">
               <div className="text-xs text-primary dark:text-teal-300">
-                <strong>📝 Preview Mode:</strong> After saving, you&aposll be able to view detailed logs, add timestamped comments, 
+                <strong>📝 Preview Mode:</strong> After saving, you'll be able to view detailed logs, add timestamped comments, 
                 and get AI-powered insights about your recording.
               </div>
             </div>
