@@ -1,11 +1,18 @@
+// app/api/auth/youtube/route.js
 import { NextResponse } from 'next/server';
+import { getBaseUrl } from '@/utils/url';
 
 export async function GET() {
   const clientId = process.env.YOUTUBE_CLIENT_ID;
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/api/auth/youtube/callback';
+  
+  // ✅ FIXED: Dynamic redirect URI
+  const baseUrl = getBaseUrl();
+  const redirectUri = `${baseUrl}/api/auth/youtube/callback`;
 
   if (!clientId) {
-    return NextResponse.json({ error: 'YOUTUBE_CLIENT_ID not configured' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'YouTube API not configured' 
+    }, { status: 500 });
   }
 
   const scope = 'https://www.googleapis.com/auth/youtube.upload';
