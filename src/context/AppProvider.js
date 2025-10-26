@@ -3,7 +3,6 @@
 
 import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
 import { useSlices, getAppState } from './hooks/useSlices';
-import { useAI } from './hooks/useAI';
 import { useTestCases } from './hooks/useTestCases';
 import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
@@ -26,14 +25,6 @@ export const AppProvider = ({ children }) => {
 
     // Check if recommendations slice is available
     const hasRecommendationsSlice = slices.recommendations !== undefined;
-
-    const { initializeAI, generateTestCasesWithAI, getAIAnalytics, updateAISettings } = useAI(
-        slices.auth,
-        slices.ai,
-        slices.ui,
-        aiInitialized,
-        setAiInitialized
-    );
 
     const { wrappedCreateTestCase, wrappedUpdateTestCase } = useTestCases(slices);
     const { setTheme, toggleTheme } = useTheme(slices.theme, slices.ui);
@@ -606,7 +597,6 @@ export const AppProvider = ({ children }) => {
                 console.log('✅ Profile refreshed, proceeding with app initialization');
                 slices.suites.actions.loadSuitesStart();
                 setSuitesLoaded(false);
-                initializeAI();
 
                 if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
                     unsubscribeSuitesRef.current();
@@ -1392,7 +1382,6 @@ export const AppProvider = ({ children }) => {
                 team: slices.team.actions,
                 automation: slices.automation.actions,
                 ui: slices.ui.actions,
-                ai: { ...slices.ai.actions, generateTestCasesWithAI, getAIAnalytics, updateAISettings },
                 theme: { ...slices.theme.actions, setTheme, toggleTheme },
 
                 organization: {
@@ -1977,8 +1966,6 @@ export const AppProvider = ({ children }) => {
             suiteCreationBlocked: slices.suites.state.suiteCreationBlocked,
             isTrialActive: slices.subscription.state.isTrialActive,
             planLimits: slices.subscription.state.planLimits,
-            aiAvailable: slices.ai.state.isInitialized && !slices.ai.state.error,
-            aiGenerating: slices.ai.state.isGenerating,
             isDarkMode: slices.theme.state.isDark,
             isLightMode: slices.theme.state.isLight,
             isSystemTheme: slices.theme.state.isSystem,
@@ -2011,7 +1998,6 @@ export const AppProvider = ({ children }) => {
                 slices.team.state.loading ||
                 slices.automation.state.loading ||
                 slices.ui.state.loading ||
-                slices.ai.state.loading ||
                 slices.theme.state.isLoading ||
                 archiveLoading ||
                 (hasRecommendationsSlice ? slices.recommendations.state.loading : false) ||
@@ -2024,9 +2010,6 @@ export const AppProvider = ({ children }) => {
             wrappedUpdateTestCase,
             saveRecording,
             linkRecordingToBug,
-            generateTestCasesWithAI,
-            getAIAnalytics,
-            updateAISettings,
             setTheme,
             toggleTheme,
             linkTestCasesToBug,

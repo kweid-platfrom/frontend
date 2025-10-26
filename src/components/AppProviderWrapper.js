@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '../context/AppProvider';
+import { AIProvider } from '../context/AIContext';
 import LoadingScreen from './common/LoadingScreen';
 import Register from './auth/Register';
 import Login from './auth/Login';
@@ -28,7 +29,10 @@ const AppProviderWrapper = ({ children }) => {
 
   return (
     <AppProvider>
-      <ProtectedRouteContent>{children}</ProtectedRouteContent>
+      {/* Wrap AIProvider inside AppProvider so AI has access to app state */}
+      <AIProvider>
+        <ProtectedRouteContent>{children}</ProtectedRouteContent>
+      </AIProvider>
     </AppProvider>
   );
 };

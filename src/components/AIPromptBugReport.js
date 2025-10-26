@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { SparklesIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, XCircleIcon, CheckCircleIcon, PaperAirplaneIcon, PencilIcon } from '@heroicons/react/24/outline';
-import { useAIBugService } from '../hooks/useAIBugService';
+import { SparklesIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, XCircleIcon, CheckCircleIcon, PaperAirplaneIcon, PencilIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { useAI } from '@/context/AIContext';
 import BugReportAttachments from '../components/create-bug/BugReportAttachments';
 
 const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, isLoadingRecordings }) => {
@@ -10,20 +10,20 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
     const [isSubmittingReport, setIsSubmittingReport] = useState(false);
     const [attachments, setAttachments] = useState([]);
     const [error, setError] = useState('');
+    const [aiGenerationMetadata, setAiGenerationMetadata] = useState(null);
     
-    // Use the AI Bug Service hook
+    // Use the central AI Context
     const {
         isInitialized,
-        isGenerating,
+        isGeneratingBugReport,
         isHealthy,
         error: aiError,
         provider,
-        model,
+        currentModel,
         canGenerate,
         generateBugReport,
-        initialize,
-        clearError
-    } = useAIBugService();
+        clearError: clearAIError
+    } = useAI();
 
     const features = [
         'Authentication',
@@ -49,7 +49,6 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
         }
 
         try {
-            // If it's an object with browser/device info, format it nicely
             if (evidence.browser || evidence.device || evidence.os) {
                 const parts = [];
                 if (evidence.browser) parts.push(`Browser: ${evidence.browser}`);
@@ -63,7 +62,6 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                 return parts.join(' | ');
             }
             
-            // For other objects, stringify safely
             return JSON.stringify(evidence, null, 2);
         } catch (error) {
             console.error('Error formatting evidence:', error);
@@ -71,16 +69,45 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
         }
     }, []);
 
-    // Generate bug report using the hook
+    // Create AI metadata for tracking
+    const createAIMetadata = useCallback((prompt, consoleError, tokensUsed = null, cost = null) => {
+        const operationId = `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Create a concise prompt summary
+        const promptSummary = prompt.trim() 
+            ? prompt.substring(0, 100) + (prompt.length > 100 ? '...' : '')
+            : consoleError.trim() 
+                ? 'Console error analysis: ' + consoleError.substring(0, 80) + '...'
+                : 'Bug report generation';
+
+        return {
+            generated: true,
+            provider: provider || 'gemini',
+            model: currentModel || 'gemini-1.5-flash-latest',
+            generated_at: new Date().toISOString(),
+            tokens_used: tokensUsed || null,
+            cost: cost || null,
+            operation_id: operationId,
+            prompt_summary: promptSummary,
+            generation_timestamp: Date.now(),
+            input_length: {
+                prompt_chars: prompt.length,
+                console_error_chars: consoleError.length
+            }
+        };
+    }, [provider, currentModel]);
+
+    // Generate bug report using the AI Context
     const handleGenerate = useCallback(async () => {
         if (!prompt.trim() && !consoleError.trim()) {
+            setError('Please provide either a bug description or console error');
             return;
         }
 
-        clearError();
+        clearAIError();
+        setError('');
         
         try {
-            // Additional context for better AI analysis
             const additionalContext = {
                 userAgent: navigator.userAgent,
                 timestamp: new Date().toISOString(),
@@ -89,26 +116,55 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                 hasConsoleError: !!consoleError.trim()
             };
 
+            const startTime = Date.now();
             const result = await generateBugReport(prompt, consoleError, additionalContext);
+            const endTime = Date.now();
 
             if (result.success) {
                 console.log('✅ Bug report generated successfully');
+                
+                // Estimate tokens (rough approximation: ~4 chars per token)
+                const estimatedTokens = Math.ceil(
+                    (prompt.length + consoleError.length + JSON.stringify(result.data).length) / 4
+                );
+                
+                // Estimate cost (example rates, adjust based on your provider)
+                const estimatedCost = provider === 'gemini' 
+                    ? (estimatedTokens / 1000) * 0.0001 // Example: $0.0001 per 1K tokens
+                    : null;
+
+                // Create AI metadata
+                const metadata = createAIMetadata(
+                    prompt, 
+                    consoleError, 
+                    estimatedTokens, 
+                    estimatedCost
+                );
+                
+                // Add generation time to metadata
+                metadata.generation_time_ms = endTime - startTime;
+
+                // Store metadata separately for UI display
+                setAiGenerationMetadata(metadata);
                 
                 // Process the evidence field for display
                 const processedData = {
                     ...result.data,
                     evidence: result.data.evidence ? formatEvidenceForDisplay(result.data.evidence) : undefined,
-                    creationType: 'ai'
+                    source: 'ai_generated',
+                    ai_metadata: metadata
                 };
                 
-                // Set the generated report for display in the AI tab
                 setGeneratedReport(processedData);
+            } else {
+                setError(result.error || 'Failed to generate bug report');
             }
             
         } catch (err) {
             console.error('❌ Bug report generation failed:', err);
+            setError(err.message || 'An unexpected error occurred');
         }
-    }, [prompt, consoleError, generateBugReport, clearError, formatEvidenceForDisplay]);
+    }, [prompt, consoleError, generateBugReport, clearAIError, formatEvidenceForDisplay, createAIMetadata, provider]);
 
     // Handle submitting the AI-generated report
     const handleSubmitGenerated = useCallback(async () => {
@@ -116,20 +172,30 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
         setIsSubmittingReport(true);
         try {
-            // Include attachments with the generated report
+            // Include attachments and ensure AI metadata is preserved
             const reportWithAttachments = {
                 ...generatedReport,
-                attachments: attachments
+                attachments: attachments,
+                source: 'ai_generated',
+                ai_metadata: {
+                    ...generatedReport.ai_metadata,
+                    submitted_at: new Date().toISOString(),
+                    submitted_timestamp: Date.now()
+                }
             };
             
             await onSubmit(reportWithAttachments);
+            
             // Clear the form and generated report after successful submission
             setPrompt('');
             setConsoleError('');
             setGeneratedReport(null);
             setAttachments([]);
+            setError('');
+            setAiGenerationMetadata(null);
         } catch (error) {
             console.error('Failed to submit AI-generated report:', error);
+            setError(error.message || 'Failed to submit bug report');
         } finally {
             setIsSubmittingReport(false);
         }
@@ -137,10 +203,26 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
 
     // Handle editing the generated report
     const handleEditGenerated = useCallback((field, value) => {
-        setGeneratedReport(prev => ({
-            ...prev,
-            [field]: value
-        }));
+        setGeneratedReport(prev => {
+            const updated = {
+                ...prev,
+                [field]: value
+            };
+            
+            // Track that report was manually edited
+            if (updated.ai_metadata) {
+                updated.ai_metadata = {
+                    ...updated.ai_metadata,
+                    manually_edited: true,
+                    last_edited_at: new Date().toISOString(),
+                    edited_fields: [...(updated.ai_metadata.edited_fields || []), field].filter(
+                        (v, i, a) => a.indexOf(v) === i
+                    )
+                };
+            }
+            
+            return updated;
+        });
     }, []);
 
     // Handle clipboard paste for console errors
@@ -148,21 +230,26 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
         try {
             const text = await navigator.clipboard.readText();
             setConsoleError(text);
-            clearError();
+            clearAIError();
+            setError('');
         } catch (error) {
             console.error('Failed to read clipboard:', error);
+            setError('Failed to read from clipboard. Please paste manually.');
         }
-    }, [clearError]);
+    }, [clearAIError]);
 
     // Reset to input form
     const handleStartOver = useCallback(() => {
         setGeneratedReport(null);
         setAttachments([]);
-        clearError();
-    }, [clearError]);
+        setAiGenerationMetadata(null);
+        clearAIError();
+        setError('');
+    }, [clearAIError]);
 
-    const isDisabled = isProcessing || isGenerating || !canGenerate || (!prompt.trim() && !consoleError.trim());
+    const isDisabled = isProcessing || isGeneratingBugReport || !canGenerate || (!prompt.trim() && !consoleError.trim());
     const hasInput = prompt.trim() || consoleError.trim();
+    const displayError = aiError || error;
 
     return (
         <div className="space-y-6">
@@ -185,36 +272,30 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                         <>
                             <CheckCircleIcon className="h-4 w-4 text-success" />
                             <span className="text-xs text-success">
-                                AI Ready ({provider} - {model})
+                                AI Ready ({provider} - {currentModel})
                             </span>
                         </>
                     ) : (
                         <>
                             <XCircleIcon className="h-4 w-4 text-destructive" />
-                            <span className="text-xs text-destructive">AI Service Issues</span>
-                            <button
-                                onClick={initialize}
-                                className="text-xs text-primary hover:text-primary ml-2 underline"
-                            >
-                                Retry
-                            </button>
+                            <span className="text-xs text-destructive">AI Service Not Available</span>
                         </>
                     )}
                 </div>
             </div>
 
             {/* Error Display */}
-            {(aiError || error) && (
+            {displayError && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded p-3">
                     <div className="flex items-start">
                         <XCircleIcon className="h-5 w-5 text-destructive mr-2 flex-shrink-0 mt-0.5" />
                         <div className="text-sm text-destructive flex-1">
                             <p className="font-medium">Error</p>
-                            <p>{aiError || error}</p>
+                            <p>{displayError}</p>
                         </div>
                         <button
                             onClick={() => {
-                                clearError();
+                                clearAIError();
                                 setError('');
                             }}
                             className="text-destructive hover:text-destructive ml-2"
@@ -240,7 +321,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             placeholder="Describe the issue you're experiencing... (e.g., 'The submit button doesn't work when I click it', 'Page crashes when loading user profile')"
                             rows={4}
                             className="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary resize-vertical"
-                            disabled={isProcessing || isGenerating || !isInitialized}
+                            disabled={isProcessing || isGeneratingBugReport || !isInitialized}
                         />
                     </div>
 
@@ -254,7 +335,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                                 type="button"
                                 onClick={handlePasteConsoleError}
                                 className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-secondary hover:bg-accent rounded border border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={isProcessing || isGenerating || !isInitialized}
+                                disabled={isProcessing || isGeneratingBugReport || !isInitialized}
                             >
                                 <ClipboardDocumentIcon className="h-3 w-3 mr-1" />
                                 Paste from Clipboard
@@ -267,7 +348,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             placeholder="Paste console errors here... (e.g., 'ReferenceError: validateSuiteAccess is not defined')"
                             rows={6}
                             className="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary resize-vertical font-mono text-sm"
-                            disabled={isProcessing || isGenerating || !isInitialized}
+                            disabled={isProcessing || isGeneratingBugReport || !isInitialized}
                         />
                     </div>
 
@@ -297,8 +378,8 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             <div className="flex">
                                 <XCircleIcon className="h-5 w-5 text-destructive mr-2 flex-shrink-0 mt-0.5" />
                                 <div className="text-sm text-destructive">
-                                    <p className="font-medium">AI Service Issues</p>
-                                    <p>The AI service is experiencing issues. Please try again or contact support.</p>
+                                    <p className="font-medium">AI Service Not Available</p>
+                                    <p>Please configure your Gemini API key in the settings to use AI features.</p>
                                 </div>
                             </div>
                         </div>
@@ -316,7 +397,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                                     : 'bg-primary text-primary-foreground hover:bg-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
                             }`}
                         >
-                            {isGenerating ? (
+                            {isGeneratingBugReport ? (
                                 <>
                                     <div className="animate-spin rounded h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                                     Generating AI Report...
@@ -338,7 +419,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                     {/* Additional Info */}
                     {isInitialized && isHealthy && (
                         <div className="text-xs text-muted text-center">
-                            Powered by {provider} ({model})
+                            Powered by {provider} ({currentModel})
                         </div>
                     )}
                 </div>
@@ -357,6 +438,66 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             </div>
                         </div>
                     </div>
+
+                    {/* AI Generation Metadata Display */}
+                    {aiGenerationMetadata && (
+                        <div className="bg-accent/50 border border-accent rounded-lg p-4">
+                            <div className="flex items-center mb-3">
+                                <ChartBarIcon className="h-5 w-5 text-accent-foreground mr-2" />
+                                <h4 className="text-sm font-semibold text-accent-foreground">AI Generation Metadata</h4>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                                <div>
+                                    <span className="text-muted-foreground">Provider:</span>
+                                    <p className="font-medium text-foreground">{aiGenerationMetadata.provider}</p>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground">Model:</span>
+                                    <p className="font-medium text-foreground">{aiGenerationMetadata.model}</p>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground">Operation ID:</span>
+                                    <p className="font-mono text-xs text-foreground">{aiGenerationMetadata.operation_id}</p>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground">Generated:</span>
+                                    <p className="font-medium text-foreground">
+                                        {new Date(aiGenerationMetadata.generated_at).toLocaleString()}
+                                    </p>
+                                </div>
+                                {aiGenerationMetadata.tokens_used && (
+                                    <div>
+                                        <span className="text-muted-foreground">Tokens:</span>
+                                        <p className="font-medium text-foreground">~{aiGenerationMetadata.tokens_used}</p>
+                                    </div>
+                                )}
+                                {aiGenerationMetadata.cost && (
+                                    <div>
+                                        <span className="text-muted-foreground">Est. Cost:</span>
+                                        <p className="font-medium text-foreground">${aiGenerationMetadata.cost.toFixed(4)}</p>
+                                    </div>
+                                )}
+                                {aiGenerationMetadata.generation_time_ms && (
+                                    <div>
+                                        <span className="text-muted-foreground">Time:</span>
+                                        <p className="font-medium text-foreground">{(aiGenerationMetadata.generation_time_ms / 1000).toFixed(2)}s</p>
+                                    </div>
+                                )}
+                                {aiGenerationMetadata.manually_edited && (
+                                    <div className="col-span-2">
+                                        <span className="text-muted-foreground">Edited Fields:</span>
+                                        <p className="font-medium text-foreground">
+                                            {aiGenerationMetadata.edited_fields?.join(', ')}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-accent">
+                                <span className="text-muted-foreground text-xs">Prompt Summary:</span>
+                                <p className="text-xs text-foreground mt-1 italic">{aiGenerationMetadata.prompt_summary}</p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Generated Report Preview */}
                     <div className="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -431,7 +572,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                             />
                         </div>
 
-                        {/* Classification Layout - Severity, Category, Feature, Environment, Frequency */}
+                        {/* Classification Layout */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-2">

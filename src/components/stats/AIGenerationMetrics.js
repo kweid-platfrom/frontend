@@ -3,46 +3,88 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, TrendingUp, Clock, DollarSign, Target, Zap, AlertTriangle, CheckCircle, Download, RefreshCw } from 'lucide-react';
-import aiIntegrationService from '../../services/AIIntegrationService';
+import { useAI } from '@/context/AIContext';
+import { useApp } from '@/context/AppProvider';
+import { calculateSuiteAIMetrics, exportMetricsAsJSON, exportMetricsAsCSV } from '@/services/aiMetricsService';
 
 const AIGenerationMetrics = () => {
+    const { state } = useApp();
+    const ai = useAI();
+    
+    const {
+        isInitialized,
+        isHealthy,
+        error: aiError,
+        currentModel,
+        operationHistory,
+        tokensUsed: sessionTokens,
+        totalCost: sessionCost,
+        operationsCount: sessionOps
+    } = ai;
+
     const [metrics, setMetrics] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [dateRange, setDateRange] = useState(30);
-    const [serviceStatus, setServiceStatus] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [exporting, setExporting] = useState(false);
 
-    useEffect(() => {
-        initializeAndLoadMetrics();
-    }, [dateRange]);
+    const activeSuiteId = state.suites?.activeSuite?.id;
 
-    const initializeAndLoadMetrics = async () => {
+    useEffect(() => {
+        if (activeSuiteId) {
+            loadMetrics();
+        }
+    }, [activeSuiteId, dateRange]);
+
+    const loadMetrics = async () => {
+        if (!activeSuiteId) {
+            setError('No active suite selected');
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         setError(null);
 
         try {
-            const status = aiIntegrationService.getServiceStatus();
-            setServiceStatus(status);
-
-            if (!status.initialized || !status.available) {
-                const initResult = await aiIntegrationService.initialize();
-                if (!initResult.success) {
-                    throw new Error(initResult.userMessage || initResult.error || 'Failed to initialize AI services');
-                }
-                const updatedStatus = aiIntegrationService.getServiceStatus();
-                setServiceStatus(updatedStatus);
+            // Check if AI context is available
+            if (!isInitialized) {
+                setError('AI service is initializing...');
+                setMetrics(getDefaultMetrics());
+                setLoading(false);
+                return;
             }
 
-            const analyticsResult = await aiIntegrationService.getAIAnalytics(dateRange);
-            if (analyticsResult.success) {
-                setMetrics(analyticsResult.data);
+            // Check for errors in AI context
+            if (aiError) {
+                throw new Error(aiError);
+            }
+
+            // Get metrics from Firestore
+            const result = await calculateSuiteAIMetrics(activeSuiteId, dateRange);
+            
+            if (result.success) {
+                // Enhance with real-time session data
+                const enhancedMetrics = {
+                    ...result.data,
+                    currentSession: {
+                        operations: sessionOps || 0,
+                        tokensUsed: sessionTokens || 0,
+                        totalCost: sessionCost || 0,
+                        successfulCalls: operationHistory?.filter(op => op.success).length || 0,
+                        failedCalls: operationHistory?.filter(op => !op.success).length || 0,
+                    },
+                    lastUpdated: new Date().toISOString()
+                };
+
+                setMetrics(enhancedMetrics);
             } else {
-                throw new Error(analyticsResult.error || 'Failed to load analytics');
+                throw new Error(result.error || 'Failed to load metrics');
             }
         } catch (err) {
-            setError(err.message);
+            console.error('Error loading metrics:', err);
+            setError(err.message || 'Failed to load metrics');
             setMetrics(getDefaultMetrics());
         } finally {
             setLoading(false);
@@ -51,39 +93,55 @@ const AIGenerationMetrics = () => {
 
     const refreshMetrics = async () => {
         setRefreshing(true);
-        try {
-            const result = await aiIntegrationService.getAIAnalytics(dateRange, true);
-            if (result.success) {
-                setMetrics(result.data);
-                setError(null);
-            } else {
-                setError(result.error || 'Failed to refresh metrics');
-            }
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setRefreshing(false);
-        }
+        await loadMetrics();
+        setRefreshing(false);
     };
 
     const exportReport = async (format) => {
         setExporting(true);
+        setError(null);
+        
         try {
-            const result = await aiIntegrationService.exportAIReport(format, dateRange);
-            if (result.success) {
-                const blob = new Blob([result.data], { type: result.contentType });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = result.filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-            } else {
-                setError(result.error || 'Export failed');
+            if (!metrics) {
+                throw new Error('No metrics to export');
             }
+
+            const exportData = {
+                generatedAt: new Date().toISOString(),
+                dateRange,
+                suiteId: activeSuiteId,
+                suiteName: state.suites?.activeSuite?.name,
+                metrics,
+                model: currentModel,
+                operationHistory: operationHistory?.slice(0, 50) || []
+            };
+
+            let content, contentType, extension;
+
+            if (format === 'json') {
+                content = exportMetricsAsJSON(exportData);
+                contentType = 'application/json';
+                extension = 'json';
+            } else if (format === 'csv') {
+                content = exportMetricsAsCSV(metrics);
+                contentType = 'text/csv';
+                extension = 'csv';
+            } else {
+                throw new Error('Unsupported format');
+            }
+
+            // Create and download blob
+            const blob = new Blob([content], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ai-metrics-${activeSuiteId}-${Date.now()}.${extension}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         } catch (err) {
+            console.error('Error exporting report:', err);
             setError(err.message);
         } finally {
             setExporting(false);
@@ -94,7 +152,11 @@ const AIGenerationMetrics = () => {
         totalTestCasesGenerated: 0,
         totalBugReportsGenerated: 0,
         totalAIGenerations: 0,
+        totalOperations: 0,
+        successfulOperations: 0,
+        failedOperations: 0,
         overallSuccessRate: 0,
+        totalTokensUsed: 0,
         totalTimeSavedHours: 0,
         totalCost: 0,
         costEfficiency: 0,
@@ -107,13 +169,11 @@ const AIGenerationMetrics = () => {
         productivityIncrease: 0,
         providerUsage: {},
         currentSession: {
-            testCasesGenerated: 0,
-            bugReportsGenerated: 0,
-            aiCallsToday: 0,
+            operations: 0,
+            tokensUsed: 0,
+            totalCost: 0,
             successfulCalls: 0,
-            failedCalls: 0,
-            totalCostToday: 0,
-            timeSaved: 0
+            failedCalls: 0
         }
     });
 
@@ -122,11 +182,11 @@ const AIGenerationMetrics = () => {
             style: 'currency',
             currency: 'USD',
             minimumFractionDigits: 4
-        }).format(amount);
+        }).format(amount || 0);
     };
 
     const formatNumber = (num) => {
-        return new Intl.NumberFormat().format(num);
+        return new Intl.NumberFormat().format(num || 0);
     };
 
     const getHealthColor = (rate) => {
@@ -145,7 +205,29 @@ const AIGenerationMetrics = () => {
         }));
     };
 
-    if (loading) {
+    // Service status
+    const serviceStatus = {
+        available: isInitialized && isHealthy && !aiError,
+        initialized: isInitialized,
+        model: currentModel || 'Not configured',
+        loading: !isInitialized
+    };
+
+    // No active suite
+    if (!activeSuiteId) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Alert className="max-w-md">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                        Please select a test suite to view AI metrics
+                    </AlertDescription>
+                </Alert>
+            </div>
+        );
+    }
+
+    if (loading && !metrics) {
         return (
             <div className="flex items-center justify-center p-8">
                 <Loader2 className="animate-spin mr-2 text-primary" />
@@ -156,10 +238,13 @@ const AIGenerationMetrics = () => {
 
     return (
         <div className="space-y-6">
+            {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-2xl font-bold text-foreground">AI Generation Metrics</h2>
-                    <p className="text-muted-foreground">Last {dateRange} days</p>
+                    <p className="text-muted-foreground">
+                        {state.suites?.activeSuite?.name} • Last {dateRange} days
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <select
@@ -175,6 +260,7 @@ const AIGenerationMetrics = () => {
                         onClick={refreshMetrics}
                         disabled={refreshing}
                         className="px-3 py-2 bg-[rgb(var(--color-info))] text-white rounded hover:bg-[rgb(var(--color-info)/0.8)] disabled:opacity-50"
+                        title="Refresh metrics"
                     >
                         {refreshing ? <Loader2 className="animate-spin w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
                     </button>
@@ -182,51 +268,96 @@ const AIGenerationMetrics = () => {
                         onClick={() => exportReport('json')}
                         disabled={exporting}
                         className="px-3 py-2 bg-[rgb(var(--color-success))] text-white rounded hover:bg-[rgb(var(--color-success)/0.8)] disabled:opacity-50"
+                        title="Export report"
                     >
                         {exporting ? <Loader2 className="animate-spin w-4 h-4" /> : <Download className="w-4 h-4" />}
                     </button>
                 </div>
             </div>
 
-            {error && (
+            {/* Error Alert */}
+            {(error || aiError) && (
                 <Alert className="border-[rgb(var(--color-error)/0.2)] bg-[rgb(var(--color-error)/0.1)]">
                     <AlertTriangle className="h-4 w-4 text-[rgb(var(--color-error))]" />
                     <AlertDescription className="text-[rgb(var(--color-error))]">
-                        {error}
+                        {error || aiError}
                     </AlertDescription>
                 </Alert>
             )}
 
-            {serviceStatus && (
-                <Card className="border-[rgb(var(--color-info)/0.2)] bg-[rgb(var(--color-info)/0.1)]">
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            {serviceStatus.available ? 
-                                <CheckCircle className="w-5 h-5 text-[rgb(var(--color-success))]" /> : 
-                                <AlertTriangle className="w-5 h-5 text-[rgb(var(--color-error))]" />
-                            }
-                            <span className="font-medium text-foreground">
-                                AI Service Status: {serviceStatus.available ? 'Available' : 'Unavailable'}
-                            </span>
-                        </div>
-                        {serviceStatus.provider && (
-                            <p className="text-sm text-muted-foreground">
-                                Provider: {serviceStatus.provider} | Model: {serviceStatus.model}
-                            </p>
+            {/* Service Status */}
+            <Card className={`border-[rgb(var(--color-${serviceStatus.available ? 'success' : 'error'})/0.2)] bg-[rgb(var(--color-${serviceStatus.available ? 'success' : 'error'})/0.1)]`}>
+                <CardContent className="pt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                        {serviceStatus.loading ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-[rgb(var(--color-info))]" />
+                        ) : serviceStatus.available ? (
+                            <CheckCircle className="w-5 h-5 text-[rgb(var(--color-success))]" />
+                        ) : (
+                            <AlertTriangle className="w-5 h-5 text-[rgb(var(--color-error))]" />
                         )}
-                    </CardContent>
-                </Card>
-            )}
+                        <span className="font-medium text-foreground">
+                            AI Service Status: {serviceStatus.loading ? 'Initializing...' : serviceStatus.available ? 'Available' : 'Unavailable'}
+                        </span>
+                    </div>
+                    {serviceStatus.model && serviceStatus.model !== 'Not configured' && (
+                        <p className="text-sm text-muted-foreground">
+                            Model: {serviceStatus.model}
+                        </p>
+                    )}
+                    {!serviceStatus.available && !serviceStatus.loading && (
+                        <p className="text-sm text-[rgb(var(--color-error))] mt-2">
+                            {aiError || 'Please configure your AI API key in settings to enable AI features.'}
+                        </p>
+                    )}
+                </CardContent>
+            </Card>
 
+            {/* Current Session Stats */}
+            <Card className="bg-card border-border">
+                <CardHeader>
+                    <h3 className="text-lg font-semibold text-foreground">Current Session (Real-time)</h3>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
+                                {metrics?.currentSession?.operations || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Operations</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
+                                {formatNumber(metrics?.currentSession?.tokensUsed || 0)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Tokens</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">
+                                {formatCurrency(metrics?.currentSession?.totalCost || 0)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Cost</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-foreground">
+                                {metrics?.currentSession?.successfulCalls || 0}/{metrics?.currentSession?.operations || 0}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Success</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Main Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="bg-card border-border">
                     <CardContent className="pt-6">
                         <div className="flex items-center">
                             <div className="flex-1">
-                                <p className="text-sm font-medium text-muted-foreground">Total Generations</p>
+                                <p className="text-sm font-medium text-muted-foreground">Total Generated</p>
                                 <p className="text-2xl font-bold text-foreground">{formatNumber(metrics?.totalAIGenerations || 0)}</p>
                                 <p className="text-xs text-muted-foreground">
-                                    {formatNumber(metrics?.totalTestCasesGenerated || 0)} test cases + {formatNumber(metrics?.totalBugReportsGenerated || 0)} bug reports
+                                    {formatNumber(metrics?.totalTestCasesGenerated || 0)} tests + {formatNumber(metrics?.totalBugReportsGenerated || 0)} bugs
                                 </p>
                             </div>
                             <Target className="h-8 w-8 text-[rgb(var(--color-info))]" />
@@ -242,7 +373,7 @@ const AIGenerationMetrics = () => {
                                 <p className={`text-2xl font-bold ${getHealthColor(metrics?.overallSuccessRate || 0)}`}>
                                     {(metrics?.overallSuccessRate || 0).toFixed(1)}%
                                 </p>
-                                <p className="text-xs text-muted-foreground">Overall AI success rate</p>
+                                <p className="text-xs text-muted-foreground">Overall success</p>
                             </div>
                             <CheckCircle className="h-8 w-8 text-[rgb(var(--color-success))]" />
                         </div>
@@ -257,7 +388,7 @@ const AIGenerationMetrics = () => {
                                 <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
                                     {(metrics?.totalTimeSavedHours || 0).toFixed(1)}h
                                 </p>
-                                <p className="text-xs text-muted-foreground">Estimated manual work saved</p>
+                                <p className="text-xs text-muted-foreground">Estimated</p>
                             </div>
                             <Clock className="h-8 w-8 text-[rgb(var(--color-success))]" />
                         </div>
@@ -272,7 +403,7 @@ const AIGenerationMetrics = () => {
                                 <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">
                                     {formatCurrency(metrics?.totalCost || 0)}
                                 </p>
-                                <p className="text-xs text-muted-foreground">AI service costs</p>
+                                <p className="text-xs text-muted-foreground">AI costs</p>
                             </div>
                             <DollarSign className="h-8 w-8 text-[rgb(var(--color-warning))]" />
                         </div>
@@ -280,6 +411,7 @@ const AIGenerationMetrics = () => {
                 </Card>
             </div>
 
+            {/* Performance Scores */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="bg-card border-border">
                     <CardHeader>
@@ -345,58 +477,34 @@ const AIGenerationMetrics = () => {
                 </Card>
             </div>
 
-            <Card className="bg-card border-border">
-                <CardHeader>
-                    <h3 className="text-lg font-semibold text-foreground">Current Session</h3>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
-                                {metrics?.currentSession?.testCasesGenerated || 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Test Cases</p>
+            {/* Recent Operations */}
+            {operationHistory && operationHistory.length > 0 && (
+                <Card className="bg-card border-border">
+                    <CardHeader>
+                        <h3 className="text-lg font-semibold text-foreground">Recent Operations</h3>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {operationHistory.slice(0, 10).map((op, index) => (
+                                <div key={op.id || index} className="flex items-center justify-between p-2 bg-muted rounded text-sm">
+                                    <div className="flex-1">
+                                        <span className="font-medium text-foreground">{op.name || op.type || 'AI Operation'}</span>
+                                        <span className={`ml-2 px-2 py-0.5 rounded text-xs ${op.success ? 'bg-[rgb(var(--color-success)/0.2)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-error)/0.2)] text-[rgb(var(--color-error))]'}`}>
+                                            {op.success ? 'Success' : 'Failed'}
+                                        </span>
+                                    </div>
+                                    <div className="text-right text-muted-foreground text-xs">
+                                        <div>{new Date(op.timestamp).toLocaleTimeString()}</div>
+                                        <div>{formatNumber(op.tokensUsed || 0)} tokens</div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">
-                                {metrics?.currentSession?.bugReportsGenerated || 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Bug Reports</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
-                                {metrics?.currentSession?.aiCallsToday || 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">AI Calls</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
-                                {metrics?.currentSession?.successfulCalls || 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Successful</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-error))]">
-                                {metrics?.currentSession?.failedCalls || 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Failed</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
-                                {formatCurrency(metrics?.currentSession?.totalCostToday || 0)}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Cost Today</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-[rgb(var(--color-info))]">
-                                {(metrics?.currentSession?.timeSaved || 0).toFixed(0)}m
-                            </p>
-                            <p className="text-sm text-muted-foreground">Time Saved</p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            )}
 
+            {/* Provider Usage */}
             {getProviderStats().length > 0 && (
                 <Card className="bg-card border-border">
                     <CardHeader>
@@ -404,16 +512,16 @@ const AIGenerationMetrics = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                            {getProviderStats().map((provider) => (
-                                <div key={provider.provider} className="flex items-center justify-between p-3 bg-muted rounded">
+                            {getProviderStats().map((providerStat) => (
+                                <div key={providerStat.provider} className="flex items-center justify-between p-3 bg-muted rounded">
                                     <div>
-                                        <h4 className="font-medium capitalize text-foreground">{provider.provider}</h4>
+                                        <h4 className="font-medium capitalize text-foreground">{providerStat.provider}</h4>
                                         <p className="text-sm text-muted-foreground">
-                                            {formatNumber(provider.calls)} calls | Success rate: {provider.successRate.toFixed(1)}%
+                                            {formatNumber(providerStat.calls)} calls | Success: {providerStat.successRate.toFixed(1)}%
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-medium text-foreground">{formatCurrency(provider.cost)}</p>
+                                        <p className="font-medium text-foreground">{formatCurrency(providerStat.cost)}</p>
                                         <p className="text-sm text-muted-foreground">Total cost</p>
                                     </div>
                                 </div>
@@ -423,6 +531,7 @@ const AIGenerationMetrics = () => {
                 </Card>
             )}
 
+            {/* Quality and Impact */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="bg-card border-border">
                     <CardHeader>
@@ -431,7 +540,7 @@ const AIGenerationMetrics = () => {
                     <CardContent>
                         <div className="space-y-3">
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Average per generation:</span>
+                                <span className="text-muted-foreground">Avg per generation:</span>
                                 <span className="font-medium text-foreground">{(metrics?.averageTestCasesPerGeneration || 0).toFixed(1)}</span>
                             </div>
                             <div className="flex justify-between">
@@ -461,7 +570,7 @@ const AIGenerationMetrics = () => {
                                 <span className="font-medium text-foreground">{(metrics?.costEfficiency || 0).toFixed(2)}x</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Time saved per generation:</span>
+                                <span className="text-muted-foreground">Time per generation:</span>
                                 <span className="font-medium text-[rgb(var(--color-success))]">
                                     {metrics?.totalAIGenerations > 0 ? 
                                         ((metrics?.totalTimeSavedHours || 0) / metrics.totalAIGenerations * 60).toFixed(0) : 0}min
@@ -472,8 +581,9 @@ const AIGenerationMetrics = () => {
                 </Card>
             </div>
 
+            {/* Footer */}
             <div className="text-center text-sm text-muted-foreground">
-                Last updated: {metrics?.lastUpdated ? new Date(metrics.lastUpdated).toLocaleString() : 'Never'}
+                Last updated: {metrics?.lastUpdated ? new Date(metrics.lastUpdated).toLocaleString() : new Date().toLocaleString()}
             </div>
         </div>
     );

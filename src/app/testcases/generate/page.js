@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     Wand2,
     ArrowLeft,
@@ -11,17 +11,29 @@ import {
     Lightbulb,
     ChevronDown,
     ChevronUp,
-    Sparkles
+    Sparkles,
+    AlertCircle
 } from 'lucide-react';
 import { useApp } from '../../../context/AppProvider';
+import { useAI } from '../../../context/AIContext';
 import AIGenerationForm from '../../../components/AIGenerationForm';
-import aiIntegrationService from '../../../services/AIIntegrationService';
+// No need for metadata helpers - AIContext handles it
 
 const AIGenerationPage = () => {
     const { actions, state } = useApp();
+    const { 
+        generateTestCases,
+        isGeneratingTestCases,
+        isInitialized,
+        isHealthy,
+        canGenerate,
+        error: aiError,
+        clearError,
+        currentModel
+    } = useAI();
+
     const [step, setStep] = useState('input');
     const [prompt, setPrompt] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
     const [generatedTestCases, setGeneratedTestCases] = useState([]);
     const [selectedTestCases, setSelectedTestCases] = useState(new Set());
     const [generationSummary, setGenerationSummary] = useState(null);
@@ -41,6 +53,29 @@ const AIGenerationPage = () => {
     });
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
+    // Clear AI errors on mount and unmount
+    useEffect(() => {
+        clearError();
+        return () => clearError();
+    }, [clearError]);
+
+    // Check AI service status on mount
+    useEffect(() => {
+        if (!isInitialized) {
+            actions.ui.showNotification({
+                type: 'warning',
+                title: 'AI Service Initializing',
+                message: 'Please wait while AI service initializes...'
+            });
+        } else if (!isHealthy) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'AI Service Unavailable',
+                message: 'Please check your API configuration'
+            });
+        }
+    }, [isInitialized, isHealthy, actions.ui]);
+
     const handleBack = () => {
         if (typeof window !== 'undefined') {
             window.history.back();
@@ -48,6 +83,7 @@ const AIGenerationPage = () => {
     };
 
     const handleGenerate = useCallback(async () => {
+        // Validation
         if (!prompt.trim()) {
             actions.ui.showNotification({
                 type: 'error',
@@ -57,15 +93,31 @@ const AIGenerationPage = () => {
             return;
         }
 
-        setIsGenerating(true);
+        // Check AI service availability
+        if (!canGenerate) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'AI Service Unavailable',
+                message: 'Please check your Gemini API key configuration'
+            });
+            return;
+        }
+
+        // Check active suite
+        if (!state.suites.activeSuite?.id) {
+            actions.ui.showNotification({
+                type: 'error',
+                title: 'No Active Suite',
+                message: 'Please select a test suite first'
+            });
+            return;
+        }
+
         setStep('generating');
 
         try {
-            const result = await aiIntegrationService.generateTestCases(
-                prompt,
-                'AI Generated Test Cases',
-                templateConfig
-            );
+            // Use AI context's generateTestCases method
+            const result = await generateTestCases(prompt, templateConfig);
 
             if (result.success && result.data?.testCases?.length > 0) {
                 const testCasesWithIds = result.data.testCases.map((tc, index) => ({
@@ -87,38 +139,45 @@ const AIGenerationPage = () => {
                 }));
 
                 setGeneratedTestCases(testCasesWithIds);
-                setGenerationSummary(result.data.summary || {
+                
+                // Create summary with operation tracking
+                setGenerationSummary({
+                    ...(result.data.summary || {}),
                     totalTests: testCasesWithIds.length,
                     breakdown: testCasesWithIds.reduce((acc, tc) => {
                         const type = tc.type?.toLowerCase() || 'functional';
                         acc[type] = (acc[type] || 0) + 1;
                         return acc;
                     }, {}),
-                    aiResponse: `I analyzed your requirements and generated ${testCasesWithIds.length} comprehensive test cases. The test suite covers various scenarios including functional testing, edge cases, and validation flows to ensure thorough coverage of your application's requirements.`
+                    aiResponse: result.data.summary?.aiResponse || 
+                        `I analyzed your requirements and generated ${testCasesWithIds.length} comprehensive test cases. The test suite covers various scenarios including functional testing, edge cases, and validation flows to ensure thorough coverage of your application's requirements.`,
+                    model: currentModel,
+                    tokensUsed: result.tokensUsed || 0,
+                    cost: result.cost || 0,
                 });
+                
+                // Select all by default
                 setSelectedTestCases(new Set(testCasesWithIds.map(tc => tc.id)));
                 setStep('review');
 
                 actions.ui.showNotification({
                     type: 'success',
                     title: 'Success',
-                    message: `Generated ${testCasesWithIds.length} test cases`
+                    message: `Generated ${testCasesWithIds.length} test cases using ${currentModel}`
                 });
             } else {
-                throw new Error(result.error || 'Failed to generate test cases');
+                throw new Error(result.error || result.userMessage || 'Failed to generate test cases');
             }
         } catch (error) {
             console.error('Generation error:', error);
             actions.ui.showNotification({
                 type: 'error',
                 title: 'Generation Error',
-                message: error.message
+                message: error.message || 'Failed to generate test cases'
             });
             setStep('input');
-        } finally {
-            setIsGenerating(false);
         }
-    }, [prompt, templateConfig, actions]);
+    }, [prompt, templateConfig, canGenerate, generateTestCases, currentModel, state.suites.activeSuite, actions]);
 
     const handleSaveSelected = useCallback(async () => {
         const testCasesToSave = generatedTestCases.filter(tc => selectedTestCases.has(tc.id));
@@ -146,18 +205,40 @@ const AIGenerationPage = () => {
         setSavedCount(0);
 
         try {
+            const suiteId = state.suites.activeSuite.id;
+            const userId = state.auth?.user?.uid;
             let successCount = 0;
-            const savedTestCases = [];
+            const savedTestCaseIds = [];
+
+            // Calculate per-test-case metrics
+            const tokensPerTestCase = (generationSummary?.tokensUsed || 0) / testCasesToSave.length;
+            const costPerTestCase = (generationSummary?.cost || 0) / testCasesToSave.length;
 
             for (const [index, testCase] of testCasesToSave.entries()) {
                 try {
+                    // Create AI metadata for this test case
+                    const aiMetadata = {
+                        generated: true,
+                        assisted: false,
+                        provider: currentModel?.split('-')[0] || 'gemini',
+                        model: currentModel || 'gemini-1.5-flash-latest',
+                        generated_at: new Date().toISOString(),
+                        tokens_used: Math.round(tokensPerTestCase),
+                        cost: parseFloat(costPerTestCase.toFixed(6)),
+                        prompt_summary: prompt.substring(0, 200),
+                        generation_timestamp: Date.now(),
+                        modified_after_generation: false,
+                    };
+
                     const cleanTestCase = {
                         ...Object.fromEntries(
                             Object.entries(testCase).filter(([key]) => !key.startsWith('_'))
                         ),
                         id: undefined,
-                        suiteId: state.suites.activeSuite.id,
+                        suiteId: suiteId,
                         source: 'ai_generated',
+                        ai_metadata: aiMetadata,
+                        created_by: userId,
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString()
                     };
@@ -167,10 +248,47 @@ const AIGenerationPage = () => {
                     if (result.success) {
                         successCount++;
                         setSavedCount(successCount);
-                        savedTestCases.push(result.data);
+                        savedTestCaseIds.push(result.data.id);
                     }
                 } catch (error) {
                     console.error(`Error saving test case ${index + 1}:`, error);
+                }
+            }
+
+            // Update Firestore usage log with saved asset IDs
+            if (successCount > 0 && savedTestCaseIds.length > 0) {
+                try {
+                    const { doc, setDoc, Timestamp } = await import('firebase/firestore');
+                    const { db } = await import('../../../config/firebase');
+                    const { createAIUsageLog } = await import('../../../utils/aiMetadataHelper');
+                    
+                    // Create complete usage log with asset IDs
+                    const usageLog = createAIUsageLog({
+                        operationId: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        operationType: 'test_case_generation',
+                        assetType: 'testCases',
+                        assetIds: savedTestCaseIds,
+                        provider: currentModel?.split('-')[0] || 'gemini',
+                        model: currentModel,
+                        tokensUsed: generationSummary?.tokensUsed || 0,
+                        cost: generationSummary?.cost || 0,
+                        success: true,
+                        promptSummary: prompt.substring(0, 200),
+                        promptLength: prompt.length,
+                        userId: userId,
+                        suiteId: suiteId,
+                    });
+
+                    const logRef = doc(db, `testSuites/${suiteId}/ai_usage_logs`, usageLog.id);
+                    await setDoc(logRef, {
+                        ...usageLog,
+                        created_at: Timestamp.now()
+                    });
+
+                    console.log('✅ AI usage logged to Firestore with asset IDs:', savedTestCaseIds);
+                } catch (logError) {
+                    console.error('Failed to log AI usage:', logError);
+                    // Don't fail the save operation
                 }
             }
 
@@ -193,13 +311,17 @@ const AIGenerationPage = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [generatedTestCases, state.suites.activeSuite?.id, selectedTestCases, actions]);
+    }, [generatedTestCases, state.suites.activeSuite, state.auth, selectedTestCases, actions]);
 
     const handleExportDocument = useCallback(() => {
         const docContent = `# AI Generated Test Cases
 
 ## AI Analysis Summary
 ${generationSummary?.automationRecommendations || generationSummary?.riskAssessment || generationSummary?.aiResponse || 'I analyzed your requirements and generated comprehensive test cases covering the key functionality, edge cases, and user scenarios. Each test case includes detailed steps, expected results, and relevant test data to ensure thorough coverage of your application.'}
+
+${generationSummary?.model ? `**Model Used**: ${generationSummary.model}` : ''}
+${generationSummary?.tokensUsed ? `**Tokens Used**: ${generationSummary.tokensUsed.toLocaleString()}` : ''}
+${generationSummary?.cost ? `**Estimated Cost**: ${generationSummary.cost.toFixed(6)}` : ''}
 
 ## Test Cases
 
@@ -225,7 +347,11 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 **Tags**: ${tc.tags.join(', ')}
 
 ---
-`).join('')}`;
+`).join('')}
+
+---
+*Generated with AI on ${new Date().toISOString()}*
+*Suite: ${state.suites.activeSuite?.name || 'N/A'}*`;
 
         const blob = new Blob([docContent], { type: 'text/markdown' });
         const url = window.URL.createObjectURL(blob);
@@ -242,7 +368,7 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
             title: 'Export Complete',
             message: 'Test cases document downloaded successfully'
         });
-    }, [generatedTestCases, generationSummary, actions]);
+    }, [generatedTestCases, generationSummary, state.suites.activeSuite, actions]);
 
     const renderHeader = () => (
         <div className="bg-card border-b border-border px-6 py-4">
@@ -263,7 +389,11 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-foreground">Generate Test Cases with AI</h1>
-                            <p className="text-sm text-muted-foreground">Generate comprehensive test cases with artificial intelligence</p>
+                            <p className="text-sm text-muted-foreground">
+                                Generate comprehensive test cases with artificial intelligence
+                                {currentModel && <span className="ml-2 text-teal-600">• {currentModel}</span>}
+                                {state.suites.activeSuite && <span className="ml-2">• {state.suites.activeSuite.name}</span>}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -280,6 +410,19 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                     </div>
                 )}
             </div>
+            
+            {/* AI Service Status Warning */}
+            {(!isInitialized || !isHealthy || !canGenerate) && (
+                <div className="mt-4 flex items-center gap-2 px-4 py-3 bg-warning/10 border border-warning/20 rounded-lg">
+                    <AlertCircle className="h-5 w-5 text-warning flex-shrink-0" />
+                    <div className="text-sm">
+                        <span className="font-medium text-foreground">AI Service Status: </span>
+                        <span className="text-muted-foreground">
+                            {!isInitialized ? 'Initializing...' : !isHealthy ? 'Service unavailable' : 'API key not configured'}
+                        </span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 
@@ -340,9 +483,14 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                         </div>
                     </div>
                     <h2 className="text-2xl font-semibold text-foreground mb-4">Generating Test Cases...</h2>
-                    <p className="text-muted-foreground mb-8 max-w-md">
+                    <p className="text-muted-foreground mb-2 max-w-md">
                         AI is analyzing your requirements and creating comprehensive test cases.
                     </p>
+                    {currentModel && (
+                        <p className="text-sm text-teal-600 mb-8">
+                            Using {currentModel}
+                        </p>
+                    )}
                     <div className="flex items-center gap-3">
                         <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
                         <span className="text-sm text-muted-foreground">Please wait...</span>
@@ -365,8 +513,11 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                         </div>
                     </div>
                     <h2 className="text-2xl font-semibold text-foreground mb-4">Saving Test Cases...</h2>
-                    <p className="text-muted-foreground mb-8 max-w-md">
+                    <p className="text-muted-foreground mb-4 max-w-md">
                         Saving {selectedTestCases.size} test case{selectedTestCases.size === 1 ? '' : 's'} to your test suite.
+                    </p>
+                    <p className="text-sm text-teal-600 mb-8">
+                        AI tracking handled automatically
                     </p>
                     <div className="flex items-center gap-3">
                         <Loader2 className="h-5 w-5 animate-spin text-success" />
@@ -403,8 +554,9 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                                 setTemplateConfig={setTemplateConfig}
                                 showAdvancedSettings={showAdvancedSettings}
                                 setShowAdvancedSettings={setShowAdvancedSettings}
-                                isGenerating={isGenerating}
+                                isGenerating={isGeneratingTestCases}
                                 onGenerate={handleGenerate}
+                                canGenerate={canGenerate}
                             />
                         </div>
                         <div className="lg:col-span-1">
@@ -423,6 +575,10 @@ ${tc.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
                         generationSummary={generationSummary}
                         onSaveSelected={handleSaveSelected}
                         onBackToEdit={() => setStep('input')}
+                        aiProvider={currentModel?.split('-')[0] || 'gemini'}
+                        aiModel={currentModel}
+                        tokensUsed={generationSummary?.tokensUsed || 0}
+                        cost={generationSummary?.cost || 0}
                     />
                 )}
                 {step === 'saving' && renderSavingStep()}

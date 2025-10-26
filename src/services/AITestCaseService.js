@@ -1,392 +1,472 @@
-// services/AITestCaseService.js - Extended AI service specifically for test case operations
-import aiServiceInstance from './aiService';
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  X, 
+  Send, 
+  Loader2, 
+  Sparkles,
+  FileText,
+  Lightbulb,
+  Edit3,
+  List,
+  CheckCircle2,
+  Wand2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Check
+} from 'lucide-react';
+import { useAI } from '../context/AIContext';
 
-export class AITestCaseService {
-    constructor() {
-        this.aiService = aiServiceInstance;
-        this.initialized = false;
-        this.generationStats = {
-            totalGenerations: 0,
-            successfulGenerations: 0,
-            failedGenerations: 0,
-            totalTestCasesGenerated: 0,
-            lastGeneration: null,
-            isHealthy: false
-        };
+export default function AIAssistantDrawer({ 
+  isOpen, 
+  onClose, 
+  documentContent = '',
+  documentTitle = 'Untitled Document',
+  documentType = 'document',
+  onInsertContent,
+  onReplaceContent
+}) {
+  const {
+    checkGrammar,
+    generateDocumentation,
+    isLoading: aiLoading,
+    error: aiError,
+    isInitialized,
+    isHealthy,
+    clearError
+  } = useAI();
+
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      content: `Hi! I'm your AI writing assistant. I can help you with:
+
+• **Summarize** - Create concise summaries
+• **Explain** - Break down complex concepts  
+• **Improve Writing** - Enhance clarity and professionalism
+• **Bullet Points** - Convert to structured lists
+• **Grammar Check** - Fix errors and typos
+• **Generate Content** - Create new sections or documents
+
+What would you like me to help with?`,
+      timestamp: new Date().toISOString()
+    }
+  ]);
+  const [inputValue, setInputValue] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (aiError) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `⚠️ ${aiError}`,
+        isError: true,
+        timestamp: new Date().toISOString()
+      }]);
+      clearError();
+    }
+  }, [aiError, clearError]);
+
+  const quickActions = [
+    {
+      icon: FileText,
+      label: 'Summarize',
+      prompt: `Please create a concise summary of this document:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
+      needsContent: true
+    },
+    {
+      icon: Lightbulb,
+      label: 'Explain',
+      prompt: `Please explain the key concepts in this document in simple terms:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
+      needsContent: true
+    },
+    {
+      icon: Edit3,
+      label: 'Improve',
+      prompt: `Please review this document and suggest improvements for clarity and professionalism:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
+      needsContent: true
+    },
+    {
+      icon: List,
+      label: 'Bullet Points',
+      prompt: `Convert the main points of this document into a bulleted list:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
+      needsContent: true
+    },
+    {
+      icon: CheckCircle2,
+      label: 'Grammar',
+      prompt: 'grammar_check',
+      needsContent: true,
+      isSpecial: true
+    },
+    {
+      icon: Wand2,
+      label: 'Generate',
+      prompt: `Create a new ${documentType} document with appropriate structure and content based on the title: ${documentTitle}`,
+      needsContent: false
+    }
+  ];
+
+  const handleQuickAction = async (action) => {
+    if (action.needsContent && !documentContent.trim()) {
+      addMessage('assistant', 'Please add some content to your document first before using this action.', true);
+      return;
     }
 
-    // Initialize the service and test connection
-    async initialize() {
-        console.log('🚀 Initializing AITestCaseService...');
-        
-        try {
-            // Test connection to the AI service
-            const connectionTest = await this.aiService.testConnection();
-            
-            if (connectionTest.success) {
-                this.initialized = true;
-                this.generationStats.isHealthy = true;
-                
-                console.log('✅ AITestCaseService initialized successfully');
-                return {
-                    success: true,
-                    data: {
-                        aiService: this.aiService,
-                        provider: connectionTest.provider,
-                        model: connectionTest.model,
-                        healthy: true
-                    }
-                };
-            } else {
-                throw new Error(connectionTest.error || connectionTest.message || 'Connection test failed');
-            }
-        } catch (error) {
-            this.initialized = false;
-            this.generationStats.isHealthy = false;
-            
-            console.error('❌ AITestCaseService initialization failed:', error);
-            return {
-                success: false,
-                error: error.message,
-                userMessage: this.getUserFriendlyErrorMessage(error)
-            };
-        }
+    if (action.isSpecial && action.prompt === 'grammar_check') {
+      await handleGrammarCheck();
+    } else {
+      await handleSendMessage(action.prompt);
+    }
+  };
+
+  const handleGrammarCheck = async () => {
+    if (!documentContent.trim()) {
+      addMessage('assistant', 'Please add some content to check for grammar.', true);
+      return;
     }
 
-    // Get user-friendly error messages
-    getUserFriendlyErrorMessage(error) {
-        const message = error.message.toLowerCase();
+    addMessage('user', '🔍 Check grammar and spelling');
+    setIsProcessing(true);
+
+    try {
+      const result = await checkGrammar(documentContent, {
+        includeStyleSuggestions: true,
+        checkSpelling: true
+      });
+
+      if (result.success && result.data) {
+        const { suggestions = [], correctedText, summary } = result.data;
         
-        if (message.includes('api key') || message.includes('apikey')) {
-            return 'AI service requires an API key. Please check your environment configuration.';
-        }
+        let responseContent = '';
         
-        if (message.includes('connection') || message.includes('network')) {
-            return 'Unable to connect to AI service. Please check your internet connection and API configuration.';
-        }
-        
-        if (message.includes('provider')) {
-            return 'AI provider not configured properly. Please set NEXT_PUBLIC_AI_PROVIDER environment variable.';
-        }
-        
-        if (message.includes('quota') || message.includes('limit')) {
-            return 'AI service quota exceeded. Please check your usage limits or try again later.';
-        }
-        
-        return 'AI service is currently unavailable. Please try again later.';
-    }
-
-    // Generate test cases from document content
-    async generateTestCases(documentContent, documentTitle, templateConfig = {}) {
-        if (!this.initialized) {
-            return {
-                success: false,
-                error: 'AITestCaseService not initialized',
-                userMessage: 'Please initialize the AI service first'
-            };
-        }
-
-        try {
-            console.log('📝 Generating test cases for:', documentTitle);
-            
-            // Build the prompt for test case generation
-            const prompt = this.buildTestCasePrompt(documentContent, documentTitle, templateConfig);
-            
-            // Call the AI service
-            const result = await this.aiService.generateTestCases(prompt, templateConfig);
-            
-            // Update generation stats
-            this.updateGenerationStats(result);
-            
-            if (result.success) {
-                console.log(`✅ Generated ${result.data?.testCases?.length || 0} test cases`);
-                
-                return {
-                    success: true,
-                    data: result.data,
-                    generationId: result.generationId,
-                    provider: result.provider,
-                    model: result.model,
-                    metadata: {
-                        documentTitle,
-                        generatedAt: new Date().toISOString(),
-                        templateConfig,
-                        testCaseCount: result.data?.testCases?.length || 0
-                    }
-                };
-            } else {
-                throw new Error(result.error || 'Failed to generate test cases');
-            }
-        } catch (error) {
-            console.error('❌ Test case generation failed:', error);
-            
-            // Update stats for failed generation
-            this.generationStats.failedGenerations++;
-            
-            return {
-                success: false,
-                error: error.message,
-                userMessage: this.getUserFriendlyErrorMessage(error)
-            };
-        }
-    }
-
-    // Build enhanced prompt for test case generation
-    buildTestCasePrompt(documentContent, documentTitle, templateConfig) {
-        const context = `
-Document Title: ${documentTitle}
-Document Content: ${documentContent}
-`;
-
-        const instructions = `
-Based on the provided document, generate comprehensive test cases that cover:
-1. Functional requirements and user flows
-2. Edge cases and boundary conditions
-3. Error handling scenarios
-4. Integration points
-5. User experience validation
-
-Template Configuration Applied:
-- Format: ${templateConfig.format || 'Given-When-Then'}
-- Priority Focus: ${templateConfig.priorities || 'Critical, High, Medium, Low'}
-- Test Types: ${templateConfig.types || 'Functional, Integration, Edge Case, Negative'}
-- Include Test Data: ${templateConfig.includeTestData ? 'Yes' : 'No'}
-- Framework: ${templateConfig.framework || 'Generic'}
-- Coverage Level: ${templateConfig.coverage || 'Standard'}
-
-Generate practical, executable test cases that provide comprehensive coverage while being realistic for implementation.
-`;
-
-        return context + instructions;
-    }
-
-    // Update generation statistics
-    updateGenerationStats(result) {
-        this.generationStats.totalGenerations++;
-        this.generationStats.lastGeneration = new Date().toISOString();
-        
-        if (result.success) {
-            this.generationStats.successfulGenerations++;
-            this.generationStats.totalTestCasesGenerated += result.data?.testCases?.length || 0;
-            this.generationStats.isHealthy = true;
+        if (suggestions.length === 0) {
+          responseContent = '✅ Great! No grammar or spelling issues found.';
         } else {
-            this.generationStats.failedGenerations++;
-            // Don't immediately mark as unhealthy on single failure
-            if (this.generationStats.failedGenerations > this.generationStats.successfulGenerations) {
-                this.generationStats.isHealthy = false;
-            }
+          responseContent = `Found ${suggestions.length} suggestion${suggestions.length > 1 ? 's' : ''}:\n\n`;
+          
+          suggestions.slice(0, 10).forEach((suggestion, idx) => {
+            responseContent += `${idx + 1}. **${suggestion.type}**: "${suggestion.original}" → "${suggestion.suggestion}"\n`;
+          });
+
+          if (suggestions.length > 10) {
+            responseContent += `\n...and ${suggestions.length - 10} more suggestions.`;
+          }
         }
+
+        addMessage('assistant', responseContent, false, {
+          hasActions: correctedText && suggestions.length > 0,
+          generatedContent: correctedText
+        });
+      } else {
+        throw new Error(result.error || 'Grammar check failed');
+      }
+    } catch (error) {
+      console.error('Grammar check error:', error);
+      addMessage('assistant', `Failed to check grammar: ${error.message}`, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSendMessage = async (messageText = inputValue) => {
+    if (!messageText.trim() || isProcessing || aiLoading) return;
+
+    if (!isInitialized || !isHealthy) {
+      addMessage('assistant', 'AI service is not available. Please check your configuration.', true);
+      return;
     }
 
-    // Get generation statistics
-    getGenerationStats() {
-        const successRate = this.generationStats.totalGenerations > 0 
-            ? (this.generationStats.successfulGenerations / this.generationStats.totalGenerations) * 100 
-            : 0;
+    addMessage('user', messageText);
+    setInputValue('');
+    setIsProcessing(true);
 
-        return {
-            ...this.generationStats,
-            successRate: Math.round(successRate * 100) / 100,
-            avgTestCasesPerGeneration: this.generationStats.successfulGenerations > 0 
-                ? Math.round((this.generationStats.totalTestCasesGenerated / this.generationStats.successfulGenerations) * 10) / 10 
-                : 0
-        };
+    try {
+      // Determine the type of request
+      const lowerMessage = messageText.toLowerCase();
+      
+      if (lowerMessage.includes('grammar') || lowerMessage.includes('spelling')) {
+        await handleGrammarCheck();
+        return;
+      }
+
+      // For documentation generation
+      const docType = lowerMessage.includes('test') ? 'test_plan' :
+                      lowerMessage.includes('report') ? 'report' :
+                      lowerMessage.includes('guide') ? 'guide' : 
+                      'general';
+
+      const result = await generateDocumentation(
+        `${messageText}\n\nDocument Context:\nTitle: ${documentTitle}\nType: ${documentType}\nContent: ${documentContent.slice(0, 1500)}`,
+        docType
+      );
+
+      if (result.success && result.data) {
+        const content = result.data.content || result.data.text || 'Content generated successfully.';
+        
+        addMessage('assistant', content, false, {
+          hasActions: true,
+          generatedContent: content
+        });
+      } else {
+        throw new Error(result.error || 'Failed to generate response');
+      }
+    } catch (error) {
+      console.error('AI Error:', error);
+      addMessage('assistant', `Sorry, I encountered an error: ${error.message}`, true);
+    } finally {
+      setIsProcessing(false);
     }
+  };
 
-    // Get current AI service status
-    getServiceStatus() {
-        return {
-            initialized: this.initialized,
-            healthy: this.generationStats.isHealthy,
-            provider: this.aiService.currentProvider,
-            model: this.aiService.providers[this.aiService.currentProvider]?.model,
-            lastHealthCheck: this.aiService.lastHealthCheck,
-            stats: this.getGenerationStats()
-        };
+  const addMessage = (role, content, isError = false, extras = {}) => {
+    setMessages(prev => [...prev, {
+      role,
+      content,
+      isError,
+      timestamp: new Date().toISOString(),
+      ...extras
+    }]);
+  };
+
+  const handleInsertContent = (content) => {
+    if (onInsertContent) {
+      onInsertContent(content);
+      addMessage('assistant', '✅ Content inserted into your document.');
     }
+  };
 
-    // Test AI service health
-    async testHealth() {
-        try {
-            const result = await this.aiService.testConnection();
-            this.generationStats.isHealthy = result.success;
-            return result;
-        } catch (error) {
-            this.generationStats.isHealthy = false;
-            return {
-                success: false,
-                error: error.message,
-                healthy: false
-            };
-        }
+  const handleReplaceDocument = (content) => {
+    if (onReplaceContent) {
+      const confirmed = window.confirm(
+        'This will replace your entire document. Are you sure?'
+      );
+      if (confirmed) {
+        onReplaceContent(content);
+        addMessage('assistant', '✅ Document replaced successfully.');
+      }
     }
+  };
 
-    // Switch AI provider
-    async switchProvider(provider) {
-        try {
-            const switched = this.aiService.switchProvider(provider);
-            
-            if (switched) {
-                // Test the new provider
-                const healthTest = await this.testHealth();
+  const handleCopyContent = (content, index) => {
+    navigator.clipboard.writeText(content);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const isLoading = isProcessing || aiLoading;
+
+  return (
+    <div className="h-full flex flex-col bg-card animate-slide-in-right overflow-hidden">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 text-foreground p-3 bg-card border-b border-border z-10">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold text-base">AI Assistant</h3>
+            {!isInitialized && (
+              <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded">Initializing...</span>
+            )}
+            {isInitialized && !isHealthy && (
+              <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">Offline</span>
+            )}
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-2 hover:bg-secondary rounded-full transition-colors"
+            title="Close AI assistant"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Quick Actions Toggle */}
+        <button
+          onClick={() => setShowQuickActions(!showQuickActions)}
+          className="w-full flex items-center justify-between p-2 hover:bg-secondary/50 rounded transition-colors"
+        >
+          <span className="text-sm text-foreground font-medium">Quick Actions</span>
+          {showQuickActions ? (
+            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          )}
+        </button>
+      </div>
+
+      {/* Collapsible Quick Actions */}
+      {showQuickActions && (
+        <div className="flex-shrink-0 p-3 border-b border-border bg-secondary/30">
+          <div className="grid grid-cols-3 gap-2">
+            {quickActions.map((action, index) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={index}
+                  onClick={() => handleQuickAction(action)}
+                  className="flex flex-col items-center gap-1 p-2 bg-background hover:bg-primary/10 rounded border border-border hover:border-primary transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isLoading}
+                  title={action.needsContent && !documentContent.trim() ? 'Add content first' : ''}
+                >
+                  <Icon className="w-4 h-4 text-primary" />
+                  <span className="text-xs text-foreground">{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Scrollable Messages Area */}
+      <div className="flex-1 overflow-y-auto p-3 bg-card">
+        <div className="space-y-3">
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[85%] rounded-lg p-3 ${
+                  message.role === 'user'
+                    ? 'bg-primary text-primary-foreground'
+                    : message.isError
+                    ? 'bg-red-50 text-red-900 border border-red-200'
+                    : 'bg-secondary text-foreground'
+                }`}
+              >
+                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                 
-                if (healthTest.success) {
-                    console.log(`✅ Successfully switched to ${provider}`);
-                    return {
-                        success: true,
-                        provider: provider,
-                        healthy: true
-                    };
-                } else {
-                    throw new Error(`Provider ${provider} is not healthy: ${healthTest.error}`);
-                }
-            } else {
-                throw new Error(`Failed to switch to provider: ${provider}`);
-            }
-        } catch (error) {
-            console.error(`❌ Provider switch failed:`, error);
-            return {
-                success: false,
-                error: error.message,
-                userMessage: this.getUserFriendlyErrorMessage(error)
-            };
+                {/* Action Buttons for AI Responses with Generated Content */}
+                {message.role === 'assistant' && message.hasActions && message.generatedContent && (
+                  <div className="mt-3 pt-3 border-t border-border space-y-2">
+                    <button
+                      onClick={() => handleCopyContent(message.generatedContent, index)}
+                      className="w-full px-3 py-2 text-xs bg-background text-foreground border border-border rounded hover:bg-secondary transition-colors flex items-center justify-center gap-2"
+                    >
+                      {copiedIndex === index ? (
+                        <>
+                          <Check className="w-3 h-3" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          Copy Content
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleInsertContent(message.generatedContent)}
+                      className="w-full px-3 py-2 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      Insert into Document
+                    </button>
+                    <button
+                      onClick={() => handleReplaceDocument(message.generatedContent)}
+                      className="w-full px-3 py-2 text-xs bg-background text-foreground border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors flex items-center justify-center gap-2"
+                    >
+                      <FileText className="w-3 h-3" />
+                      Replace Entire Document
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-secondary text-foreground rounded-lg p-3 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">AI is thinking...</span>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Fixed Input Area at Bottom */}
+      <div className="flex-shrink-0 p-3 bg-card border-t border-border">
+        <div className="flex items-end gap-2">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={isInitialized ? "Ask me anything about this document..." : "Initializing AI service..."}
+              rows={2}
+              disabled={isLoading || !isInitialized}
+              className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none disabled:bg-secondary disabled:cursor-not-allowed bg-background text-foreground"
+              style={{ minHeight: '60px', maxHeight: '120px' }}
+            />
+          </div>
+
+          <button
+            onClick={() => handleSendMessage()}
+            disabled={!inputValue.trim() || isLoading || !isInitialized}
+            className="p-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            title="Send message"
+          >
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2 px-1">
+          Press Enter to send, Shift+Enter for new line
+        </p>
+      </div>
+
+      {/* Animation Styles */}
+      <style>{`
+        @keyframes slide-in-right {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
         }
-    }
 
-    // Update AI settings
-    updateSettings(newSettings) {
-        if (newSettings.provider && newSettings.provider !== this.aiService.currentProvider) {
-            return this.switchProvider(newSettings.provider);
+        .animate-slide-in-right {
+          animation: slide-in-right 0.3s ease-out;
         }
-
-        // Update other settings if needed
-        if (newSettings.temperature) {
-            this.defaultTemperature = newSettings.temperature;
-        }
-        
-        if (newSettings.maxTokens) {
-            this.defaultMaxTokens = newSettings.maxTokens;
-        }
-
-        return {
-            success: true,
-            message: 'Settings updated successfully'
-        };
-    }
-
-    // Generate bug report using AI
-    async generateBugReport(bugDescription, additionalContext = {}) {
-        if (!this.initialized) {
-            return {
-                success: false,
-                error: 'AITestCaseService not initialized'
-            };
-        }
-
-        try {
-            const result = await this.aiService.generateBugReport(
-                bugDescription, 
-                'description', 
-                additionalContext
-            );
-
-            if (result.success) {
-                console.log('✅ Bug report generated successfully');
-            }
-
-            return result;
-        } catch (error) {
-            console.error('❌ Bug report generation failed:', error);
-            return {
-                success: false,
-                error: error.message,
-                userMessage: this.getUserFriendlyErrorMessage(error)
-            };
-        }
-    }
-
-    // Get AI metrics and analytics
-    async getMetrics(dateRange = 30) {
-        try {
-            const metrics = await this.aiService.getAIMetrics(dateRange);
-            
-            // Add service-specific metrics
-            if (metrics.success) {
-                metrics.data.serviceStats = this.getGenerationStats();
-                metrics.data.serviceStatus = this.getServiceStatus();
-            }
-
-            return metrics;
-        } catch (error) {
-            console.error('❌ Failed to get AI metrics:', error);
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-
-    // Clear all statistics (useful for testing or reset)
-    clearStats() {
-        this.generationStats = {
-            totalGenerations: 0,
-            successfulGenerations: 0,
-            failedGenerations: 0,
-            totalTestCasesGenerated: 0,
-            lastGeneration: null,
-            isHealthy: false
-        };
-    }
-
-    // Get supported providers
-    getSupportedProviders() {
-        return Object.keys(this.aiService.providers).map(provider => ({
-            name: provider,
-            model: this.aiService.providers[provider].model,
-            configured: this.isProviderConfigured(provider)
-        }));
-    }
-
-    // Check if a provider is properly configured
-    isProviderConfigured(provider) {
-        const providerConfig = this.aiService.providers[provider];
-        
-        if (!providerConfig) return false;
-        
-        // OpenAI requires API key
-        if (provider === 'openai') {
-            return !!providerConfig.apiKey;
-        }
-        
-        // LocalAI might require API key
-        if (provider === 'localai') {
-            return !!providerConfig.apiKey;
-        }
-        
-        // Ollama doesn't require API key, just endpoint
-        if (provider === 'ollama') {
-            return !!providerConfig.endpoint;
-        }
-        
-        return true;
-    }
-
-    // Validate current configuration
-    validateConfiguration() {
-        try {
-            this.aiService.validateConfiguration();
-            return {
-                success: true,
-                valid: true,
-                provider: this.aiService.currentProvider
-            };
-        } catch (error) {
-            return {
-                success: false,
-                valid: false,
-                error: error.message,
-                userMessage: this.getUserFriendlyErrorMessage(error)
-            };
-        }
-    }
+      `}</style>
+    </div>
+  );
 }

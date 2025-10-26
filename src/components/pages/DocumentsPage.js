@@ -90,13 +90,7 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         try {
             setLoading(true);
             setError('');
-
-            // Get auth token
-            const token = await currentUser.getIdToken?.();
-            if (!token) {
-                throw new Error('Failed to get authentication token');
-            }
-
+            
             // Build query parameters
             const params = new URLSearchParams({
                 suiteId,
@@ -112,7 +106,6 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
             const response = await fetch(`/api/documents?${params.toString()}`, {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 }
             });

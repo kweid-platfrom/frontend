@@ -1,5 +1,5 @@
-// components/QAIDMetricsOverview.jsx - COMPLETE FIXED VERSION
-import React from 'react';
+// components/QAIDMetricsOverview.jsx - Fixed with AI Context Integration
+import React, { useEffect, useState } from 'react';
 import {
     TestTube,
     Bug,
@@ -15,10 +15,60 @@ import {
     Clock,
     CheckCircle,
     Bot,
-    Tags
+    Tags,
+    AlertTriangle
 } from 'lucide-react';
+import { useAI } from '@/context/AIContext';
 
 const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
+    const [aiMetrics, setAIMetrics] = useState(null);
+    
+    // Get AI Context for real-time AI generation metrics
+    const {
+        isInitialized,
+        isHealthy,
+        apiKeyConfigured,
+        tokensUsed,
+        totalCost,
+        operationsCount,
+        operationHistory
+    } = useAI();
+
+    // Calculate AI-specific metrics from operation history
+    useEffect(() => {
+        if (operationHistory && operationHistory.length > 0) {
+            const testCaseGenerations = operationHistory.filter(op => op.type === 'test_cases');
+            const bugReportGenerations = operationHistory.filter(op => op.type === 'bug_report');
+            
+            const successfulGenerations = testCaseGenerations.filter(op => op.success).length;
+            const totalGenerations = testCaseGenerations.length;
+            
+            setAIMetrics({
+                totalAIGenerations: totalGenerations,
+                successfulAIGenerations: successfulGenerations,
+                aiGenerationSuccessRate: totalGenerations > 0 
+                    ? Math.round((successfulGenerations / totalGenerations) * 100) 
+                    : 0,
+                totalBugReports: bugReportGenerations.length,
+                aiTokensUsed: tokensUsed || 0,
+                aiTotalCost: totalCost || 0,
+                avgTestCasesPerGeneration: 5, // This would come from actual generation data
+                recentAIActivity: testCaseGenerations.length > 0
+            });
+        } else {
+            setAIMetrics({
+                totalAIGenerations: 0,
+                successfulAIGenerations: 0,
+                aiGenerationSuccessRate: 0,
+                totalBugReports: 0,
+                aiTokensUsed: 0,
+                aiTotalCost: 0,
+                avgTestCasesPerGeneration: 5,
+                recentAIActivity: false
+            });
+        }
+    }, [operationHistory, tokensUsed, totalCost]);
+
     if (loading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -44,7 +94,8 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
         icon: Icon,
         color = 'teal',
         subtitle,
-        onClick
+        onClick,
+        warning
     }) => {
         const colorClasses = {
             teal: 'bg-teal-50 text-teal-800 border-teal-300',
@@ -70,7 +121,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
 
         return (
             <div
-                className={`bg-card rounded-lg shadow-theme border border-border p-6 transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-theme-xl hover:border-border/80' : ''}`}
+                className={`bg-card rounded-lg shadow-theme border border-border p-6 transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-theme-xl hover:border-border/80' : ''} ${warning ? 'border-orange-300' : ''}`}
                 onClick={onClick}
             >
                 <div className="flex items-center justify-between mb-4">
@@ -82,6 +133,9 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                             {getTrendIcon()}
                             <span>{change > 0 ? '+' : ''}{change}%</span>
                         </div>
+                    )}
+                    {warning && (
+                        <AlertTriangle className="w-4 h-4 text-orange-500" />
                     )}
                 </div>
 
@@ -123,13 +177,20 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
         negativeCaseCoverage: metrics.negativeCaseCoverage || 0
     };
 
+    // Use real AI metrics from context
     const ai = {
-        aiGenerationSuccessRate: metrics.aiGenerationSuccessRate || 0,
-        avgTestCasesPerAIGeneration: metrics.avgTestCasesPerAIGeneration || 5,
-        totalAIGenerations: testCases.aiGeneratedTestCases > 0 
-            ? Math.max(1, Math.round(testCases.aiGeneratedTestCases / (metrics.avgTestCasesPerAIGeneration || 5)))
-            : 0,
-        aiCostPerTestCase: 0.05
+        totalAIGenerations: aiMetrics?.totalAIGenerations || 0,
+        successfulAIGenerations: aiMetrics?.successfulAIGenerations || 0,
+        aiGenerationSuccessRate: aiMetrics?.aiGenerationSuccessRate || 0,
+        avgTestCasesPerAIGeneration: aiMetrics?.avgTestCasesPerGeneration || 5,
+        totalBugReports: aiMetrics?.totalBugReports || 0,
+        aiTokensUsed: aiMetrics?.aiTokensUsed || 0,
+        aiTotalCost: aiMetrics?.aiTotalCost || 0,
+        aiCostPerTestCase: aiMetrics?.totalAIGenerations > 0 
+            ? (aiMetrics.aiTotalCost / aiMetrics.totalAIGenerations)
+            : 0.05,
+        aiServiceAvailable: isInitialized && isHealthy && apiKeyConfigured,
+        recentAIActivity: aiMetrics?.recentAIActivity || false
     };
 
     const automation = {
@@ -182,6 +243,29 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
 
     return (
         <div className="space-y-8">
+            {/* AI Service Status Alert */}
+            {!ai.aiServiceAvailable && (
+                <div className="bg-orange-50 border border-orange-300 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                        <div>
+                            <h4 className="text-sm font-semibold text-orange-800 mb-1">
+                                AI Service Not Available
+                            </h4>
+                            <p className="text-sm text-orange-700">
+                                {!isInitialized 
+                                    ? 'AI service is initializing. Please wait...'
+                                    : !apiKeyConfigured
+                                    ? 'Please configure your Gemini API key in settings to enable AI test case generation.'
+                                    : !isHealthy
+                                    ? 'AI service health check failed. Please verify your API key and try again.'
+                                    : 'AI service is not available. Please check your configuration.'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* QAID Core Performance */}
             <div className="bg-background/50 rounded-xl p-6 border border-border">
                 <h2 className="text-lg font-semibold text-foreground mb-6 flex items-center">
@@ -214,7 +298,10 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         changeType={getTrendType(getTrend('aiProductivity'))}
                         icon={Brain}
                         color="purple"
-                        subtitle="AI Generation Success + Contribution"
+                        subtitle={ai.aiServiceAvailable 
+                            ? "AI Generation Success + Contribution"
+                            : "AI Service Not Available"}
+                        warning={!ai.aiServiceAvailable}
                     />
                 </div>
             </div>
@@ -259,9 +346,12 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     changeType={getTrendType(getTrend('aiGeneratedTestCases'))}
                     icon={Bot}
                     color="purple"
-                    subtitle={ai.aiGenerationSuccessRate > 0 
-                        ? `${ai.aiGenerationSuccessRate}% success rate`
-                        : 'No AI generations yet'}
+                    subtitle={ai.aiServiceAvailable
+                        ? (ai.aiGenerationSuccessRate > 0 
+                            ? `${ai.aiGenerationSuccessRate}% success rate`
+                            : 'No AI generations yet')
+                        : 'AI service not configured'}
+                    warning={!ai.aiServiceAvailable}
                 />
             </div>
 
@@ -394,11 +484,11 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 </div>
             </div>
 
-            {/* AI Generation Insights */}
+            {/* AI Generation Insights - Real-time from Context */}
             <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
                     <Brain className="w-5 h-5 mr-2 text-purple-500" />
-                    AI Generation Insights
+                    AI Generation Insights (Real-time)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="text-center p-4 bg-[rgb(var(--color-info)/0.1)] rounded-lg border border-[rgb(var(--color-info)/0.2)]">
@@ -407,9 +497,11 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         </div>
                         <div className="text-sm text-foreground">Total AI Generations</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            {ai.totalAIGenerations > 0 
-                                ? 'Successful generation attempts'
-                                : 'No AI generations yet'}
+                            {ai.aiServiceAvailable
+                                ? (ai.totalAIGenerations > 0 
+                                    ? `${ai.successfulAIGenerations} successful`
+                                    : 'No AI generations yet')
+                                : 'Service not available'}
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-success)/0.1)] rounded-lg border border-[rgb(var(--color-success)/0.2)]">
@@ -418,27 +510,31 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         </div>
                         <div className="text-sm text-foreground">Success Rate</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            {ai.aiGenerationSuccessRate > 0 
-                                ? 'AI generation efficiency'
-                                : 'No data available'}
+                            {ai.aiServiceAvailable
+                                ? (ai.totalAIGenerations > 0 
+                                    ? 'AI generation efficiency'
+                                    : 'No data yet')
+                                : 'Configure API key'}
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-teal-50))] rounded-lg border border-[rgb(var(--color-teal-300)/0.2)]">
                         <div className="text-2xl font-bold text-teal-800 mb-1">
-                            {ai.avgTestCasesPerAIGeneration}
+                            {ai.aiTokensUsed.toLocaleString()}
                         </div>
-                        <div className="text-sm text-foreground">Tests per Generation</div>
+                        <div className="text-sm text-foreground">Tokens Used</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            Average output per attempt
+                            Current session consumption
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-warning)/0.1)] rounded-lg border border-[rgb(var(--color-warning)/0.2)]">
                         <div className="text-2xl font-bold text-[rgb(var(--color-warning))] mb-1">
-                            ${(ai.aiCostPerTestCase).toFixed(3)}
+                            ${(ai.aiTotalCost).toFixed(4)}
                         </div>
-                        <div className="text-sm text-foreground">Cost per Test</div>
+                        <div className="text-sm text-foreground">Total AI Cost</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            AI generation cost efficiency
+                            {ai.totalAIGenerations > 0 
+                                ? `$${ai.aiCostPerTestCase.toFixed(4)}/generation`
+                                : 'No cost data yet'}
                         </div>
                     </div>
                 </div>
@@ -493,13 +589,20 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
             </div>
 
             {/* Recommendations */}
-            {(testCases.outdatedTestCases > 0 || automation.automationRatio < 30 || ai.aiGenerationSuccessRate < 70 || execution.executionCount === 0) && (
+            {(testCases.outdatedTestCases > 0 || 
+              automation.automationRatio < 30 || 
+              ai.aiGenerationSuccessRate < 70 || 
+              execution.executionCount === 0 ||
+              !ai.aiServiceAvailable) && (
                 <div className="bg-card border border-orange-300 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-orange-800 mb-2 flex items-center">
                         <Activity className="w-4 h-4 mr-1 text-orange-500" />
                         Recommendations
                     </h4>
                     <div className="space-y-1 text-sm text-orange-700">
+                        {!ai.aiServiceAvailable && (
+                            <div>• Configure your Gemini API key to enable AI test case generation and unlock productivity gains</div>
+                        )}
                         {execution.executionCount === 0 && (
                             <div>• No test executions yet - start running your test cases to gather metrics</div>
                         )}
@@ -509,7 +612,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         {automation.automationRatio < 30 && testCases.totalTestCases > 0 && (
                             <div>• Automation coverage is below 30% - consider converting manual tests to automated</div>
                         )}
-                        {ai.aiGenerationSuccessRate < 70 && ai.totalAIGenerations > 0 && (
+                        {ai.aiGenerationSuccessRate < 70 && ai.totalAIGenerations > 5 && ai.aiServiceAvailable && (
                             <div>• AI generation success rate is below 70% - review prompts and generation parameters</div>
                         )}
                         {qualityScore < 60 && testCases.totalTestCases > 0 && (
@@ -518,6 +621,26 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         {testCases.totalTestCases === 0 && (
                             <div>• No test cases found - create your first test case to start tracking metrics</div>
                         )}
+                        {ai.aiServiceAvailable && ai.totalAIGenerations === 0 && testCases.totalTestCases > 0 && (
+                            <div>• Try using AI to generate test cases - it can save significant time and improve coverage</div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* AI Service Stats Footer */}
+            {ai.aiServiceAvailable && ai.recentAIActivity && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Brain className="w-5 h-5 text-purple-600" />
+                            <span className="text-sm font-medium text-purple-900">
+                                AI Service Active
+                            </span>
+                        </div>
+                        <div className="text-xs text-purple-700">
+                            {ai.totalAIGenerations} generations • {ai.aiTokensUsed.toLocaleString()} tokens • ${ai.aiTotalCost.toFixed(4)} cost
+                        </div>
                     </div>
                 </div>
             )}
