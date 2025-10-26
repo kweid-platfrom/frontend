@@ -16,7 +16,7 @@ export const AIProvider = ({ children }) => {
         isInitialized: false,
         isHealthy: false,
         provider: 'gemini',
-        currentModel: 'gemini-1.5-flash-latest',
+        currentModel: 'gemini-2.0-flash-light',
         availableModels: [],
 
         // Loading states for different operations
