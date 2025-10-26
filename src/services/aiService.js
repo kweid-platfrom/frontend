@@ -70,7 +70,7 @@ class AIService {
             console.log(`✅ Gemini client initialized with model: ${this.currentModel}`);
             return true;
         } catch (error) {
-            console.error('❌ Failed to initialize Gemini client:', error);
+            console.error('Failed to initialize Gemini client:', error);
             this.initializationError = error.message;
             return false;
         }
@@ -79,7 +79,7 @@ class AIService {
     // Switch between Gemini models
     switchModel(modelName) {
         if (!this.models[modelName]) {
-            console.error(`❌ Invalid model: ${modelName}`);
+            console.error(`Invalid model: ${modelName}`);
             return {
                 success: false,
                 error: `Model ${modelName} not found. Available models: ${Object.keys(this.models).join(', ')}`
@@ -121,7 +121,7 @@ class AIService {
 
     // Test connection to Gemini
     async testConnection() {
-        console.log(`🔍 Testing Gemini connection with ${this.currentModel}...`);
+        console.log(`Testing Gemini connection with ${this.currentModel}...`);
 
         try {
             if (!this.apiKey) {
