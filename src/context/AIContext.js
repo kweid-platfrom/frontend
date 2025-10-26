@@ -1,4 +1,4 @@
-// contexts/AIContext.js - Central AI Service Context with Firestore Integration
+// contexts/AIContext.js - Fixed version with proper model synchronization
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
@@ -16,7 +16,7 @@ export const AIProvider = ({ children }) => {
         isInitialized: false,
         isHealthy: false,
         provider: 'gemini',
-        currentModel: 'gemini-2.0-flash-light',
+        currentModel: aiServiceInstance.currentModel,
         availableModels: [],
 
         // Loading states for different operations
@@ -74,8 +74,8 @@ export const AIProvider = ({ children }) => {
             // Create usage log with required fields
             const usageLog = createAIUsageLog({
                 ...operationData,
-                userId, // ← Add userId
-                suiteId // ← Add suiteId
+                userId,
+                suiteId
             });
 
             const logRef = doc(db, `testSuites/${suiteId}/ai_usage_logs`, usageLog.id);
@@ -112,7 +112,7 @@ export const AIProvider = ({ children }) => {
                     isInitialized: true,
                     isHealthy: healthCheck.healthy,
                     provider: 'gemini',
-                    currentModel: aiServiceInstance.currentModel,
+                    currentModel: aiServiceInstance.currentModel, // ← Sync from service
                     availableModels,
                     apiKeyConfigured: modelInfo.apiKeyConfigured,
                     lastHealthCheck: new Date().toISOString(),
@@ -162,9 +162,6 @@ export const AIProvider = ({ children }) => {
         }));
 
         // Firestore logging (async, non-blocking)
-        // Skip logging for:
-        // - test_cases (logged after saving with asset IDs)
-        // - bug_report (logged when bug is saved, not during generation)
         const skipFirestoreLogging = [
             'test_cases',
             'bug_report'
@@ -231,20 +228,19 @@ export const AIProvider = ({ children }) => {
                 type: operationType,
                 name: operationName,
                 success: result.success,
-                model: result.model || state.currentModel,
+                model: result.model || aiServiceInstance.currentModel, // ← Use service instance
                 tokensUsed: result.tokensUsed || 0,
                 cost: result.cost || 0,
                 operation_id: options.operationId,
                 promptSummary: options.promptSummary,
                 promptLength: options.promptLength,
-                shouldLog: options.shouldLog !== false, // Log by default
+                shouldLog: options.shouldLog !== false,
             };
 
             // Add asset info for tracking
             if (operationType === 'test_cases' && result.success && result.data?.testCases) {
                 operationData.assetType = 'testCases';
                 operationData.testCasesCount = result.data.testCases.length;
-                // assetIds will be added after saving in the page
             }
 
             if (operationType === 'bug_report' && result.success) {
@@ -280,11 +276,11 @@ export const AIProvider = ({ children }) => {
                 type: operationType,
                 name: operationName,
                 success: false,
-                model: state.currentModel,
+                model: aiServiceInstance.currentModel, // ← Use service instance
                 tokensUsed: 0,
                 cost: 0,
                 error: errorMessage,
-                shouldLog: false // Don't log errors to Firestore
+                shouldLog: false
             });
 
             safeSetState(prev => ({
@@ -305,9 +301,9 @@ export const AIProvider = ({ children }) => {
         } finally {
             setLoadingState(operationType, false);
         }
-    }, [state.isInitialized, state.currentModel, initialize, setLoadingState, logOperation, safeSetState]);
+    }, [state.isInitialized, initialize, setLoadingState, logOperation, safeSetState]);
 
-    // ============= AI OPERATIONS =============
+    // ============= AI OPERATIONS (unchanged) =============
 
     const generateTestCases = useCallback(async (prompt, templateConfig = {}) => {
         return executeAIOperation(
@@ -339,7 +335,7 @@ export const AIProvider = ({ children }) => {
             () => aiServiceInstance.checkGrammar(text, options),
             'check grammar',
             {
-                shouldLog: false // Don't log grammar checks
+                shouldLog: false
             }
         );
     }, [executeAIOperation]);
@@ -350,7 +346,7 @@ export const AIProvider = ({ children }) => {
             () => aiServiceInstance.detectAutomationOpportunities(testCases),
             'analyze automation opportunities',
             {
-                shouldLog: false // Don't log analysis
+                shouldLog: false
             }
         );
     }, [executeAIOperation]);
@@ -377,7 +373,7 @@ export const AIProvider = ({ children }) => {
             () => aiServiceInstance.generateTeamImprovements(teamData),
             'generate team improvements',
             {
-                shouldLog: false // Don't log suggestions
+                shouldLog: false
             }
         );
     }, [executeAIOperation]);
@@ -393,25 +389,30 @@ export const AIProvider = ({ children }) => {
             }),
             'generate plain text content',
             {
-                shouldLog: false // Don't log plain text generation
+                shouldLog: false
             }
         );
     }, [executeAIOperation]);
 
     // ============= UTILITY FUNCTIONS =============
 
+    // FIXED: Properly sync model changes between context and service
     const switchModel = useCallback(async (modelName) => {
         try {
             const result = aiServiceInstance.switchModel(modelName);
 
             if (result.success) {
+                // Update context state to match service
                 safeSetState(prev => ({
                     ...prev,
-                    currentModel: result.currentModel,
+                    currentModel: aiServiceInstance.currentModel, // ← Sync from service
                     error: null
                 }));
 
+                // Test the new model
                 await testHealth();
+                
+                console.log(`✅ Model switched to ${result.currentModel}`);
             }
 
             return result;
@@ -429,6 +430,7 @@ export const AIProvider = ({ children }) => {
             safeSetState(prev => ({
                 ...prev,
                 isHealthy: result.healthy,
+                currentModel: aiServiceInstance.currentModel, // ← Always sync
                 lastHealthCheck: new Date().toISOString(),
                 error: result.success ? null : result.error
             }));
@@ -477,6 +479,7 @@ export const AIProvider = ({ children }) => {
     const getServiceStatus = useCallback(() => {
         return {
             ...state,
+            currentModel: aiServiceInstance.currentModel, // ← Always get from service
             modelInfo: getCurrentModelInfo(),
             canGenerate: state.isInitialized && state.isHealthy && state.apiKeyConfigured,
             isLoading: state.isGeneratingTestCases ||
@@ -508,6 +511,7 @@ export const AIProvider = ({ children }) => {
 
     const value = {
         ...state,
+        currentModel: aiServiceInstance.currentModel, // ← Always expose current model from service
         canGenerate: state.isInitialized && state.isHealthy && state.apiKeyConfigured,
         isLoading: state.isGeneratingTestCases ||
             state.isGeneratingBugReport ||

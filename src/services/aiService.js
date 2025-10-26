@@ -1,4 +1,4 @@
-// services/aiService.js - Complete Gemini AI Service with Model Switching
+// services/aiService.js - Fixed version with proper environment variable support
 import { FirestoreService } from '../services';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -39,9 +39,15 @@ class AIService {
             }
         };
 
-        // Current configuration
-        this.currentModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash-latest';
-        this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+        // Get API key - support both client and server-side
+        this.apiKey = this.getApiKey();
+        
+        // Get initial model from environment or use default
+        const envModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL;
+        this.currentModel = envModel && this.models[envModel] 
+            ? envModel 
+            : 'gemini-2.0-flash-lite'; // Default model
+        
         this.temperature = 0.7;
         this.maxRetries = 3;
         this.retryDelay = 1000;
@@ -58,9 +64,25 @@ class AIService {
         if (this.apiKey) {
             this.initializeClient();
         } else {
-            console.warn('⚠️ Gemini API key not found. Set NEXT_PUBLIC_GEMINI_API_KEY');
+            console.warn('⚠️ Gemini API key not found. Set GEMINI_API_KEY or NEXT_PUBLIC_GEMINI_API_KEY');
             this.initializationError = 'API key not configured';
         }
+    }
+
+    // Get API key from environment - supports both client and server-side
+    getApiKey() {
+        // Try client-side first (NEXT_PUBLIC_)
+        if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+            return process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+        }
+        
+        // Try server-side (without NEXT_PUBLIC_)
+        if (process.env.GEMINI_API_KEY) {
+            return process.env.GEMINI_API_KEY;
+        }
+        
+        // Fallback to NEXT_PUBLIC_ on server
+        return process.env.NEXT_PUBLIC_GEMINI_API_KEY || null;
     }
 
     // Initialize Gemini client
@@ -125,7 +147,7 @@ class AIService {
 
         try {
             if (!this.apiKey) {
-                throw new Error('Gemini API key not configured. Set NEXT_PUBLIC_GEMINI_API_KEY environment variable.');
+                throw new Error('Gemini API key not configured. Set GEMINI_API_KEY or NEXT_PUBLIC_GEMINI_API_KEY environment variable.');
             }
 
             if (!this.genAI) {
@@ -293,8 +315,6 @@ class AIService {
     // Generate test cases from user prompt
     async generateTestCases(prompt, templateConfig = {}) {
         const systemPrompt = this.buildTestCasePrompt(prompt, templateConfig);
-
-        // Use appropriate model based on complexity
         const modelToUse = templateConfig.useAdvancedModel ? 'gemini-1.5-pro' : this.currentModel;
 
         const result = await this.callAI(systemPrompt, {
@@ -308,7 +328,6 @@ class AIService {
             try {
                 const parsedData = this.parseJSONResponse(result.data);
 
-                // Store generation record
                 const docResult = await this.firestoreService.createDocument('ai_generations', {
                     type: 'test_cases',
                     prompt,
@@ -409,8 +428,6 @@ Focus on creating realistic, executable test cases that provide comprehensive co
     // Generate comprehensive bug report with AI enhancement
     async generateBugReport(input, type = 'description', additionalContext = {}) {
         const systemPrompt = this.buildBugReportPrompt(input, type, additionalContext);
-
-        // Use Pro model for complex bug analysis
         const modelToUse = additionalContext.useAdvancedModel ? 'gemini-1.5-pro' : this.currentModel;
 
         const result = await this.callAI(systemPrompt, {
@@ -424,7 +441,6 @@ Focus on creating realistic, executable test cases that provide comprehensive co
             try {
                 const parsedData = this.parseJSONResponse(result.data);
 
-                // Store bug analysis
                 const docResult = await this.firestoreService.createDocument('ai_bug_analysis', {
                     input,
                     inputType: type,
@@ -641,7 +657,7 @@ Generate comprehensive improvement suggestions in JSON format:
             type: 'team_improvement',
             temperature: 0.6,
             maxTokens: 3000,
-            model: 'gemini-1.5-pro' // Use advanced model for team analysis
+            model: 'gemini-1.5-pro'
         });
 
         if (result.success) {
